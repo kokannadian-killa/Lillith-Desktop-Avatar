@@ -29,12 +29,22 @@
 //! the clip fields of the same names. The engine validates that `base_clip`
 //! exists and every `base_frames` index is in range.
 //!
+//! Also carried (entry first, then the per-animation JSON):
+//! - `rule_events` (every dotted rule event the clip serves) -> `rule_events`;
+//! - `frame_points` (`{ name: [[x, y], ...one per frame] }`) -> `frame_points`
+//!   (the clip-level medians stay in `points`); a list whose length is not
+//!   `frame_count` is an error;
+//! - blend helpers (`blend: true`, `from`, `to`, `from_frame`, `to_frame`,
+//!   optional `blend_t` / `easing`) -> `blend = { ... }` plus a `blend` tag.
+//!   Blend clips describe `scale` as text ("interpolated ..."); that becomes a
+//!   `scale:interpolated` tag.
+//!
 //! With `--check`, the written manifest is re-loaded through
 //! `Manifest::load` + `load_page` and every frame rect is bounds-checked.
 
 use anyhow::{bail, ensure, Context, Result};
 use clap::Parser;
-use lillith_anim::atlas::{load_page, Clip, FrameRect, LoopMode, Manifest};
+use lillith_anim::atlas::{load_page, Blend, Clip, FrameRect, LoopMode, Manifest};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -67,6 +77,8 @@ struct JsonManifest {
 enum JsonScale {
     Single(f64),
     Phases(BTreeMap<String, f64>),
+    /// Free text, e.g. blend helpers: "interpolated between the two clips".
+    Text(String),
 }
 
 #[derive(Debug, Deserialize)]
@@ -221,8 +233,29 @@ fn convert(
             tags.extend(phases.iter().map(|(k, v)| format!("scale:{k}={v}")));
             None
         }
+        Some(JsonScale::Text(t)) => {
+            let word = t.split_whitespace().next().unwrap_or("text");
+            tags.push(format!("scale:{word}"));
+            None
+        }
         None => None,
     };
+
+    let frame_points: BTreeMap<String, Vec<(i32, i32)>> =
+        typed_field(&anim.name, &anim.extra, side, "frame_points")?.unwrap_or_default();
+    for (pname, v) in &frame_points {
+        ensure!(
+            v.len() == anim.frame_count as usize,
+            "{}: frame_points.{pname} has {} entries for {} frames",
+            anim.name,
+            v.len(),
+            anim.frame_count
+        );
+    }
+    let blend = blend_of(anim, side)?;
+    if blend.is_some() {
+        tags.push("blend".into());
+    }
 
     let frames = (0..anim.frame_count)
         .map(|i| FrameRect {
@@ -256,8 +289,38 @@ fn convert(
         event: typed_field(&anim.name, &anim.extra, side, "event")?,
         base_clip: typed_field(&anim.name, &anim.extra, side, "base_clip")?,
         base_frames: typed_field(&anim.name, &anim.extra, side, "base_frames")?,
+        rule_events: typed_field(&anim.name, &anim.extra, side, "rule_events")?.unwrap_or_default(),
+        frame_points,
+        blend,
         frames,
     })
+}
+
+/// Blend-helper metadata when the entry or its JSON has `blend: true`.
+fn blend_of(anim: &JsonAnim, side: Option<&Map<String, Value>>) -> Result<Option<Blend>> {
+    let name = &anim.name;
+    let is_blend: Option<bool> = typed_field(name, &anim.extra, side, "blend")?;
+    if is_blend != Some(true) {
+        return Ok(None);
+    }
+    let need = |key: &str| -> Result<Value> {
+        anim.extra
+            .get(key)
+            .or_else(|| side.and_then(|m| m.get(key)))
+            .cloned()
+            .with_context(|| format!("{name}: blend clip without `{key}`"))
+    };
+    Ok(Some(Blend {
+        from: serde_json::from_value(need("from")?)
+            .with_context(|| format!("{name}: blend `from`"))?,
+        to: serde_json::from_value(need("to")?).with_context(|| format!("{name}: blend `to`"))?,
+        from_frame: serde_json::from_value(need("from_frame")?)
+            .with_context(|| format!("{name}: blend `from_frame`"))?,
+        to_frame: serde_json::from_value(need("to_frame")?)
+            .with_context(|| format!("{name}: blend `to_frame`"))?,
+        blend_t: typed_field(name, &anim.extra, side, "blend_t")?,
+        easing: typed_field(name, &anim.extra, side, "easing")?,
+    }))
 }
 
 fn dir_of(p: &Path) -> PathBuf {
@@ -346,6 +409,38 @@ fn check(path: &Path) -> Result<()> {
                 clip.base_frames.as_deref().unwrap_or(&[])
             );
         }
+        if !clip.rule_events.is_empty() {
+            println!("   rule_events {:?}", clip.rule_events);
+        }
+        if let Some(b) = &clip.blend {
+            println!(
+                "   blend {}[{}] -> {}[{}]  t {:?}",
+                b.from,
+                b.from_frame,
+                b.to,
+                b.to_frame,
+                b.blend_t.as_deref().unwrap_or(&[])
+            );
+        }
+        if !clip.frame_points.is_empty() {
+            let cell = clip.frames[0];
+            let outside: usize = clip
+                .frame_points
+                .values()
+                .flatten()
+                .filter(|&&(x, y)| x < 0 || y < 0 || x as u32 >= cell.w || y as u32 >= cell.h)
+                .count();
+            println!(
+                "   frame_points {:?} x {} frames{}",
+                clip.frame_points.keys().collect::<Vec<_>>(),
+                clip.frames.len(),
+                if outside > 0 {
+                    format!("  [{outside} outside cell]")
+                } else {
+                    String::new()
+                }
+            );
+        }
         if clip.seat_y.is_some() || clip.seat_x_range.is_some() || clip.feet_lowest_y.is_some() {
             println!(
                 "   seat_y {:?}  seat_x_range {:?}  feet_lowest_y {:?}",
@@ -361,7 +456,17 @@ fn check(path: &Path) -> Result<()> {
             );
         }
     }
-    println!("{} clip(s) loaded and in bounds", m.clips.len());
+    let blends = m.clips.values().filter(|c| c.is_blend()).count();
+    let events = m.clips.values().filter(|c| c.event.is_some()).count();
+    let with_fp = m
+        .clips
+        .values()
+        .filter(|c| !c.frame_points.is_empty())
+        .count();
+    println!(
+        "{} clip(s) loaded and in bounds ({events} event, {blends} blend, {with_fp} with frame_points)",
+        m.clips.len()
+    );
     Ok(())
 }
 
@@ -550,5 +655,81 @@ mod tests {
         )
         .unwrap();
         assert!(build(&json, Path::new("."), Path::new("."), &[]).is_err());
+    }
+
+    #[test]
+    fn carries_frame_points_blend_and_rule_events() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [
+              { "name": "idle", "sheet": "i.png", "frame_count": 2, "fps": 8 },
+              { "name": "wave", "sheet": "w.png", "frame_count": 1, "fps": 8 },
+              { "name": "blend_idle_to_wave", "sheet": "b.png", "frame_count": 2, "fps": 12,
+                "loop": false, "scale": "interpolated between the two clips" } ] }"#,
+        )
+        .unwrap();
+        let idle_side: Value = serde_json::from_str(
+            r#"{ "chest_point": [240, 130],
+                 "frame_points": { "chest_point": [[241, 131], [243, 129]] } }"#,
+        )
+        .unwrap();
+        let wave_side: Value = serde_json::from_str(
+            r#"{ "event": "window.closed", "rule_events": ["window.closed"] }"#,
+        )
+        .unwrap();
+        let blend_side: Value = serde_json::from_str(
+            r#"{ "blend": true, "from": "idle", "to": "wave", "from_frame": 1, "to_frame": 0,
+                 "blend_t": [0.33, 0.66], "easing": "smoothstep",
+                 "scale": "interpolated between the two clips" }"#,
+        )
+        .unwrap();
+        let a = &json.animations;
+        let idle = convert(&a[0], idle_side.as_object(), "i.png".into(), &[]).unwrap();
+        let wave = convert(&a[1], wave_side.as_object(), "w.png".into(), &[]).unwrap();
+        let bl = convert(&a[2], blend_side.as_object(), "b.png".into(), &[]).unwrap();
+        assert_eq!(idle.point("chest_point"), Some((240, 130)));
+        assert_eq!(
+            idle.frame_points["chest_point"],
+            vec![(241, 131), (243, 129)]
+        );
+        assert_eq!(idle.point_at("chest_point", 1), Some((243, 129)));
+        assert_eq!(wave.rule_events, vec!["window.closed"]);
+        let b = bl.blend.clone().unwrap();
+        assert_eq!(
+            (b.from.as_str(), b.from_frame, b.to.as_str(), b.to_frame),
+            ("idle", 1, "wave", 0)
+        );
+        assert_eq!(b.blend_t, Some(vec![0.33, 0.66]));
+        assert!(bl.tags.contains(&"blend".to_string()));
+        assert!(bl.tags.contains(&"scale:interpolated".to_string()));
+        assert_eq!(bl.scale, None);
+        let m = Manifest {
+            clips: [
+                ("idle".to_string(), idle),
+                ("wave".to_string(), wave),
+                ("blend_idle_to_wave".to_string(), bl),
+            ]
+            .into(),
+        };
+        let back = Manifest::from_toml_str(&toml::to_string(&m).unwrap()).unwrap();
+        assert_eq!(back.clips, m.clips);
+    }
+
+    #[test]
+    fn rejects_bad_frame_points_and_incomplete_blends() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [ { "name": "x", "sheet": "x.png", "frame_count": 2, "fps": 8 } ] }"#,
+        )
+        .unwrap();
+        let short: Value =
+            serde_json::from_str(r#"{ "frame_points": { "hip_point": [[1, 1]] } }"#).unwrap();
+        assert!(convert(&json.animations[0], short.as_object(), "x.png".into(), &[]).is_err());
+        let partial: Value = serde_json::from_str(r#"{ "blend": true, "from": "idle" }"#).unwrap();
+        assert!(convert(
+            &json.animations[0],
+            partial.as_object(),
+            "x.png".into(),
+            &[]
+        )
+        .is_err());
     }
 }
