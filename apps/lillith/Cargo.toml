@@ -1,0 +1,48 @@
+[package]
+name = "lillith"
+description = "Lillith desktop companion: main binary."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "lillith"
+path = "src/main.rs"
+
+[features]
+default = []
+wayland = ["lillith-overlay/wayland"]
+x11 = ["lillith-overlay/x11"]
+full = [
+    "wayland",
+    "x11",
+    "lillith-overlay/text",
+    "lillith-overlay/portal",
+    "lillith-sense/bluetooth",
+    "lillith-sense/pulse",
+    "lillith-sense/journal",
+    "lillith-sense/clipboard",
+    "lillith-sense/x11",
+    "lillith-voice/audio",
+]
+
+[dependencies]
+lillith-core.workspace = true
+lillith-anim.workspace = true
+lillith-overlay.workspace = true
+lillith-sense.workspace = true
+lillith-mind.workspace = true
+lillith-voice.workspace = true
+lillith-panel.workspace = true
+lillith-tray.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+directories.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true

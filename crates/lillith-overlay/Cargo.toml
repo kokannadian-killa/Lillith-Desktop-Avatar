@@ -1,0 +1,34 @@
+[package]
+name = "lillith-overlay"
+description = "Transparent, always-on-top, click-through avatar overlay: wlr-layer-shell on KDE Plasma 6 Wayland with a winit/X11 fallback."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Native Wayland layer-shell overlay (needs libxkbcommon at build time).
+wayland = ["dep:smithay-client-toolkit", "dep:wayland-client"]
+# winit + softbuffer fallback for X11/XWayland.
+x11 = ["dep:winit", "dep:softbuffer"]
+# Speech-bubble text shaping.
+text = ["dep:cosmic-text"]
+# xdg-desktop-portal: GlobalShortcuts + Screenshot.
+portal = ["dep:ashpd"]
+
+[dependencies]
+lillith-core.workspace = true
+lillith-anim.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tiny-skia.workspace = true
+smithay-client-toolkit = { workspace = true, optional = true }
+wayland-client = { workspace = true, optional = true }
+winit = { workspace = true, optional = true }
+softbuffer = { workspace = true, optional = true }
+cosmic-text = { workspace = true, optional = true }
+ashpd = { workspace = true, optional = true }

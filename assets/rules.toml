@@ -1,0 +1,708 @@
+# Lillith event -> reaction rules.
+#
+# Source: docs/FEATURES.md §4 (system monitor events -> pose mappings) and
+# docs/PLAN.md §3.2 (gesture / line / mood / SFX columns).
+# Loaded by `lillith_core::rules::RuleSet`. Unit-tested in that crate, so a
+# typo here fails `cargo test`.
+#
+# Fields per [[rule]]:
+#   event       event name emitted on the bus (lillith-sense or the injector)
+#   pose        clean pose name (assets/source/poses/NN_<pose>.*)
+#   then        optional follow-up pose once `pose` finishes
+#   gesture     procedural gesture (aether_animator names), optional
+#   line        speech-bubble line, optional ("{summary}" = notification text)
+#   mood        Playful | Happy | Mischievous | Alert | Sleepy, optional
+#   sfx         README_SOUNDS cue name, optional
+#   priority    0 (ambient) .. 255 (must show); higher interrupts lower
+#   cooldown_s  minimum seconds between two firings of this rule
+#   source      where the event comes from in Rust (documentation only)
+#   status      prototype status from FEATURES.md (documentation only)
+#   enabled     default true; set false to keep a rule as a quiet indicator
+
+[thresholds]
+cpu_high_percent = 72.0      # Python prototype (mod_system_monitor); PLAN.md §3.2 suggests 68
+cpu_high_sustain_s = 10.0
+cpu_poll_s = 5.5
+ram_high_percent = 85.0      # guess
+battery_low_percent = 15.0
+focus_long_work_min = 50.0   # guess
+idle_sleepy_s = 300.0        # guess
+idle_asleep_s = 900.0        # guess
+auto_gesture_cooldown_s = 2.5
+secret_sequence_window_s = 3.0
+
+# ── System load ───────────────────────────────────────────────────────────
+[[rule]]
+event = "cpu.high"
+pose = "busy"
+then = "alert"
+gesture = "bounce"
+line = "System's getting sharp… I like the heat."
+mood = "Alert"
+sfx = "alert"
+priority = 60
+cooldown_s = 60.0
+source = "sysinfo"
+status = "PY"
+
+[[rule]]
+event = "ram.high"
+pose = "htop"
+gesture = "think"
+mood = "Alert"
+sfx = "alert"
+priority = 55
+cooldown_s = 120.0
+source = "sysinfo"
+status = "SPEC"
+
+[[rule]]
+event = "system.status"
+pose = "diagnostics"
+priority = 40
+source = "sysinfo (chat command / key D)"
+status = "PY-missing"
+
+# ── Power ─────────────────────────────────────────────────────────────────
+[[rule]]
+event = "battery.low"
+pose = "battery_low"
+line = "Power's low. Don't fade on me."
+mood = "Alert"
+sfx = "battery"
+priority = 80
+cooldown_s = 600.0
+source = "UPower D-Bus (zbus)"
+status = "PY-missing"
+
+[[rule]]
+event = "brightness.changed"
+pose = "brightness"
+priority = 20
+cooldown_s = 5.0
+source = "/sys/class/backlight inotify or org.kde.Solid.PowerManagement"
+status = "ART"
+
+# ── Network ───────────────────────────────────────────────────────────────
+[[rule]]
+event = "net.lost"
+pose = "connection_lost"
+gesture = "facepalm"
+mood = "Alert"
+sfx = "disconnect"
+priority = 75
+cooldown_s = 30.0
+source = "NetworkManager connectivity (zbus)"
+status = "SPEC"
+
+[[rule]]
+event = "net.restored"
+pose = "wifi"
+gesture = "wave"
+line = "Network restored"
+mood = "Happy"
+sfx = "soft"
+priority = 60
+cooldown_s = 30.0
+source = "NetworkManager connectivity (zbus)"
+status = "SPEC"
+
+[[rule]]
+event = "wifi.changed"
+pose = "wifi"
+gesture = "nod"
+sfx = "wifi"
+priority = 25
+cooldown_s = 60.0
+source = "NetworkManager (zbus)"
+status = "ART"
+
+[[rule]]
+event = "vpn.up"
+pose = "vpn"
+gesture = "salute"
+line = "Tunnel's up."
+mood = "Mischievous"
+sfx = "vpn"
+priority = 50
+cooldown_s = 30.0
+source = "NetworkManager active connections (zbus)"
+status = "ART"
+
+[[rule]]
+event = "hotspot.on"
+pose = "hotspot"
+gesture = "wave"
+priority = 40
+cooldown_s = 60.0
+source = "NetworkManager (zbus)"
+status = "ART"
+
+[[rule]]
+event = "bt.paired"
+pose = "bluetooth"
+gesture = "tada"
+mood = "Happy"
+sfx = "soft"
+priority = 45
+cooldown_s = 10.0
+source = "BlueZ D-Bus (bluer)"
+status = "ART"
+
+[[rule]]
+event = "firewall.blocked"
+pose = "firewall"
+gesture = "point_right"
+mood = "Alert"
+sfx = "alert"
+priority = 55
+cooldown_s = 30.0
+source = "journald (firewalld/ufw/nftables, verify)"
+status = "ART"
+
+# ── Audio / devices ───────────────────────────────────────────────────────
+[[rule]]
+event = "volume.changed"
+pose = "volume"
+priority = 20
+cooldown_s = 2.0
+source = "PipeWire/Pulse (libpulse-binding or pactl subscribe)"
+status = "ART"
+
+[[rule]]
+event = "usb.added"
+pose = "drive_eject"
+gesture = "point_right"
+priority = 40
+cooldown_s = 5.0
+source = "UDisks2 D-Bus (zbus)"
+status = "ART"
+
+[[rule]]
+event = "usb.removed"
+pose = "drive_eject"
+gesture = "point_right"
+priority = 40
+cooldown_s = 5.0
+source = "UDisks2 D-Bus (zbus)"
+status = "ART"
+
+[[rule]]
+event = "print.job"
+pose = "printing"
+gesture = "nod"
+priority = 35
+cooldown_s = 10.0
+source = "CUPS D-Bus notifier / lpstat poll"
+status = "ART"
+
+# ── Files ─────────────────────────────────────────────────────────────────
+[[rule]]
+event = "archive.created"
+pose = "compress"
+gesture = "tada"
+priority = 30
+cooldown_s = 10.0
+source = "inotify (.zip/.tar*) or process watch (zip/tar/ark)"
+status = "ART"
+
+[[rule]]
+event = "cloud.sync"
+pose = "cloud_sync"
+priority = 25
+cooldown_s = 120.0
+source = "process/inotify (rclone/nextcloud/syncthing), guess"
+status = "ART"
+
+[[rule]]
+event = "trash.added"
+pose = "recycle"
+gesture = "shrug"
+priority = 30
+cooldown_s = 10.0
+source = "inotify ~/.local/share/Trash"
+status = "ART"
+
+[[rule]]
+event = "screenshot.taken"
+pose = "screenshot"
+gesture = "tada"
+mood = "Playful"
+sfx = "soft"
+priority = 40
+cooldown_s = 5.0
+source = "inotify ~/Pictures/Screenshots or Spectacle D-Bus"
+status = "ART"
+
+[[rule]]
+event = "clipboard.copied"
+pose = "clipboard"
+priority = 15
+cooldown_s = 10.0
+source = "wl-clipboard-rs"
+status = "ART"
+
+[[rule]]
+event = "clipboard.cut"
+pose = "crop"
+priority = 15
+cooldown_s = 10.0
+source = "clipboard / app focus, guess"
+status = "ART"
+
+# ── Notifications / time ──────────────────────────────────────────────────
+[[rule]]
+event = "notify.received"
+pose = "dismiss_notif"
+gesture = "wave"
+line = "{summary}"
+mood = "Alert"
+sfx = "alert"
+priority = 50
+cooldown_s = 5.0
+source = "org.freedesktop.Notifications monitor (zbus)"
+status = "ART"
+
+[[rule]]
+event = "update.available"
+pose = "dismiss_notif"
+priority = 35
+cooldown_s = 3600.0
+source = "pacman checkupdates / notifications"
+status = "ART"
+
+[[rule]]
+event = "calendar.reminder"
+pose = "calendar"
+gesture = "point_right"
+line = "{summary}"
+mood = "Alert"
+sfx = "alert"
+priority = 70
+cooldown_s = 60.0
+source = "KOrganizer/Merkuro notifications or .ics, guess"
+status = "ART"
+
+[[rule]]
+event = "timer.fired"
+pose = "scheduler"
+priority = 60
+cooldown_s = 1.0
+source = "own reminders / Pomodoro"
+status = "ART"
+
+# ── Windows (KWin bridge on Wayland, x11rb on X11) ────────────────────────
+[[rule]]
+event = "window.opened.folder"
+pose = "peeking_folder"
+gesture = "point_right"
+line = "Ooh, what's in there? 👀"
+mood = "Playful"
+sfx = "hover"
+priority = 35
+cooldown_s = 8.0
+source = "KWin script -> org.lillith.Bridge"
+status = "PY (X11 wmctrl)"
+
+[[rule]]
+event = "window.opened.browser"
+pose = "peeking"
+gesture = "wave"
+line = "Surfing the web? 🌐"
+mood = "Playful"
+sfx = "hover"
+priority = 35
+cooldown_s = 8.0
+source = "KWin script -> org.lillith.Bridge"
+status = "PY (X11 wmctrl)"
+
+[[rule]]
+event = "window.opened.terminal"
+pose = "hacking"
+gesture = "salute"
+line = "Let's hack! 💻"
+mood = "Playful"
+sfx = "hover"
+priority = 35
+cooldown_s = 8.0
+source = "KWin script -> org.lillith.Bridge"
+status = "PY (X11 wmctrl)"
+
+[[rule]]
+event = "window.opened.media"
+pose = "sitting"
+gesture = "dance"
+line = "Now we're vibing 🎵"
+mood = "Playful"
+sfx = "hover"
+priority = 35
+cooldown_s = 8.0
+source = "KWin script -> org.lillith.Bridge"
+status = "PY (X11 wmctrl)"
+
+[[rule]]
+event = "window.opened.app"
+pose = "code_inspect"
+gesture = "nod"
+mood = "Playful"
+priority = 30
+cooldown_s = 8.0
+source = "KWin script -> org.lillith.Bridge"
+status = "PY (X11 wmctrl)"
+
+[[rule]]
+event = "window.closed"
+pose = "knife"
+gesture = "stab"
+line = "Gotcha! 🗡️"
+mood = "Mischievous"
+sfx = "click"
+priority = 40
+cooldown_s = 4.0
+source = "KWin script -> org.lillith.Bridge"
+status = "PY (X11 wmctrl)"
+
+[[rule]]
+event = "window.minimized"
+pose = "minimize"
+priority = 25
+cooldown_s = 4.0
+source = "KWin script -> org.lillith.Bridge"
+status = "ART + WEB"
+
+[[rule]]
+event = "window.private"
+pose = "private"
+mood = "Mischievous"
+priority = 45
+cooldown_s = 300.0
+source = "KWin script (title contains Private Browsing / Incognito)"
+status = "ART"
+
+[[rule]]
+event = "start_menu.opened"
+pose = "start_menu"
+priority = 15
+cooldown_s = 30.0
+source = "KWin script (plasmashell launcher active)"
+status = "ART"
+
+[[rule]]
+event = "search.opened"
+pose = "magnify"
+priority = 15
+cooldown_s = 30.0
+source = "KRunner activation (KWin), guess"
+status = "ART"
+
+[[rule]]
+event = "browser.bookmark"
+pose = "bookmark"
+priority = 15
+cooldown_s = 60.0
+source = "window title heuristics, guess"
+status = "ART"
+
+[[rule]]
+event = "browser.history"
+pose = "browser_history"
+priority = 15
+cooldown_s = 60.0
+source = "window title heuristics, guess"
+status = "ART"
+
+[[rule]]
+event = "focus.long_work"
+pose = "code_inspect"
+line = "You've been at it a while. Stretch, drink some water?"
+sfx = "soft"
+priority = 50
+cooldown_s = 3000.0
+source = "KWin active window + timer"
+status = "PY-missing"
+
+[[rule]]
+event = "app.loading"
+pose = "loading"
+then = "running"
+priority = 20
+cooldown_s = 15.0
+source = "process spawn (sysinfo diff)"
+status = "ART"
+
+# ── Idle / presence ───────────────────────────────────────────────────────
+[[rule]]
+event = "idle.long"
+pose = "sitting"
+gesture = "float"
+line = "You've been quiet. I'll stay close."
+mood = "Sleepy"
+priority = 10
+source = "ext-idle-notify-v1 / org.freedesktop.ScreenSaver"
+status = "PY-missing"
+
+[[rule]]
+event = "idle.asleep"
+pose = "sleep"
+mood = "Sleepy"
+sfx = "sleep"
+priority = 10
+source = "ext-idle-notify-v1 / org.freedesktop.ScreenSaver"
+status = "PY-missing"
+
+[[rule]]
+event = "user.returned"
+pose = "peeking"
+mood = "Happy"
+sfx = "soft"
+priority = 50
+cooldown_s = 60.0
+source = "ext-idle-notify-v1 / pointer proximity (KWin bridge)"
+status = "PY-missing"
+
+# ── Errors / own state ────────────────────────────────────────────────────
+[[rule]]
+event = "journal.error"
+pose = "error"
+gesture = "facepalm"
+line = "That stack trace looked rude."
+mood = "Alert"
+sfx = "error"
+priority = 55
+cooldown_s = 120.0
+source = "journald (systemd crate)"
+status = "PY (on_error)"
+
+[[rule]]
+event = "app.crash"
+pose = "error"
+gesture = "facepalm"
+mood = "Alert"
+sfx = "error"
+priority = 65
+cooldown_s = 30.0
+source = "journald (systemd-coredump)"
+status = "PY (on_error)"
+
+[[rule]]
+event = "llm.thinking"
+pose = "waiting"
+gesture = "think"
+line = "Hmm…"
+priority = 70
+source = "lillith-mind"
+status = "PY (aether)"
+
+[[rule]]
+event = "llm.done"
+pose = "sitting"
+gesture = "tada"
+priority = 70
+source = "lillith-mind"
+status = "PY (aether)"
+
+[[rule]]
+event = "approval.needed"
+pose = "waiting"
+priority = 90
+source = "own confirmation dialogs"
+status = "ART + SPEC"
+
+[[rule]]
+event = "help.requested"
+pose = "help"
+priority = 60
+source = "own (middle click / key H)"
+status = "PY"
+
+# ── Pointer interactions (overlay input) ──────────────────────────────────
+# Open question (PLAN.md §6 Q3): double-click = knife (v01) or hacking (README-SP);
+# right-click = cleaning or pose menu. Defaults below follow README-SP.
+[[rule]]
+event = "input.click.left"
+pose = "knife"
+gesture = "bounce"
+mood = "Playful"
+sfx = "click"
+priority = 85
+source = "overlay pointer"
+status = "PY"
+
+[[rule]]
+event = "input.click.double"
+pose = "hacking"
+gesture = "bounce"
+mood = "Playful"
+sfx = "hack"
+priority = 85
+source = "overlay pointer"
+status = "PY (decide knife vs hacking)"
+
+[[rule]]
+event = "input.click.right"
+pose = "cleaning"
+mood = "Playful"
+sfx = "clean"
+priority = 85
+source = "overlay pointer"
+status = "PY (decide cleaning vs pose menu)"
+
+[[rule]]
+event = "input.click.middle"
+pose = "help"
+sfx = "help"
+priority = 85
+source = "overlay pointer"
+status = "PY"
+
+[[rule]]
+event = "input.hover"
+pose = "hover_sit_on_window"
+sfx = "hover"
+priority = 30
+cooldown_s = 3.0
+source = "overlay pointer"
+status = "PY"
+
+[[rule]]
+event = "input.hover_long"
+pose = "peeking"
+sfx = "peek"
+priority = 30
+cooldown_s = 10.0
+source = "overlay pointer"
+status = "PY"
+
+[[rule]]
+event = "input.drag"
+pose = "drag_drop"
+sfx = "drag"
+priority = 95
+source = "overlay pointer"
+status = "PY"
+
+[[rule]]
+event = "input.secret"
+pose = "dual_tail"
+gesture = "dance"
+line = "You found me out~"
+mood = "Happy"
+sfx = "tail"
+priority = 100
+cooldown_s = 30.0
+source = "overlay pointer: Left -> Double -> Right within secret_sequence_window_s"
+status = "PY-missing"
+
+# ── Rule -> clip table ───────────────────────────────────────────────────
+# Rule event -> clip in the canonical generated manifest (assets/generated).
+# The clip may be an `event_<name>` reaction or a regular animation (sleep,
+# drag_held, ...). Resolved by `RuleSet::clip_for`. A rule missing from this
+# table has no clip and falls back to its `pose` (currently every rule has one). Full reconciliation,
+# confidence and remaining art gaps: docs/EVENT_MAPPING.md.
+# (The older table name `[event_clips]` is still accepted.)
+[rule_clips]
+# Event reaction clips: exact / pose-match links.
+"cpu.high"           = "event_cpu_busy"        # pose busy; CPU chip heating
+"system.status"      = "event_diagnostics"     # pose diagnostics; monitor ECG
+"battery.low"        = "event_battery_low"     # pose battery_low
+"brightness.changed" = "event_brightness"      # pose brightness
+"wifi.changed"       = "event_wifi"            # pose wifi
+"net.restored"       = "event_wifi"            # rule also uses pose wifi
+"bt.paired"          = "event_bluetooth"       # pose bluetooth
+"firewall.blocked"   = "event_firewall_block"  # pose firewall
+"volume.changed"     = "event_volume"          # pose volume
+"usb.removed"        = "event_usb_eject"       # stick rises under eject symbol, wave bye
+"print.job"          = "event_printing"        # pose printing
+"archive.created"    = "event_archiving"       # pose compress; files into a zipped box
+"cloud.sync"         = "event_cloud_sync"      # pose cloud_sync
+"trash.added"        = "event_recycle_bin"     # pose recycle; paper into bin
+"screenshot.taken"   = "event_screenshot"      # pose screenshot; flash + thumbnail
+"clipboard.copied"   = "event_clipboard"       # pose clipboard
+"notify.received"    = "event_notification"    # pose dismiss_notif; bell with badge
+"calendar.reminder"  = "event_calendar"        # pose calendar
+"window.opened.app"  = "event_window_open"     # generic app window (other window.opened.* keep their poses)
+"window.closed"      = "event_window_close"    # NOTE: rule pose/line is knife "Gotcha!", clip is a wave bye
+"window.minimized"   = "event_window_minimize" # pose minimize
+"window.private"     = "event_incognito"       # pose private; glasses + fade to ~45%
+"app.loading"        = "event_loading"         # pose loading
+"journal.error"      = "event_error"           # pose error
+"app.crash"          = "event_error"           # pose error
+"help.requested"     = "event_help"            # pose help
+"input.click.middle" = "event_help"            # pose help (middle click = help)
+
+# Dedicated event clips (batch 3). The clip's own `event` field is this
+# dotted rule name. * = new pose, the clip is its own base_clip.
+"ram.high"             = "event_ram_high"  # *
+"net.lost"             = "event_net_lost"  # *
+"vpn.up"               = "event_vpn_up"  # *
+"hotspot.on"           = "event_hotspot_on"
+"usb.added"            = "event_usb_added"
+"clipboard.cut"        = "event_clipboard_cut"  # *
+"start_menu.opened"    = "event_start_menu_opened"  # *
+"search.opened"        = "event_search_opened"
+"browser.bookmark"     = "event_browser_bookmark"
+"browser.history"      = "event_browser_history"
+"approval.needed"      = "event_approval_needed"  # *
+"input.click.double"   = "event_input_click_double"
+"input.click.right"    = "event_input_click_right"  # *
+"input.hover_long"     = "event_input_hover_long"
+
+# Regular animations reused for rules (safe: the animation shows the rule).
+"idle.asleep"        = "sleep"
+"input.drag"         = "drag_held"             # pin the clip's grab_point to the cursor
+"input.click.left"   = "knife_tap"
+"llm.thinking"       = "think"
+"llm.done"           = "tada_celebrate"
+"idle.long"          = "sit_swing"
+"input.hover"        = "sit_swing"
+"focus.long_work"    = "shoulder_roll"         # "stretch" line
+"user.returned"      = "wake"
+"input.secret"       = "tail_wag"
+
+# LOW-CONFIDENCE stand-ins (existing event clips that roughly fit). Override
+# these when dedicated art exists.
+"update.available"       = "event_notification"
+"timer.fired"            = "event_calendar"
+"window.opened.folder"   = "event_window_open"
+"window.opened.browser"  = "event_window_open"
+"window.opened.terminal" = "event_window_open"
+"window.opened.media"    = "event_window_open"
+
+# ── Key map (README-SP; active only while she has keyboard focus) ─────────
+# Each entry is either { pose = "<pose>" } or { action = "<action>" }.
+[keys]
+T = { pose = "dual_tail" }
+K = { pose = "hacking" }
+H = { pose = "help" }
+R = { action = "random_reaction" }
+C = { action = "cycle_pose" }
+M = { action = "toggle_mute" }
+S = { action = "sleep" }
+W = { pose = "wifi" }
+V = { pose = "vpn" }
+B = { pose = "battery_low" }
+A = { pose = "alert" }          # v09 also used A/S for opacity; README-SP wins
+E = { pose = "error" }
+F = { pose = "firewall" }
+P = { pose = "private" }
+"0" = { pose = "running" }
+"1" = { pose = "htop" }
+"2" = { pose = "unknown_net_files_terminal" }  # "task manager" pose unresolved
+"3" = { pose = "unknown_peek_over_laptop" }    # "settings" pose unresolved
+"4" = { pose = "tools" }
+"5" = { pose = "screenshot" }
+"6" = { pose = "calendar" }
+"7" = { pose = "clipboard" }
+"8" = { pose = "volume" }
+"9" = { pose = "brightness" }
+D = { pose = "diagnostics" }
+N = { pose = "bluetooth" }
+U = { pose = "cloud_sync" }
+J = { pose = "bookmark" }
+X = { pose = "compress" }
+Z = { pose = "loading" }        # "restart" pose unresolved
+Y = { action = "open_chat" }
+Enter = { action = "open_chat" }
+I = { action = "voice_listen" }
+Q = { action = "quit" }
+Escape = { action = "close_chat_or_quit" }
