@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
                 Some(rule) => println!(
                     "{} -> clip={:?} pose={} then={:?} gesture={:?} mood={:?} sfx={:?} line={:?}",
                     ev.name,
-                    rules.event_clip(&ev.name),
+                    rules.clip_for(&ev.name),
                     rule.pose,
                     rule.then,
                     rule.gesture,
@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
                     "{:<26} {:<20} {}",
                     r.event,
                     r.pose,
-                    rules.event_clip(&r.event).unwrap_or("-")
+                    rules.clip_for(&r.event).unwrap_or("-")
                 );
             }
         }

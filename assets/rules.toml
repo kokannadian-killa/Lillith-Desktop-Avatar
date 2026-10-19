@@ -593,13 +593,15 @@ cooldown_s = 30.0
 source = "overlay pointer: Left -> Double -> Right within secret_sequence_window_s"
 status = "PY-missing"
 
-# ── Event reaction clips (assets/generated, `event_<name>`) ───────────────
-# Rule event -> canonical event reaction clip in the generated manifest.
-# Resolved by `RuleSet::event_clip`. A rule missing from this table has no
-# event clip yet (it falls back to its `pose`). Full reconciliation, gaps and
-# uncertain candidates: docs/EVENT_MAPPING.md. Do not map a rule here unless
-# the clip shows the same thing; keep candidates in that doc instead.
-[event_clips]
+# ── Rule -> clip table ───────────────────────────────────────────────────
+# Rule event -> clip in the canonical generated manifest (assets/generated).
+# The clip may be an `event_<name>` reaction or a regular animation (sleep,
+# drag_held, ...). Resolved by `RuleSet::clip_for`. A rule missing from this
+# table has no clip yet and falls back to its `pose`. Full reconciliation,
+# confidence and remaining art gaps: docs/EVENT_MAPPING.md.
+# (The older table name `[event_clips]` is still accepted.)
+[rule_clips]
+# Event reaction clips: exact / pose-match links.
 "cpu.high"           = "event_cpu_busy"        # pose busy; CPU chip heating
 "system.status"      = "event_diagnostics"     # pose diagnostics; monitor ECG
 "battery.low"        = "event_battery_low"     # pose battery_low
@@ -627,6 +629,27 @@ status = "PY-missing"
 "app.crash"          = "event_error"           # pose error
 "help.requested"     = "event_help"            # pose help
 "input.click.middle" = "event_help"            # pose help (middle click = help)
+
+# Regular animations reused for rules (safe: the animation shows the rule).
+"idle.asleep"        = "sleep"
+"input.drag"         = "drag_held"             # pin the clip's grab_point to the cursor
+"input.click.left"   = "knife_tap"
+"llm.thinking"       = "think"
+"llm.done"           = "tada_celebrate"
+"idle.long"          = "sit_swing"
+"input.hover"        = "sit_swing"
+"focus.long_work"    = "shoulder_roll"         # "stretch" line
+"user.returned"      = "wake"
+"input.secret"       = "tail_wag"
+
+# LOW-CONFIDENCE stand-ins (existing event clips that roughly fit). Override
+# these when dedicated art exists.
+"update.available"       = "event_notification"
+"timer.fired"            = "event_calendar"
+"window.opened.folder"   = "event_window_open"
+"window.opened.browser"  = "event_window_open"
+"window.opened.terminal" = "event_window_open"
+"window.opened.media"    = "event_window_open"
 
 # ── Key map (README-SP; active only while she has keyboard focus) ─────────
 # Each entry is either { pose = "<pose>" } or { action = "<action>" }.

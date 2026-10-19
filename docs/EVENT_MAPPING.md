@@ -1,19 +1,23 @@
-# Event mapping: rules.toml ↔ event reaction clips
+# Event mapping: rules.toml ↔ generated clips
 
-Reconciles the 57 `[[rule]]` events in `assets/rules.toml` with the 24
-`event_<name>` reaction clips in the canonical generated set
-(`assets/generated/manifest.json`, final batch of 50 clips).
+Reconciles the 57 `[[rule]]` events in `assets/rules.toml` with the canonical
+generated set (`assets/generated/manifest.json`, 50 clips: 24 `event_<name>`
+reactions and 26 regular animations).
 
-The mapping lives in `assets/rules.toml` under `[event_clips]` and is resolved by
-`lillith_core::rules::RuleSet::event_clip(event)`. A rule with no entry has no
-reaction clip yet and falls back to its `pose`. Tests in `lillith-core`
-(`rules::tests`) check every mapped pair and every unmapped rule below, and that
-every clip in the table exists in `KNOWN_EVENT_CLIPS`.
+The mapping lives in `assets/rules.toml` under `[rule_clips]` (the older name
+`[event_clips]` is still accepted). It is resolved by
+`lillith_core::rules::RuleSet::clip_for(event)`; `event_clip()` is kept as an
+alias. A rule's clip can be an event reaction or any regular animation. A rule
+with no entry falls back to its `pose`. Tests in `lillith-core` (`rules::tests`)
+pin every mapped pair and every remaining gap, check that 43 mapped + 14
+unmapped = 57, and check that every target is in `KNOWN_EVENT_CLIPS` or
+`KNOWN_BASE_CLIPS`.
 
-I only mapped a rule when the clip shows the same thing. "pose match" means the
-rule's own `pose` is the pose the clip depicts.
+**Totals: 43 / 57 rules have a clip** (27 event-clip links + 10 regular
+animations + 6 low-confidence stand-ins). **14 true art gaps** remain. All 24
+event clips are used.
 
-## 1. Mapped: 27 rules → 24 clips
+## 1. Event reaction clips: 27 rules → 24 clips
 
 | Event clip | Rule event(s) | Basis | Confidence |
 |---|---|---|---|
@@ -45,62 +49,66 @@ rule's own `pose` is the pose the clip depicts.
 | event_help | `input.click.middle` | pose `help` (middle click = help per `help.requested` source) | pose match |
 | event_diagnostics | `system.status` | pose `diagnostics`; monitor ECG | exact |
 
-- **Note A:** `window.opened.folder/browser/terminal/media` each have their own pose and line
-  (peeking_folder, peeking, hacking, sitting+dance), so they stay unmapped. `event_window_open`
-  could be their fallback if you want.
+- **Note A:** `window.opened.folder/browser/terminal/media` now use `event_window_open` as a
+  low-confidence stand-in (section 3). Their own poses and lines (peeking_folder, peeking,
+  hacking, sitting+dance) are still in the rule and are better targets once that art exists.
 - **Note B:** the `window.closed` rule is pose `knife` + gesture `stab` + line "Gotcha! 🗡️",
   but `event_window_close` is a friendly wave goodbye. The event matches; the
-  personality doesn't. Decide which one wins, or keep the clip for the event and
-  the knife for `input.click.left`.
+  personality doesn't. **Unchanged, pending Ko's tone decision.** (`input.click.left`
+  now uses `knife_tap`, so the knife still has a home either way.)
 
-## 2. Rules with NO event clip: 30
+## 2. Regular animations reused for rules: 10 (safe)
 
-| Rule event | Rule pose | Closest existing clip (not mapped) | Notes |
+| Rule event | Rule pose | Clip | Notes |
 |---|---|---|---|
-| `ram.high` | htop | event_cpu_busy? | clip draws a CPU chip, so it's specifically CPU |
-| `net.lost` | connection_lost | — | needs a "disconnected" reaction (event_wifi is the positive one) |
-| `vpn.up` | vpn | — | |
-| `hotspot.on` | hotspot | — | |
-| `usb.added` | drive_eject | event_usb_eject? | rule reuses `drive_eject`, but the clip is a goodbye/eject, the opposite meaning |
-| `clipboard.cut` | crop | event_clipboard? | clip shows a check mark, not a cut |
-| `update.available` | dismiss_notif | event_notification? | rule reuses the notification pose; plausible fallback |
-| `timer.fired` | scheduler | event_calendar? | different object (timer vs calendar) |
-| `window.opened.folder` | peeking_folder | event_window_open? | see note A |
-| `window.opened.browser` | peeking | event_window_open? | see note A |
-| `window.opened.terminal` | hacking | event_window_open? | see note A |
-| `window.opened.media` | sitting | event_window_open? / sit_swing, dance | see note A |
-| `start_menu.opened` | start_menu | — | |
-| `search.opened` | magnify | — | |
-| `browser.bookmark` | bookmark | — | |
-| `browser.history` | browser_history | — | |
-| `focus.long_work` | code_inspect | shoulder_roll / lean_forward (base clips) | "stretch" line fits shoulder_roll |
-| `idle.long` | sitting | sit_swing (base clip) | |
-| `idle.asleep` | sleep | sleep (base clip) | covered by the base `sleep` clip |
-| `user.returned` | peeking | wake / wave (base clips) | |
-| `llm.thinking` | waiting | think (base clip) | |
-| `llm.done` | sitting | tada_celebrate (base clip) | gesture is `tada` |
-| `approval.needed` | waiting | — | |
-| `input.click.left` | knife | knife_tap (base clip) | |
-| `input.click.double` | hacking | — | |
-| `input.click.right` | cleaning | — | |
-| `input.hover` | hover_sit_on_window | sit_swing (base clip) | |
-| `input.hover_long` | peeking | — | |
-| `input.drag` | drag_drop | drag_held (base clip) | covered by base `drag_held` (pin `grab_point`) |
-| `input.secret` | dual_tail | dance / tail_wag (base clips) | gesture is `dance` |
+| `idle.asleep` | sleep | sleep | |
+| `input.drag` | drag_drop | drag_held | position by the clip's `grab_point` [200,76], not the feet |
+| `input.click.left` | knife | knife_tap | |
+| `llm.thinking` | waiting | think | |
+| `llm.done` | sitting | tada_celebrate | rule gesture is `tada` |
+| `idle.long` | sitting | sit_swing | uses seat_y / seat_x_range |
+| `input.hover` | hover_sit_on_window | sit_swing | uses seat_y / seat_x_range |
+| `focus.long_work` | code_inspect | shoulder_roll | fits the "stretch" line |
+| `user.returned` | peeking | wake | plays once; ends on idle_00 |
+| `input.secret` | dual_tail | tail_wag | |
 
-Many of these are already covered by a non-event base clip from the 50 (sleep,
-drag_held, knife_tap, think, sit_swing, …). That is a separate rule→base-clip
-binding and is not part of `[event_clips]`. The real art gaps (no event clip and
-no obvious base clip) are: **ram.high, net.lost, vpn.up, hotspot.on, usb.added,
-clipboard.cut, start_menu.opened, search.opened, browser.bookmark,
-browser.history, approval.needed, input.click.double, input.click.right,
-input.hover_long**, plus the four specific `window.opened.*` variants if
-they should differ from `event_window_open`.
+## 3. LOW-CONFIDENCE stand-ins: 6 (override when dedicated art exists)
 
-## 3. Event clips with NO rule: 0
+| Rule event | Rule pose | Stand-in clip | Why it's only a stand-in |
+|---|---|---|---|
+| `update.available` | dismiss_notif | event_notification | generic bell; no "update" art |
+| `timer.fired` | scheduler | event_calendar | calendar, not a timer/clock |
+| `window.opened.folder` | peeking_folder | event_window_open | generic window; rule wants peeking into a folder |
+| `window.opened.browser` | peeking | event_window_open | generic window; rule wants peeking/surfing |
+| `window.opened.terminal` | hacking | event_window_open | generic window; rule wants hacking |
+| `window.opened.media` | sitting | event_window_open | generic window; rule wants sitting + dance |
 
-All 24 event clips are reachable from at least one rule. Clips that serve more
-than one rule: event_wifi (2), event_error (2), event_help (2).
+## 4. TRUE art gaps: rules with NO clip (14)
+
+| Rule event | Rule pose | Notes |
+|---|---|---|
+| `ram.high` | htop | do **not** reuse event_cpu_busy (it draws a CPU chip) |
+| `net.lost` | connection_lost | needs a "disconnected" reaction (event_wifi is the positive one) |
+| `vpn.up` | vpn | |
+| `hotspot.on` | hotspot | |
+| `usb.added` | drive_eject | do **not** reuse event_usb_eject (it shows the stick leaving) |
+| `clipboard.cut` | crop | event_clipboard shows a check mark, not a cut |
+| `start_menu.opened` | start_menu | |
+| `search.opened` | magnify | |
+| `browser.bookmark` | bookmark | |
+| `browser.history` | browser_history | |
+| `approval.needed` | waiting | |
+| `input.click.double` | hacking | |
+| `input.click.right` | cleaning | |
+| `input.hover_long` | peeking | |
+
+These still play their rule `pose` (from the legacy pose stills) until art exists.
+
+## 5. Event clips with NO rule: 0
+
+All 24 event clips are reachable. Clips serving several rules: event_window_open
+(5), event_wifi (2), event_error (2), event_help (2), event_notification (2),
+event_calendar (2), sit_swing (2).
 
 ## Render note (not an importer/mapping issue)
 

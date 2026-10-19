@@ -64,7 +64,7 @@ pub const KNOWN_POSES: &[&str] = &[
 /// Event reaction clips that exist in the canonical generated set
 /// (`assets/generated/manifest.json`, clips named `event_<name>`). Mirrors
 /// the manifest the same way [`KNOWN_POSES`] mirrors the pose art, so a typo
-/// in `[event_clips]` fails `cargo test`.
+/// in `[rule_clips]` fails `cargo test`.
 pub const KNOWN_EVENT_CLIPS: &[&str] = &[
     "event_archiving",
     "event_battery_low",
@@ -91,6 +91,42 @@ pub const KNOWN_EVENT_CLIPS: &[&str] = &[
     "event_window_minimize",
     "event_window_open",
 ];
+
+/// Regular (non-event) animations in the canonical generated set that rules
+/// may also point at via `[rule_clips]`.
+pub const KNOWN_BASE_CLIPS: &[&str] = &[
+    "beam_cast",
+    "blink_wink",
+    "dance",
+    "drag_held",
+    "facepalm",
+    "hip_sway",
+    "idle",
+    "knife_tap",
+    "lean_forward",
+    "nod",
+    "point",
+    "run_left",
+    "run_right",
+    "salute",
+    "shoulder_roll",
+    "shrug",
+    "sit_swing",
+    "sleep",
+    "spell_orb_cast",
+    "tada_celebrate",
+    "tail_wag",
+    "think",
+    "wake",
+    "walk_left",
+    "walk_right",
+    "wave",
+];
+
+/// `true` if `clip` is a known clip of the generated set (event or regular).
+pub fn is_known_clip(clip: &str) -> bool {
+    KNOWN_EVENT_CLIPS.contains(&clip) || KNOWN_BASE_CLIPS.contains(&clip)
+}
 
 /// Errors loading the rule table.
 #[derive(Debug, thiserror::Error)]
@@ -155,10 +191,11 @@ pub struct RuleSet {
     pub rules: Vec<Rule>,
     #[serde(default)]
     pub keys: BTreeMap<String, KeyBinding>,
-    /// Rule event name -> event reaction clip (`[event_clips]`). Optional;
-    /// rules without an entry fall back to their `pose`.
-    #[serde(default)]
-    pub event_clips: BTreeMap<String, String>,
+    /// Rule event name -> clip (`[rule_clips]`, formerly `[event_clips]`):
+    /// an `event_<name>` reaction or any regular animation. Optional; rules
+    /// without an entry fall back to their `pose`.
+    #[serde(default, alias = "event_clips")]
+    pub rule_clips: BTreeMap<String, String>,
 }
 
 impl RuleSet {
@@ -178,16 +215,22 @@ impl RuleSet {
         self.rules.iter().find(|r| r.enabled && r.event == event)
     }
 
-    /// Event reaction clip for a fired rule event, if one is mapped.
-    pub fn event_clip(&self, event: &str) -> Option<&str> {
-        self.event_clips.get(event).map(String::as_str)
+    /// Clip (event reaction or regular animation) for a fired rule event,
+    /// if one is mapped.
+    pub fn clip_for(&self, event: &str) -> Option<&str> {
+        self.rule_clips.get(event).map(String::as_str)
     }
 
-    /// Enabled rules that have no event reaction clip mapped.
+    /// Same as [`RuleSet::clip_for`] (kept for existing callers).
+    pub fn event_clip(&self, event: &str) -> Option<&str> {
+        self.clip_for(event)
+    }
+
+    /// Enabled rules that have no clip mapped.
     pub fn rules_without_clip(&self) -> impl Iterator<Item = &Rule> {
         self.rules
             .iter()
-            .filter(|r| r.enabled && !self.event_clips.contains_key(&r.event))
+            .filter(|r| r.enabled && !self.rule_clips.contains_key(&r.event))
     }
 
     /// Clips from `known` that no rule maps to.
@@ -195,7 +238,7 @@ impl RuleSet {
         known
             .iter()
             .copied()
-            .filter(|c| !self.event_clips.values().any(|v| v == c))
+            .filter(|c| !self.rule_clips.values().any(|v| v == c))
             .collect()
     }
 
@@ -288,9 +331,29 @@ mod tests {
         ("app.crash", "event_error"),
         ("help.requested", "event_help"),
         ("input.click.middle", "event_help"),
+        // Regular animations.
+        ("idle.asleep", "sleep"),
+        ("input.drag", "drag_held"),
+        ("input.click.left", "knife_tap"),
+        ("llm.thinking", "think"),
+        ("llm.done", "tada_celebrate"),
+        ("idle.long", "sit_swing"),
+        ("input.hover", "sit_swing"),
+        ("focus.long_work", "shoulder_roll"),
+        ("user.returned", "wake"),
+        ("input.secret", "tail_wag"),
+        // Low-confidence stand-ins.
+        ("update.available", "event_notification"),
+        ("timer.fired", "event_calendar"),
+        ("window.opened.folder", "event_window_open"),
+        ("window.opened.browser", "event_window_open"),
+        ("window.opened.terminal", "event_window_open"),
+        ("window.opened.media", "event_window_open"),
     ];
 
-    /// Rules deliberately left without an event clip (see docs/EVENT_MAPPING.md).
+    /// True art gaps: rules deliberately left without a clip (see
+    /// docs/EVENT_MAPPING.md). ram.high / usb.added must NOT reuse
+    /// event_cpu_busy / event_usb_eject (different meaning).
     const UNMAPPED: &[&str] = &[
         "ram.high",
         "net.lost",
@@ -298,30 +361,14 @@ mod tests {
         "hotspot.on",
         "usb.added",
         "clipboard.cut",
-        "update.available",
-        "timer.fired",
-        "window.opened.folder",
-        "window.opened.browser",
-        "window.opened.terminal",
-        "window.opened.media",
         "start_menu.opened",
         "search.opened",
         "browser.bookmark",
         "browser.history",
-        "focus.long_work",
-        "idle.long",
-        "idle.asleep",
-        "user.returned",
-        "llm.thinking",
-        "llm.done",
         "approval.needed",
-        "input.click.left",
         "input.click.double",
         "input.click.right",
-        "input.hover",
         "input.hover_long",
-        "input.drag",
-        "input.secret",
     ];
 
     #[test]
@@ -331,7 +378,7 @@ mod tests {
             assert_eq!(rs.event_clip(ev), Some(*clip), "{ev}");
         }
         assert_eq!(
-            rs.event_clips.len(),
+            rs.rule_clips.len(),
             MAPPED.len(),
             "unexpected extra mapping"
         );
@@ -353,14 +400,11 @@ mod tests {
     #[test]
     fn event_clip_table_is_consistent() {
         let rs = RuleSet::bundled();
-        for (ev, clip) in &rs.event_clips {
+        for (ev, clip) in &rs.rule_clips {
+            assert!(rs.find(ev).is_some(), "[rule_clips] key {ev} is not a rule");
             assert!(
-                rs.find(ev).is_some(),
-                "[event_clips] key {ev} is not a rule"
-            );
-            assert!(
-                KNOWN_EVENT_CLIPS.contains(&clip.as_str()),
-                "[event_clips] {ev}: unknown clip {clip}"
+                is_known_clip(clip),
+                "[rule_clips] {ev}: unknown clip {clip}"
             );
         }
         // Every generated event clip is reachable from some rule.
@@ -368,16 +412,37 @@ mod tests {
     }
 
     #[test]
-    fn event_clips_table_is_optional() {
+    fn rule_clips_table_is_optional() {
         let rs =
             RuleSet::from_toml_str("[[rule]]\nevent = \"cpu.high\"\npose = \"busy\"\n").unwrap();
-        assert!(rs.event_clips.is_empty());
+        assert!(rs.rule_clips.is_empty());
         assert_eq!(rs.event_clip("cpu.high"), None);
         assert_eq!(rs.rules_without_clip().count(), 1);
         assert_eq!(
             rs.clips_without_rule(&["event_cpu_busy"]),
             ["event_cpu_busy"]
         );
+    }
+
+    #[test]
+    fn counts_and_aliases() {
+        let rs = RuleSet::bundled();
+        assert_eq!(rs.rules.len(), 57);
+        assert_eq!(MAPPED.len(), 43);
+        assert_eq!(UNMAPPED.len(), 14);
+        // Semantically wrong reuses stay unmapped.
+        assert_eq!(rs.clip_for("ram.high"), None);
+        assert_eq!(rs.clip_for("usb.added"), None);
+        // window.closed unchanged pending a tone decision.
+        assert_eq!(rs.clip_for("window.closed"), Some("event_window_close"));
+        // Old table name still parses.
+        let old = RuleSet::from_toml_str(
+            "[[rule]]\nevent = \"cpu.high\"\npose = \"busy\"\n[event_clips]\n\"cpu.high\" = \"event_cpu_busy\"\n",
+        )
+        .unwrap();
+        assert_eq!(old.event_clip("cpu.high"), Some("event_cpu_busy"));
+        assert!(is_known_clip("sleep") && is_known_clip("event_wifi"));
+        assert!(!is_known_clip("event_ram_high"));
     }
 
     #[test]
