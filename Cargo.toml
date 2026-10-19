@@ -11,6 +11,7 @@ members = [
     "crates/lillith-tray",
     "apps/lillith",
     "tools/slice-sheets",
+    "tools/import-manifest",
 ]
 default-members = [
     "crates/lillith-core",
@@ -23,6 +24,7 @@ default-members = [
     "crates/lillith-tray",
     "apps/lillith",
     "tools/slice-sheets",
+    "tools/import-manifest",
 ]
 
 [workspace.package]

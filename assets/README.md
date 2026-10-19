@@ -8,5 +8,14 @@
 | `source/reference/` | labelled pose sheets 1–3, full-body ref, physics keyframe refs A–D | **not yet** |
 | `source/frames_640x960/` | 80 black-background video frames | **not yet** |
 | `atlas/` | generated atlases + `manifest.toml` written by `tools/slice-sheets` | no (generated, git-ignored) |
+| `generated/` (box only for now) | canonical full-body set from the image pipeline: 400×400 horizontal-strip sheets + `manifest.json`; convert with `tools/import-manifest` | **not yet** |
 
 The curated originals currently live outside the repo on the build box (`/workspace/lillith/assets`, ~43 MB). They will be committed through Git LFS once the canonical art style is chosen (PLAN.md §6 Q1). Run `git lfs install` before adding them.
+
+## Importing a generated set
+
+```sh
+cargo run -p import-manifest -- --input /path/to/generated/manifest.json --tag canonical --check
+```
+
+Writes `manifest.toml` next to `manifest.json` (pages stay relative to it): frame `i` at `x = i*400`, feet anchor `[body_anchor_x or 200, baseline_y]`, `sheet` → `page`, `loop` → `mode`, and `frame_durations_ms` / `baseline_y` / `scale` carried through. A phase-dependent scale object becomes `scale:<phase>=<v>` tags. `--check` re-loads it through `Manifest::load` + `load_page` and bounds-checks every frame.
