@@ -1,6 +1,7 @@
 # Lillith: deduplicated feature list
 
 > **Changelog**
+> - 2026-10-19, 13:5x MDT: **M4 system monitor** landed on `scaffold/rust-workspace` (`lillith-sense`). §4 Repo column now says IMPL / STUB for the rows it covers; detection sources updated to what the Rust code actually reads.
 > - 2026-10-19, 04:4x MDT: folded in **Grok history pass 2** (`grok_history_pass2.md`). Corrected the CPU monitor, added new movement/pose-sheet/installer/branding rows, expanded the out-of-scope list (CAPABILITIES 60-tool set). All ~85 Library downloads in `~/Downloads` were already in `source/` (hash-checked, no new files); see `source/DOWNLOADS_MAPPING.csv`.
 > - 2026-10-19, 04:3x MDT: added the Repo column (the repo holds only a README).
 
@@ -18,7 +19,7 @@ Built from every attached file (see `inventory.md`), `grok_history.md` (pass 1, 
 
 **Repo column:** status in `github.com/kokannadian-killa/Lillith-Desktop-Avatar` (private, branch `main`), checked 2026-10-19 at 04:31 MDT.
 - The repo holds one commit, `afb24cc` "Initial commit", made 04:31 MDT, about when it was shared. Its only file is a 2-line `README.md`: "Interactive desktop avatar and system state and action moniter".
-- **No feature below is implemented in the repo yet**, so every row reads "—". Rows will change to IMPL / STUB as code lands.
+- Rows read "—" until code lands, then IMPL / STUB (M4 filled in the §4 system-monitor rows; earlier milestones are tracked in PLAN.md §5).
 - The repo is the intended home for the Rust port in PLAN.md and has no code yet.
 
 Out of scope and deliberately excluded (not planned, even where code or docs exist): the Tor/anon bot pool (CAPABILITIES.md lists 55 "anon" tools among 60), Tor routing, MAC randomizer/"MAC mask", network kill switch (rfkill/nmcli), trace wiper (RAM tmpdir/shred); port/secret scanning, the CAI security scan/panel, offensive "forge" tools, "30 drones", and pentesting/exploit tooling (P2-L, P2-O and the skipped chats); the ~97 KB `grok-chat.txt` jailbreak/18+ transcript and any "uncensored"/"unrestricted"/moderation-bypass persona prompts (P2-1c). These are noted for awareness only; their code was not reviewed and none feed the plan.
@@ -90,42 +91,42 @@ Each row gives the event, the pose (clean name from pose_map / file in `assets/p
 
 | Event / state | Pose (assets/poses) | Detection source (Rust) | Status | Repo |
 |---|---|---|---|---|
-| CPU high: psutil.cpu_percent(interval=0.5), threshold 72%, every 5.5 s; 60% → `system_high` (2100 ms) else `hacking` (1800 ms), skipped while already reacting | busy (39) / alert (51) / hacking | sysinfo | **PY** (psutil; exact logic in mod_system_monitor/system_monitor.py, P2-§2) | — |
-| RAM high | busy (39) / htop (29) | sysinfo | SPEC (INV system_event_watcher) | — |
-| System monitor view / "how's my system" | htop (29), diagnostics (37) | sysinfo (CPU, RAM, disk, load, uptime, temps, top procs) | PY-missing (README-SP agent tools) | — |
-| Battery low (15%) | battery_low (12) | UPower D-Bus (zbus) / starship-battery | PY-missing | — |
+| CPU high: psutil.cpu_percent(interval=0.5), threshold 72%, every 5.5 s; 60% → `system_high` (2100 ms) else `hacking` (1800 ms), skipped while already reacting | busy (39) / alert (51) / hacking | `/proc/stat` deltas (2 s poll), ≥ 72 % for 10 s, re-arm < 62 % for 10 s | **PY** (psutil; exact logic in mod_system_monitor/system_monitor.py, P2-§2) | IMPL (M4) `cpu.high` |
+| RAM high | busy (39) / htop (29) | `/proc/meminfo` MemTotal − MemAvailable ≥ 85 % for 10 s, re-arm < 80 % | SPEC (INV system_event_watcher) | IMPL (M4) `ram.high` |
+| System monitor view / "how's my system" | htop (29), diagnostics (37) | sysinfo (CPU, RAM, disk, load, uptime, temps, top procs) | PY-missing (README-SP agent tools) | STUB (M4): `lillith status` one-line snapshot (CPU, RAM, load, battery, backlight, net, VPN, drives); panel view M6 |
+| Battery low (15%) | battery_low (12) | `/sys/class/power_supply` (system batteries only; peripheral `scope=Device` ignored; no battery = silent) | PY-missing | IMPL (M4) `battery.low` |
 | Wi-Fi strength / connection check | wifi (40) | NetworkManager D-Bus | ART + key only | — |
-| Connection lost / restored | connection_lost (01) | NetworkManager connectivity | SPEC (INV, GH#1) | — |
+| Connection lost / restored | connection_lost (01) | `/proc/net/route` + `ipv6_route` default route on an interface with carrier (`/sys/class/net/*/operstate`), 4 s debounce | SPEC (INV, GH#1) | IMPL (M4) `net.lost` / `net.restored` |
 | Hotspot active (n devices) | hotspot (30) | NetworkManager | ART | — |
-| VPN connected | vpn (22, guess) | NetworkManager active connections | ART + key | — |
+| VPN connected | vpn (22, guess) | `/sys/class/net` tun/tap/WireGuard/PPP interface comes up | ART + key | IMPL (M4) `vpn.up` |
 | Bluetooth paired | bluetooth (05) | BlueZ D-Bus (bluer) | ART | — |
 | Master volume change | volume (26) + volume frames | PipeWire/Pulse (libpulse or `pactl subscribe`) | ART + key | — |
-| Screen brightness change | brightness (18) | /sys/class/backlight + inotify, or KDE PowerManagement D-Bus | ART | — |
+| Screen brightness change | brightness (18) | `/sys/class/backlight/*` polled (≥ 2 points) | ART | IMPL (M4) `brightness.changed` |
 | Firewall blocked IP | firewall (31) | journald (firewalld/ufw/nftables log) | ART. Detection unspecced | — |
-| Safely eject USB / drive mounted | drive_eject (48) | UDisks2 D-Bus | ART | — |
+| Safely eject USB / drive mounted | drive_eject (48) | `/sys/block` removable / USB-bus disks with media appear / vanish | ART | IMPL (M4) `usb.added` / `usb.removed` |
 | Printing job | printing (20) | CUPS (D-Bus notifier / `lpstat` poll) | ART | — |
-| Creating archive / compress | compress (44) | inotify on Downloads/home for .zip/.tar*, or process watch (zip/tar/ark) | ART | — |
+| Creating archive / compress | compress (44) | inotify on Downloads/home for .zip/.tar*, or process watch (zip/tar/ark) | ART | IMPL (M4) `archive.created` (inotify on ~/Downloads, incl. `.part` renames) |
 | Cloud sync | cloud_sync (21) | process/inotify (rclone/nextcloud/syncthing). Guess | ART | — |
-| Recycle bin / file deleted | recycle (15) | inotify on ~/.local/share/Trash | ART | — |
-| Private/incognito session | private (38) | window title contains "Private Browsing"/"Incognito" (KWin script) | ART | — |
-| Email / system update notification; dismiss | dismiss_notif (32) | org.freedesktop.Notifications monitor (zbus) | ART | — |
-| System update available / restart needed | restart (unresolved), dismiss_notif | pacman checkupdates / notifications | ART | — |
-| Calendar meeting reminder | calendar (02) | notifications from KOrganizer/Merkuro, or .ics. Guess | ART | — |
+| Recycle bin / file deleted | recycle (15) | inotify on ~/.local/share/Trash | ART | IMPL (M4) `trash.added` |
+| Private/incognito session | private (38) | window title contains "Private Browsing"/"Incognito" (KWin script) | ART | STUB: receiver + mapping done (`window.private`); needs the KWin script installed (M5) |
+| Email / system update notification; dismiss | dismiss_notif (32) | org.freedesktop.Notifications monitor (zbus) | ART | IMPL (M4) `notify.received` (summary only, body never read) |
+| System update available / restart needed | restart (unresolved), dismiss_notif | pacman checkupdates / notifications | ART | IMPL (M4) `update.available` from Discover/pamac/octopi/garuda notifications |
+| Calendar meeting reminder | calendar (02) | notifications from KOrganizer/Merkuro, or .ics. Guess | ART | IMPL (M4) `calendar.reminder` from KOrganizer/Merkuro/kalendarac notifications |
 | Clock / scheduled task | scheduler (10) | timers (own reminders, Pomodoro) | ART | — |
-| Screenshot taken | screenshot (07) | ~/Pictures/Screenshots inotify or Spectacle D-Bus | ART + key | — |
+| Screenshot taken | screenshot (07) | ~/Pictures/Screenshots inotify or Spectacle D-Bus | ART + key | IMPL (M4) `screenshot.taken` |
 | Clipboard copy | clipboard (25) | wl-clipboard-rs (watch) | ART + key | — |
 | Cut / crop | crop (03) | clipboard / app focus. Guess | ART | — |
 | File dragging / multi-select | drag_drop (23), multi_select (19) | not observable on Wayland. Own-window drag only | ART | — |
 | Right-click / desktop shortcut menu | shortcut_menu (27) | own right-click | ART | — |
 | Start menu opened | start_menu (36) | KWin script (plasmashell launcher window active) | ART | — |
 | Search / magnifier | magnify (35) | KRunner/zoom activation (KWin). Guess | ART | — |
-| Window opened (folder/browser/terminal/media/app → point/wave/salute/dance/nod + line) | peeking_folder (49), peeking (45), hacking (09), code_inspect (13) | KWin script → D-Bus | **PY** (wmctrl, X11) | — |
-| Window closed → "stab" knife | knife (28) | KWin script | **PY** (X11) | — |
-| Window minimized | minimize (08) | KWin script | ART + WEB | — |
+| Window opened (folder/browser/terminal/media/app → point/wave/salute/dance/nod + line) | peeking_folder (49), peeking (45), hacking (09), code_inspect (13) | KWin script → D-Bus | **PY** (wmctrl, X11) | STUB: `org.lillith.Bridge` receiver maps `window.opened.*`; script install/verify M5 |
+| Window closed → "stab" knife | knife (28) | KWin script | **PY** (X11) | STUB: receiver maps `window.closed`; M5 |
+| Window minimized | minimize (08) | KWin script | ART + WEB | STUB: receiver maps `window.minimized`; M5 |
 | Browser history / bookmark | browser_history (00), bookmark (06) | window title heuristics. Guess | ART | — |
 | Code editor focused / long work session → stretch nudge | code_inspect (13) | KWin active window + timer | PY-missing (README-SP) | — |
 | User typing | (bounce) | not observable globally on Wayland; only in own chat bar | PY (X11 design) | — |
-| Idle → sit → sleep; return → peek / wake | sitting (42), sleep (34), peeking (45) | KDE idle (ext-idle-notify / org.freedesktop.ScreenSaver) | PY-missing | — |
+| Idle → sit → sleep; return → peek / wake | sitting (42), sleep (34), peeking (45) | ext-idle-notify-v1 (Wayland) / MIT-SCREEN-SAVER (X11) → `user.activity` (keeps her awake), `user.returned` after ≥ 120 s away; drowsy/asleep stay the brain's own timers | PY-missing | IMPL (M4) — needs Plasma 6 smoke test |
 | Loading / busy app start | loading (16), running (24) | process spawn (sysinfo diff) | ART | — |
 | Waiting for input / awaiting approval | waiting (11) | own confirmation dialogs | ART + SPEC (README-DK) | — |
 | Error (app crash / journal error / LLM error) | error (43) | journald, own errors | PY (aether gesture_map on_error) | — |
