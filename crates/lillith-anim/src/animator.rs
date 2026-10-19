@@ -16,12 +16,25 @@
 //! Physics: breathing drives the scale/chest spring targets; reactions apply
 //! impulses on start ([`kick_for`]); walk/run/dance apply footfall impulses
 //! twice per cycle; starting/stopping a walk tips the angle spring. There is
-//! no random per-frame jitter.
+//! no random per-frame jitter. The tier values, footfalls and breathing
+//! amplitudes come from the bundled `assets/physics.toml`
+//! (`[impulse_recipes]` high/medium/low, `[walk]`, `[breathing]`).
+//!
+//! With [`AnimatorConfig::physics_driver`] on, a
+//! [`lillith_core::physics_driver::PhysicsDriver`] runs the springs instead:
+//! clip starts go through `on_clip_start` (per-clip recipes, impact-frame
+//! delays, double bounces, baked idle clips get kicks only), walking through
+//! `set_motion` (cycle-derived footfalls, pigtail trail), breathing through
+//! its shaped breath curve, and [`Animator::on_event`] / [`Animator::set_mood`]
+//! feed rule events and moods.
 
 use crate::atlas::{Clip, FrameRect, LoopMode, Manifest};
 use crate::player::ClipPlayer;
 use lillith_core::config::Springs;
 use lillith_core::idle::{IdleConfig, IdleCue, IdleLife};
+use lillith_core::mood::Mood;
+use lillith_core::physics_config::{PhysicsConfig, Recipe};
+use lillith_core::physics_driver::{Motion, Overlay as PhysicsOverlay, PhysicsDriver};
 use lillith_core::spring::{Channel, Physics, Transform};
 use std::collections::VecDeque;
 
@@ -67,6 +80,9 @@ pub struct AnimatorConfig {
     pub blink_clip: String,
     /// Run idle life (blinks/transitions/idle reactions). Off for previews.
     pub idle_enabled: bool,
+    /// Drive the springs with the physics.toml [`PhysicsDriver`] instead of
+    /// the built-in kick tables (off by default; the app turns it on).
+    pub physics_driver: bool,
 }
 
 impl Default for AnimatorConfig {
@@ -76,10 +92,13 @@ impl Default for AnimatorConfig {
             physics_hz: 120.0,
             idle: IdleConfig::default(),
             seed: 0x1111_7777,
-            breath_scale: 0.006,
+            breath_scale: physics_toml().breathing.scale_amplitude,
+            // Legacy path keeps M2's +1.2 px chest breath; physics.toml uses
+            // -0.6 px (inhale lifts, preview pass 2), applied in driver mode.
             breath_chest: 1.2,
             blink_clip: "blink_wink".into(),
             idle_enabled: true,
+            physics_driver: false,
         }
     }
 }
@@ -142,56 +161,61 @@ pub const LOW_ENERGY: &[&str] = &[
     "event_incognito",
 ];
 
+fn physics_toml() -> &'static PhysicsConfig {
+    PhysicsConfig::bundled_shared()
+}
+
+/// A physics.toml recipe flattened to one simultaneous kick (delays and
+/// double bounces are the driver's job).
+fn recipe_kick(name: &str) -> Kick {
+    let mut k = Kick::default();
+    let Some(Recipe { impulses, .. }) = physics_toml().impulse_recipes.get(name) else {
+        return k;
+    };
+    for i in impulses {
+        match Channel::from_name(&i.channel) {
+            Some(Channel::RootY) => k.root_y += i.strength,
+            Some(Channel::Angle) => k.angle += i.strength,
+            Some(Channel::Scale) => k.scale += i.strength,
+            Some(Channel::Chest) => k.chest += i.strength,
+            Some(Channel::Pigtail) => k.pigtail += i.strength,
+            _ => {}
+        }
+    }
+    k
+}
+
 /// Impulse to apply when `name` starts as a reaction/transition.
 /// High-energy clips get a real bounce; other gestures and every remaining
-/// `event_*` clip a medium one; idle-ish clips a gentle sway.
+/// `event_*` clip a medium one; idle-ish clips a gentle sway. Values are
+/// physics.toml `[impulse_recipes]` `high` / `medium` / `low`.
 pub fn kick_for(name: &str) -> Kick {
     if HIGH_ENERGY.contains(&name) {
-        Kick {
-            root_y: -90.0,
-            angle: 0.6,
-            scale: 0.35,
-            chest: 70.0,
-            pigtail: 90.0,
-        }
+        recipe_kick("high")
     } else if LOW_ENERGY.contains(&name) {
-        Kick {
-            root_y: 0.0,
-            angle: 0.12,
-            scale: 0.0,
-            chest: 18.0,
-            pigtail: 30.0,
-        }
+        recipe_kick("low")
     } else {
-        Kick {
-            root_y: -40.0,
-            angle: 0.3,
-            scale: 0.15,
-            chest: 40.0,
-            pigtail: 55.0,
-        }
+        recipe_kick("medium")
     }
 }
 
 /// Footfall impulse for locomotion clips (`None` for non-locomotion).
+/// Values are physics.toml `[walk]` `walk_footfall` / `run_footfall`.
 pub fn footfall_for(name: &str) -> Option<Kick> {
-    if name.starts_with("run") {
-        Some(Kick {
-            root_y: 30.0,
-            chest: 45.0,
-            pigtail: 35.0,
-            ..Kick::default()
-        })
+    let w = &physics_toml().walk;
+    let f = if name.starts_with("run") {
+        w.run_footfall
     } else if name.starts_with("walk") || name == "dance" {
-        Some(Kick {
-            root_y: 10.0,
-            chest: 22.0,
-            pigtail: 18.0,
-            ..Kick::default()
-        })
+        w.walk_footfall
     } else {
-        None
-    }
+        return None;
+    };
+    Some(Kick {
+        root_y: f.root_y,
+        chest: f.chest,
+        pigtail: f.pigtails,
+        ..Kick::default()
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -249,6 +273,8 @@ pub struct Animator {
     blink_frames: Vec<usize>,
     idle: IdleLife,
     physics: Physics,
+    /// Present when [`AnimatorConfig::physics_driver`] is on; owns the springs.
+    driver: Option<PhysicsDriver>,
     last_key: Option<(String, usize)>,
     idle_base: String,
 }
@@ -301,6 +327,9 @@ impl Animator {
             .map(auto_blink_frames)
             .unwrap_or_default();
         let physics = Physics::new(&cfg.springs, cfg.physics_hz);
+        let driver = cfg
+            .physics_driver
+            .then(|| PhysicsDriver::bundled(&cfg.springs, cfg.physics_hz, cfg.seed));
         Ok(Self {
             base: idle_base.clone(),
             idle_base,
@@ -312,6 +341,7 @@ impl Animator {
             blink_frames,
             idle,
             physics,
+            driver,
             last_key: None,
             manifest,
             cfg,
@@ -332,11 +362,56 @@ impl Animator {
     }
 
     pub fn physics(&self) -> &Physics {
-        &self.physics
+        match &self.driver {
+            Some(d) => d.physics(),
+            None => &self.physics,
+        }
     }
 
     pub fn physics_mut(&mut self) -> &mut Physics {
-        &mut self.physics
+        match &mut self.driver {
+            Some(d) => d.physics_mut(),
+            None => &mut self.physics,
+        }
+    }
+
+    /// The physics.toml driver, when [`AnimatorConfig::physics_driver`] is on.
+    pub fn driver(&self) -> Option<&PhysicsDriver> {
+        self.driver.as_ref()
+    }
+
+    pub fn driver_mut(&mut self) -> Option<&mut PhysicsDriver> {
+        self.driver.as_mut()
+    }
+
+    /// Procedural tail/horn/glow overlay (driver mode only).
+    pub fn physics_overlay(&self) -> Option<PhysicsOverlay> {
+        self.driver.as_ref().map(PhysicsDriver::overlay)
+    }
+
+    /// Feeds a fired rule event (dotted name) to the driver: its mood and
+    /// impulse recipe. Call it next to `react(clip)`; the clip start is then
+    /// not kicked twice. Returns `false` without a driver or for unknown events.
+    pub fn on_event(&mut self, event: &str) -> bool {
+        self.driver.as_mut().is_some_and(|d| d.on_event(event))
+    }
+
+    /// Mood change for the springs (driver mode; no-op otherwise).
+    pub fn set_mood(&mut self, mood: Mood) {
+        if let Some(d) = &mut self.driver {
+            d.set_mood(mood);
+        }
+    }
+
+    /// Held by the cursor (`Some(cursor vx px/s)`) or released (`None`):
+    /// dangling sway and a soft drop (driver mode; no-op otherwise).
+    pub fn set_dragged(&mut self, vx: Option<f32>) {
+        if let Some(d) = &mut self.driver {
+            d.set_motion(match vx {
+                Some(vx) => Motion::Dragged { vx },
+                None => Motion::Idle,
+            });
+        }
     }
 
     pub fn idle_life(&self) -> &IdleLife {
@@ -404,9 +479,23 @@ impl Animator {
         self.set_base(&name, flip)?;
         if starting {
             let s = if dir == Dir::Right { 1.0 } else { -1.0 };
-            self.physics
-                .impulse(Channel::Angle, s * if running { 0.5 } else { 0.25 });
-            self.physics.impulse(Channel::Pigtail, -s * 40.0);
+            if let Some(d) = &mut self.driver {
+                let vx = s * d.config().walk.demo_speed_px_s * if running { 2.0 } else { 1.0 };
+                let cycle_s = self.manifest.clips[&name].duration_s();
+                // Leave the current locomotion first so a direction change
+                // re-tips the body.
+                d.set_motion(Motion::Idle);
+                d.set_motion(if running {
+                    Motion::Running { vx, cycle_s }
+                } else {
+                    Motion::Walking { vx, cycle_s }
+                });
+            } else {
+                let tip = physics_toml().walk.start_tip_angle;
+                self.physics
+                    .impulse(Channel::Angle, s * if running { 2.0 * tip } else { tip });
+                self.physics.impulse(Channel::Pigtail, -s * 40.0);
+            }
         }
         Ok(())
     }
@@ -419,7 +508,9 @@ impl Animator {
             } else {
                 1.0
             };
-            if footfall_for(&self.base).is_some() {
+            if let Some(d) = &mut self.driver {
+                d.set_motion(Motion::Idle);
+            } else if footfall_for(&self.base).is_some() {
                 self.physics.impulse(Channel::Angle, -s * 0.3);
                 self.physics.impulse(Channel::Pigtail, s * 50.0);
                 self.physics.impulse(Channel::Chest, 25.0);
@@ -432,7 +523,13 @@ impl Animator {
     fn start_overlay(&mut self, clip: String, flip: bool, kind: OverlayKind) {
         let player = once_player(&self.manifest.clips[&clip]);
         let sign = if flip { -1.0 } else { 1.0 };
-        kick_for(&clip).apply(&mut self.physics, sign);
+        match &mut self.driver {
+            Some(d) => {
+                d.set_facing(!flip);
+                d.on_clip_start(&clip);
+            }
+            None => kick_for(&clip).apply(&mut self.physics, sign),
+        }
         self.blink = None;
         self.overlay = Some(Overlay {
             clip,
@@ -570,12 +667,15 @@ impl Animator {
             }
         }
 
-        // Breathing drives spring targets (the springs smooth it).
-        let b = self.idle.breath();
-        self.physics
-            .set_target(Channel::Scale, 1.0 + self.cfg.breath_scale * b);
-        self.physics
-            .set_target(Channel::Chest, self.cfg.breath_chest * b);
+        // Breathing drives spring targets (the springs smooth it). The
+        // driver has its own shaped breath curve.
+        if self.driver.is_none() {
+            let b = self.idle.breath();
+            self.physics
+                .set_target(Channel::Scale, 1.0 + self.cfg.breath_scale * b);
+            self.physics
+                .set_target(Channel::Chest, self.cfg.breath_chest * b);
+        }
 
         self.base_player.advance(dt);
         if let Some(bl) = &mut self.blink {
@@ -615,7 +715,8 @@ impl Animator {
         };
         let key = (name.clone(), frame);
         if self.last_key.as_ref() != Some(&key) {
-            if let Some(kick) = footfall_for(&name) {
+            // (The driver derives footfalls from the locomotion cycle.)
+            if let Some(kick) = footfall_for(&name).filter(|_| self.driver.is_none()) {
                 let n = self.manifest.clips[&name].frames.len();
                 let half = (n / 2).max(1);
                 if frame % half == 0 {
@@ -625,12 +726,15 @@ impl Animator {
             self.last_key = Some(key);
         }
 
-        self.physics.step(dt);
+        match &mut self.driver {
+            Some(d) => d.tick(dt),
+            None => self.physics.step(dt),
+        }
     }
 
     /// The frame to draw now, with the spring transform.
     pub fn current(&self) -> FrameRef<'_> {
-        let transform = self.physics.transform();
+        let transform = self.physics().transform();
         if let Some(o) = &self.overlay {
             let clip = &self.manifest.clips[&o.clip];
             let frame = o.player.frame().min(clip.frames.len() - 1);
@@ -899,5 +1003,93 @@ mod tests {
         assert_eq!(a.overlay_clip(), Some("hip_sway"));
         run(&mut a, 0.2);
         assert_eq!(a.overlay_clip(), None);
+    }
+
+    fn driven() -> AnimatorConfig {
+        AnimatorConfig {
+            physics_driver: true,
+            ..quiet()
+        }
+    }
+
+    #[test]
+    fn kick_tables_come_from_physics_toml() {
+        let cfg = PhysicsConfig::bundled_shared();
+        let high = &cfg.impulse_recipes["high"].impulses;
+        let k = kick_for("knife_tap");
+        assert_eq!(
+            k.chest,
+            high.iter().find(|i| i.channel == "chest").unwrap().strength
+        );
+        assert_eq!(k.root_y, -90.0);
+        assert_eq!(
+            footfall_for("walk_right").unwrap().chest,
+            cfg.walk.walk_footfall.chest
+        );
+        assert_eq!(
+            footfall_for("run_left").unwrap().root_y,
+            cfg.walk.run_footfall.root_y
+        );
+        let d = AnimatorConfig::default();
+        assert_eq!(d.breath_scale, cfg.breathing.scale_amplitude);
+        assert_eq!(d.breath_chest, 1.2, "legacy M2 chest breath");
+        assert!(!d.physics_driver);
+    }
+
+    #[test]
+    fn driver_mode_knife_tap_lands_on_impact_frame() {
+        let mut a = Animator::new(manifest(), driven()).unwrap();
+        assert!(a.driver().is_some());
+        run(&mut a, 2.0);
+        let calm = a.physics().chest.velocity.abs();
+        a.react("knife_tap", 1).unwrap();
+        run(&mut a, 0.3); // impact frame is 0.4 s in
+        assert!(a.physics().chest.velocity.abs() < calm + 5.0, "too early");
+        let mut peak = 0f32;
+        for _ in 0..60 {
+            a.tick(1.0 / 60.0);
+            peak = peak.max(a.current().transform.chest_offset.abs());
+        }
+        assert!(peak > 1.0, "knife_tap chest jiggle {peak}");
+        assert!(a.physics_overlay().is_some());
+    }
+
+    #[test]
+    fn driver_mode_cpu_high_event_and_clip() {
+        let mut a = Animator::new(manifest(), driven()).unwrap();
+        run(&mut a, 1.0);
+        assert!(a.on_event("cpu.high"));
+        assert_eq!(a.driver().unwrap().mood(), Mood::Alert);
+        a.react("event_cpu_busy", 5).unwrap(); // deduped against the event
+        let mut hop = 0f32;
+        for _ in 0..60 {
+            a.tick(1.0 / 60.0);
+            hop = hop.min(a.current().transform.y);
+        }
+        assert!(hop < -2.0, "hop {hop}");
+        assert!(!a.on_event("no.such.event"));
+        // Without a driver, events are ignored.
+        let mut plain = Animator::new(manifest(), quiet()).unwrap();
+        assert!(!plain.on_event("cpu.high"));
+    }
+
+    #[test]
+    fn driver_mode_walk_bounces_and_settles() {
+        let mut a = Animator::new(manifest(), driven()).unwrap();
+        a.walk(Dir::Right, false).unwrap();
+        let mut max_chest = 0f32;
+        for _ in 0..180 {
+            a.tick(1.0 / 60.0);
+            max_chest = max_chest.max(a.current().transform.chest_offset.abs());
+        }
+        assert!(max_chest > 1.0, "chest {max_chest}");
+        a.stand();
+        run(&mut a, 5.0);
+        let t = a.current().transform;
+        assert!(t.y.abs() < 0.1 && t.angle.abs() < 0.01, "{t:?}");
+        a.set_dragged(Some(300.0));
+        run(&mut a, 1.0);
+        assert!(a.current().transform.angle.abs() > 0.05, "dangling sway");
+        a.set_dragged(None);
     }
 }

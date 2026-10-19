@@ -213,6 +213,8 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
             springs: cfg.springs.clone(),
             physics_hz: cfg.physics_hz,
             seed,
+            // Tuned jiggle physics from assets/physics.toml (PhysicsDriver).
+            physics_driver: true,
             ..Default::default()
         },
         position: if cli.reset_position {
