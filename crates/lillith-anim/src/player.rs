@@ -170,12 +170,8 @@ mod tests {
             page: "p.png".into(),
             fps: 6.0,
             mode: LoopMode::Once,
-            frame_durations_ms: None,
-            baseline_y: None,
-            scale: None,
-            tags: vec![],
-            points: Default::default(),
             frames: vec![frame; 10],
+            ..Clip::default()
         };
         let flat = ClipPlayer::for_clip(&clip);
         assert!((flat.duration_s() - 10.0 / 6.0).abs() < 1e-4);

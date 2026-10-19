@@ -24,6 +24,11 @@
 //! `feet_off_ground_px` becomes a `feet_off_ground_px:<n>` tag; the feet
 //! anchor itself stays on the shared baseline.
 //!
+//! Seat metadata (`seat_y`, `seat_x_range`, `feet_lowest_y`) and event
+//! reaction metadata (`event`, `base_clip`, `base_frames`) are carried into
+//! the clip fields of the same names. The engine validates that `base_clip`
+//! exists and every `base_frames` index is in range.
+//!
 //! With `--check`, the written manifest is re-loaded through
 //! `Manifest::load` + `load_page` and every frame rect is bounds-checked.
 
@@ -131,6 +136,22 @@ fn collect_points(
     out
 }
 
+/// Typed field looked up in the entry, then the per-animation JSON. A field
+/// that is present but has the wrong shape is an error, not silently dropped.
+fn typed_field<T: serde::de::DeserializeOwned>(
+    name: &str,
+    entry: &Map<String, Value>,
+    side: Option<&Map<String, Value>>,
+    key: &str,
+) -> Result<Option<T>> {
+    match entry.get(key).or_else(|| side.and_then(|m| m.get(key))) {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => serde_json::from_value(v.clone())
+            .map(Some)
+            .with_context(|| format!("{name}: field `{key}` has an unexpected shape: {v}")),
+    }
+}
+
 /// Integer field looked up in the entry, then the per-animation JSON.
 fn int_field(
     entry: &Map<String, Value>,
@@ -226,6 +247,15 @@ fn convert(
         scale,
         tags,
         points: collect_points(&anim.extra, side),
+        // Seat metadata (sit_swing): a line, a range and a scalar; mapped
+        // explicitly so they are never mistaken for points or frame indices.
+        seat_y: typed_field(&anim.name, &anim.extra, side, "seat_y")?,
+        seat_x_range: typed_field(&anim.name, &anim.extra, side, "seat_x_range")?,
+        feet_lowest_y: typed_field(&anim.name, &anim.extra, side, "feet_lowest_y")?,
+        // Event reaction metadata: which base clip/frames it composes from.
+        event: typed_field(&anim.name, &anim.extra, side, "event")?,
+        base_clip: typed_field(&anim.name, &anim.extra, side, "base_clip")?,
+        base_frames: typed_field(&anim.name, &anim.extra, side, "base_frames")?,
         frames,
     })
 }
@@ -309,6 +339,19 @@ fn check(path: &Path) -> Result<()> {
             },
             clip.frames[0].anchor,
         );
+        if let Some(ev) = &clip.event {
+            println!(
+                "   event {ev} <- base {} frames {:?}",
+                clip.base_clip.as_deref().unwrap_or("-"),
+                clip.base_frames.as_deref().unwrap_or(&[])
+            );
+        }
+        if clip.seat_y.is_some() || clip.seat_x_range.is_some() || clip.feet_lowest_y.is_some() {
+            println!(
+                "   seat_y {:?}  seat_x_range {:?}  feet_lowest_y {:?}",
+                clip.seat_y, clip.seat_x_range, clip.feet_lowest_y
+            );
+        }
         let cell = clip.frames[0];
         for (pname, &(px, py)) in &clip.points {
             let inside = px >= 0 && py >= 0 && (px as u32) < cell.w && (py as u32) < cell.h;
@@ -440,6 +483,63 @@ mod tests {
         )
         .unwrap();
         assert_eq!(back.clips["drag_held"], clip);
+    }
+
+    #[test]
+    fn carries_seat_and_event_metadata() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [
+              { "name": "think", "sheet": "t.png", "frame_count": 3, "fps": 6 },
+              { "name": "event_wifi", "sheet": "e.png", "frame_count": 2, "fps": 10,
+                "loop": false, "manifest": "does/not/exist.json" },
+              { "name": "sit_swing", "sheet": "s.png", "frame_count": 1, "fps": 8,
+                "baseline_y": 392, "anchor": [200, 392] } ] }"#,
+        )
+        .unwrap();
+        let ev_side: Value = serde_json::from_str(
+            r#"{ "event": "wifi", "base_clip": "think", "base_frames": [2, 0] }"#,
+        )
+        .unwrap();
+        let seat_side: Value = serde_json::from_str(
+            r#"{ "seat_y": 230, "seat_x_range": [136, 279], "feet_lowest_y": 364 }"#,
+        )
+        .unwrap();
+        let a = &json.animations;
+        let think = convert(&a[0], None, "t.png".into(), &[]).unwrap();
+        let ev = convert(&a[1], ev_side.as_object(), "e.png".into(), &[]).unwrap();
+        let sit = convert(&a[2], seat_side.as_object(), "s.png".into(), &[]).unwrap();
+        assert_eq!(ev.event.as_deref(), Some("wifi"));
+        assert_eq!(ev.base_clip.as_deref(), Some("think"));
+        assert_eq!(ev.base_frames.as_deref(), Some(&[2, 0][..]));
+        assert_eq!(sit.seat_y, Some(230));
+        assert_eq!(sit.seat_x_range, Some((136, 279)));
+        assert_eq!(sit.feet_lowest_y, Some(364));
+        // Not misread as attachment points; feet anchor untouched.
+        assert!(sit.points.is_empty());
+        assert_eq!(sit.frames[0].anchor, (200, 392));
+        assert_eq!(think.event, None);
+        assert_eq!(think.seat_y, None);
+
+        let m = Manifest {
+            clips: [
+                ("think".to_string(), think),
+                ("event_wifi".to_string(), ev),
+                ("sit_swing".to_string(), sit),
+            ]
+            .into(),
+        };
+        let back = Manifest::from_toml_str(&toml::to_string(&m).unwrap()).unwrap();
+        assert_eq!(back.clips, m.clips);
+    }
+
+    #[test]
+    fn rejects_malformed_metadata() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [ { "name": "s", "sheet": "s.png", "frame_count": 1,
+                 "fps": 8, "seat_x_range": [1, 2, 3] } ] }"#,
+        )
+        .unwrap();
+        assert!(convert(&json.animations[0], None, "s.png".into(), &[]).is_err());
     }
 
     #[test]

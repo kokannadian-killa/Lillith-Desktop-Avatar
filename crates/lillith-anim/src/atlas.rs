@@ -14,6 +14,10 @@
 //! scale = 0.54                   # optional: character scale baked into the art
 //! tags = ["canonical"]
 //! points = { beam_origin = [306, 78] }  # optional named points
+//! # optional seat metadata (sit_swing): seat_y = 230, seat_x_range = [136, 279],
+//! # feet_lowest_y = 364
+//! # optional event reaction metadata: event = "cpu_busy",
+//! # base_clip = "facepalm", base_frames = [0, 1, ...] (one per frame)
 //! frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
 //! ```
 
@@ -82,7 +86,49 @@ pub struct Clip {
     /// spot to pin to the cursor while she is dragged).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub points: BTreeMap<String, (i32, i32)>,
+    /// Optional seat line (y in cell coords) for seated clips such as
+    /// `sit_swing`: the engine puts the edge she sits on (e.g. a window top) here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seat_y: Option<i32>,
+    /// Optional horizontal extent `[x0, x1]` of the seat contact, cell coords.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seat_x_range: Option<(i32, i32)>,
+    /// Optional lowest y the feet reach (for clips whose feet are not on
+    /// `baseline_y`, e.g. legs dangling below a seat).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feet_lowest_y: Option<i32>,
+    /// Optional system event this clip reacts to (e.g. `cpu_busy`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// Optional base clip this clip was composed from (reaction = base + overlay).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_clip: Option<String>,
+    /// Optional frame index into `base_clip` for each of this clip's frames.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_frames: Option<Vec<u32>>,
     pub frames: Vec<FrameRect>,
+}
+
+impl Default for Clip {
+    fn default() -> Self {
+        Self {
+            page: String::new(),
+            fps: default_fps(),
+            mode: LoopMode::default(),
+            frame_durations_ms: None,
+            baseline_y: None,
+            scale: None,
+            tags: Vec::new(),
+            points: BTreeMap::new(),
+            seat_y: None,
+            seat_x_range: None,
+            feet_lowest_y: None,
+            event: None,
+            base_clip: None,
+            base_frames: None,
+            frames: Vec::new(),
+        }
+    }
 }
 
 fn default_fps() -> f32 {
@@ -137,6 +183,20 @@ impl Clip {
         } else if !(self.fps.is_finite() && self.fps > 0.0) {
             return Err(bad(format!("fps must be > 0 (got {})", self.fps)));
         }
+        if let Some(bf) = &self.base_frames {
+            if bf.len() != self.frames.len() {
+                return Err(bad(format!(
+                    "base_frames has {} entries but clip has {} frames",
+                    bf.len(),
+                    self.frames.len()
+                )));
+            }
+        }
+        if let Some((x0, x1)) = self.seat_x_range {
+            if x0 > x1 {
+                return Err(bad(format!("seat_x_range [{x0}, {x1}] is reversed")));
+            }
+        }
         Ok(())
     }
 }
@@ -159,6 +219,27 @@ impl Manifest {
         let m: Self = toml::from_str(s)?;
         for (name, clip) in &m.clips {
             clip.validate(name)?;
+            // Composed clips must point at an existing base clip and frames.
+            if let Some(base) = &clip.base_clip {
+                let bad = |reason: String| AtlasError::InvalidClip {
+                    clip: name.clone(),
+                    reason,
+                };
+                let Some(b) = m.clips.get(base) else {
+                    return Err(bad(format!("base_clip `{base}` not in manifest")));
+                };
+                if let Some(&i) = clip
+                    .base_frames
+                    .iter()
+                    .flatten()
+                    .find(|&&i| i as usize >= b.frames.len())
+                {
+                    return Err(bad(format!(
+                        "base_frames index {i} out of range for `{base}` ({} frames)",
+                        b.frames.len()
+                    )));
+                }
+            }
         }
         Ok(m)
     }
@@ -237,6 +318,61 @@ mod tests {
     }
 
     #[test]
+    fn parses_seat_and_event_metadata() {
+        let m = Manifest::from_toml_str(
+            r#"
+            [clips.facepalm]
+            page = "f.png"
+            frames = [ { x = 0, y = 0, w = 4, h = 4 }, { x = 4, y = 0, w = 4, h = 4 } ]
+            [clips.event_cpu_busy]
+            page = "e.png"
+            mode = "once"
+            event = "cpu_busy"
+            base_clip = "facepalm"
+            base_frames = [1, 0]
+            frames = [ { x = 0, y = 0, w = 4, h = 4 }, { x = 4, y = 0, w = 4, h = 4 } ]
+            [clips.sit_swing]
+            page = "s.png"
+            seat_y = 230
+            seat_x_range = [136, 279]
+            feet_lowest_y = 364
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            "#,
+        )
+        .unwrap();
+        let e = &m.clips["event_cpu_busy"];
+        assert_eq!(e.event.as_deref(), Some("cpu_busy"));
+        assert_eq!(e.base_clip.as_deref(), Some("facepalm"));
+        assert_eq!(e.base_frames.as_deref(), Some(&[1, 0][..]));
+        let s = &m.clips["sit_swing"];
+        assert_eq!(s.seat_y, Some(230));
+        assert_eq!(s.seat_x_range, Some((136, 279)));
+        assert_eq!(s.feet_lowest_y, Some(364));
+        assert!(s.points.is_empty());
+        assert_eq!(m.clips["facepalm"].event, None);
+    }
+
+    #[test]
+    fn rejects_bad_base_references() {
+        let base = r#"
+            [clips.b]
+            page = "b.png"
+            frames = [ { x = 0, y = 0, w = 1, h = 1 } ]
+            "#;
+        for clip in [
+            // unknown base clip
+            "[clips.e]\npage = \"e.png\"\nbase_clip = \"nope\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
+            // index out of range
+            "[clips.e]\npage = \"e.png\"\nbase_clip = \"b\"\nbase_frames = [3]\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
+            // wrong length
+            "[clips.e]\npage = \"e.png\"\nbase_clip = \"b\"\nbase_frames = [0, 0]\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
+        ] {
+            let err = Manifest::from_toml_str(&format!("{base}\n{clip}")).unwrap_err();
+            assert!(matches!(err, AtlasError::InvalidClip { .. }), "{err}");
+        }
+    }
+
+    #[test]
     fn round_trips_through_toml() {
         let mut m = Manifest::default();
         m.clips.insert(
@@ -250,6 +386,12 @@ mod tests {
                 scale: Some(0.5),
                 tags: vec!["t".into()],
                 points: [("beam_origin".to_string(), (306, 78))].into(),
+                seat_y: Some(230),
+                seat_x_range: Some((136, 279)),
+                feet_lowest_y: Some(364),
+                event: Some("cpu_busy".into()),
+                base_clip: Some("a".into()),
+                base_frames: Some(vec![0]),
                 frames: vec![FrameRect {
                     x: 0,
                     y: 0,
