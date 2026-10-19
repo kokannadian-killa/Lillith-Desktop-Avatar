@@ -64,7 +64,7 @@ Out of scope and deliberately excluded (not planned, even where code or docs exi
 | Right click → cleaning pose; GH#4: right-click → **pose menu** | v01+, README-SP, GH#4 | PY / WEB | — |
 | Middle click → help | v01+ | PY | — |
 | Hover enter → sit & swing; sustained → peek with mouse parallax | v01+ | PY | — |
-| Drag to move (with drag pose) | v01+, README-SP | PY | — |
+| Drag to move (with drag pose) | v01+, README-SP | PY | M1: left-drag plays `drag_held`, position saved to `[overlay]` in config.toml (X11 verified; Wayland needs on-machine test) |
 | Tap to pet (GH#1); tap empty glass to walk there; arrow keys nudge | GH#1 | WEB | — |
 | Secret sequence Left → Double → Right within ~3 s | README-SP | PY-missing | — |
 | First-interaction & daily greeting (style from warmth) | README-SP, lillith_memory | PY (memory part) | — |
@@ -181,7 +181,7 @@ Each row gives the event, the pose (clean name from pose_map / file in `assets/p
 | Feature | Sources | Status | Repo |
 |---|---|---|---|
 | Target: Garuda (Arch), KDE Plasma 6 **Wayland**, HP Spectre x360 i5-7200U / Intel HD 620, fish shell | lillith_os_v2, GH#5/#12, README-SP | info | — |
-| Always-on-top on Wayland (layer-shell overlay; KWin "Keep above" rule fallback) | GH#12, README-SP troubleshooting | SPEC | — |
+| Always-on-top on Wayland (layer-shell overlay; KWin "Keep above" rule fallback) | GH#12, README-SP troubleshooting | SPEC | M1: `zwlr_layer_shell_v1` Overlay layer + input-region click-through (compiles; needs on-machine smoke test); X11/XWayland fallback verified |
 | X11 always-on-top via wmctrl | v12, GH#11 | PY (X11 only) | — |
 | Window list/events via wmctrl/xdotool | aether_event_watcher | PY (X11 only) | — |
 | Autostart (.desktop in ~/.config/autostart), install via pacman | install_arch_autostart, README-SP | PY | — |

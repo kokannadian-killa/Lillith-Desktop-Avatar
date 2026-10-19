@@ -8,15 +8,22 @@
 //!   margins. Click-through by setting the `wl_surface` input region to the
 //!   current frame's alpha mask ([`input_region`]). Feature `wayland`.
 //! - **X11 / XWayland fallback:** `winit` 0.30 transparent window with
-//!   `WindowLevel::AlwaysOnTop` and `set_cursor_hittest()` toggled by the
-//!   hit-test, drawn with `softbuffer`. Feature `x11`.
-//! - Speech bubbles ([`bubble`]), drag, walk/patrol as margin animation.
+//!   `WindowLevel::AlwaysOnTop`, click-through via the X Shape input shape
+//!   set to the same mask, drawn with `softbuffer`. Feature `x11`.
+//! - [`stage`]: the M2 animator rendered into the overlay canvas + mask;
+//!   [`drag`]: click/drag and `(left, bottom)` placement; [`run`](mod@run): backend
+//!   dispatch, the shared [`run::Controller`] and position persistence.
+//! - Speech bubbles ([`bubble`], M3), walk/patrol as margin animation (M3).
 //!
 //! Rendering is CPU-side (`tiny-skia`) at 30 Hz; `wgpu` only if effects need it.
 
 pub mod backend;
 pub mod bubble;
+pub mod drag;
 pub mod input_region;
+pub mod pixels;
+pub mod run;
+pub mod stage;
 
 #[cfg(feature = "wayland")]
 pub mod wayland;
@@ -25,3 +32,4 @@ pub mod wayland;
 pub mod x11;
 
 pub use backend::Backend;
+pub use run::{run, OverlayError, OverlayOptions};

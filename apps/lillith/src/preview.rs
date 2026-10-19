@@ -46,7 +46,7 @@ pub struct PreviewArgs {
     pub seed: u64,
 }
 
-fn resolve(path: Option<PathBuf>) -> Result<PathBuf> {
+pub(crate) fn resolve(path: Option<PathBuf>) -> Result<PathBuf> {
     let p = match path {
         Some(p) => p,
         None => default_manifest_path().context(

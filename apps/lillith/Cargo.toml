@@ -14,7 +14,8 @@ name = "lillith"
 path = "src/main.rs"
 
 [features]
-default = []
+# Both overlay backends by default (Wayland needs libxkbcommon + libwayland at build time).
+default = ["wayland", "x11"]
 wayland = ["lillith-overlay/wayland"]
 x11 = ["lillith-overlay/x11"]
 full = [

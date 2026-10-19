@@ -14,7 +14,7 @@ default = []
 # Native Wayland layer-shell overlay (needs libxkbcommon at build time).
 wayland = ["dep:smithay-client-toolkit", "dep:wayland-client"]
 # winit + softbuffer fallback for X11/XWayland.
-x11 = ["dep:winit", "dep:softbuffer"]
+x11 = ["dep:winit", "dep:softbuffer", "dep:x11rb"]
 # Speech-bubble text shaping.
 text = ["dep:cosmic-text"]
 # xdg-desktop-portal: GlobalShortcuts + Screenshot.
@@ -30,5 +30,11 @@ smithay-client-toolkit = { workspace = true, optional = true }
 wayland-client = { workspace = true, optional = true }
 winit = { workspace = true, optional = true }
 softbuffer = { workspace = true, optional = true }
+# Input shape (click-through) + pointer queries on the winit window.
+x11rb = { workspace = true, optional = true, features = ["shape"] }
 cosmic-text = { workspace = true, optional = true }
 ashpd = { workspace = true, optional = true }
+
+[[example]]
+name = "x11_click_probe"
+required-features = ["x11"]

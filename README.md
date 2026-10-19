@@ -4,7 +4,7 @@ Interactive desktop avatar and system state and action monitor.
 
 **Lillith** is a local desktop companion for **Garuda / Arch Linux on KDE Plasma 6 (Wayland)**. She's a transparent, always-on-top anime demon-girl avatar who lives on your desktop, moves with spring physics, reacts to what you and your system are doing (CPU load, battery, Wi-Fi, USB, notifications, windows opening and closing…), and chats with you through a fully local LLM, with her own memory, voice and tray controls.
 
-This repository is the **pure-Rust rewrite** of the earlier Python prototypes (Tk/pygame/psutil). It has reached **milestone M2: animation engine (headless)**. Clip player, spring physics, breathing, blink, idle transitions, walk/run with flip and a reaction queue are implemented and tested, and every manifest clip is previewable (`lillith preview`, or the panel's Poses tab). The desktop overlay (M1), sensors and chat are still stubs. See [`docs/PLAN.md`](docs/PLAN.md) for the full build plan and [`docs/FEATURES.md`](docs/FEATURES.md) for every feature and its status.
+This repository is the **pure-Rust rewrite** of the earlier Python prototypes (Tk/pygame/psutil). It has reached **milestone M1 + M2**: she runs on the desktop as a transparent, always-on-top, click-through overlay (Wayland layer-shell, X11/XWayland fallback) playing the M2 animation engine (clip player, spring physics, breathing, blink, idle transitions, walk/run with flip, reaction queue). Drag her anywhere; the spot is remembered. Sensors and chat are still stubs. See [`docs/PLAN.md`](docs/PLAN.md) for the full build plan and [`docs/FEATURES.md`](docs/FEATURES.md) for every feature and its status.
 
 ## Architecture
 
@@ -51,11 +51,14 @@ This repository is the **pure-Rust rewrite** of the earlier Python prototypes (T
 Requirements: Rust **1.85+** (`rustup` or the distro `rust` package), a C compiler (for bundled SQLite), and `pkg-config`.
 
 ```fish
-# Default features: pure-Rust parts only, no system libraries needed
+# Default features: both overlay backends (Wayland + X11) and the egui panel
 cargo build
 cargo test --workspace
 
-# Try it (M0): resolve events through the rule table, list rules, open the panel
+# Run her (M1): see "Running on Garuda" below
+cargo run --release -p lillith -- --manifest /path/to/generated/manifest.toml
+
+# Resolve events through the rule table, list rules, open the panel
 cargo run -p lillith -- event battery.low
 cargo run -p lillith -- event notify.received "New mail from Mom"
 cargo run -p lillith -- rules
@@ -71,8 +74,8 @@ cargo build -p lillith --features full      # wayland + x11 + bluetooth + pulse 
 
 | Feature (on `lillith`) | Enables |
 |---|---|
-| `wayland` | layer-shell overlay (smithay-client-toolkit) |
-| `x11` | winit/softbuffer fallback window |
+| `wayland` (default) | layer-shell overlay (smithay-client-toolkit) |
+| `x11` (default) | winit/softbuffer fallback window (X11/XWayland) |
 | `full` | all of the above plus Bluetooth, volume, journald, clipboard, X11 window list, audio, portals, text shaping |
 
 ### KWin bridge (M5)
@@ -97,8 +100,8 @@ The heavy art (6 sprite sheets, 52 pose stills, reference sheets, 80 video frame
 | # | Milestone |
 |---|---|
 | M0 | Workspace + asset pipeline ✔ (CI workflow still pending) |
-| M1 | Overlay on KDE Wayland (transparent, on top, click-through, drag) + X11 fallback |
-| M2 | Animation engine (clips, springs, breathing, blink, idle transitions, walk) ✔ headless ← *current* |
+| M1 | Overlay on KDE Wayland (transparent, on top, click-through, drag) + X11 fallback ✔ X11 verified, Wayland needs an on-machine smoke test ← *current* |
+| M2 | Animation engine (clips, springs, breathing, blink, idle transitions, walk) ✔ |
 | M3 | Interactions & state machine (clicks, hover/peek, keys, moods, mischief, sleep/wake) |
 | M4 | System monitor v1 (CPU, RAM, battery, network, volume, brightness, USB, notifications…) |
 | M5 | KWin bridge (window reactions, perching, Follow mode) |
@@ -108,6 +111,25 @@ The heavy art (6 sprite sheets, 52 pose stills, reference sheets, 80 video frame
 | M9 | Proactive life & polish |
 
 Details and acceptance criteria are in [`docs/PLAN.md` §5](docs/PLAN.md).
+
+## Running on Garuda (M1 overlay)
+
+```fish
+sudo pacman -S --needed rust libxkbcommon wayland        # usually already there on Plasma
+cargo build --release -p lillith
+set -x LILLITH_MANIFEST /path/to/generated/manifest.toml  # or copy the set to ~/.local/share/lillith/generated/
+./target/release/lillith                                  # Plasma Wayland → layer-shell overlay
+./target/release/lillith --backend x11                    # force the XWayland/X11 fallback
+```
+
+- **Move her:** hold the left button on her body and drag. On release the spot is written to `~/.config/lillith/config.toml` (`[overlay] margin_left / margin_bottom`, px from the bottom-left corner) and restored next start. `--reset-position` ignores it, `--no-save` never writes it.
+- **Click** on her: she waves. **Right-click** on her: quit (temporary until the M6 tray menu). Or `pkill lillith`.
+- **Click-through:** only her opaque pixels take the mouse; everything around her goes to the window or desktop underneath.
+- **Size / look:** `--scale 0.6` (default 0.75 → 300 px window from the 400 px cells; or `scale = 0.6` in config.toml), `--opacity 0.9`, `--fps 15` (redraw cap; default 30).
+- **Backend choice:** Wayland if `WAYLAND_DISPLAY` is set, else X11. If the compositor has no `zwlr_layer_shell_v1` (e.g. GNOME) she falls back to X11/XWayland automatically; `--backend wayland` makes that an error instead.
+- **Smoke test checklist on Plasma 6 Wayland** (not verifiable on the build box): she shows above normal and maximised windows; clicking right next to her clicks the desktop/window below; drag is smooth and the position survives a restart; `top -p (pgrep lillith)` stays under ~3 % idle. If she ever sits below a fullscreen app, run `--backend x11` and add a KWin window rule "Keep above" for window class `lillith` (KWin rules don't apply to layer-shell surfaces).
+- **Click-through probe (X11):** `cargo run -p lillith-overlay --features x11 --example x11_click_probe -- 0 500 900 600` opens a striped window that prints every click it gets; put it behind her and click around.
+- Logs: `RUST_LOG=lillith=info,lillith_overlay=debug ./target/release/lillith`. On exit she logs `renders` and `avg_render_us`.
 
 ## Previewing the animation engine (M2)
 

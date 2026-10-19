@@ -2416,6 +2416,7 @@ dependencies = [
  "tracing",
  "wayland-client",
  "winit",
+ "x11rb",
 ]
 
 [[package]]
