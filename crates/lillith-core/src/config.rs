@@ -8,6 +8,7 @@
 //! other key in the file.
 
 use crate::spring::SpringParams;
+use crate::state::BehaviorConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -93,6 +94,8 @@ pub struct Config {
     pub llm_url: String,
     pub llm_model: String,
     pub overlay: OverlayPos,
+    /// M3 behaviour timings (`[behavior]`).
+    pub behavior: BehaviorConfig,
 }
 
 impl Default for Config {
@@ -113,6 +116,7 @@ impl Default for Config {
             llm_url: "http://127.0.0.1:11434".into(),
             llm_model: "dolphin3".into(),
             overlay: OverlayPos::default(),
+            behavior: BehaviorConfig::default(),
         }
     }
 }

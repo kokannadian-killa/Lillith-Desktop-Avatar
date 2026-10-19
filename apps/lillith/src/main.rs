@@ -5,16 +5,19 @@
 //! tokio runtime runs sensors, LLM and voice; everything talks over one
 //! event bus into `lillith-core`, which emits commands back to the overlay.
 //!
-//! Status: M1 overlay + M2 animation engine. Plain `lillith` puts her on the
-//! desktop (Wayland layer-shell, or the X11 fallback) playing idle life with
-//! springs; drag her with the left button (position is saved), right-click
-//! her to quit. `lillith event <name>` resolves a rule from
+//! Status: M1 overlay + M2 animation engine + M3 behaviour. Plain `lillith`
+//! puts her on the desktop (Wayland layer-shell, or the X11 fallback) playing
+//! idle life with springs, driven by `lillith_core::state::Brain`: left /
+//! double / right / middle click, hover and sustained hover, drag (position
+//! is saved), README-SP keys while she has focus (`G` Wander/Stay, `S`
+//! sleep, `Q`/`Esc` quit), the secret Left → Double → Right sequence, moods,
+//! mischief, sleep/wake and wandering. `lillith event <name>` resolves a rule from
 //! `assets/rules.toml`; `lillith preview` lists/plays/renders every manifest
 //! clip through the animator headlessly.
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use lillith_core::config::{Config, OverlayPos};
+use lillith_core::config::{Config, MoveMode, OverlayPos};
 use lillith_core::{rules::RuleSet, Event};
 use lillith_overlay::{Backend, OverlayOptions};
 use std::path::PathBuf;
@@ -58,6 +61,15 @@ struct Cli {
     /// Do not write the position back to config.toml after a drag.
     #[arg(long)]
     no_save: bool,
+    /// Movement mode: wander (walk around when idle) or stay (default: config `mode`).
+    #[arg(long, value_parser = parse_mode)]
+    mode: Option<MoveMode>,
+    /// Seconds without interaction until she gets drowsy (default: config `[behavior]`, 300).
+    #[arg(long, value_name = "SECONDS")]
+    sleepy_after: Option<f32>,
+    /// Seconds without interaction until she falls asleep (default 900).
+    #[arg(long, value_name = "SECONDS")]
+    asleep_after: Option<f32>,
     /// Quit after N seconds (smoke tests, CPU measurements).
     #[arg(long, value_name = "SECONDS")]
     exit_after: Option<f32>,
@@ -88,6 +100,17 @@ enum Cmd {
 
 fn parse_backend(s: &str) -> Result<Backend, String> {
     s.parse()
+}
+
+fn parse_mode(s: &str) -> Result<MoveMode, String> {
+    match s.to_ascii_lowercase().as_str() {
+        "wander" => Ok(MoveMode::Wander),
+        "stay" => Ok(MoveMode::Stay),
+        "follow" => Ok(MoveMode::Follow),
+        other => Err(format!(
+            "unknown mode {other} (expected wander|stay|follow)"
+        )),
+    }
 }
 
 #[tokio::main]
@@ -169,6 +192,18 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         } else {
             cfg.scale
         });
+    let mut behavior = cfg.behavior.clone();
+    behavior.pose_cycle_s = cfg.pose_cycle_s;
+    if let Some(s) = cli.sleepy_after {
+        behavior.sleepy_after_s = s;
+    }
+    if let Some(s) = cli.asleep_after {
+        behavior.asleep_after_s = s;
+    }
+    if behavior.asleep_after_s < behavior.sleepy_after_s {
+        behavior.sleepy_after_s = behavior.asleep_after_s;
+    }
+    let mode = cli.mode.unwrap_or(cfg.mode);
     let opts = OverlayOptions {
         manifest: manifest.clone(),
         scale,
@@ -192,7 +227,9 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         },
         forced: cli.backend.is_some(),
         exit_after: cli.exit_after.map(std::time::Duration::from_secs_f32),
-        right_click_quits: true,
+        behavior,
+        mode,
+        muted: cfg.muted,
     };
     tracing::info!(
         ?backend,
@@ -203,7 +240,8 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         voice = !cli.no_voice,
         llm = !cli.no_llm,
         rules,
-        "Lillith overlay (M1): drag with left button, right-click her to quit"
+        ?mode,
+        "Lillith overlay (M3): click/hover/drag her; keys while focused (G wander/stay, S sleep, Q/Esc quit)"
     );
     lillith_overlay::run(backend, opts).map_err(|e| anyhow::anyhow!("overlay: {e}"))
 }

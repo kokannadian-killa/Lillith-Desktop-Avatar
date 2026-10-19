@@ -15,10 +15,12 @@
 use crate::drag::{Placement, Release};
 use crate::pixels::rgba_to_argb8888_le;
 use crate::run::{period, Controller, OverlayError, OverlayOptions, KEEP_ON_SCREEN};
+use lillith_core::interaction::Button;
+use lillith_core::state::Key;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState, Region},
-    delegate_compositor, delegate_layer, delegate_output, delegate_pointer, delegate_registry,
-    delegate_seat, delegate_shm,
+    delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer,
+    delegate_registry, delegate_seat, delegate_shm,
     output::{OutputHandler, OutputState},
     reexports::{
         calloop::{
@@ -30,9 +32,10 @@ use smithay_client_toolkit::{
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
     seat::{
+        keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers},
         pointer::{
             CursorIcon, PointerEvent, PointerEventKind, PointerHandler, ThemeSpec, ThemedPointer,
-            BTN_LEFT, BTN_RIGHT,
+            BTN_LEFT, BTN_MIDDLE, BTN_RIGHT,
         },
         Capability, SeatHandler, SeatState,
     },
@@ -48,7 +51,7 @@ use smithay_client_toolkit::{
 use std::time::Instant;
 use wayland_client::{
     globals::registry_queue_init,
-    protocol::{wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
+    protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
     Connection, QueueHandle,
 };
 
@@ -67,6 +70,7 @@ struct App {
     pool: SlotPool,
     layer: LayerSurface,
     pointer: Option<ThemedPointer>,
+    keyboard: Option<wl_keyboard::WlKeyboard>,
     conn: Connection,
     ctl: Controller,
     configured: bool,
@@ -140,6 +144,7 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
         pool,
         layer,
         pointer: None,
+        keyboard: None,
         conn,
         ctl,
         configured: false,
@@ -179,6 +184,11 @@ impl App {
         let now = Instant::now();
         let dt = (now - self.last).as_secs_f32().min(0.25);
         self.last = now;
+        if !self.ctl.has_screen() {
+            if let Some(out) = self.output_size() {
+                self.ctl.set_screen(out);
+            }
+        }
         match self.ctl.tick(dt) {
             Ok(c) => {
                 self.pixels_dirty |= c.pixels;
@@ -188,6 +198,15 @@ impl App {
                 self.error = Some(e);
                 self.signal.stop();
                 return;
+            }
+        }
+        if self.ctl.quit_requested() {
+            self.signal.stop();
+            return;
+        }
+        if let Some(p) = self.ctl.take_move() {
+            if !self.ctl.drag.active() {
+                self.pending = Some(p);
             }
         }
         if self.configured && (self.pixels_dirty || self.mask_dirty || self.pending.is_some()) {
@@ -353,6 +372,12 @@ impl SeatHandler for App {
                 Err(e) => tracing::warn!("pointer: {e}"),
             }
         }
+        if capability == Capability::Keyboard && self.keyboard.is_none() {
+            match self.seat_state.get_keyboard(qh, &seat, None) {
+                Ok(k) => self.keyboard = Some(k),
+                Err(e) => tracing::warn!("keyboard: {e}"),
+            }
+        }
     }
     fn remove_capability(
         &mut self,
@@ -364,6 +389,11 @@ impl SeatHandler for App {
         if capability == Capability::Pointer {
             if let Some(p) = self.pointer.take() {
                 p.pointer().release();
+            }
+        }
+        if capability == Capability::Keyboard {
+            if let Some(k) = self.keyboard.take() {
+                k.release();
             }
         }
     }
@@ -383,19 +413,29 @@ impl PointerHandler for App {
                 continue;
             }
             match ev.kind {
-                PointerEventKind::Enter { .. } => self.set_cursor(CursorIcon::Grab),
+                PointerEventKind::Enter { .. } => {
+                    self.set_cursor(CursorIcon::Grab);
+                    self.ctl.hover(true);
+                }
+                PointerEventKind::Leave { .. } => {
+                    if !self.ctl.drag.active() {
+                        self.ctl.hover(false);
+                    }
+                }
                 PointerEventKind::Press { button, .. } if button == BTN_LEFT => {
                     if self.ctl.press(ev.position, ev.position, true) {
                         self.set_cursor(CursorIcon::Grabbing);
                     }
                 }
                 PointerEventKind::Press { button, .. }
-                    if button == BTN_RIGHT && self.ctl.right_click_quits =>
+                    if button == BTN_RIGHT || button == BTN_MIDDLE =>
                 {
-                    if self.ctl.stage.hit(ev.position.0, ev.position.1) {
-                        tracing::info!("right-click: quitting");
-                        self.signal.stop();
-                    }
+                    let b = if button == BTN_RIGHT {
+                        Button::Right
+                    } else {
+                        Button::Middle
+                    };
+                    self.ctl.button(b, ev.position);
                 }
                 PointerEventKind::Motion { .. } => {
                     if let Some(p) = self.ctl.motion(ev.position) {
@@ -419,6 +459,73 @@ impl PointerHandler for App {
     }
 }
 
+impl KeyboardHandler for App {
+    fn enter(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: &wl_surface::WlSurface,
+        _: u32,
+        _: &[u32],
+        _: &[Keysym],
+    ) {
+    }
+    fn leave(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: &wl_surface::WlSurface,
+        _: u32,
+    ) {
+    }
+    fn press_key(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: u32,
+        event: KeyEvent,
+    ) {
+        let key = match event.keysym {
+            Keysym::Escape => Some(Key::Escape),
+            Keysym::Return | Keysym::KP_Enter => Some(Key::Enter),
+            _ => event
+                .utf8
+                .as_deref()
+                .and_then(|s| s.chars().next())
+                .filter(|c| !c.is_control())
+                .map(Key::Char),
+        };
+        if let Some(k) = key {
+            self.ctl.key(k);
+            if self.ctl.quit_requested() {
+                self.signal.stop();
+            }
+        }
+    }
+    fn release_key(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: u32,
+        _: KeyEvent,
+    ) {
+    }
+    fn update_modifiers(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: u32,
+        _: Modifiers,
+        _: u32,
+    ) {
+    }
+}
+
 impl ShmHandler for App {
     fn shm_state(&mut self) -> &mut Shm {
         &mut self.shm
@@ -430,6 +537,7 @@ delegate_output!(App);
 delegate_shm!(App);
 delegate_seat!(App);
 delegate_pointer!(App);
+delegate_keyboard!(App);
 delegate_layer!(App);
 delegate_registry!(App);
 

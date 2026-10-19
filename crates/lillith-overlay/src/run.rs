@@ -1,18 +1,20 @@
 //! Backend dispatch plus the [`Controller`] both backends drive: stage
-//! (animator + renderer + mask), drag, placement and position persistence.
+//! (animator + renderer + mask), drag, placement, position persistence and
+//! the M3 behaviour [`Brain`] (clicks, hover, keys, drag, moods, sleep/wake,
+//! Wander/Stay, pose cycle).
 
 use crate::backend::Backend;
 use crate::drag::{Drag, Placement, Release};
 use crate::stage::{Changed, Stage, StageError};
-use lillith_anim::animator::AnimatorConfig;
-use lillith_core::config::{save_overlay, OverlayPos};
+use lillith_anim::animator::{AnimatorConfig, Dir};
+use lillith_core::config::{save_overlay, MoveMode, OverlayPos};
+use lillith_core::interaction::Button;
+use lillith_core::rules::RuleSet;
+use lillith_core::state::{Action, BehaviorConfig, Brain, Input, Key};
+use lillith_core::Event;
 use std::path::PathBuf;
 use std::time::Duration;
 
-/// Clip played while she is held (if the manifest has it).
-pub const DRAG_CLIP: &str = "drag_held";
-/// Reaction to a plain left click on her (M3 owns the full click table).
-pub const CLICK_CLIP: &str = "wave";
 /// Px of her window kept on screen when dragging off an edge.
 pub const KEEP_ON_SCREEN: i32 = 64;
 
@@ -52,8 +54,12 @@ pub struct OverlayOptions {
     pub forced: bool,
     /// Quit after this long (smoke tests / CPU measurement).
     pub exit_after: Option<Duration>,
-    /// Right-click on her quits (until the M6 tray menu exists).
-    pub right_click_quits: bool,
+    /// M3 behaviour timings (`[behavior]`).
+    pub behavior: BehaviorConfig,
+    /// Wander or Stay (Follow behaves like Stay until M5).
+    pub mode: MoveMode,
+    /// Start muted (no SFX cues).
+    pub muted: bool,
 }
 
 /// Shared overlay logic, independent of the windowing system.
@@ -61,12 +67,15 @@ pub struct OverlayOptions {
 pub struct Controller {
     pub stage: Stage,
     pub drag: Drag,
+    pub brain: Brain,
     /// Where the window is (last value handed to the compositor/WM).
     pub placement: Placement,
     output: Option<String>,
     config_path: Option<PathBuf>,
     pub opacity: u8,
-    pub right_click_quits: bool,
+    pending_move: Option<Placement>,
+    screen: Option<(u32, u32)>,
+    quit: bool,
 }
 
 impl Controller {
@@ -76,19 +85,104 @@ impl Controller {
     }
 
     pub fn with_stage(stage: Stage, opts: &OverlayOptions) -> Self {
+        let clips: Vec<String> = stage.animator().clip_names().map(str::to_string).collect();
+        let mut brain = Brain::new(
+            opts.behavior.clone(),
+            opts.mode,
+            RuleSet::bundled(),
+            clips,
+            opts.animator.seed ^ 0xB4A1_17B4,
+        );
+        brain.set_muted(opts.muted);
+        let placement = Placement::from_config(&opts.position);
+        brain.set_position(placement.left as f32);
         Self {
             stage,
             drag: Drag::default(),
-            placement: Placement::from_config(&opts.position),
+            brain,
+            placement,
             output: opts.position.output.clone(),
             config_path: opts.config_path.clone(),
             opacity: crate::pixels::opacity_byte(opts.opacity),
-            right_click_quits: opts.right_click_quits,
+            pending_move: None,
+            screen: None,
+            quit: false,
         }
     }
 
+    /// Output size in px; sets the range she wanders over.
+    pub fn set_screen(&mut self, output: (u32, u32)) {
+        self.screen = Some(output);
+        let w = self.stage.size().0 as f32;
+        self.brain.set_area(0.0, (output.0 as f32 - w).max(0.0));
+    }
+
+    pub fn has_screen(&self) -> bool {
+        self.screen.is_some()
+    }
+
+    /// A wander step the backend should apply (bottom unchanged).
+    pub fn take_move(&mut self) -> Option<Placement> {
+        self.pending_move.take()
+    }
+
+    /// `true` once Q/Esc asked to quit.
+    pub fn quit_requested(&self) -> bool {
+        self.quit
+    }
+
+    /// Advances the brain and the stage by `dt` seconds.
     pub fn tick(&mut self, dt: f32) -> Result<Changed, OverlayError> {
+        let anim = self.stage.animator();
+        let busy = anim.overlay_clip().is_some() || anim.queued() > 0;
+        let actions = self.brain.tick(dt, busy);
+        self.apply(actions);
         Ok(self.stage.tick(dt)?)
+    }
+
+    /// Applies brain actions to the animator / window.
+    pub fn apply(&mut self, actions: Vec<Action>) {
+        for a in actions {
+            let anim = self.stage.animator_mut();
+            match a {
+                Action::React { clip, priority } => {
+                    tracing::debug!(clip, priority, "react");
+                    if anim.has_clip(&clip) {
+                        let _ = anim.react(&clip, priority);
+                    }
+                }
+                Action::SetBase { clip } => {
+                    if anim.has_clip(&clip) {
+                        let _ = anim.set_base(&clip, false);
+                    }
+                }
+                Action::Stand => anim.stand(),
+                Action::Walk { right } => {
+                    tracing::debug!(right, "wander walk");
+                    let dir = if right { Dir::Right } else { Dir::Left };
+                    if anim.walk(dir, false).is_err() {
+                        tracing::debug!("no walk clip; gliding");
+                    }
+                }
+                Action::MoveTo { left } => {
+                    self.pending_move = Some(Placement {
+                        left,
+                        bottom: self.placement.bottom,
+                    });
+                }
+                Action::Say(line) => tracing::info!("💬 {line}"),
+                Action::Sfx(cue) => tracing::debug!(cue, "sfx (audio lands with lillith-voice)"),
+                Action::MoodChanged(m) => tracing::info!(mood = ?m, "mood"),
+                Action::ContextMenu => tracing::info!("right-click: pose menu (stub until M6)"),
+                Action::OpenChat => tracing::info!("chat requested (panel chat lands in M7)"),
+                Action::Muted(m) => tracing::info!(muted = m, "sound"),
+                Action::ModeChanged(m) => tracing::info!(mode = ?m, "movement mode"),
+                Action::Quit => {
+                    tracing::info!("quit requested");
+                    self.quit = true;
+                }
+            }
+        }
     }
 
     /// Left button down at `at`. Ignored unless it is on her (X11 may
@@ -102,15 +196,46 @@ impl Controller {
         true
     }
 
+    /// Right/middle button pressed at window-local `hit_at`.
+    pub fn button(&mut self, button: Button, hit_at: (f64, f64)) -> bool {
+        if !self.stage.hit(hit_at.0, hit_at.1) {
+            return false;
+        }
+        tracing::debug!(?button, "press");
+        let a = self.brain.input(Input::Click(button));
+        self.apply(a);
+        true
+    }
+
+    /// Pointer entered/left her silhouette.
+    pub fn hover(&mut self, inside: bool) {
+        if inside && self.drag.active() {
+            return;
+        }
+        let a = self.brain.input(Input::Hover(inside));
+        self.apply(a);
+    }
+
+    /// A key while she has keyboard focus.
+    pub fn key(&mut self, key: Key) {
+        let a = self.brain.input(Input::Key(key));
+        self.apply(a);
+    }
+
+    /// A bus event (sensors arrive in M4; used by tests / the injector).
+    pub fn event(&mut self, ev: &Event) {
+        let a = self.brain.event(ev);
+        self.apply(a);
+    }
+
     /// Pointer moved; returns the new placement while dragging.
     pub fn motion(&mut self, at: (f64, f64)) -> Option<Placement> {
         let was = self.drag.dragging();
         let p = self.drag.motion(at, self.placement)?;
         if !was {
-            let anim = self.stage.animator_mut();
-            if anim.has_clip(DRAG_CLIP) {
-                let _ = anim.set_base(DRAG_CLIP, false);
-            }
+            let a = self.brain.input(Input::DragStart);
+            self.apply(a);
+            self.pending_move = None;
         }
         Some(p)
     }
@@ -120,14 +245,14 @@ impl Controller {
         let r = self.drag.release(self.placement);
         match r {
             Release::Dropped(p) => {
-                self.stage.animator_mut().stand();
+                let a = self.brain.input(Input::DragEnd { left: p.left });
+                self.apply(a);
                 self.persist(p);
             }
             Release::Click => {
-                let anim = self.stage.animator_mut();
-                if anim.has_clip(CLICK_CLIP) {
-                    let _ = anim.react(CLICK_CLIP, 1);
-                }
+                tracing::debug!("left click");
+                let a = self.brain.input(Input::Click(Button::Left));
+                self.apply(a);
             }
             Release::None => {}
         }
@@ -236,7 +361,9 @@ mod tests {
             config_path: Some(cfg_path.clone()),
             forced: false,
             exit_after: None,
-            right_click_quits: true,
+            behavior: BehaviorConfig::default(),
+            mode: MoveMode::Stay,
+            muted: false,
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -265,6 +392,114 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    fn m3_manifest(tag: &str) -> (std::path::PathBuf, lillith_anim::atlas::Manifest) {
+        let (dir, _) = fixture(tag);
+        let frames = r#"page = "idle.png"
+fps = 8.0
+frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+"#;
+        let mut toml = String::new();
+        for c in [
+            "idle",
+            "knife_tap",
+            "wave",
+            "drag_held",
+            "walk_right",
+            "sleep",
+            "wake",
+            "event_input_click_right",
+        ] {
+            toml.push_str(&format!("[clips.{c}]\n{frames}\n"));
+        }
+        (
+            dir,
+            lillith_anim::atlas::Manifest::from_toml_str(&toml).unwrap(),
+        )
+    }
+
+    fn m3_controller(tag: &str, mode: MoveMode) -> (std::path::PathBuf, Controller) {
+        let (dir, m) = m3_manifest(tag);
+        let opts = OverlayOptions {
+            manifest: dir.join("manifest.toml"),
+            scale: 2.0,
+            opacity: 1.0,
+            render_hz: 30.0,
+            animator: AnimatorConfig {
+                idle_enabled: false,
+                ..AnimatorConfig::default()
+            },
+            position: OverlayPos {
+                margin_left: 100,
+                margin_bottom: 50,
+                output: None,
+            },
+            config_path: None,
+            forced: false,
+            exit_after: None,
+            behavior: BehaviorConfig {
+                pose_cycle_s: 1e6,
+                ..BehaviorConfig::default()
+            },
+            mode,
+            muted: false,
+        };
+        let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
+        let mut c = Controller::with_stage(stage, &opts);
+        c.stage.render().unwrap();
+        (dir, c)
+    }
+
+    #[test]
+    fn brain_drives_the_animator() {
+        let (dir, mut c) = m3_controller("m3", MoveMode::Stay);
+        // Left click on her -> knife_tap reaction.
+        assert!(c.press((40.0, 40.0), (40.0, 40.0), true));
+        assert_eq!(c.release(), Release::Click);
+        assert_eq!(c.stage.animator().overlay_clip(), Some("knife_tap"));
+        // Right click on her: cleaning reaction, never quits.
+        assert!(c.button(Button::Right, (40.0, 40.0)));
+        assert!(!c.quit_requested());
+        assert!(!c.button(Button::Middle, (1.0, 1.0)), "transparent pixel");
+        // Drag -> drag_held base; drop -> idle.
+        assert!(c.press((40.0, 40.0), (40.0, 40.0), true));
+        c.motion((70.0, 40.0)).unwrap();
+        assert_eq!(c.stage.animator().base(), "drag_held");
+        c.release();
+        assert_eq!(c.stage.animator().base(), "idle");
+        // Sleep, then proximity wakes her.
+        c.event(&Event::new("idle.asleep"));
+        assert_eq!(c.stage.animator().base(), "sleep");
+        c.hover(true);
+        assert_eq!(c.stage.animator().base(), "idle");
+        assert_eq!(c.stage.animator().overlay_clip(), Some("wake"));
+        // Q quits.
+        c.key(Key::Char('q'));
+        assert!(c.quit_requested());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn wander_moves_the_window() {
+        let (dir, mut c) = m3_controller("m3w", MoveMode::Wander);
+        c.set_screen((1200, 800));
+        let mut moved = Vec::new();
+        let mut walked = false;
+        for _ in 0..1200 {
+            c.tick(0.1).unwrap();
+            // walk_left is walk_right mirrored in this manifest.
+            walked |= c.stage.animator().base() == "walk_right";
+            if let Some(p) = c.take_move() {
+                assert_eq!(p.bottom, 50, "only x changes");
+                c.placement = p;
+                moved.push(p.left);
+            }
+        }
+        assert!(!moved.is_empty(), "she wandered");
+        assert!(walked, "walk clip played");
+        assert!(moved.iter().all(|&x| (0..=1200 - 80).contains(&x)));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn missing_backend_feature_is_reported() {
         let opts = OverlayOptions {
@@ -277,7 +512,9 @@ mod tests {
             config_path: None,
             forced: true,
             exit_after: Some(Duration::ZERO),
-            right_click_quits: false,
+            behavior: BehaviorConfig::default(),
+            mode: MoveMode::Stay,
+            muted: false,
         };
         // Either the backend is not compiled in, or the manifest is missing:
         // both are clean errors, never a panic or a hang.

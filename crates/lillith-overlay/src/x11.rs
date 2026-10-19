@@ -17,6 +17,8 @@
 use crate::drag::{Placement, Release};
 use crate::pixels::rgba_to_argb_u32;
 use crate::run::{period, Controller, OverlayError, OverlayOptions, KEEP_ON_SCREEN};
+use lillith_core::interaction::Button;
+use lillith_core::state::Key;
 use std::num::NonZeroU32;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -24,6 +26,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{Key as WKey, NamedKey};
 use winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11, WindowType};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{CursorIcon, Window, WindowId, WindowLevel};
@@ -212,6 +215,8 @@ impl App {
             .placement
             .clamped((w, h), (monitor.2, monitor.3), KEEP_ON_SCREEN);
         self.ctl.placement = p;
+        self.ctl.brain.set_position(p.left as f32);
+        self.ctl.set_screen((monitor.2, monitor.3));
         let (x, y) = p.to_xy(h, monitor.3);
         let attrs = Window::default_attributes()
             .with_title("Lillith")
@@ -383,17 +388,48 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
-                button: MouseButton::Right,
+                button: b @ (MouseButton::Right | MouseButton::Middle),
                 ..
-            } if self.ctl.right_click_quits && self.ctl.stage.hit(self.cursor.0, self.cursor.1) => {
-                tracing::info!("right-click: quitting");
-                el.exit();
+            } => {
+                let b = if b == MouseButton::Right {
+                    Button::Right
+                } else {
+                    Button::Middle
+                };
+                self.ctl.button(b, self.cursor);
+            }
+            WindowEvent::CursorEntered { .. } => self.ctl.hover(true),
+            WindowEvent::CursorLeft { .. } => {
+                if !self.ctl.drag.active() {
+                    self.ctl.hover(false);
+                }
+            }
+            // Synthetic presses are winit replaying held keys on focus-in.
+            WindowEvent::KeyboardInput {
+                event,
+                is_synthetic: false,
+                ..
+            } if event.state == ElementState::Pressed && !event.repeat => {
+                tracing::debug!(key = ?event.logical_key, "key");
+                let key = match &event.logical_key {
+                    WKey::Named(NamedKey::Escape) => Some(Key::Escape),
+                    WKey::Named(NamedKey::Enter) => Some(Key::Enter),
+                    WKey::Character(s) => s.chars().next().map(Key::Char),
+                    _ => None,
+                };
+                if let Some(k) = key {
+                    self.ctl.key(k);
+                }
             }
             _ => {}
         }
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        if self.ctl.quit_requested() {
+            el.exit();
+            return;
+        }
         let now = Instant::now();
         if let Some(limit) = self.exit_after {
             if now - self.started >= limit {
@@ -410,6 +446,11 @@ impl ApplicationHandler for App {
                     self.mask_dirty |= c.mask;
                 }
                 Err(e) => return self.fail(el, e),
+            }
+            if let Some(p) = self.ctl.take_move() {
+                if !self.ctl.drag.active() {
+                    self.move_to(p);
+                }
             }
             if self.pixels_dirty || self.mask_dirty {
                 self.draw();

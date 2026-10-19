@@ -4,7 +4,7 @@ Interactive desktop avatar and system state and action monitor.
 
 **Lillith** is a local desktop companion for **Garuda / Arch Linux on KDE Plasma 6 (Wayland)**. She's a transparent, always-on-top anime demon-girl avatar who lives on your desktop, moves with spring physics, reacts to what you and your system are doing (CPU load, battery, Wi-Fi, USB, notifications, windows opening and closing…), and chats with you through a fully local LLM, with her own memory, voice and tray controls.
 
-This repository is the **pure-Rust rewrite** of the earlier Python prototypes (Tk/pygame/psutil). It has reached **milestone M1 + M2**: she runs on the desktop as a transparent, always-on-top, click-through overlay (Wayland layer-shell, X11/XWayland fallback) playing the M2 animation engine (clip player, spring physics, breathing, blink, idle transitions, walk/run with flip, reaction queue). Drag her anywhere; the spot is remembered. Sensors and chat are still stubs. See [`docs/PLAN.md`](docs/PLAN.md) for the full build plan and [`docs/FEATURES.md`](docs/FEATURES.md) for every feature and its status.
+This repository is the **pure-Rust rewrite** of the earlier Python prototypes (Tk/pygame/psutil). It has reached **milestone M1 + M2 + M3**: she runs on the desktop as a transparent, always-on-top, click-through overlay (Wayland layer-shell, X11/XWayland fallback) playing the M2 animation engine (clip player, spring physics, breathing, blink, idle transitions, walk/run with flip, reaction queue). Drag her anywhere; the spot is remembered. M3 adds the interaction state machine: click/double/right/middle reactions, hover and peek, README-SP keys, the secret sequence, moods, the mischief meter, sleep/wake and Wander/Stay. Sensors and chat are still stubs. See [`docs/PLAN.md`](docs/PLAN.md) for the full build plan and [`docs/FEATURES.md`](docs/FEATURES.md) for every feature and its status.
 
 ## Architecture
 
@@ -100,9 +100,9 @@ The heavy art (6 sprite sheets, 52 pose stills, reference sheets, 80 video frame
 | # | Milestone |
 |---|---|
 | M0 | Workspace + asset pipeline ✔ (CI workflow still pending) |
-| M1 | Overlay on KDE Wayland (transparent, on top, click-through, drag) + X11 fallback ✔ X11 verified, Wayland needs an on-machine smoke test ← *current* |
+| M1 | Overlay on KDE Wayland (transparent, on top, click-through, drag) + X11 fallback ✔ X11 verified, Wayland needs an on-machine smoke test |
 | M2 | Animation engine (clips, springs, breathing, blink, idle transitions, walk) ✔ |
-| M3 | Interactions & state machine (clicks, hover/peek, keys, moods, mischief, sleep/wake) |
+| M3 | Interactions & state machine (clicks, hover/peek, keys, moods, mischief, sleep/wake, Wander/Stay) ✔ X11 verified ← *current* |
 | M4 | System monitor v1 (CPU, RAM, battery, network, volume, brightness, USB, notifications…) |
 | M5 | KWin bridge (window reactions, perching, Follow mode) |
 | M6 | Tray, panels, config, autostart + PKGBUILD |
@@ -112,7 +112,7 @@ The heavy art (6 sprite sheets, 52 pose stills, reference sheets, 80 video frame
 
 Details and acceptance criteria are in [`docs/PLAN.md` §5](docs/PLAN.md).
 
-## Running on Garuda (M1 overlay)
+## Running on Garuda (M1 overlay + M3 behaviour)
 
 ```fish
 sudo pacman -S --needed rust libxkbcommon wayland        # usually already there on Plasma
@@ -123,7 +123,10 @@ set -x LILLITH_MANIFEST /path/to/generated/manifest.toml  # or copy the set to ~
 ```
 
 - **Move her:** hold the left button on her body and drag. On release the spot is written to `~/.config/lillith/config.toml` (`[overlay] margin_left / margin_bottom`, px from the bottom-left corner) and restored next start. `--reset-position` ignores it, `--no-save` never writes it.
-- **Click** on her: she waves. **Right-click** on her: quit (temporary until the M6 tray menu). Or `pkill lillith`.
+- **Mouse (M3):** left click = knife tap (a second click within 4 s waves, then it alternates; when you've been teasing her a lot it's always the knife, in Mischievous mood); double click = hacking; right click = cleaning + pose-menu stub (right-click **no longer quits**); middle click = help; hovering her = sit-swing, keep hovering ~1.2 s = peek; drag = `drag_held`.
+- **Secret:** click once, then double-click, then right-click, all within 3 s → tail wag + "You found me out~" (30 s cooldown).
+- **Keys** (click her first so she has keyboard focus): the README-SP map (`T` tail, `K` hack, `H` help, `R` random, `C` cycle pose, `M` mute, `S` sleep, `W`/`V`/`B`/`A`/`E`/`F`/`P`/`0`–`9`/`D`/`N`/`U` system poses), plus `G` = toggle Wander/Stay, `Y`/`Enter` = chat (M7 stub), **`Q`/`Esc` = quit**. Or `pkill lillith`.
+- **Life:** pose cycle every 16 s when idle; drowsy after 5 min without interaction, asleep after 15 min (hover or click wakes her with the wake clip); ignored for ~2.5 min she plays a prank. `--mode wander|stay` (default config `mode`, wander): in Wander she walks to a new spot along the bottom every 20–45 s. Demo the sleep cycle quickly with `--sleepy-after 10 --asleep-after 20`. Timings live in `[behavior]` in config.toml.
 - **Click-through:** only her opaque pixels take the mouse; everything around her goes to the window or desktop underneath.
 - **Size / look:** `--scale 0.6` (default 0.75 → 300 px window from the 400 px cells; or `scale = 0.6` in config.toml), `--opacity 0.9`, `--fps 15` (redraw cap; default 30).
 - **Backend choice:** Wayland if `WAYLAND_DISPLAY` is set, else X11. If the compositor has no `zwlr_layer_shell_v1` (e.g. GNOME) she falls back to X11/XWayland automatically; `--backend wayland` makes that an error instead.

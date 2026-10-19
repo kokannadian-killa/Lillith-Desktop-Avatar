@@ -6,18 +6,21 @@
 //!
 //! - [`event`]: the [`Event`] type every sensor and input source emits onto the bus.
 //! - [`command`]: the [`Command`]s the core sends back to the overlay/voice/mind.
-//! - [`mood`]: moods, mischief meter and warmth.
+//! - [`mood`]: moods (decaying strength + baseline) and the mischief meter.
+//! - [`interaction`]: pointer gestures (double click, secret sequence, hover).
 //! - [`spring`]: spring-damper channels ([`spring::Physics`]) and breathing for the "alive" physics.
 //! - [`idle`]: idle-life scheduler (blink, idle transitions, idle reactions).
 //! - [`rng`]: tiny seedable PRNG so idle timing is deterministic in tests.
 //! - [`rules`]: the data-driven event → reaction table (`assets/rules.toml`).
 //! - [`config`]: user config (`~/.config/lillith/config.toml`) with README-SP defaults.
-//! - [`state`]: the locomotion/reaction state machine (TODO, M3).
+//! - [`state`]: the M3 behaviour state machine ([`state::Brain`]): input
+//!   mapping, moods, mischief, sleep/wake, Wander/Stay, pose cycle, rules.
 
 pub mod command;
 pub mod config;
 pub mod event;
 pub mod idle;
+pub mod interaction;
 pub mod mood;
 pub mod rng;
 pub mod rules;
