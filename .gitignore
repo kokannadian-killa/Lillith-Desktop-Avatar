@@ -1,26 +1,45 @@
-# Rust
+# ── Rust / Cargo ────────────────────────────────────────────────
 /target/
 **/*.rs.bk
 *.pdb
+# NOTE: Cargo.lock is deliberately tracked (binary app workspace;
+# CI builds with --locked). Do not add it here.
 
-# Generated asset pipeline output (rebuilt by tools/slice-sheets)
+# ── Generated asset pipeline output (rebuilt by tools/slice-sheets) ──
 /assets/atlas/*
 !/assets/atlas/.gitkeep
 /assets/manifest.generated.toml
+# Everything else under assets/ (rules.toml, physics.toml, source/, art
+# routed through Git LFS by .gitattributes) is tracked. Don't ignore it.
 
-# Local runtime data
+# ── Local scratch / previews ────────────────────────────────────
+# `lillith preview` writes here by default (--out preview)
+/preview/
+/preview_m*/
+# physics-lab render output (when the lab lives inside the repo)
+/physics-lab/out/
+/physics-lab/_backup*/
+
+# ── Local config overrides ──────────────────────────────────────
+*.local.toml
+.env
+.env.*
+
+# ── Local runtime data ──────────────────────────────────────────
 *.db
 *.db-journal
 *.log
 *.jsonl
 
-# Editors / OS
+# ── Editors / OS ────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
+*.swo
+*~
 .DS_Store
 
-# Python leftovers (legacy prototypes, if added later)
+# ── Python leftovers (legacy prototypes / physics-lab scripts) ──
 __pycache__/
 *.pyc
 .venv/
