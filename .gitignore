@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Generated asset pipeline output (rebuilt by tools/slice-sheets)
+/assets/atlas/*
+!/assets/atlas/.gitkeep
+/assets/manifest.generated.toml
+
+# Local runtime data
+*.db
+*.db-journal
+*.log
+*.jsonl
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Python leftovers (legacy prototypes, if added later)
+__pycache__/
+*.pyc
+.venv/

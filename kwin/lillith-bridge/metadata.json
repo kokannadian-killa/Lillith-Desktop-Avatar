@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Id": "lillith-bridge",
+        "Name": "Lillith Bridge",
+        "Description": "Forwards window events and cursor position to the Lillith desktop companion over D-Bus",
+        "Authors": [{ "Name": "Ko Kannadian" }],
+        "License": "MIT",
+        "Version": "0.0.1"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js",
+    "KPackageStructure": "KWin/Script"
+}

@@ -1,0 +1,37 @@
+[package]
+name = "lillith-sense"
+description = "System-monitor event sources for Lillith: sysinfo, D-Bus (UPower, NetworkManager, UDisks2, Notifications), inotify, journald and the KWin bridge."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# BlueZ pairing events (needs libdbus at build time).
+bluetooth = ["dep:bluer"]
+# PipeWire/Pulse volume subscription (needs libpulse at build time).
+pulse = ["dep:libpulse-binding"]
+# journald reader for errors / firewall blocks (needs libsystemd at build time).
+journal = ["dep:systemd"]
+# Wayland clipboard watcher.
+clipboard = ["dep:wl-clipboard-rs"]
+# X11 window list fallback (replaces wmctrl/xdotool).
+x11 = ["dep:x11rb"]
+
+[dependencies]
+lillith-core.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+sysinfo.workspace = true
+zbus.workspace = true
+notify.workspace = true
+bluer = { workspace = true, optional = true, features = ["bluetoothd"] }
+libpulse-binding = { workspace = true, optional = true }
+systemd = { workspace = true, optional = true, features = ["journal"] }
+wl-clipboard-rs = { workspace = true, optional = true }
+x11rb = { workspace = true, optional = true }
