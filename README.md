@@ -4,7 +4,7 @@ Interactive desktop avatar and system state and action monitor.
 
 **Lillith** is a local desktop companion for **Garuda / Arch Linux on KDE Plasma 6 (Wayland)**. She's a transparent, always-on-top anime demon-girl avatar who lives on your desktop, moves with spring physics, reacts to what you and your system are doing (CPU load, battery, Wi-Fi, USB, notifications, windows opening and closing…), and chats with you through a fully local LLM, with her own memory, voice and tray controls.
 
-This repository is the **pure-Rust rewrite** of the earlier Python prototypes (Tk/pygame/psutil). It is at **milestone M0: workspace scaffold**. The crates compile and the rule table is tested, but the overlay, sensors and chat are still stubs. See [`docs/PLAN.md`](docs/PLAN.md) for the full build plan and [`docs/FEATURES.md`](docs/FEATURES.md) for every feature and its status.
+This repository is the **pure-Rust rewrite** of the earlier Python prototypes (Tk/pygame/psutil). It has reached **milestone M2: animation engine (headless)**. Clip player, spring physics, breathing, blink, idle transitions, walk/run with flip and a reaction queue are implemented and tested, and every manifest clip is previewable (`lillith preview`, or the panel's Poses tab). The desktop overlay (M1), sensors and chat are still stubs. See [`docs/PLAN.md`](docs/PLAN.md) for the full build plan and [`docs/FEATURES.md`](docs/FEATURES.md) for every feature and its status.
 
 ## Architecture
 
@@ -32,7 +32,7 @@ This repository is the **pure-Rust rewrite** of the earlier Python prototypes (T
 | Path | Crate | What it will hold |
 |---|---|---|
 | `crates/lillith-core` | lib | Pure logic: `Event`/`Command` types, moods + mischief, spring-damper physics, the `rules.toml` loader, config (README-SP keys), and the locomotion/reaction state machine. Unit-tested, no I/O |
-| `crates/lillith-anim` | lib | Atlas + `manifest.toml` loader, clip player (~12 fps, loop/once, feet anchors), procedural gestures ported from `aether_animator`, particles. CPU compositing with `tiny-skia` |
+| `crates/lillith-anim` | lib | Atlas + `manifest.toml` loader, clip player (fps or per-frame ms, loop/once, feet anchors), **animator** (base + idle life + reaction queue + springs), renderer and headless preview (`tiny-skia`), gestures, particles |
 | `crates/lillith-overlay` | lib | The avatar window: sctk layer-shell (`wayland` feature), winit + softbuffer fallback (`x11` feature), alpha-mask input region / hit-test, drag, speech bubbles (`text` feature, cosmic-text), portals (`portal` feature, ashpd) |
 | `crates/lillith-sense` | lib | Monitors → event bus: `sysinfo` (CPU/RAM), `zbus` (UPower, NetworkManager, UDisks2, Notifications, ScreenSaver), `notify` (trash, screenshots, archives, backlight), KWin bridge receiver. Optional: `bluetooth` (bluer), `pulse` (libpulse), `journal` (systemd), `clipboard` (wl-clipboard-rs), `x11` (x11rb) |
 | `crates/lillith-mind` | lib | Memory (`rusqlite`, same schema as `lillith_memory_sqlite.py`), LLM client for Ollama and OpenAI-compatible `llama-server` (`reqwest`), read-only agent tools with approval gating |
@@ -96,9 +96,9 @@ The heavy art (6 sprite sheets, 52 pose stills, reference sheets, 80 video frame
 
 | # | Milestone |
 |---|---|
-| M0 | Workspace + asset pipeline ← *this scaffold* |
+| M0 | Workspace + asset pipeline ✔ (CI workflow still pending) |
 | M1 | Overlay on KDE Wayland (transparent, on top, click-through, drag) + X11 fallback |
-| M2 | Animation engine (clips, springs, breathing, blink, idle transitions, walk) |
+| M2 | Animation engine (clips, springs, breathing, blink, idle transitions, walk) ✔ headless ← *current* |
 | M3 | Interactions & state machine (clicks, hover/peek, keys, moods, mischief, sleep/wake) |
 | M4 | System monitor v1 (CPU, RAM, battery, network, volume, brightness, USB, notifications…) |
 | M5 | KWin bridge (window reactions, perching, Follow mode) |
@@ -108,3 +108,19 @@ The heavy art (6 sprite sheets, 52 pose stills, reference sheets, 80 video frame
 | M9 | Proactive life & polish |
 
 Details and acceptance criteria are in [`docs/PLAN.md` §5](docs/PLAN.md).
+
+## Previewing the animation engine (M2)
+
+The generated art set is not in git yet; point the tools at its `manifest.toml` (`--manifest`, or `LILLITH_MANIFEST`, or `assets/generated/manifest.toml`, or `~/.local/share/lillith/generated/manifest.toml`):
+
+```sh
+export LILLITH_MANIFEST=/path/to/generated/manifest.toml
+cargo run -p lillith -- preview --list                       # all clips: frames, fps, mode, length, metadata
+cargo run -p lillith -- preview knife_tap                     # raw frames → preview/knife_tap.png
+cargo run -p lillith -- preview knife_tap --physics --frames  # through the animator with springs, + per-frame PNGs
+cargo run -p lillith -- preview --all --out preview           # overview.png + one contact sheet per clip
+cargo run -p lillith -- preview --sim 60 --seed 3             # idle-life timeline (blinks, transitions, idle reactions)
+cargo run -p lillith -- panel                                 # egui window, Poses tab: list/play/step/react/walk/jiggle
+```
+
+Physics: one spring-damper per channel (root x/y, angle, scale, chest, pigtails; README-SP stiffness/damping and gains, 120 Hz semi-implicit Euler, velocity and offset clamps). Breathing drives the scale/chest targets; reactions start with an impulse sized by energy tier (`knife_tap`, `dance`, `event_cpu_busy`… hit hardest); walk/run/dance add footfall bounces; starting/stopping a walk tips the angle spring. With single-image frames the chest and pigtail channels render as a subtle whole-sprite squash and skew until layered art exists.

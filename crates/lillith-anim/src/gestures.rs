@@ -1,7 +1,9 @@
-//! Procedural gestures, ported from `aether_animator.py`. TODO(M2).
+//! Procedural gestures, ported from `aether_animator.py`.
 //!
-//! Each gesture becomes a short sequence of spring targets/impulses applied
-//! on top of the current pose.
+//! As of M2 every gesture has an authored clip in the generated set, played by
+//! [`crate::animator::Animator`] with an impulse from
+//! [`crate::animator::kick_for`]. Procedural tweens (spring-target sequences)
+//! remain a TODO for clips that lack art.
 
 use std::str::FromStr;
 

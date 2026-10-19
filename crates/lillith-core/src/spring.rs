@@ -1,8 +1,16 @@
 //! Spring-damper channels (PLAN.md §3.1, layer 5).
 //!
 //! One spring per channel (root x/y, angle, scale, chest, pigtails),
-//! integrated with semi-implicit Euler at 120 Hz and velocity clamping.
+//! integrated with semi-implicit Euler in fixed 120 Hz sub-steps with
+//! velocity clamping. Reactions apply **impulses** (velocity kicks); there is
+//! no random per-frame jitter like the v01 Python prototype.
+//!
+//! Units: root x/y in pixels (screen space, +y down), angle in radians,
+//! scale as a multiplier (rest 1.0), chest and pigtail offsets in pixels.
+//! Without layered art the renderer applies chest/pigtail as a subtle
+//! whole-sprite squash and skew (PLAN.md §3.1 design note).
 
+use crate::config::Springs;
 use serde::{Deserialize, Serialize};
 
 /// Stiffness/damping pair, as in README-SP `[springs]`.
@@ -19,7 +27,10 @@ pub struct Spring {
     pub position: f32,
     pub velocity: f32,
     pub target: f32,
+    /// Velocity is clamped to `±max_velocity` after every kick and step.
     pub max_velocity: f32,
+    /// Optional hard limit on `|position - target|`.
+    pub max_offset: Option<f32>,
 }
 
 impl Spring {
@@ -31,7 +42,20 @@ impl Spring {
             velocity: 0.0,
             target,
             max_velocity: 50.0,
+            max_offset: None,
         }
+    }
+
+    /// Builder: velocity clamp.
+    pub fn with_max_velocity(mut self, v: f32) -> Self {
+        self.max_velocity = v.abs();
+        self
+    }
+
+    /// Builder: displacement clamp around the target.
+    pub fn with_max_offset(mut self, d: f32) -> Self {
+        self.max_offset = Some(d.abs());
+        self
     }
 
     /// Adds an instantaneous velocity kick (reactions use impulses, not jitter).
@@ -45,17 +69,255 @@ impl Spring {
             - self.params.damping * self.velocity;
         self.velocity = (self.velocity + accel * dt).clamp(-self.max_velocity, self.max_velocity);
         self.position += self.velocity * dt;
+        if let Some(m) = self.max_offset {
+            let off = self.position - self.target;
+            if off.abs() > m {
+                self.position = self.target + off.signum() * m;
+                // Kill the velocity component pushing further out.
+                if self.velocity.signum() == off.signum() {
+                    self.velocity = 0.0;
+                }
+            }
+        }
     }
 
     /// Steps in fixed `1/hz` sub-steps covering `dt`.
     pub fn advance(&mut self, dt: f32, hz: f32) {
         let h = 1.0 / hz;
         let mut remaining = dt;
-        while remaining > 0.0 {
+        while remaining > 1e-7 {
             let s = remaining.min(h);
             self.step(s);
             remaining -= s;
         }
+    }
+
+    /// Displacement from the target.
+    pub fn offset(&self) -> f32 {
+        self.position - self.target
+    }
+
+    /// `true` when (nearly) at rest on the target.
+    pub fn at_rest(&self, eps: f32) -> bool {
+        self.offset().abs() < eps && self.velocity.abs() < eps
+    }
+}
+
+/// The physics channels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Channel {
+    RootX,
+    RootY,
+    Angle,
+    Scale,
+    Chest,
+    Pigtail,
+}
+
+impl Channel {
+    pub const ALL: [Channel; 6] = [
+        Channel::RootX,
+        Channel::RootY,
+        Channel::Angle,
+        Channel::Scale,
+        Channel::Chest,
+        Channel::Pigtail,
+    ];
+}
+
+/// The spring-driven transform applied on top of the current sprite frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transform {
+    /// Root offset in px (+y down).
+    pub x: f32,
+    pub y: f32,
+    /// Rotation about the feet anchor, radians.
+    pub angle: f32,
+    /// Uniform scale multiplier (rest 1.0).
+    pub scale: f32,
+    /// Chest bounce offset in px (renderer: vertical squash/stretch).
+    pub chest_offset: f32,
+    /// Pigtail sway offset in px (renderer: slight skew of the upper body).
+    pub pigtail_offset: f32,
+}
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
+impl Transform {
+    pub const IDENTITY: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        angle: 0.0,
+        scale: 1.0,
+        chest_offset: 0.0,
+        pigtail_offset: 0.0,
+    };
+}
+
+/// All six channels, tuned from [`Springs`] (README-SP defaults).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Physics {
+    pub root_x: Spring,
+    pub root_y: Spring,
+    pub angle: Spring,
+    pub scale: Spring,
+    pub chest: Spring,
+    pub pigtail: Spring,
+    pub jiggle_gain: f32,
+    pub chest_bounce_gain: f32,
+    pub pigtail_sway_gain: f32,
+    /// Sub-step rate (README-SP: 120 Hz).
+    pub hz: f32,
+}
+
+impl Default for Physics {
+    fn default() -> Self {
+        Self::new(&Springs::default(), 120.0)
+    }
+}
+
+impl Physics {
+    /// Builds the channels from config. Clamps keep a bad config or a pile of
+    /// impulses from flinging her off screen.
+    pub fn new(cfg: &Springs, hz: f32) -> Self {
+        Self {
+            root_x: Spring::new(cfg.root, 0.0)
+                .with_max_velocity(400.0)
+                .with_max_offset(40.0),
+            root_y: Spring::new(cfg.root, 0.0)
+                .with_max_velocity(400.0)
+                .with_max_offset(40.0),
+            angle: Spring::new(cfg.angle, 0.0)
+                .with_max_velocity(4.0)
+                .with_max_offset(0.35),
+            scale: Spring::new(cfg.scale, 1.0)
+                .with_max_velocity(2.0)
+                .with_max_offset(0.2),
+            chest: Spring::new(cfg.chest, 0.0)
+                .with_max_velocity(120.0)
+                .with_max_offset(12.0),
+            pigtail: Spring::new(cfg.pig, 0.0)
+                .with_max_velocity(160.0)
+                .with_max_offset(20.0),
+            jiggle_gain: cfg.jiggle_gain,
+            chest_bounce_gain: cfg.chest_bounce_gain,
+            pigtail_sway_gain: cfg.pigtail_sway_gain,
+            hz: if hz > 0.0 { hz } else { 120.0 },
+        }
+    }
+
+    pub fn spring(&self, c: Channel) -> &Spring {
+        match c {
+            Channel::RootX => &self.root_x,
+            Channel::RootY => &self.root_y,
+            Channel::Angle => &self.angle,
+            Channel::Scale => &self.scale,
+            Channel::Chest => &self.chest,
+            Channel::Pigtail => &self.pigtail,
+        }
+    }
+
+    pub fn spring_mut(&mut self, c: Channel) -> &mut Spring {
+        match c {
+            Channel::RootX => &mut self.root_x,
+            Channel::RootY => &mut self.root_y,
+            Channel::Angle => &mut self.angle,
+            Channel::Scale => &mut self.scale,
+            Channel::Chest => &mut self.chest,
+            Channel::Pigtail => &mut self.pigtail,
+        }
+    }
+
+    /// Gain applied to impulses on channel `c`: `chest_bounce` for the chest,
+    /// `pigtail_sway` for pigtails, `jiggle` for root/angle/scale.
+    pub fn gain(&self, c: Channel) -> f32 {
+        match c {
+            Channel::Chest => self.chest_bounce_gain,
+            Channel::Pigtail => self.pigtail_sway_gain,
+            _ => self.jiggle_gain,
+        }
+    }
+
+    /// Velocity kick of `strength` (channel units per second), scaled by the
+    /// channel's gain.
+    pub fn impulse(&mut self, c: Channel, strength: f32) {
+        let g = self.gain(c);
+        self.spring_mut(c).impulse(strength * g);
+    }
+
+    /// Moves the rest target (e.g. breathing drives the scale/chest targets).
+    pub fn set_target(&mut self, c: Channel, target: f32) {
+        self.spring_mut(c).target = target;
+    }
+
+    /// Advances every channel by `dt` seconds in fixed `1/hz` sub-steps.
+    pub fn step(&mut self, dt: f32) {
+        let hz = self.hz;
+        for c in Channel::ALL {
+            self.spring_mut(c).advance(dt, hz);
+        }
+    }
+
+    /// Current transform. Root x/y, angle, chest and pigtail are reported as
+    /// offsets from rest; scale is absolute.
+    pub fn transform(&self) -> Transform {
+        Transform {
+            x: self.root_x.position,
+            y: self.root_y.position,
+            angle: self.angle.position,
+            scale: self.scale.position,
+            chest_offset: self.chest.position,
+            pigtail_offset: self.pigtail.position,
+        }
+    }
+
+    /// `true` when every channel is (nearly) at rest on its target.
+    pub fn at_rest(&self, eps: f32) -> bool {
+        Channel::ALL.iter().all(|&c| self.spring(c).at_rest(eps))
+    }
+}
+
+/// Breathing: a slow sine whose period is re-picked every cycle from
+/// `[min_s, max_s]` (README-SP: 3.5–4.5 s) so it never looks mechanical.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Breath {
+    pub period_s: f32,
+    phase: f32,
+}
+
+impl Breath {
+    pub fn new(period_s: f32) -> Self {
+        Self {
+            period_s: period_s.max(0.1),
+            phase: 0.0,
+        }
+    }
+
+    /// Advances; returns `true` when a new cycle starts (so the caller can
+    /// pick a fresh period).
+    pub fn advance(&mut self, dt: f32) -> bool {
+        self.phase += dt / self.period_s;
+        if self.phase >= 1.0 {
+            self.phase = self.phase.fract();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Phase in `[0, 1)`.
+    pub fn phase(&self) -> f32 {
+        self.phase
+    }
+
+    /// Breath value in `[-1, 1]` (0 at the start of each cycle, inhaling).
+    pub fn value(&self) -> f32 {
+        (self.phase * std::f32::consts::TAU).sin()
     }
 }
 
@@ -75,5 +337,95 @@ mod tests {
         s.impulse(5.0);
         s.advance(5.0, 120.0);
         assert!(s.position.abs() < 1e-3, "position {}", s.position);
+    }
+
+    #[test]
+    fn physics_at_rest_stays_at_rest() {
+        let mut p = Physics::default();
+        for _ in 0..600 {
+            p.step(1.0 / 30.0);
+        }
+        assert!(p.at_rest(1e-6));
+        assert_eq!(p.transform(), Transform::IDENTITY);
+    }
+
+    #[test]
+    fn impulse_moves_then_decays() {
+        let mut p = Physics::default();
+        p.impulse(Channel::Chest, 60.0);
+        p.step(0.05);
+        let peak = p.transform().chest_offset;
+        assert!(peak > 0.5, "chest should move, got {peak}");
+        p.step(4.0);
+        assert!(p.chest.at_rest(1e-2), "chest {:?}", p.chest);
+        assert!(p.root_x.at_rest(1e-9), "other channels untouched");
+    }
+
+    #[test]
+    fn gains_scale_impulses() {
+        let mut p = Physics::default();
+        p.impulse(Channel::Chest, 10.0);
+        p.impulse(Channel::Pigtail, 10.0);
+        p.impulse(Channel::Angle, 1.0);
+        assert!((p.chest.velocity - 10.0).abs() < 1e-6); // chest_bounce 1.0
+        assert!((p.pigtail.velocity - 9.0).abs() < 1e-5); // pigtail_sway 0.9
+        assert!((p.angle.velocity - 0.6).abs() < 1e-6); // jiggle 0.6
+    }
+
+    #[test]
+    fn velocity_and_offset_are_clamped() {
+        let mut p = Physics::default();
+        p.impulse(Channel::RootY, 1e6);
+        assert_eq!(p.root_y.velocity, 400.0);
+        for _ in 0..240 {
+            p.step(1.0 / 120.0);
+            assert!(p.root_y.offset().abs() <= 40.0 + 1e-4);
+            assert!(p.root_y.velocity.abs() <= 400.0);
+        }
+        p.impulse(Channel::Angle, -1e6);
+        p.step(0.5);
+        assert!(p.angle.offset().abs() <= 0.35 + 1e-6);
+    }
+
+    #[test]
+    fn substeps_match_fine_stepping() {
+        let mut a = Physics::default();
+        let mut b = Physics::default();
+        a.impulse(Channel::Pigtail, 30.0);
+        b.impulse(Channel::Pigtail, 30.0);
+        a.step(0.5); // one call, sub-stepped internally
+        for _ in 0..60 {
+            b.step(1.0 / 120.0);
+        }
+        assert!((a.pigtail.position - b.pigtail.position).abs() < 1e-3);
+    }
+
+    #[test]
+    fn spring_follows_moving_target() {
+        let mut p = Physics::default();
+        p.set_target(Channel::Scale, 1.02);
+        p.step(3.0);
+        assert!((p.transform().scale - 1.02).abs() < 1e-3);
+    }
+
+    #[test]
+    fn breath_oscillates_with_period() {
+        let mut b = Breath::new(4.0);
+        let mut samples = Vec::new();
+        let mut wrapped = 0;
+        for _ in 0..(8 * 30 + 3) {
+            if b.advance(1.0 / 30.0) {
+                wrapped += 1;
+            }
+            samples.push(b.value());
+        }
+        assert_eq!(wrapped, 2, "two 4 s cycles in 8 s");
+        let max = samples.iter().cloned().fold(f32::MIN, f32::max);
+        let min = samples.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(max > 0.99 && min < -0.99, "{min}..{max}");
+        // Quarter period in: near the peak.
+        let mut q = Breath::new(4.0);
+        q.advance(1.0);
+        assert!((q.value() - 1.0).abs() < 1e-4);
     }
 }

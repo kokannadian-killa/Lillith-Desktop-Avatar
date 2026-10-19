@@ -5,13 +5,17 @@
 //!
 //! - **Chat** tab: input line + streamed replies (also shown in her bubble).
 //! - **Settings** tab: live-edit `config.toml` (springs, thresholds, size, opacity).
-//! - **Poses** tab: preview every manifest clip.
+//! - **Poses** tab: browse and play every manifest clip through the animator
+//!   (springs, breathing, idle life, walk flip, reactions) — M2, see [`poses`].
 //! - **Events** tab: debug injector that fires any `assets/rules.toml` event.
 //!
 //! `LillithStage.tsx` is the visual reference for the stage/debug layout.
 
 use eframe::egui;
 use lillith_core::rules::RuleSet;
+use std::path::PathBuf;
+
+pub mod poses;
 
 /// Which tab is visible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -29,16 +33,25 @@ pub struct Panel {
     input: String,
     log: Vec<String>,
     rules: RuleSet,
+    poses: poses::Poses,
 }
 
-impl Default for Panel {
-    fn default() -> Self {
+impl Panel {
+    /// Panel whose Poses tab loads `manifest` (or the default lookup).
+    pub fn new(manifest: Option<PathBuf>) -> Self {
         Self {
             tab: Tab::default(),
             input: String::new(),
             log: Vec::new(),
             rules: RuleSet::bundled(),
+            poses: poses::Poses::new(manifest),
         }
+    }
+}
+
+impl Default for Panel {
+    fn default() -> Self {
+        Self::new(None)
     }
 }
 
@@ -67,9 +80,7 @@ impl eframe::App for Panel {
             Tab::Settings => {
                 ui.label("TODO(M6): live config.toml editor");
             }
-            Tab::Poses => {
-                ui.label("TODO(M2): manifest clip browser");
-            }
+            Tab::Poses => self.poses.ui(ui),
             Tab::Events => {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for rule in &self.rules.rules {
@@ -87,15 +98,28 @@ impl eframe::App for Panel {
 
 /// Opens the panel window (blocks until it is closed).
 pub fn run() -> eframe::Result<()> {
+    run_with(None)
+}
+
+/// Opens the panel with the Poses tab on `manifest`, starting on that tab
+/// when a manifest was given.
+pub fn run_with(manifest: Option<PathBuf>) -> eframe::Result<()> {
+    let start_on_poses = manifest.is_some();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Lillith")
-            .with_inner_size([420.0, 560.0]),
+            .with_inner_size([660.0, 580.0]),
         ..Default::default()
     };
     eframe::run_native(
         "Lillith",
         options,
-        Box::new(|_cc| Ok(Box::<Panel>::default())),
+        Box::new(move |_cc| {
+            let mut p = Panel::new(manifest);
+            if start_on_poses {
+                p.tab = Tab::Poses;
+            }
+            Ok(Box::new(p))
+        }),
     )
 }

@@ -2423,6 +2423,7 @@ name = "lillith-panel"
 version = "0.0.1"
 dependencies = [
  "eframe",
+ "lillith-anim",
  "lillith-core",
  "tracing",
 ]

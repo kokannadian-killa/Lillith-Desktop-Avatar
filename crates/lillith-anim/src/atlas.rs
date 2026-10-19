@@ -245,6 +245,25 @@ impl Manifest {
     }
 }
 
+/// Finds the generated set's `manifest.toml`: `$LILLITH_MANIFEST`, then
+/// `./assets/generated/manifest.toml`, then
+/// `$XDG_DATA_HOME/lillith/generated/manifest.toml` (default
+/// `~/.local/share/...`). Returns the first that exists.
+pub fn default_manifest_path() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(p) = std::env::var_os("LILLITH_MANIFEST") {
+        candidates.push(PathBuf::from(p));
+    }
+    candidates.push(PathBuf::from("assets/generated/manifest.toml"));
+    let data = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
+    if let Some(d) = data {
+        candidates.push(d.join("lillith/generated/manifest.toml"));
+    }
+    candidates.into_iter().find(|p| p.is_file())
+}
+
 /// Loads one atlas page as RGBA8.
 pub fn load_page(path: &Path) -> Result<image::RgbaImage, AtlasError> {
     Ok(image::open(path)?.to_rgba8())

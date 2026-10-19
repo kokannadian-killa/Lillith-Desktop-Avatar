@@ -5,13 +5,16 @@
 //! tokio runtime runs sensors, LLM and voice; everything talks over one
 //! event bus into `lillith-core`, which emits commands back to the overlay.
 //!
-//! Status: M0 scaffold. `lillith event <name>` already resolves a rule from
-//! `assets/rules.toml`; the overlay itself lands in M1.
+//! Status: M2 animation engine (headless). `lillith event <name>` resolves a
+//! rule from `assets/rules.toml`; `lillith preview` lists/plays/renders every
+//! manifest clip through the animator; the overlay itself lands in M1.
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use lillith_core::{rules::RuleSet, Event};
 use lillith_overlay::Backend;
+
+mod preview;
 
 #[derive(Debug, Parser)]
 #[command(name = "lillith", version, about = "Lillith desktop companion")]
@@ -42,8 +45,15 @@ enum Cmd {
     },
     /// List all rules.
     Rules,
-    /// Open the chat/settings panel window.
-    Panel,
+    /// Open the chat/settings panel window (Poses tab = clip browser).
+    Panel {
+        /// manifest.toml for the Poses tab (default: same lookup as `preview`).
+        #[arg(long)]
+        manifest: Option<std::path::PathBuf>,
+    },
+    /// Headless clip preview: list clips, write contact sheets / frames,
+    /// or simulate idle life (M2).
+    Preview(preview::PreviewArgs),
 }
 
 fn parse_backend(s: &str) -> Result<Backend, String> {
@@ -93,9 +103,10 @@ async fn main() -> Result<()> {
                 );
             }
         }
-        Some(Cmd::Panel) => {
-            lillith_panel::run().map_err(|e| anyhow::anyhow!("panel: {e}"))?;
+        Some(Cmd::Panel { manifest }) => {
+            lillith_panel::run_with(manifest).map_err(|e| anyhow::anyhow!("panel: {e}"))?;
         }
+        Some(Cmd::Preview(args)) => preview::run(args)?,
         None => {
             let backend = Backend::detect_env(cli.backend);
             let dirs = directories::ProjectDirs::from("", "", "lillith");
@@ -106,7 +117,7 @@ async fn main() -> Result<()> {
                 llm = !cli.no_llm,
                 rules = rules.rules.len(),
                 config_dir = ?dirs.as_ref().map(|d| d.config_dir().to_path_buf()),
-                "Lillith scaffold (M0): overlay not implemented yet, see docs/PLAN.md M1"
+                "Lillith (M2 engine, headless): overlay not implemented yet, see docs/PLAN.md M1; try `lillith preview --list`"
             );
         }
     }

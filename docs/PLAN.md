@@ -230,6 +230,10 @@ Repo baseline: the repo has nothing to port from. Every target module below is n
 | M8 | Voice | Replies are spoken (Piper, else espeak-ng). Push-to-talk records 5 s → whisper → chat. Both can be toggled and fail gracefully |
 | M9 | Proactive life & polish | Proactive comments with cooldown, warmth/greeting styles, work-session nudges, SFX, particles, optional "What do you see?" (portal + moondream), and the remaining events (print, archive, calendar, firewall) |
 
+**M2 status (2026-10-19, UTC-6): met headlessly on branch `scaffold/rust-workspace`.**
+- Done: `lillith-core::spring::Physics` (6 channels, README-SP defaults, gains, 120 Hz sub-steps, velocity + offset clamps, `Breath`); `lillith-core::idle::IdleLife` (breath period 3.5–4.5 s, blink 4–6 s, idle transition 8–12 s × 1.2–2 s from hip_sway/lean_forward/shoulder_roll, idle reactions 12–26 s, busy hold-back, seeded/fake-clock); `lillith-anim::animator::Animator` (base clip, priority reaction queue, idle transitions, blink segment from `blink_wink`, walk/run with dedicated left/right clips or mirror fallback, impulses by energy tier, footfalls, walk start/stop lean); `lillith-anim::render` (tiny-skia compositing: flip, spring transform about the feet, chest → squash, pigtails → skew); `lillith preview` (list / contact sheets / per-frame PNGs / physics playback / idle timeline) and the egui **Poses** tab (list, play, pause+step, play as reaction, walk ◀ ▶, jiggle, idle-life toggle). An integration test plays and renders all 64 generated clips when the art is present.
+- Deferred: drawing on the real desktop (M1 overlay); procedural `gestures.rs` tweens (the clip library covers them); per-layer chest/pigtail deformation (needs layered art); sit-down/stand-up transition clips; the 16 s pose cycle and mood-driven idle choice (M3).
+
 M0–M3 give the first demoable build: README-SP behaviour without AI. M4–M5 complete the system state/action monitor. M7–M8 complete the companion.
 
 ## 6. Open questions
