@@ -66,26 +66,40 @@ pub const KNOWN_POSES: &[&str] = &[
 /// the manifest the same way [`KNOWN_POSES`] mirrors the pose art, so a typo
 /// in `[rule_clips]` fails `cargo test`.
 pub const KNOWN_EVENT_CLIPS: &[&str] = &[
+    "event_approval_needed",
     "event_archiving",
     "event_battery_low",
     "event_bluetooth",
     "event_brightness",
+    "event_browser_bookmark",
+    "event_browser_history",
     "event_calendar",
     "event_clipboard",
+    "event_clipboard_cut",
     "event_cloud_sync",
     "event_cpu_busy",
     "event_diagnostics",
     "event_error",
     "event_firewall_block",
     "event_help",
+    "event_hotspot_on",
     "event_incognito",
+    "event_input_click_double",
+    "event_input_click_right",
+    "event_input_hover_long",
     "event_loading",
+    "event_net_lost",
     "event_notification",
     "event_printing",
+    "event_ram_high",
     "event_recycle_bin",
     "event_screenshot",
+    "event_search_opened",
+    "event_start_menu_opened",
+    "event_usb_added",
     "event_usb_eject",
     "event_volume",
+    "event_vpn_up",
     "event_wifi",
     "event_window_close",
     "event_window_minimize",
@@ -349,27 +363,27 @@ mod tests {
         ("window.opened.browser", "event_window_open"),
         ("window.opened.terminal", "event_window_open"),
         ("window.opened.media", "event_window_open"),
+        // Dedicated event clips (batch 3).
+        ("ram.high", "event_ram_high"),
+        ("net.lost", "event_net_lost"),
+        ("vpn.up", "event_vpn_up"),
+        ("hotspot.on", "event_hotspot_on"),
+        ("usb.added", "event_usb_added"),
+        ("clipboard.cut", "event_clipboard_cut"),
+        ("start_menu.opened", "event_start_menu_opened"),
+        ("search.opened", "event_search_opened"),
+        ("browser.bookmark", "event_browser_bookmark"),
+        ("browser.history", "event_browser_history"),
+        ("approval.needed", "event_approval_needed"),
+        ("input.click.double", "event_input_click_double"),
+        ("input.click.right", "event_input_click_right"),
+        ("input.hover_long", "event_input_hover_long"),
     ];
 
     /// True art gaps: rules deliberately left without a clip (see
-    /// docs/EVENT_MAPPING.md). ram.high / usb.added must NOT reuse
-    /// event_cpu_busy / event_usb_eject (different meaning).
-    const UNMAPPED: &[&str] = &[
-        "ram.high",
-        "net.lost",
-        "vpn.up",
-        "hotspot.on",
-        "usb.added",
-        "clipboard.cut",
-        "start_menu.opened",
-        "search.opened",
-        "browser.bookmark",
-        "browser.history",
-        "approval.needed",
-        "input.click.double",
-        "input.click.right",
-        "input.hover_long",
-    ];
+    /// docs/EVENT_MAPPING.md). Empty since batch 3; keep the list so a new
+    /// rule without art has to be acknowledged here.
+    const UNMAPPED: &[&str] = &[];
 
     #[test]
     fn mapped_events_resolve_to_clips() {
@@ -428,11 +442,13 @@ mod tests {
     fn counts_and_aliases() {
         let rs = RuleSet::bundled();
         assert_eq!(rs.rules.len(), 57);
-        assert_eq!(MAPPED.len(), 43);
-        assert_eq!(UNMAPPED.len(), 14);
-        // Semantically wrong reuses stay unmapped.
-        assert_eq!(rs.clip_for("ram.high"), None);
-        assert_eq!(rs.clip_for("usb.added"), None);
+        assert_eq!(MAPPED.len(), 57);
+        assert_eq!(UNMAPPED.len(), 0);
+        assert_eq!(rs.rules_without_clip().count(), 0);
+        assert_eq!(KNOWN_EVENT_CLIPS.len(), 38);
+        // Dedicated art replaced the semantically wrong reuses.
+        assert_eq!(rs.clip_for("ram.high"), Some("event_ram_high"));
+        assert_eq!(rs.clip_for("usb.added"), Some("event_usb_added"));
         // window.closed unchanged pending a tone decision.
         assert_eq!(rs.clip_for("window.closed"), Some("event_window_close"));
         // Old table name still parses.
@@ -442,7 +458,8 @@ mod tests {
         .unwrap();
         assert_eq!(old.event_clip("cpu.high"), Some("event_cpu_busy"));
         assert!(is_known_clip("sleep") && is_known_clip("event_wifi"));
-        assert!(!is_known_clip("event_ram_high"));
+        assert!(is_known_clip("event_ram_high"));
+        assert!(!is_known_clip("event_no_such_clip"));
     }
 
     #[test]

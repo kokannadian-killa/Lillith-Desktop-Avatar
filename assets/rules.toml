@@ -597,7 +597,7 @@ status = "PY-missing"
 # Rule event -> clip in the canonical generated manifest (assets/generated).
 # The clip may be an `event_<name>` reaction or a regular animation (sleep,
 # drag_held, ...). Resolved by `RuleSet::clip_for`. A rule missing from this
-# table has no clip yet and falls back to its `pose`. Full reconciliation,
+# table has no clip and falls back to its `pose` (currently every rule has one). Full reconciliation,
 # confidence and remaining art gaps: docs/EVENT_MAPPING.md.
 # (The older table name `[event_clips]` is still accepted.)
 [rule_clips]
@@ -629,6 +629,23 @@ status = "PY-missing"
 "app.crash"          = "event_error"           # pose error
 "help.requested"     = "event_help"            # pose help
 "input.click.middle" = "event_help"            # pose help (middle click = help)
+
+# Dedicated event clips (batch 3). The clip's own `event` field is this
+# dotted rule name. * = new pose, the clip is its own base_clip.
+"ram.high"             = "event_ram_high"  # *
+"net.lost"             = "event_net_lost"  # *
+"vpn.up"               = "event_vpn_up"  # *
+"hotspot.on"           = "event_hotspot_on"
+"usb.added"            = "event_usb_added"
+"clipboard.cut"        = "event_clipboard_cut"  # *
+"start_menu.opened"    = "event_start_menu_opened"  # *
+"search.opened"        = "event_search_opened"
+"browser.bookmark"     = "event_browser_bookmark"
+"browser.history"      = "event_browser_history"
+"approval.needed"      = "event_approval_needed"  # *
+"input.click.double"   = "event_input_click_double"
+"input.click.right"    = "event_input_click_right"  # *
+"input.hover_long"     = "event_input_hover_long"
 
 # Regular animations reused for rules (safe: the animation shows the rule).
 "idle.asleep"        = "sleep"

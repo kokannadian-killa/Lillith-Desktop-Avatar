@@ -1,7 +1,7 @@
 # Event mapping: rules.toml ↔ generated clips
 
 Reconciles the 57 `[[rule]]` events in `assets/rules.toml` with the canonical
-generated set (`assets/generated/manifest.json`, 50 clips: 24 `event_<name>`
+generated set (`assets/generated/manifest.json`, 64 clips: 38 `event_<name>`
 reactions and 26 regular animations).
 
 The mapping lives in `assets/rules.toml` under `[rule_clips]` (the older name
@@ -9,13 +9,12 @@ The mapping lives in `assets/rules.toml` under `[rule_clips]` (the older name
 `lillith_core::rules::RuleSet::clip_for(event)`; `event_clip()` is kept as an
 alias. A rule's clip can be an event reaction or any regular animation. A rule
 with no entry falls back to its `pose`. Tests in `lillith-core` (`rules::tests`)
-pin every mapped pair and every remaining gap, check that 43 mapped + 14
-unmapped = 57, and check that every target is in `KNOWN_EVENT_CLIPS` or
+pin every mapped pair, check that 57 mapped + 0 unmapped = 57, and check that every target is in `KNOWN_EVENT_CLIPS` or
 `KNOWN_BASE_CLIPS`.
 
-**Totals: 43 / 57 rules have a clip** (27 event-clip links + 10 regular
-animations + 6 low-confidence stand-ins). **14 true art gaps** remain. All 24
-event clips are used.
+**Totals: 57 / 57 rules have a clip** (27 event-clip links + 14 dedicated
+batch-3 event clips + 10 regular animations + 6 low-confidence stand-ins).
+**0 true art gaps.** All 38 event clips are used.
 
 ## 1. Event reaction clips: 27 rules → 24 clips
 
@@ -83,36 +82,61 @@ event clips are used.
 | `window.opened.terminal` | hacking | event_window_open | generic window; rule wants hacking |
 | `window.opened.media` | sitting | event_window_open | generic window; rule wants sitting + dance |
 
-## 4. TRUE art gaps: rules with NO clip (14)
+## 4. Dedicated event clips, batch 3: 14 (formerly the true art gaps)
 
-| Rule event | Rule pose | Notes |
-|---|---|---|
-| `ram.high` | htop | do **not** reuse event_cpu_busy (it draws a CPU chip) |
-| `net.lost` | connection_lost | needs a "disconnected" reaction (event_wifi is the positive one) |
-| `vpn.up` | vpn | |
-| `hotspot.on` | hotspot | |
-| `usb.added` | drive_eject | do **not** reuse event_usb_eject (it shows the stick leaving) |
-| `clipboard.cut` | crop | event_clipboard shows a check mark, not a cut |
-| `start_menu.opened` | start_menu | |
-| `search.opened` | magnify | |
-| `browser.bookmark` | bookmark | |
-| `browser.history` | browser_history | |
-| `approval.needed` | waiting | |
-| `input.click.double` | hacking | |
-| `input.click.right` | cleaning | |
-| `input.hover_long` | peeking | |
+Each clip's own `event` field is the dotted rule name; checked to match.
+`*` = brand-new pose: the clip is its own `base_clip` (self-reference, see below).
 
-These still play their rule `pose` (from the legacy pose stills) until art exists.
+| Rule event | Clip | base_clip | Attachment points carried |
+|---|---|---|---|
+| `ram.high` | event_ram_high * | itself | icon_origin |
+| `net.lost` | event_net_lost * | itself | icon_origin |
+| `vpn.up` | event_vpn_up * | itself | finger_point, icon_origin (fades to ~72% opacity) |
+| `hotspot.on` | event_hotspot_on | spell_orb_cast | broadcast_origin, icon_origin |
+| `usb.added` | event_usb_added | wave | icon_origin, port_point |
+| `clipboard.cut` | event_clipboard_cut * | itself | finger_point, icon_origin |
+| `start_menu.opened` | event_start_menu_opened * | itself | icon_origin, menu_origin [262,30] (menu top-left), palm_point |
+| `search.opened` | event_search_opened | think | icon_origin |
+| `browser.bookmark` | event_browser_bookmark | dance | icon_origin |
+| `browser.history` | event_browser_history | hip_sway | icon_origin |
+| `approval.needed` | event_approval_needed * | itself | icon_origin, palm_point |
+| `input.click.double` | event_input_click_double | tada_celebrate | click_point, icon_origin |
+| `input.click.right` | event_input_click_right * | itself | click_point, icon_origin, menu_origin, palm_point |
+| `input.hover_long` | event_input_hover_long | lean_forward | cursor_point, icon_origin |
 
-## 5. Event clips with NO rule: 0
+**Self-referencing base clips (7):** event_ram_high, event_net_lost,
+event_vpn_up, event_clipboard_cut, event_start_menu_opened,
+event_approval_needed, event_input_click_right. The image bot's note listed 6;
+event_input_click_right is a 7th. The loader accepts self-reference: the clip
+exists and its own frame count bounds its `base_frames` (pinned by the
+`allows_self_referencing_base_clip` test in lillith-anim). The engine should
+treat `base_clip == name` as "this is the base pose", not as a separate base to
+compose.
 
-All 24 event clips are reachable. Clips serving several rules: event_window_open
+## 5. TRUE art gaps: none
+
+All 57 rules have a clip. `UNMAPPED` in `rules::tests` is empty; a new rule
+without art fails the tests until it is either mapped or listed there.
+
+## 6. Event clips with NO rule: 0
+
+All 38 event clips are reachable. Clips serving several rules: event_window_open
 (5), event_wifi (2), event_error (2), event_help (2), event_notification (2),
 event_calendar (2), sit_swing (2).
 
-## Render note (not an importer/mapping issue)
+## Naming note
+
+The 24 older event clips carry a snake_case `event` field (e.g. `cpu_busy`); the
+14 batch-3 clips carry the dotted rule name (e.g. `ram.high`). The engine binds
+rules to clips through `[rule_clips]`, so this doesn't affect lookup; it would
+only matter if something matched on the clip's `event` field directly.
+
+## Render notes (not importer/mapping issues)
 
 event_bluetooth, event_volume, event_firewall_block, event_recycle_bin,
 event_clipboard and event_diagnostics point at an icon on screen-LEFT (base
 clip `point`). When she stands near the left screen edge, the renderer may need
 to mirror the sheet (and any points) so the icon stays on screen.
+
+event_screenshot (white flash), event_incognito (fade to ~45%) and event_vpn_up
+(fade to ~72%) contain intentional translucent full-frame effects.

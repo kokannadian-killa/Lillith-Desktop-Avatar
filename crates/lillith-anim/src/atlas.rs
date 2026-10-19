@@ -353,6 +353,37 @@ mod tests {
     }
 
     #[test]
+    fn allows_self_referencing_base_clip() {
+        // New-pose event clips are their own base (base_clip = own name).
+        let m = Manifest::from_toml_str(
+            r#"
+            [clips.event_ram_high]
+            page = "r.png"
+            mode = "once"
+            event = "ram.high"
+            base_clip = "event_ram_high"
+            base_frames = [0, 1]
+            frames = [ { x = 0, y = 0, w = 4, h = 4 }, { x = 4, y = 0, w = 4, h = 4 } ]
+            "#,
+        )
+        .unwrap();
+        let c = &m.clips["event_ram_high"];
+        assert_eq!(c.base_clip.as_deref(), Some("event_ram_high"));
+        // Its own frame count still bounds the indices.
+        let err = Manifest::from_toml_str(
+            r#"
+            [clips.e]
+            page = "e.png"
+            base_clip = "e"
+            base_frames = [2]
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            "#,
+        )
+        .unwrap_err();
+        assert!(matches!(err, AtlasError::InvalidClip { .. }), "{err}");
+    }
+
+    #[test]
     fn rejects_bad_base_references() {
         let base = r#"
             [clips.b]
