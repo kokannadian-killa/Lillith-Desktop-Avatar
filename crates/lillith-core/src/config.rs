@@ -74,6 +74,87 @@ impl Default for OverlayPos {
     }
 }
 
+/// System monitor tunables (`[monitor]`, M4). Thresholds default to the
+/// `[thresholds]` numbers in `assets/rules.toml` (Python prototype parity);
+/// rule `cooldown_s` values still apply on top inside the brain.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MonitorConfig {
+    /// Master switch (`lillith --no-monitor` overrides it).
+    pub enabled: bool,
+    /// procfs/sysfs sampling period (s).
+    pub poll_s: f32,
+    /// Minimum seconds between two emissions of the same event by the
+    /// monitor itself (anti-spam; `user.activity` has its own period).
+    pub event_cooldown_s: f32,
+    /// `cpu.high` when total CPU ≥ this for `cpu_high_sustain_s`.
+    pub cpu_high_percent: f32,
+    pub cpu_high_sustain_s: f32,
+    /// Re-arms once CPU has stayed below this for `cpu_rearm_sustain_s`.
+    pub cpu_rearm_percent: f32,
+    pub cpu_rearm_sustain_s: f32,
+    /// `ram.high` (MemTotal − MemAvailable) ≥ this for `ram_high_sustain_s`.
+    pub ram_high_percent: f32,
+    pub ram_high_sustain_s: f32,
+    pub ram_rearm_percent: f32,
+    /// `battery.low` at or below this while discharging.
+    pub battery_low_percent: f32,
+    /// Re-arms at or above this, or as soon as AC is plugged in.
+    pub battery_rearm_percent: f32,
+    /// `net.lost` / `net.restored` only after the new state held this long.
+    pub net_debounce_s: f32,
+    /// `brightness.changed` when the backlight moved at least this many points.
+    pub brightness_min_delta_percent: f32,
+    /// Watch removable block devices (`usb.added` / `usb.removed`).
+    pub usb: bool,
+    /// Detect VPN tunnels (tun/wg/ppp interfaces) → `vpn.up`.
+    pub vpn: bool,
+    /// Desktop-wide idle detection (ext-idle-notify on Wayland, XScreenSaver on X11).
+    pub idle: bool,
+    /// Input within this many seconds counts as "the user is active".
+    pub activity_window_s: f32,
+    /// While active, `user.activity` is sent at most this often (keeps her awake).
+    pub activity_every_s: f32,
+    /// Idle this long = away; the next input sends `user.returned`.
+    pub away_after_s: f32,
+    /// inotify on Trash / Screenshots / Downloads.
+    pub files: bool,
+    /// Session-bus notification monitor (`notify.received`, `calendar.reminder`, `update.available`).
+    pub notifications: bool,
+    /// Serve `org.lillith.Bridge` for the KWin script (`window.*`).
+    pub kwin_bridge: bool,
+}
+
+impl Default for MonitorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            poll_s: 2.0,
+            event_cooldown_s: 20.0,
+            cpu_high_percent: 72.0,
+            cpu_high_sustain_s: 10.0,
+            cpu_rearm_percent: 62.0,
+            cpu_rearm_sustain_s: 10.0,
+            ram_high_percent: 85.0,
+            ram_high_sustain_s: 10.0,
+            ram_rearm_percent: 80.0,
+            battery_low_percent: 15.0,
+            battery_rearm_percent: 20.0,
+            net_debounce_s: 4.0,
+            brightness_min_delta_percent: 2.0,
+            usb: true,
+            vpn: true,
+            idle: true,
+            activity_window_s: 10.0,
+            activity_every_s: 30.0,
+            away_after_s: 120.0,
+            files: true,
+            notifications: true,
+            kwin_bridge: true,
+        }
+    }
+}
+
 /// Top-level config.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -96,6 +177,8 @@ pub struct Config {
     pub overlay: OverlayPos,
     /// M3 behaviour timings (`[behavior]`).
     pub behavior: BehaviorConfig,
+    /// M4 system monitor (`[monitor]`).
+    pub monitor: MonitorConfig,
 }
 
 impl Default for Config {
@@ -117,6 +200,7 @@ impl Default for Config {
             llm_model: "dolphin3".into(),
             overlay: OverlayPos::default(),
             behavior: BehaviorConfig::default(),
+            monitor: MonitorConfig::default(),
         }
     }
 }
@@ -194,6 +278,16 @@ mod tests {
         assert_eq!(c.mode, MoveMode::Stay);
         assert_eq!(c.springs.chest.stiffness, 70.0);
         assert_eq!(c.springs.pig.stiffness, 32.0);
+    }
+
+    #[test]
+    fn monitor_table() {
+        let c =
+            Config::from_toml_str("[monitor]\nenabled = false\ncpu_high_percent = 90.0\n").unwrap();
+        assert!(!c.monitor.enabled);
+        assert_eq!(c.monitor.cpu_high_percent, 90.0);
+        assert_eq!(c.monitor.battery_low_percent, 15.0);
+        assert!(c.monitor.cpu_rearm_percent < MonitorConfig::default().cpu_high_percent);
     }
 
     #[test]
