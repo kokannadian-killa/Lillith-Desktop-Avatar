@@ -70,8 +70,9 @@ async fn main() -> Result<()> {
             };
             match rules.find(&ev.name) {
                 Some(rule) => println!(
-                    "{} -> pose={} then={:?} gesture={:?} mood={:?} sfx={:?} line={:?}",
+                    "{} -> clip={:?} pose={} then={:?} gesture={:?} mood={:?} sfx={:?} line={:?}",
                     ev.name,
+                    rules.event_clip(&ev.name),
                     rule.pose,
                     rule.then,
                     rule.gesture,
@@ -84,7 +85,12 @@ async fn main() -> Result<()> {
         }
         Some(Cmd::Rules) => {
             for r in &rules.rules {
-                println!("{:<26} {}", r.event, r.pose);
+                println!(
+                    "{:<26} {:<20} {}",
+                    r.event,
+                    r.pose,
+                    rules.event_clip(&r.event).unwrap_or("-")
+                );
             }
         }
         Some(Cmd::Panel) => {

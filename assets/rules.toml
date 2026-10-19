@@ -593,6 +593,41 @@ cooldown_s = 30.0
 source = "overlay pointer: Left -> Double -> Right within secret_sequence_window_s"
 status = "PY-missing"
 
+# ── Event reaction clips (assets/generated, `event_<name>`) ───────────────
+# Rule event -> canonical event reaction clip in the generated manifest.
+# Resolved by `RuleSet::event_clip`. A rule missing from this table has no
+# event clip yet (it falls back to its `pose`). Full reconciliation, gaps and
+# uncertain candidates: docs/EVENT_MAPPING.md. Do not map a rule here unless
+# the clip shows the same thing; keep candidates in that doc instead.
+[event_clips]
+"cpu.high"           = "event_cpu_busy"        # pose busy; CPU chip heating
+"system.status"      = "event_diagnostics"     # pose diagnostics; monitor ECG
+"battery.low"        = "event_battery_low"     # pose battery_low
+"brightness.changed" = "event_brightness"      # pose brightness
+"wifi.changed"       = "event_wifi"            # pose wifi
+"net.restored"       = "event_wifi"            # rule also uses pose wifi
+"bt.paired"          = "event_bluetooth"       # pose bluetooth
+"firewall.blocked"   = "event_firewall_block"  # pose firewall
+"volume.changed"     = "event_volume"          # pose volume
+"usb.removed"        = "event_usb_eject"       # stick rises under eject symbol, wave bye
+"print.job"          = "event_printing"        # pose printing
+"archive.created"    = "event_archiving"       # pose compress; files into a zipped box
+"cloud.sync"         = "event_cloud_sync"      # pose cloud_sync
+"trash.added"        = "event_recycle_bin"     # pose recycle; paper into bin
+"screenshot.taken"   = "event_screenshot"      # pose screenshot; flash + thumbnail
+"clipboard.copied"   = "event_clipboard"       # pose clipboard
+"notify.received"    = "event_notification"    # pose dismiss_notif; bell with badge
+"calendar.reminder"  = "event_calendar"        # pose calendar
+"window.opened.app"  = "event_window_open"     # generic app window (other window.opened.* keep their poses)
+"window.closed"      = "event_window_close"    # NOTE: rule pose/line is knife "Gotcha!", clip is a wave bye
+"window.minimized"   = "event_window_minimize" # pose minimize
+"window.private"     = "event_incognito"       # pose private; glasses + fade to ~45%
+"app.loading"        = "event_loading"         # pose loading
+"journal.error"      = "event_error"           # pose error
+"app.crash"          = "event_error"           # pose error
+"help.requested"     = "event_help"            # pose help
+"input.click.middle" = "event_help"            # pose help (middle click = help)
+
 # ── Key map (README-SP; active only while she has keyboard focus) ─────────
 # Each entry is either { pose = "<pose>" } or { action = "<action>" }.
 [keys]

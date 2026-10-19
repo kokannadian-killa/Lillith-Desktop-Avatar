@@ -61,6 +61,37 @@ pub const KNOWN_POSES: &[&str] = &[
     "alert",
 ];
 
+/// Event reaction clips that exist in the canonical generated set
+/// (`assets/generated/manifest.json`, clips named `event_<name>`). Mirrors
+/// the manifest the same way [`KNOWN_POSES`] mirrors the pose art, so a typo
+/// in `[event_clips]` fails `cargo test`.
+pub const KNOWN_EVENT_CLIPS: &[&str] = &[
+    "event_archiving",
+    "event_battery_low",
+    "event_bluetooth",
+    "event_brightness",
+    "event_calendar",
+    "event_clipboard",
+    "event_cloud_sync",
+    "event_cpu_busy",
+    "event_diagnostics",
+    "event_error",
+    "event_firewall_block",
+    "event_help",
+    "event_incognito",
+    "event_loading",
+    "event_notification",
+    "event_printing",
+    "event_recycle_bin",
+    "event_screenshot",
+    "event_usb_eject",
+    "event_volume",
+    "event_wifi",
+    "event_window_close",
+    "event_window_minimize",
+    "event_window_open",
+];
+
 /// Errors loading the rule table.
 #[derive(Debug, thiserror::Error)]
 pub enum RulesError {
@@ -124,6 +155,10 @@ pub struct RuleSet {
     pub rules: Vec<Rule>,
     #[serde(default)]
     pub keys: BTreeMap<String, KeyBinding>,
+    /// Rule event name -> event reaction clip (`[event_clips]`). Optional;
+    /// rules without an entry fall back to their `pose`.
+    #[serde(default)]
+    pub event_clips: BTreeMap<String, String>,
 }
 
 impl RuleSet {
@@ -141,6 +176,27 @@ impl RuleSet {
     /// First enabled rule for an event name.
     pub fn find(&self, event: &str) -> Option<&Rule> {
         self.rules.iter().find(|r| r.enabled && r.event == event)
+    }
+
+    /// Event reaction clip for a fired rule event, if one is mapped.
+    pub fn event_clip(&self, event: &str) -> Option<&str> {
+        self.event_clips.get(event).map(String::as_str)
+    }
+
+    /// Enabled rules that have no event reaction clip mapped.
+    pub fn rules_without_clip(&self) -> impl Iterator<Item = &Rule> {
+        self.rules
+            .iter()
+            .filter(|r| r.enabled && !self.event_clips.contains_key(&r.event))
+    }
+
+    /// Clips from `known` that no rule maps to.
+    pub fn clips_without_rule<'a>(&self, known: &[&'a str]) -> Vec<&'a str> {
+        known
+            .iter()
+            .copied()
+            .filter(|c| !self.event_clips.values().any(|v| v == c))
+            .collect()
     }
 
     /// A numeric threshold by key.
@@ -201,6 +257,127 @@ mod tests {
         for r in &rs.rules {
             assert!(seen.insert(r.event.as_str()), "duplicate rule {}", r.event);
         }
+    }
+
+    /// (rule event, clip) pairs that must resolve.
+    const MAPPED: &[(&str, &str)] = &[
+        ("cpu.high", "event_cpu_busy"),
+        ("system.status", "event_diagnostics"),
+        ("battery.low", "event_battery_low"),
+        ("brightness.changed", "event_brightness"),
+        ("wifi.changed", "event_wifi"),
+        ("net.restored", "event_wifi"),
+        ("bt.paired", "event_bluetooth"),
+        ("firewall.blocked", "event_firewall_block"),
+        ("volume.changed", "event_volume"),
+        ("usb.removed", "event_usb_eject"),
+        ("print.job", "event_printing"),
+        ("archive.created", "event_archiving"),
+        ("cloud.sync", "event_cloud_sync"),
+        ("trash.added", "event_recycle_bin"),
+        ("screenshot.taken", "event_screenshot"),
+        ("clipboard.copied", "event_clipboard"),
+        ("notify.received", "event_notification"),
+        ("calendar.reminder", "event_calendar"),
+        ("window.opened.app", "event_window_open"),
+        ("window.closed", "event_window_close"),
+        ("window.minimized", "event_window_minimize"),
+        ("window.private", "event_incognito"),
+        ("app.loading", "event_loading"),
+        ("journal.error", "event_error"),
+        ("app.crash", "event_error"),
+        ("help.requested", "event_help"),
+        ("input.click.middle", "event_help"),
+    ];
+
+    /// Rules deliberately left without an event clip (see docs/EVENT_MAPPING.md).
+    const UNMAPPED: &[&str] = &[
+        "ram.high",
+        "net.lost",
+        "vpn.up",
+        "hotspot.on",
+        "usb.added",
+        "clipboard.cut",
+        "update.available",
+        "timer.fired",
+        "window.opened.folder",
+        "window.opened.browser",
+        "window.opened.terminal",
+        "window.opened.media",
+        "start_menu.opened",
+        "search.opened",
+        "browser.bookmark",
+        "browser.history",
+        "focus.long_work",
+        "idle.long",
+        "idle.asleep",
+        "user.returned",
+        "llm.thinking",
+        "llm.done",
+        "approval.needed",
+        "input.click.left",
+        "input.click.double",
+        "input.click.right",
+        "input.hover",
+        "input.hover_long",
+        "input.drag",
+        "input.secret",
+    ];
+
+    #[test]
+    fn mapped_events_resolve_to_clips() {
+        let rs = RuleSet::bundled();
+        for (ev, clip) in MAPPED {
+            assert_eq!(rs.event_clip(ev), Some(*clip), "{ev}");
+        }
+        assert_eq!(
+            rs.event_clips.len(),
+            MAPPED.len(),
+            "unexpected extra mapping"
+        );
+    }
+
+    #[test]
+    fn unmapped_events_have_no_clip() {
+        let rs = RuleSet::bundled();
+        for ev in UNMAPPED {
+            assert!(rs.find(ev).is_some(), "{ev} is not a rule");
+            assert_eq!(rs.event_clip(ev), None, "{ev}");
+        }
+        let gaps: Vec<&str> = rs.rules_without_clip().map(|r| r.event.as_str()).collect();
+        assert_eq!(gaps, UNMAPPED);
+        assert_eq!(rs.event_clip("no.such.event"), None);
+        assert_eq!(MAPPED.len() + UNMAPPED.len(), rs.rules.len());
+    }
+
+    #[test]
+    fn event_clip_table_is_consistent() {
+        let rs = RuleSet::bundled();
+        for (ev, clip) in &rs.event_clips {
+            assert!(
+                rs.find(ev).is_some(),
+                "[event_clips] key {ev} is not a rule"
+            );
+            assert!(
+                KNOWN_EVENT_CLIPS.contains(&clip.as_str()),
+                "[event_clips] {ev}: unknown clip {clip}"
+            );
+        }
+        // Every generated event clip is reachable from some rule.
+        assert!(rs.clips_without_rule(KNOWN_EVENT_CLIPS).is_empty());
+    }
+
+    #[test]
+    fn event_clips_table_is_optional() {
+        let rs =
+            RuleSet::from_toml_str("[[rule]]\nevent = \"cpu.high\"\npose = \"busy\"\n").unwrap();
+        assert!(rs.event_clips.is_empty());
+        assert_eq!(rs.event_clip("cpu.high"), None);
+        assert_eq!(rs.rules_without_clip().count(), 1);
+        assert_eq!(
+            rs.clips_without_rule(&["event_cpu_busy"]),
+            ["event_cpu_busy"]
+        );
     }
 
     #[test]
