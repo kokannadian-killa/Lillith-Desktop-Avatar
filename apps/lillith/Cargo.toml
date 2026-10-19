@@ -15,9 +15,11 @@ path = "src/main.rs"
 
 [features]
 # Both overlay backends by default (Wayland needs libxkbcommon + libwayland at build time).
+# Desktop idle (presence) comes with each backend: ext-idle-notify-v1 on
+# Wayland, MIT-SCREEN-SAVER on X11 (both pure Rust).
 default = ["wayland", "x11"]
-wayland = ["lillith-overlay/wayland"]
-x11 = ["lillith-overlay/x11"]
+wayland = ["lillith-overlay/wayland", "lillith-sense/wayland-idle"]
+x11 = ["lillith-overlay/x11", "lillith-sense/x11"]
 full = [
     "wayland",
     "x11",

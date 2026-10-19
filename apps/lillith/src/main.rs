@@ -5,7 +5,10 @@
 //! tokio runtime runs sensors, LLM and voice; everything talks over one
 //! event bus into `lillith-core`, which emits commands back to the overlay.
 //!
-//! Status: M1 overlay + M2 animation engine + M3 behaviour. Plain `lillith`
+//! Status: M1 overlay + M2 animation engine + M3 behaviour + M4 system
+//! monitor (`lillith-sense`, events fed into the brain every frame;
+//! `--no-monitor` / `[monitor] enabled = false` turn it off, `lillith status`
+//! prints a snapshot, `lillith monitor` prints live events). Plain `lillith`
 //! puts her on the desktop (Wayland layer-shell, or the X11 fallback) playing
 //! idle life with springs, driven by `lillith_core::state::Brain`: left /
 //! double / right / middle click, hover and sustained hover, drag (position
@@ -39,6 +42,10 @@ struct Cli {
     /// Disable the local LLM (offline personality lines only).
     #[arg(long)]
     no_llm: bool,
+    /// Disable the M4 system monitor (CPU/RAM/battery/network/idle/
+    /// notifications/files/KWin bridge); overrides `[monitor] enabled`.
+    #[arg(long)]
+    no_monitor: bool,
     /// manifest.toml of the animation set (default: $LILLITH_MANIFEST,
     /// ./assets/generated/manifest.toml, ~/.local/share/lillith/generated/manifest.toml).
     #[arg(long)]
@@ -87,6 +94,16 @@ enum Cmd {
     },
     /// List all rules.
     Rules,
+    /// One system-monitor snapshot: CPU, RAM, load, battery, backlight,
+    /// network, VPN, removable drives (reads procfs/sysfs, ~1 s).
+    Status,
+    /// Run only the system monitor and print every event it emits
+    /// (no overlay; Ctrl-C to stop). Handy to test thresholds.
+    Monitor {
+        /// Stop after N seconds.
+        #[arg(long, value_name = "SECONDS")]
+        exit_after: Option<f32>,
+    },
     /// Open the chat/settings panel window (Poses tab = clip browser).
     Panel {
         /// manifest.toml for the Poses tab (default: same lookup as `preview`).
@@ -156,6 +173,29 @@ async fn main() -> Result<()> {
                 );
             }
         }
+        Some(Cmd::Status) => {
+            let cfg = load_config(&cli).0.monitor;
+            let sys = lillith_sense::sysfs::Sys::default();
+            let mut m = lillith_sense::Monitor::new(cfg.clone());
+            m.step(0.0, &lillith_sense::Sample::read(&sys, &cfg));
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let s = lillith_sense::Sample::read(&sys, &cfg);
+            m.step(1.0, &s);
+            println!("{}", m.summary(&s));
+        }
+        Some(Cmd::Monitor { exit_after }) => {
+            let mut cfg = load_config(&cli).0.monitor;
+            cfg.enabled = true;
+            let sink: lillith_sense::Sink = std::sync::Arc::new(|ev: Event| match &ev.detail {
+                Some(d) => println!("{} ({d})", ev.name),
+                None => println!("{}", ev.name),
+            });
+            let _h = lillith_sense::spawn(cfg, sink);
+            match exit_after {
+                Some(s) => tokio::time::sleep(std::time::Duration::from_secs_f32(s)).await,
+                None => tokio::signal::ctrl_c().await?,
+            }
+        }
         Some(Cmd::Panel { manifest }) => {
             lillith_panel::run_with(manifest.or(cli.manifest))
                 .map_err(|e| anyhow::anyhow!("panel: {e}"))?;
@@ -170,16 +210,46 @@ async fn main() -> Result<()> {
 /// tall window from the 400 px cells.
 const DEFAULT_OVERLAY_SCALE: f32 = 0.75;
 
-fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
-    let backend = Backend::detect_env(cli.backend);
+/// Loads `--config` / `~/.config/lillith/config.toml` (defaults on error).
+fn load_config(cli: &Cli) -> (Config, Option<PathBuf>) {
     let config_path = cli.config.clone().or_else(Config::default_path);
     let cfg = match &config_path {
-        Some(p) => Config::load(p).unwrap_or_else(|e| {
+        Some(p) if p.exists() => Config::load(p).unwrap_or_else(|e| {
             tracing::warn!("{}: {e}; using defaults", p.display());
             Config::default()
         }),
-        None => Config::default(),
+        _ => Config::default(),
     };
+    (cfg, config_path)
+}
+
+/// Starts the system monitor (unless disabled) and returns the feed the
+/// overlay drains plus the handle that keeps the monitors alive.
+fn start_monitor(
+    cli: &Cli,
+    cfg: &Config,
+) -> (
+    Option<lillith_overlay::EventFeed>,
+    Option<lillith_sense::MonitorHandle>,
+) {
+    if cli.no_monitor || !cfg.monitor.enabled {
+        tracing::info!("system monitor off (--no-monitor or [monitor] enabled = false)");
+        return (None, None);
+    }
+    let (tx, rx) = std::sync::mpsc::channel::<Event>();
+    let sink: lillith_sense::Sink = std::sync::Arc::new(move |ev| {
+        let _ = tx.send(ev);
+    });
+    let handle = lillith_sense::spawn(cfg.monitor.clone(), sink);
+    (
+        Some(std::sync::Arc::new(std::sync::Mutex::new(rx))),
+        Some(handle),
+    )
+}
+
+fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
+    let backend = Backend::detect_env(cli.backend);
+    let (cfg, config_path) = load_config(cli);
     let manifest = preview::resolve(cli.manifest.clone())?;
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -232,6 +302,7 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         behavior,
         mode,
         muted: cfg.muted,
+        events: None,
     };
     tracing::info!(
         ?backend,
@@ -241,9 +312,15 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         tray = !cli.no_tray,
         voice = !cli.no_voice,
         llm = !cli.no_llm,
+        monitor = !cli.no_monitor && cfg.monitor.enabled,
         rules,
         ?mode,
-        "Lillith overlay (M3): click/hover/drag her; keys while focused (G wander/stay, S sleep, Q/Esc quit)"
+        "Lillith overlay (M4): click/hover/drag her; keys while focused (G wander/stay, S sleep, Q/Esc quit)"
     );
+    let (feed, _monitor) = start_monitor(cli, &cfg);
+    let opts = OverlayOptions {
+        events: feed,
+        ..opts
+    };
     lillith_overlay::run(backend, opts).map_err(|e| anyhow::anyhow!("overlay: {e}"))
 }

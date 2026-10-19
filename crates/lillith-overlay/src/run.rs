@@ -13,7 +13,17 @@ use lillith_core::rules::RuleSet;
 use lillith_core::state::{Action, BehaviorConfig, Brain, Input, Key};
 use lillith_core::Event;
 use std::path::PathBuf;
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+/// Events from the system monitor (`lillith-sense`) and other async
+/// sources, drained into the brain once per frame. Shared so the Wayland →
+/// X11 fallback keeps the same feed.
+pub type EventFeed = Arc<Mutex<Receiver<Event>>>;
+
+/// Most feed events applied per frame (a burst cannot stall rendering).
+pub const MAX_EVENTS_PER_TICK: usize = 16;
 
 /// Px of her window kept on screen when dragging off an edge.
 pub const KEEP_ON_SCREEN: i32 = 64;
@@ -60,6 +70,8 @@ pub struct OverlayOptions {
     pub mode: MoveMode,
     /// Start muted (no SFX cues).
     pub muted: bool,
+    /// System-monitor events (`None` = `--no-monitor` / tests).
+    pub events: Option<EventFeed>,
 }
 
 /// Shared overlay logic, independent of the windowing system.
@@ -76,6 +88,7 @@ pub struct Controller {
     pending_move: Option<Placement>,
     screen: Option<(u32, u32)>,
     quit: bool,
+    feed: Option<EventFeed>,
 }
 
 impl Controller {
@@ -107,6 +120,7 @@ impl Controller {
             pending_move: None,
             screen: None,
             quit: false,
+            feed: opts.events.clone(),
         }
     }
 
@@ -133,6 +147,7 @@ impl Controller {
 
     /// Advances the brain and the stage by `dt` seconds.
     pub fn tick(&mut self, dt: f32) -> Result<Changed, OverlayError> {
+        self.drain_feed();
         let anim = self.stage.animator();
         let busy = anim.overlay_clip().is_some() || anim.queued() > 0;
         let actions = self.brain.tick(dt, busy);
@@ -222,10 +237,28 @@ impl Controller {
         self.apply(a);
     }
 
-    /// A bus event (sensors arrive in M4; used by tests / the injector).
+    /// A bus event (system monitor feed, tests, the injector).
     pub fn event(&mut self, ev: &Event) {
+        tracing::debug!(event = %ev.name, detail = ?ev.detail, "event");
         let a = self.brain.event(ev);
         self.apply(a);
+    }
+
+    /// Applies pending [`EventFeed`] events (at most [`MAX_EVENTS_PER_TICK`]).
+    fn drain_feed(&mut self) {
+        let Some(feed) = &self.feed else { return };
+        let mut batch = Vec::new();
+        if let Ok(rx) = feed.lock() {
+            while batch.len() < MAX_EVENTS_PER_TICK {
+                match rx.try_recv() {
+                    Ok(ev) => batch.push(ev),
+                    Err(_) => break,
+                }
+            }
+        }
+        for ev in batch {
+            self.event(&ev);
+        }
     }
 
     /// Pointer moved; returns the new placement while dragging.
@@ -364,6 +397,7 @@ mod tests {
             behavior: BehaviorConfig::default(),
             mode: MoveMode::Stay,
             muted: false,
+            events: None,
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -442,6 +476,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             },
             mode,
             muted: false,
+            events: None,
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -475,6 +510,33 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
         // Q quits.
         c.key(Key::Char('q'));
         assert!(c.quit_requested());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn monitor_feed_reaches_the_brain() {
+        let (dir, mut c) = m3_controller("m4feed", MoveMode::Stay);
+        let (tx, rx) = std::sync::mpsc::channel();
+        c.feed = Some(Arc::new(Mutex::new(rx)));
+        tx.send(Event::new("idle.asleep")).unwrap();
+        c.tick(0.05).unwrap();
+        assert_eq!(c.stage.animator().base(), "sleep");
+        // Desktop input after a long break (presence monitor) wakes her.
+        tx.send(Event::with_detail("user.returned", "away 6m"))
+            .unwrap();
+        c.tick(0.05).unwrap();
+        assert_eq!(c.stage.animator().base(), "idle");
+        // A burst is spread over frames.
+        for _ in 0..(MAX_EVENTS_PER_TICK + 4) {
+            tx.send(Event::new("user.activity")).unwrap();
+        }
+        c.tick(0.05).unwrap();
+        assert_eq!(
+            c.feed.as_ref().unwrap().lock().unwrap().try_iter().count(),
+            4
+        );
+        drop(tx);
+        c.tick(0.05).unwrap(); // disconnected feed is harmless
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -515,6 +577,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             behavior: BehaviorConfig::default(),
             mode: MoveMode::Stay,
             muted: false,
+            events: None,
         };
         // Either the backend is not compiled in, or the manifest is missing:
         // both are clean errors, never a panic or a hang.
