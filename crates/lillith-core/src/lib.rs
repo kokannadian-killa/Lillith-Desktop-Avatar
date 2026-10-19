@@ -9,6 +9,9 @@
 //! - [`mood`]: moods (decaying strength + baseline) and the mischief meter.
 //! - [`interaction`]: pointer gestures (double click, secret sequence, hover).
 //! - [`spring`]: spring-damper channels ([`spring::Physics`]) and breathing for the "alive" physics.
+//! - [`physics_config`]: serde model of the bundled `assets/physics.toml` (tuning, recipes, moods).
+//! - [`physics_driver`]: [`physics_driver::PhysicsDriver`], which turns clips/events/motion/mood
+//!   into spring impulses and targets, plus the procedural tail/horn overlay.
 //! - [`idle`]: idle-life scheduler (blink, idle transitions, idle reactions).
 //! - [`rng`]: tiny seedable PRNG so idle timing is deterministic in tests.
 //! - [`rules`]: the data-driven event → reaction table (`assets/rules.toml`).
@@ -22,6 +25,8 @@ pub mod event;
 pub mod idle;
 pub mod interaction;
 pub mod mood;
+pub mod physics_config;
+pub mod physics_driver;
 pub mod rng;
 pub mod rules;
 pub mod spring;

@@ -112,6 +112,9 @@ pub enum Channel {
     Angle,
     Scale,
     Chest,
+    /// Serialized as `"pigtail"`; `"pigtails"` (physics.toml naming) and
+    /// `"pig"` (README-SP `[springs]` key) are accepted too.
+    #[serde(alias = "pigtails", alias = "pig")]
     Pigtail,
 }
 
@@ -124,6 +127,32 @@ impl Channel {
         Channel::Chest,
         Channel::Pigtail,
     ];
+
+    /// The physics.toml channel name (`"pigtails"` for [`Channel::Pigtail`]).
+    pub fn name(self) -> &'static str {
+        match self {
+            Channel::RootX => "root_x",
+            Channel::RootY => "root_y",
+            Channel::Angle => "angle",
+            Channel::Scale => "scale",
+            Channel::Chest => "chest",
+            Channel::Pigtail => "pigtails",
+        }
+    }
+
+    /// Parses physics.toml / `Command::Impulse` channel names
+    /// (`"pigtails"`, `"pigtail"` and `"pig"` all mean [`Channel::Pigtail`]).
+    pub fn from_name(s: &str) -> Option<Channel> {
+        Some(match s {
+            "root_x" => Channel::RootX,
+            "root_y" => Channel::RootY,
+            "angle" => Channel::Angle,
+            "scale" => Channel::Scale,
+            "chest" => Channel::Chest,
+            "pigtails" | "pigtail" | "pig" => Channel::Pigtail,
+            _ => return None,
+        })
+    }
 }
 
 /// The spring-driven transform applied on top of the current sprite frame.
@@ -253,6 +282,19 @@ impl Physics {
     /// Moves the rest target (e.g. breathing drives the scale/chest targets).
     pub fn set_target(&mut self, c: Channel, target: f32) {
         self.spring_mut(c).target = target;
+    }
+
+    /// Retunes one channel (e.g. mood multipliers) without touching its
+    /// position, velocity or target.
+    pub fn set_params(&mut self, c: Channel, p: SpringParams) {
+        self.spring_mut(c).params = p;
+    }
+
+    /// Sets the three README-SP gains at once.
+    pub fn set_gains(&mut self, jiggle: f32, chest_bounce: f32, pigtail_sway: f32) {
+        self.jiggle_gain = jiggle;
+        self.chest_bounce_gain = chest_bounce;
+        self.pigtail_sway_gain = pigtail_sway;
     }
 
     /// Advances every channel by `dt` seconds in fixed `1/hz` sub-steps.
@@ -427,5 +469,39 @@ mod tests {
         let mut q = Breath::new(4.0);
         q.advance(1.0);
         assert!((q.value() - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn set_params_keeps_state_and_names_parse() {
+        let mut p = Physics::default();
+        p.impulse(Channel::Chest, 30.0);
+        p.step(0.05);
+        let (x, v) = (p.chest.position, p.chest.velocity);
+        p.set_params(
+            Channel::Chest,
+            SpringParams {
+                stiffness: 84.5,
+                damping: 10.45,
+            },
+        );
+        assert_eq!((p.chest.position, p.chest.velocity), (x, v));
+        assert_eq!(p.chest.params.stiffness, 84.5);
+        p.set_gains(0.5, 1.1, 0.8);
+        assert_eq!(p.gain(Channel::Pigtail), 0.8);
+        for c in Channel::ALL {
+            assert_eq!(Channel::from_name(c.name()), Some(c));
+        }
+        assert_eq!(Channel::from_name("pigtail"), Some(Channel::Pigtail));
+        assert_eq!(Channel::from_name("pig"), Some(Channel::Pigtail));
+        assert_eq!(Channel::from_name("tail_tip_x"), None);
+        // serde: canonical "pigtail", aliases accepted.
+        #[derive(serde::Deserialize)]
+        struct W {
+            c: Channel,
+        }
+        for n in ["pigtail", "pigtails", "pig"] {
+            let w: W = toml::from_str(&format!("c = \"{n}\"")).unwrap();
+            assert_eq!(w.c, Channel::Pigtail);
+        }
     }
 }
