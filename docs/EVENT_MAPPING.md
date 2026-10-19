@@ -1,8 +1,10 @@
 # Event mapping: rules.toml ↔ generated clips
 
 Reconciles the 57 `[[rule]]` events in `assets/rules.toml` with the canonical
-generated set (`assets/generated/manifest.json`, 64 clips: 38 `event_<name>`
-reactions and 26 regular animations).
+generated set (`assets/generated/manifest.json`; at the 82-clip handoff: 44
+`event_<name>` reactions, 26 regular animations and 12 blend helpers. Later
+additions without a rule, such as the strut/tease gesture batch, don't change
+this mapping).
 
 The mapping lives in `assets/rules.toml` under `[rule_clips]` (the older name
 `[event_clips]` is still accepted). It is resolved by
@@ -13,8 +15,8 @@ pin every mapped pair, check that 57 mapped + 0 unmapped = 57, and check that ev
 `KNOWN_BASE_CLIPS`.
 
 **Totals: 57 / 57 rules have a clip** (27 event-clip links + 14 dedicated
-batch-3 event clips + 10 regular animations + 6 low-confidence stand-ins).
-**0 true art gaps.** All 38 event clips are used.
+batch-3 event clips + 6 dedicated batch-4 event clips + 10 regular animations).
+**0 low-confidence stand-ins, 0 true art gaps.** All 44 event clips are used.
 
 ## 1. Event reaction clips: 27 rules → 24 clips
 
@@ -48,9 +50,8 @@ batch-3 event clips + 10 regular animations + 6 low-confidence stand-ins).
 | event_help | `input.click.middle` | pose `help` (middle click = help per `help.requested` source) | pose match |
 | event_diagnostics | `system.status` | pose `diagnostics`; monitor ECG | exact |
 
-- **Note A:** `window.opened.folder/browser/terminal/media` now use `event_window_open` as a
-  low-confidence stand-in (section 3). Their own poses and lines (peeking_folder, peeking,
-  hacking, sitting+dance) are still in the rule and are better targets once that art exists.
+- **Note A:** `event_window_open` now serves only `window.opened.app`;
+  `window.opened.folder/browser/terminal/media` have dedicated clips (section 3).
 - **Note B:** the `window.closed` rule is pose `knife` + gesture `stab` + line "Gotcha! 🗡️",
   but `event_window_close` is a friendly wave goodbye. The event matches; the
   personality doesn't. **Unchanged, pending Ko's tone decision.** (`input.click.left`
@@ -71,16 +72,20 @@ batch-3 event clips + 10 regular animations + 6 low-confidence stand-ins).
 | `user.returned` | peeking | wake | plays once; ends on idle_00 |
 | `input.secret` | dual_tail | tail_wag | |
 
-## 3. LOW-CONFIDENCE stand-ins: 6 (override when dedicated art exists)
+## 3. Dedicated event clips, batch 4: 6 (replaced the low-confidence stand-ins)
 
-| Rule event | Rule pose | Stand-in clip | Why it's only a stand-in |
-|---|---|---|---|
-| `update.available` | dismiss_notif | event_notification | generic bell; no "update" art |
-| `timer.fired` | scheduler | event_calendar | calendar, not a timer/clock |
-| `window.opened.folder` | peeking_folder | event_window_open | generic window; rule wants peeking into a folder |
-| `window.opened.browser` | peeking | event_window_open | generic window; rule wants peeking/surfing |
-| `window.opened.terminal` | hacking | event_window_open | generic window; rule wants hacking |
-| `window.opened.media` | sitting | event_window_open | generic window; rule wants sitting + dance |
+These used to borrow event_notification / event_calendar / event_window_open.
+The older clips' `rule_events` were narrowed to match (see each JSON's
+`rule_events_moved_to`).
+
+| Rule event | Rule pose | Clip | base_clip | Attachment points carried |
+|---|---|---|---|---|
+| `update.available` | dismiss_notif | event_update_available | spell_orb_cast | icon_origin, package_origin |
+| `timer.fired` | scheduler | event_timer_fired | point | icon_origin, clock_origin |
+| `window.opened.folder` | peeking_folder | event_window_opened_folder | lean_forward | icon_origin, folder_origin |
+| `window.opened.browser` | peeking | event_window_opened_browser | salute | icon_origin, window_origin |
+| `window.opened.terminal` | hacking | event_window_opened_terminal * | itself | icon_origin, window_origin, keyboard_origin |
+| `window.opened.media` | sitting | event_window_opened_media | dance | icon_origin, window_origin |
 
 ## 4. Dedicated event clips, batch 3: 14 (formerly the true art gaps)
 
@@ -104,10 +109,10 @@ Each clip's own `event` field is the dotted rule name; checked to match.
 | `input.click.right` | event_input_click_right * | itself | click_point, icon_origin, menu_origin, palm_point |
 | `input.hover_long` | event_input_hover_long | lean_forward | cursor_point, icon_origin |
 
-**Self-referencing base clips (7):** event_ram_high, event_net_lost,
+**Self-referencing base clips (8):** event_ram_high, event_net_lost,
 event_vpn_up, event_clipboard_cut, event_start_menu_opened,
-event_approval_needed, event_input_click_right. The image bot's note listed 6;
-event_input_click_right is a 7th. The loader accepts self-reference: the clip
+event_approval_needed, event_input_click_right and (batch 4)
+event_window_opened_terminal. The loader accepts self-reference: the clip
 exists and its own frame count bounds its `base_frames` (pinned by the
 `allows_self_referencing_base_clip` test in lillith-anim). The engine should
 treat `base_clip == name` as "this is the base pose", not as a separate base to
@@ -120,16 +125,32 @@ without art fails the tests until it is either mapped or listed there.
 
 ## 6. Event clips with NO rule: 0
 
-All 38 event clips are reachable. Clips serving several rules: event_window_open
-(5), event_wifi (2), event_error (2), event_help (2), event_notification (2),
-event_calendar (2), sit_swing (2).
+All 44 event clips are reachable. Clips serving several rules: event_wifi (2),
+event_error (2), event_help (2), sit_swing (2).
 
 ## Naming note
 
-The 24 older event clips carry a snake_case `event` field (e.g. `cpu_busy`); the
-14 batch-3 clips carry the dotted rule name (e.g. `ram.high`). The engine binds
-rules to clips through `[rule_clips]`, so this doesn't affect lookup; it would
-only matter if something matched on the clip's `event` field directly.
+All 44 event clips now carry the dotted rule name in `event`, plus
+`rule_events` (every rule they serve) and `event_slug`. The importer carries
+`event` and `rule_events` into `manifest.toml` (`Clip::serves_event`). Rules
+are still bound through `[rule_clips]`; the clip fields are for checks.
+
+## Blend helpers (12, not rule targets)
+
+`blend_<from>_to_<to>` clips play once between two clips; each carries
+`blend = { from, to, from_frame, to_frame, blend_t, easing }` in
+`manifest.toml`, which the loader checks (both clips exist, frames in range):
+idle↔wave, idle↔knife_tap, idle↔walk_right, idle↔walk_left, idle↔sit_swing
+(both also carry `seat_y = 230`), sleep→wake (3 frames) and wake→sleep (5
+frames, per-frame ms).
+
+## Per-frame jiggle anchors
+
+idle, walk_right/left, run_right/left, wave and knife_tap carry
+`chest_point`, `pigtail_left_point`, `pigtail_right_point`, `hip_point` and
+`tail_tip_point`: clip-level medians in `points`, per-frame values in
+`frame_points` (`Clip::point_at(name, frame)`). Spring parameters for those
+anchors live in `assets/physics.toml` `[attachments]`.
 
 ## Render notes (not importer/mapping issues)
 

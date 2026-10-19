@@ -96,6 +96,8 @@ pub const KNOWN_EVENT_CLIPS: &[&str] = &[
     "event_screenshot",
     "event_search_opened",
     "event_start_menu_opened",
+    "event_timer_fired",
+    "event_update_available",
     "event_usb_added",
     "event_usb_eject",
     "event_volume",
@@ -104,6 +106,10 @@ pub const KNOWN_EVENT_CLIPS: &[&str] = &[
     "event_window_close",
     "event_window_minimize",
     "event_window_open",
+    "event_window_opened_browser",
+    "event_window_opened_folder",
+    "event_window_opened_media",
+    "event_window_opened_terminal",
 ];
 
 /// Regular (non-event) animations in the canonical generated set that rules
@@ -356,13 +362,13 @@ mod tests {
         ("focus.long_work", "shoulder_roll"),
         ("user.returned", "wake"),
         ("input.secret", "tail_wag"),
-        // Low-confidence stand-ins.
-        ("update.available", "event_notification"),
-        ("timer.fired", "event_calendar"),
-        ("window.opened.folder", "event_window_open"),
-        ("window.opened.browser", "event_window_open"),
-        ("window.opened.terminal", "event_window_open"),
-        ("window.opened.media", "event_window_open"),
+        // Dedicated event clips (batch 4; replaced the low-confidence stand-ins).
+        ("update.available", "event_update_available"),
+        ("timer.fired", "event_timer_fired"),
+        ("window.opened.folder", "event_window_opened_folder"),
+        ("window.opened.browser", "event_window_opened_browser"),
+        ("window.opened.terminal", "event_window_opened_terminal"),
+        ("window.opened.media", "event_window_opened_media"),
         // Dedicated event clips (batch 3).
         ("ram.high", "event_ram_high"),
         ("net.lost", "event_net_lost"),
@@ -445,7 +451,30 @@ mod tests {
         assert_eq!(MAPPED.len(), 57);
         assert_eq!(UNMAPPED.len(), 0);
         assert_eq!(rs.rules_without_clip().count(), 0);
-        assert_eq!(KNOWN_EVENT_CLIPS.len(), 38);
+        assert_eq!(KNOWN_EVENT_CLIPS.len(), 44);
+        // No stand-ins left: each of these now has its own clip.
+        assert_eq!(rs.clip_for("timer.fired"), Some("event_timer_fired"));
+        assert_eq!(
+            rs.clip_for("update.available"),
+            Some("event_update_available")
+        );
+        for kind in ["folder", "browser", "terminal", "media"] {
+            let ev = format!("window.opened.{kind}");
+            assert_eq!(
+                rs.clip_for(&ev).map(str::to_owned),
+                Some(format!("event_window_opened_{kind}")),
+                "{ev}"
+            );
+        }
+        let generic = rs
+            .rule_clips
+            .values()
+            .filter(|c| *c == "event_window_open")
+            .count();
+        assert_eq!(
+            generic, 1,
+            "event_window_open only serves window.opened.app"
+        );
         // Dedicated art replaced the semantically wrong reuses.
         assert_eq!(rs.clip_for("ram.high"), Some("event_ram_high"));
         assert_eq!(rs.clip_for("usb.added"), Some("event_usb_added"));

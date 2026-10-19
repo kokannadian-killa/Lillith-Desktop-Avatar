@@ -620,7 +620,7 @@ status = "PY-missing"
 "clipboard.copied"   = "event_clipboard"       # pose clipboard
 "notify.received"    = "event_notification"    # pose dismiss_notif; bell with badge
 "calendar.reminder"  = "event_calendar"        # pose calendar
-"window.opened.app"  = "event_window_open"     # generic app window (other window.opened.* keep their poses)
+"window.opened.app"  = "event_window_open"     # generic app window (folder/browser/terminal/media have their own clips)
 "window.closed"      = "event_window_close"    # NOTE: rule pose/line is knife "Gotcha!", clip is a wave bye
 "window.minimized"   = "event_window_minimize" # pose minimize
 "window.private"     = "event_incognito"       # pose private; glasses + fade to ~45%
@@ -659,14 +659,14 @@ status = "PY-missing"
 "user.returned"      = "wake"
 "input.secret"       = "tail_wag"
 
-# LOW-CONFIDENCE stand-ins (existing event clips that roughly fit). Override
-# these when dedicated art exists.
-"update.available"       = "event_notification"
-"timer.fired"            = "event_calendar"
-"window.opened.folder"   = "event_window_open"
-"window.opened.browser"  = "event_window_open"
-"window.opened.terminal" = "event_window_open"
-"window.opened.media"    = "event_window_open"
+# Dedicated event clips (batch 4) that replaced the former low-confidence
+# stand-ins (event_notification / event_calendar / event_window_open).
+"update.available"       = "event_update_available"        # catches a download arrow -> gift box
+"timer.fired"            = "event_timer_fired"             # points at a ringing alarm clock
+"window.opened.folder"   = "event_window_opened_folder"    # peeks into a popping folder
+"window.opened.browser"  = "event_window_opened_browser"   # shades eyes as a browser pops in
+"window.opened.terminal" = "event_window_opened_terminal"  # * hacker typing on a holo keyboard
+"window.opened.media"    = "event_window_opened_media"     # dance beat beside a media player
 
 # ── Key map (README-SP; active only while she has keyboard focus) ─────────
 # Each entry is either { pose = "<pose>" } or { action = "<action>" }.
