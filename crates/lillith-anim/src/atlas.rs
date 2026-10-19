@@ -13,6 +13,7 @@
 //! baseline_y = 392               # optional: ground line inside each cell
 //! scale = 0.54                   # optional: character scale baked into the art
 //! tags = ["canonical"]
+//! points = { beam_origin = [306, 78] }  # optional named points
 //! frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
 //! ```
 
@@ -76,6 +77,11 @@ pub struct Clip {
     pub scale: Option<f64>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Optional named attachment points in cell coordinates (same space as
+    /// the feet anchor), e.g. `beam_origin` for a cast or `grab_point` (the
+    /// spot to pin to the cursor while she is dragged).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub points: BTreeMap<String, (i32, i32)>,
     pub frames: Vec<FrameRect>,
 }
 
@@ -96,6 +102,11 @@ impl Clip {
             Some(ms) => ms.iter().map(|&d| d as f32 / 1000.0).collect(),
             None => vec![1.0 / self.fps; self.frames.len().max(1)],
         }
+    }
+
+    /// Named attachment point, if the clip defines it.
+    pub fn point(&self, name: &str) -> Option<(i32, i32)> {
+        self.points.get(name).copied()
     }
 
     /// Total length of one pass through the clip, in seconds.
@@ -191,6 +202,7 @@ mod tests {
             frame_durations_ms = [450, 350]
             baseline_y = 392
             scale = 0.54
+            points = { grab_point = [200, 76] }
             frames = [
               { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] },
               { x = 400, y = 0, w = 400, h = 400, anchor = [200, 392] },
@@ -201,6 +213,8 @@ mod tests {
         let c = &m.clips["wake"];
         assert_eq!(c.mode, LoopMode::Once);
         assert_eq!(c.baseline_y, Some(392));
+        assert_eq!(c.point("grab_point"), Some((200, 76)));
+        assert_eq!(c.point("beam_origin"), None);
         assert!((c.duration_s() - 0.8).abs() < 1e-6);
         assert_eq!(
             c.page_path(Path::new("/a")),
@@ -235,6 +249,7 @@ mod tests {
                 baseline_y: Some(392),
                 scale: Some(0.5),
                 tags: vec!["t".into()],
+                points: [("beam_origin".to_string(), (306, 78))].into(),
                 frames: vec![FrameRect {
                     x: 0,
                     y: 0,

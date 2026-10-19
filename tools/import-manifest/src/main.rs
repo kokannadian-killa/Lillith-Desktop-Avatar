@@ -18,6 +18,12 @@
 //! `sheet` becomes `page` (relative to the output manifest when it sits in the
 //! same directory as the input), `loop` becomes `mode = "loop" | "once"`.
 //!
+//! `[x, y]` integer fields named `*_origin` / `*_point` (e.g. `beam_origin`,
+//! `grab_point`) become `points` on the clip; they are taken from the entry
+//! and from its per-animation JSON (the entry's `manifest` path) when present.
+//! `feet_off_ground_px` becomes a `feet_off_ground_px:<n>` tag; the feet
+//! anchor itself stays on the shared baseline.
+//!
 //! With `--check`, the written manifest is re-loaded through
 //! `Manifest::load` + `load_page` and every frame rect is bounds-checked.
 
@@ -25,6 +31,8 @@ use anyhow::{bail, ensure, Context, Result};
 use clap::Parser;
 use lillith_anim::atlas::{load_page, Clip, FrameRect, LoopMode, Manifest};
 use serde::Deserialize;
+use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Parser)]
@@ -53,7 +61,7 @@ struct JsonManifest {
 #[serde(untagged)]
 enum JsonScale {
     Single(f64),
-    Phases(std::collections::BTreeMap<String, f64>),
+    Phases(BTreeMap<String, f64>),
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,6 +90,57 @@ struct JsonAnim {
     frame_durations_ms: Option<Vec<u32>>,
     #[serde(default)]
     placeholder: bool,
+    /// Per-animation JSON (relative to the top-level manifest), which may
+    /// carry extra fields such as `beam_origin` or `grab_point`.
+    #[serde(default)]
+    manifest: Option<String>,
+    /// Every other field of the entry.
+    #[serde(flatten)]
+    extra: Map<String, Value>,
+}
+
+/// Attachment points are `[x, y]` fields named `*_origin` or `*_point`
+/// (e.g. `beam_origin`, `grab_point`). Other integer pairs such as
+/// `code_tween_frames` or `seat_x_range` are not coordinates.
+fn is_point_name(key: &str) -> bool {
+    key.ends_with("_origin") || key.ends_with("_point")
+}
+
+/// Collects attachment points (see [`is_point_name`])
+/// from the top-level entry, then from the per-animation JSON for names the
+/// entry doesn't already define.
+fn collect_points(
+    entry: &Map<String, Value>,
+    side: Option<&Map<String, Value>>,
+) -> BTreeMap<String, (i32, i32)> {
+    let mut out = BTreeMap::new();
+    for map in std::iter::once(entry).chain(side) {
+        for (k, v) in map {
+            if !is_point_name(k) || out.contains_key(k) {
+                continue;
+            }
+            if let Some([x, y]) = v.as_array().map(Vec::as_slice) {
+                if let (Some(x), Some(y)) = (x.as_i64(), y.as_i64()) {
+                    if let (Ok(x), Ok(y)) = (i32::try_from(x), i32::try_from(y)) {
+                        out.insert(k.clone(), (x, y));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Integer field looked up in the entry, then the per-animation JSON.
+fn int_field(
+    entry: &Map<String, Value>,
+    side: Option<&Map<String, Value>>,
+    key: &str,
+) -> Option<i64> {
+    entry
+        .get(key)
+        .or_else(|| side.and_then(|m| m.get(key)))
+        .and_then(Value::as_i64)
 }
 
 fn default_cell() -> u32 {
@@ -92,7 +151,12 @@ fn default_true() -> bool {
 }
 
 /// Converts one JSON animation into an engine clip.
-fn convert(anim: &JsonAnim, page: String, extra_tags: &[String]) -> Result<Clip> {
+fn convert(
+    anim: &JsonAnim,
+    side: Option<&Map<String, Value>>,
+    page: String,
+    extra_tags: &[String],
+) -> Result<Clip> {
     ensure!(anim.frame_count > 0, "{}: frame_count is 0", anim.name);
     ensure!(
         anim.fps.is_finite() && anim.fps > 0.0,
@@ -122,6 +186,11 @@ fn convert(anim: &JsonAnim, page: String, extra_tags: &[String]) -> Result<Clip>
     }
     if let Some(f) = &anim.facing {
         tags.push(format!("facing:{f}"));
+    }
+    // Held/dragged poses keep the shared feet anchor (so swapping clips
+    // doesn't jump); record how far the feet hang above it.
+    if let Some(px) = int_field(&anim.extra, side, "feet_off_ground_px") {
+        tags.push(format!("feet_off_ground_px:{px}"));
     }
     let scale = match &anim.scale {
         Some(JsonScale::Single(s)) => Some(*s),
@@ -156,6 +225,7 @@ fn convert(anim: &JsonAnim, page: String, extra_tags: &[String]) -> Result<Clip>
         baseline_y: anim.baseline_y,
         scale,
         tags,
+        points: collect_points(&anim.extra, side),
         frames,
     })
 }
@@ -186,12 +256,28 @@ fn build(json: &JsonManifest, in_dir: &Path, out_dir: &Path, tags: &[String]) ->
             let p = in_dir.join(&anim.sheet);
             p.canonicalize().unwrap_or(p).to_string_lossy().into_owned()
         };
-        let clip = convert(anim, page, tags)?;
+        let side = match &anim.manifest {
+            Some(rel) => read_side_json(&in_dir.join(rel))?,
+            None => None,
+        };
+        let clip = convert(anim, side.as_ref(), page, tags)?;
         if m.clips.insert(anim.name.clone(), clip).is_some() {
             bail!("duplicate animation name {}", anim.name);
         }
     }
     Ok(m)
+}
+
+/// Reads a per-animation JSON object; a missing file is not an error.
+fn read_side_json(path: &Path) -> Result<Option<Map<String, Value>>> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let text = std::fs::read_to_string(path).with_context(|| format!("reading {path:?}"))?;
+    match serde_json::from_str(&text).with_context(|| format!("parsing {path:?}"))? {
+        Value::Object(m) => Ok(Some(m)),
+        _ => bail!("{path:?}: expected a JSON object"),
+    }
 }
 
 /// Loads `path` like the engine does and bounds-checks every frame.
@@ -223,6 +309,14 @@ fn check(path: &Path) -> Result<()> {
             },
             clip.frames[0].anchor,
         );
+        let cell = clip.frames[0];
+        for (pname, &(px, py)) in &clip.points {
+            let inside = px >= 0 && py >= 0 && (px as u32) < cell.w && (py as u32) < cell.h;
+            println!(
+                "   point {pname} = ({px}, {py}){}",
+                if inside { "" } else { "  [outside cell]" }
+            );
+        }
     }
     println!("{} clip(s) loaded and in bounds", m.clips.len());
     Ok(())
@@ -313,6 +407,39 @@ mod tests {
         let s = toml::to_string(&sample()).unwrap();
         let back = Manifest::from_toml_str(&s).unwrap();
         assert_eq!(back.clips, sample().clips);
+    }
+
+    #[test]
+    fn carries_points_from_entry_and_side_json() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [ { "name": "drag_held", "sheet": "d.png", "frame_count": 1,
+                 "fps": 10, "anchor": [200, 392], "baseline_y": 392,
+                 "grab_point": [200, 76], "dir": "d/" } ] }"#,
+        )
+        .unwrap();
+        let side: Value = serde_json::from_str(
+            r##"{ "grab_point": [1, 1], "beam_origin": [306, 78], "anchor": [0, 0],
+                 "code_tween_frames": [3, 8], "seat_x_range": [10, 20],
+                 "palette": ["#fff", "#000"], "feet_off_ground_px": 16 }"##,
+        )
+        .unwrap();
+        let clip = convert(&json.animations[0], side.as_object(), "d.png".into(), &[]).unwrap();
+        // Entry wins over side JSON; anchor, non-point pairs and non-integer
+        // pairs are skipped.
+        assert_eq!(clip.point("grab_point"), Some((200, 76)));
+        assert_eq!(clip.point("beam_origin"), Some((306, 78)));
+        assert_eq!(clip.points.len(), 2);
+        // Feet anchor stays on the baseline; hang distance becomes a tag.
+        assert_eq!(clip.frames[0].anchor, (200, 392));
+        assert!(clip.tags.contains(&"feet_off_ground_px:16".to_string()));
+        let back = Manifest::from_toml_str(
+            &toml::to_string(&Manifest {
+                clips: [("drag_held".to_string(), clip.clone())].into(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(back.clips["drag_held"], clip);
     }
 
     #[test]

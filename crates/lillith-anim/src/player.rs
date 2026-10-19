@@ -174,6 +174,7 @@ mod tests {
             baseline_y: None,
             scale: None,
             tags: vec![],
+            points: Default::default(),
             frames: vec![frame; 10],
         };
         let flat = ClipPlayer::for_clip(&clip);
