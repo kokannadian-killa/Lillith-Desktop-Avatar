@@ -10,7 +10,7 @@
   ]
  },
  "jiggle_note": "All clips are tagged baked_motion: the engine must damp chest/pigtail springs and breathing for them (AnimatorConfig::baked_motion_gain in lillith-anim).",
- "notes": "Canonical set (committed 2026-10-20). idle = alias of idle_a; idle_a/idle_b are variant_of:idle for random cycling; idle_flirt_* carry idle_variant (pose-cycle mannerisms, not idle loops); finger_wag_tease, hands_behind_head_pose and bounce_giggle are aliases of near-duplicate clips.",
+ "notes": "Canonical set (committed 2026-10-20). idle = alias of idle_a; idle_a/idle_b are variant_of:idle for random cycling; idle_flirt_* carry idle_variant (pose-cycle mannerisms, not idle loops); finger_wag_tease, hands_behind_head_pose and bounce_giggle are aliases of near-duplicate clips. Batch 13: walk_sassy/skip/saunter_{right,left} (variant_of:walk_right|walk_left), sit_bored_chin/cross_legged_bob/heel_kick/stretch_yawn (variant_of:sit_swing; engine has no walk/sit variant picker yet) and idle_bored_sigh/nail_check/tail_fidget/yawn_stretch (variant_of:idle, idle_variant; ~4 s gesture loops).",
  "animations": [
   {
    "frame_count": 25,
@@ -2399,6 +2399,35 @@
    "body_anchor_x": 200,
    "facing": "front",
    "canvas_compliant": true,
+   "name": "idle_bored_sigh",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_bored_sigh/",
+   "sheet": "idle_bored_sigh/idle_bored_sigh_sheet.png",
+   "manifest": "idle_bored_sigh/idle_bored_sigh.json",
+   "preview": "idle_bored_sigh/idle_bored_sigh_preview.gif",
+   "frames": "idle_bored_sigh/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:idle"
+   ],
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
    "name": "idle_flirt_foot_tap",
    "placeholder": false,
    "source": "grok-imagine-video",
@@ -2672,6 +2701,93 @@
     "baked_motion"
    ],
    "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_nail_check",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_nail_check/",
+   "sheet": "idle_nail_check/idle_nail_check_sheet.png",
+   "manifest": "idle_nail_check/idle_nail_check.json",
+   "preview": "idle_nail_check/idle_nail_check_preview.gif",
+   "frames": "idle_nail_check/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:idle"
+   ],
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_tail_fidget",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_tail_fidget/",
+   "sheet": "idle_tail_fidget/idle_tail_fidget_sheet.png",
+   "manifest": "idle_tail_fidget/idle_tail_fidget.json",
+   "preview": "idle_tail_fidget/idle_tail_fidget_preview.gif",
+   "frames": "idle_tail_fidget/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:idle"
+   ],
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_yawn_stretch",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_yawn_stretch/",
+   "sheet": "idle_yawn_stretch/idle_yawn_stretch_sheet.png",
+   "manifest": "idle_yawn_stretch/idle_yawn_stretch.json",
+   "preview": "idle_yawn_stretch/idle_yawn_stretch_preview.gif",
+   "frames": "idle_yawn_stretch/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:idle"
+   ],
    "idle_variant": true
   },
   {
@@ -3107,6 +3223,118 @@
    "frames": "shrug/frames/",
    "tags": [
     "baked_motion"
+   ]
+  },
+  {
+   "frame_count": 59,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.5,
+   "body_anchor_x": 200,
+   "facing": "right (side profile, seated on an edge)",
+   "canvas_compliant": true,
+   "name": "sit_bored_chin",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "sit_bored_chin/",
+   "sheet": "sit_bored_chin/sit_bored_chin_sheet.png",
+   "manifest": "sit_bored_chin/sit_bored_chin.json",
+   "preview": "sit_bored_chin/sit_bored_chin_preview.gif",
+   "frames": "sit_bored_chin/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:sit_swing"
+   ]
+  },
+  {
+   "frame_count": 59,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.5,
+   "body_anchor_x": 200,
+   "facing": "right (side profile, seated on an edge)",
+   "canvas_compliant": true,
+   "name": "sit_cross_legged_bob",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "sit_cross_legged_bob/",
+   "sheet": "sit_cross_legged_bob/sit_cross_legged_bob_sheet.png",
+   "manifest": "sit_cross_legged_bob/sit_cross_legged_bob.json",
+   "preview": "sit_cross_legged_bob/sit_cross_legged_bob_preview.gif",
+   "frames": "sit_cross_legged_bob/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:sit_swing"
+   ]
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.5,
+   "body_anchor_x": 200,
+   "facing": "right (side profile, seated on an edge)",
+   "canvas_compliant": true,
+   "name": "sit_heel_kick",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "sit_heel_kick/",
+   "sheet": "sit_heel_kick/sit_heel_kick_sheet.png",
+   "manifest": "sit_heel_kick/sit_heel_kick.json",
+   "preview": "sit_heel_kick/sit_heel_kick_preview.gif",
+   "frames": "sit_heel_kick/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:sit_swing"
+   ]
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.5,
+   "body_anchor_x": 200,
+   "facing": "right (side profile, seated on an edge)",
+   "canvas_compliant": true,
+   "name": "sit_stretch_yawn",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "sit_stretch_yawn/",
+   "sheet": "sit_stretch_yawn/sit_stretch_yawn_sheet.png",
+   "manifest": "sit_stretch_yawn/sit_stretch_yawn.json",
+   "preview": "sit_stretch_yawn/sit_stretch_yawn_preview.gif",
+   "frames": "sit_stretch_yawn/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:sit_swing"
    ]
   },
   {
@@ -3764,6 +3992,180 @@
    "contact_frames": [
     3,
     9
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
+  },
+  {
+   "frame_count": 13,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "left",
+   "canvas_compliant": true,
+   "name": "walk_sassy_left",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "walk_sassy_left/",
+   "sheet": "walk_sassy_left/walk_sassy_left_sheet.png",
+   "manifest": "walk_sassy_left/walk_sassy_left.json",
+   "preview": "walk_sassy_left/walk_sassy_left_preview.gif",
+   "frames": "walk_sassy_left/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:walk_left"
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
+  },
+  {
+   "frame_count": 13,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "right",
+   "canvas_compliant": true,
+   "name": "walk_sassy_right",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "walk_sassy_right/",
+   "sheet": "walk_sassy_right/walk_sassy_right_sheet.png",
+   "manifest": "walk_sassy_right/walk_sassy_right.json",
+   "preview": "walk_sassy_right/walk_sassy_right_preview.gif",
+   "frames": "walk_sassy_right/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:walk_right"
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
+  },
+  {
+   "frame_count": 15,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "left",
+   "canvas_compliant": true,
+   "name": "walk_saunter_left",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "walk_saunter_left/",
+   "sheet": "walk_saunter_left/walk_saunter_left_sheet.png",
+   "manifest": "walk_saunter_left/walk_saunter_left.json",
+   "preview": "walk_saunter_left/walk_saunter_left_preview.gif",
+   "frames": "walk_saunter_left/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:walk_left"
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
+  },
+  {
+   "frame_count": 15,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "right",
+   "canvas_compliant": true,
+   "name": "walk_saunter_right",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "walk_saunter_right/",
+   "sheet": "walk_saunter_right/walk_saunter_right_sheet.png",
+   "manifest": "walk_saunter_right/walk_saunter_right.json",
+   "preview": "walk_saunter_right/walk_saunter_right_preview.gif",
+   "frames": "walk_saunter_right/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:walk_right"
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
+  },
+  {
+   "frame_count": 11,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "left",
+   "canvas_compliant": true,
+   "name": "walk_skip_left",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "walk_skip_left/",
+   "sheet": "walk_skip_left/walk_skip_left_sheet.png",
+   "manifest": "walk_skip_left/walk_skip_left.json",
+   "preview": "walk_skip_left/walk_skip_left_preview.gif",
+   "frames": "walk_skip_left/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:walk_left"
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
+  },
+  {
+   "frame_count": 11,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "right",
+   "canvas_compliant": true,
+   "name": "walk_skip_right",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "walk_skip_right/",
+   "sheet": "walk_skip_right/walk_skip_right_sheet.png",
+   "manifest": "walk_skip_right/walk_skip_right.json",
+   "preview": "walk_skip_right/walk_skip_right_preview.gif",
+   "frames": "walk_skip_right/frames/",
+   "tags": [
+    "baked_motion",
+    "variant_of:walk_right"
    ],
    "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },

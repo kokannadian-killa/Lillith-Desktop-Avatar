@@ -1,0 +1,178 @@
+{
+  "name": "walk_saunter_right",
+  "placeholder": false,
+  "frame_count": 15,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "walk_saunter_right_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "right",
+  "source_files": [
+    "../../source/video/walk_saunter_right/walk_saunter_right_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 18,
+    "last": 46,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "body_trend",
+  "baseline_snap": "per_frame",
+  "body_point_src_x": [
+    622.6,
+    635.9,
+    632.2,
+    630.1,
+    624.2,
+    624.4,
+    622.0,
+    622.8,
+    626.5,
+    621.0,
+    631.5,
+    627.8,
+    632.8,
+    623.2,
+    617.5
+  ],
+  "horn_fix": {
+    "ref_horn_px": 529,
+    "ref_hue_median": 277.0,
+    "mean_hue_shift_deg_per_frame": [
+      0.3,
+      0.4,
+      -0.6,
+      0.2,
+      -0.9,
+      -0.2,
+      1.0,
+      1.0,
+      0.8,
+      -0.0,
+      -0.1,
+      -0.7,
+      -1.1,
+      -1.0,
+      -0.3
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Walk variant of walk_right: slow lazy saunter in place, tail swinging in wide arcs, 1.25 s cycle (f18-f47). Same scale/anchor as walk_right.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      75,
+      298,
+      22,
+      392
+    ],
+    [
+      94,
+      279,
+      23,
+      392
+    ],
+    [
+      106,
+      260,
+      21,
+      392
+    ],
+    [
+      108,
+      246,
+      21,
+      392
+    ],
+    [
+      109,
+      257,
+      21,
+      392
+    ],
+    [
+      107,
+      274,
+      22,
+      392
+    ],
+    [
+      108,
+      307,
+      23,
+      392
+    ],
+    [
+      113,
+      311,
+      23,
+      392
+    ],
+    [
+      111,
+      296,
+      22,
+      392
+    ],
+    [
+      114,
+      276,
+      19,
+      392
+    ],
+    [
+      102,
+      257,
+      18,
+      392
+    ],
+    [
+      90,
+      257,
+      18,
+      392
+    ],
+    [
+      79,
+      263,
+      18,
+      392
+    ],
+    [
+      70,
+      289,
+      18,
+      392
+    ],
+    [
+      69,
+      312,
+      20,
+      392
+    ]
+  ]
+}

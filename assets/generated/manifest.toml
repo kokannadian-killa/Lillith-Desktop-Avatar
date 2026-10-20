@@ -9009,6 +9009,343 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.idle_bored_sigh]
+page = "idle_bored_sigh/idle_bored_sigh_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "variant_of:idle", "idle_variant"]
+
+[[clips.idle_bored_sigh.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_bored_sigh.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.idle_flirt_foot_tap]
 page = "idle_flirt_foot_tap/idle_flirt_foot_tap_sheet.png"
 fps = 12.0
@@ -12463,6 +12800,1017 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.idle_nail_check]
+page = "idle_nail_check/idle_nail_check_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "variant_of:idle", "idle_variant"]
+
+[[clips.idle_nail_check.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_nail_check.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_tail_fidget]
+page = "idle_tail_fidget/idle_tail_fidget_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "variant_of:idle", "idle_variant"]
+
+[[clips.idle_tail_fidget.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_tail_fidget.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_yawn_stretch]
+page = "idle_yawn_stretch/idle_yawn_stretch_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "variant_of:idle", "idle_variant"]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_yawn_stretch.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.knife_tap]
 page = "knife_tap/knife_tap_sheet.png"
 fps = 12.0
@@ -14358,6 +15706,1534 @@ anchor = [200, 392]
 
 [[clips.shrug.frames]]
 x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.sit_bored_chin]
+page = "sit_bored_chin/sit_bored_chin_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.5
+tags = ["canonical", "facing:right (side profile, seated on an edge)", "baked_motion", "variant_of:sit_swing"]
+seat_y = 230
+seat_x_range = [136, 279]
+feet_lowest_y = 364
+
+[[clips.sit_bored_chin.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 18800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 19200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 19600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 20000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 20400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 20800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 21200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 21600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 22000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 22400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 22800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_bored_chin.frames]]
+x = 23200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.sit_cross_legged_bob]
+page = "sit_cross_legged_bob/sit_cross_legged_bob_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.5
+tags = ["canonical", "facing:right (side profile, seated on an edge)", "baked_motion", "variant_of:sit_swing"]
+seat_y = 230
+seat_x_range = [136, 279]
+feet_lowest_y = 365
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 18800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 19200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 19600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 20000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 20400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 20800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 21200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 21600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 22000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 22400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 22800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_cross_legged_bob.frames]]
+x = 23200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.sit_heel_kick]
+page = "sit_heel_kick/sit_heel_kick_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.5
+tags = ["canonical", "facing:right (side profile, seated on an edge)", "baked_motion", "variant_of:sit_swing"]
+seat_y = 230
+seat_x_range = [136, 279]
+feet_lowest_y = 364
+
+[[clips.sit_heel_kick.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_heel_kick.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.sit_stretch_yawn]
+page = "sit_stretch_yawn/sit_stretch_yawn_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.5
+tags = ["canonical", "facing:right (side profile, seated on an edge)", "baked_motion", "variant_of:sit_swing"]
+seat_y = 230
+seat_x_range = [136, 279]
+feet_lowest_y = 366
+
+[[clips.sit_stretch_yawn.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sit_stretch_yawn.frames]]
+x = 18400
 y = 0
 w = 400
 h = 400
@@ -16828,6 +19704,606 @@ anchor = [200, 392]
 
 [[clips.walk_right.frames]]
 x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.walk_sassy_left]
+page = "walk_sassy_left/walk_sassy_left_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:left", "baked_motion", "variant_of:walk_left"]
+disable_springs = ["gait"]
+
+[[clips.walk_sassy_left.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_left.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.walk_sassy_right]
+page = "walk_sassy_right/walk_sassy_right_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:right", "baked_motion", "variant_of:walk_right"]
+disable_springs = ["gait"]
+
+[[clips.walk_sassy_right.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_sassy_right.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.walk_saunter_left]
+page = "walk_saunter_left/walk_saunter_left_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:left", "baked_motion", "variant_of:walk_left"]
+disable_springs = ["gait"]
+
+[[clips.walk_saunter_left.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_left.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.walk_saunter_right]
+page = "walk_saunter_right/walk_saunter_right_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:right", "baked_motion", "variant_of:walk_right"]
+disable_springs = ["gait"]
+
+[[clips.walk_saunter_right.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_saunter_right.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.walk_skip_left]
+page = "walk_skip_left/walk_skip_left_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:left", "baked_motion", "variant_of:walk_left"]
+disable_springs = ["gait"]
+
+[[clips.walk_skip_left.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_left.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.walk_skip_right]
+page = "walk_skip_right/walk_skip_right_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:right", "baked_motion", "variant_of:walk_right"]
+disable_springs = ["gait"]
+
+[[clips.walk_skip_right.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.walk_skip_right.frames]]
+x = 4000
 y = 0
 w = 400
 h = 400
