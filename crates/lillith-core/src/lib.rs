@@ -8,6 +8,7 @@
 //! - [`command`]: the [`Command`]s the core sends back to the overlay/voice/mind.
 //! - [`mood`]: moods (decaying strength + baseline) and the mischief meter.
 //! - [`interaction`]: pointer gestures (double click, secret sequence, hover).
+//! - [`menu`]: the right-click menu as data ([`menu::build_menu`] / [`menu::on_menu_action`]).
 //! - [`spring`]: spring-damper channels ([`spring::Physics`]) and breathing for the "alive" physics.
 //! - [`physics_config`]: serde model of the bundled `assets/physics.toml` (tuning, recipes, moods).
 //! - [`physics_driver`]: [`physics_driver::PhysicsDriver`], which turns clips/events/motion/mood
@@ -24,6 +25,7 @@ pub mod config;
 pub mod event;
 pub mod idle;
 pub mod interaction;
+pub mod menu;
 pub mod mood;
 pub mod physics_config;
 pub mod physics_driver;
