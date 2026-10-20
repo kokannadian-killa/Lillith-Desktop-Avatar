@@ -39,7 +39,9 @@ lillith-anim.workspace = true
 lillith-overlay.workspace = true
 lillith-sense.workspace = true
 lillith-mind.workspace = true
-lillith-voice.workspace = true
+# `voice`: the speech worker + subprocess TTS engines (piper / espeak-ng /
+# spd-say); no system libraries at build time, engines optional at runtime.
+lillith-voice = { workspace = true, features = ["voice"] }
 lillith-panel.workspace = true
 lillith-tray.workspace = true
 anyhow.workspace = true

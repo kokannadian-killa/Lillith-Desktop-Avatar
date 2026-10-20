@@ -395,8 +395,29 @@ pub fn settings_template() -> String {
         "# Lillith settings. Restart Lillith after editing.\n# Missing keys use the defaults below.\n\n",
     );
     s.push_str(&toml::to_string_pretty(&crate::config::Config::default()).unwrap_or_default());
+    s.push_str(VOICE_EXAMPLE);
     s
 }
+
+/// Commented `[voice]` example (read by `lillith-voice`; core's `Config`
+/// ignores the table). Appended to [`settings_template`].
+pub const VOICE_EXAMPLE: &str = r#"
+# Voice (text-to-speech, offline). Needs piper, espeak-ng or spd-say on PATH;
+# with none installed she stays silent. Uncomment to change the defaults.
+# [voice]
+# enabled = true
+# engine = "auto"        # auto | piper | espeak-ng | spd-say | none
+# model = "~/.local/share/lillith/piper/en_US-amy-medium.onnx"
+# voice = "female1"      # optional (spd-say -t / espeak-ng -v)
+# rate = 1.0             # 0.5..2.0
+# volume = 0.8           # 0..1
+# mute = false
+# cooldown_s = 8.0
+# repeat_cooldown_s = 90.0
+# queue = 3
+# max_chars = 240
+# player = "auto"        # auto | aplay | paplay  (piper only)
+"#;
 
 #[cfg(test)]
 mod tests {

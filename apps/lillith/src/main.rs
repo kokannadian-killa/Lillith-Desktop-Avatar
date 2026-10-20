@@ -253,6 +253,46 @@ fn start_monitor(
     )
 }
 
+/// Feeds every overlay action batch to the voice (`Say` speaks, `Muted`
+/// mutes). `Voice::on_actions` only queues; the worker thread speaks.
+struct VoiceSink(lillith_voice::Voice);
+
+impl lillith_overlay::ActionSink for VoiceSink {
+    fn on_actions(&mut self, actions: &[lillith_core::state::Action]) {
+        self.0.on_actions(actions);
+    }
+}
+
+/// Builds the voice from config.toml `[voice]` (logs the engine choice
+/// once). `--no-voice` disables it; with no TTS engine installed she stays
+/// silent (`Dropped::NoEngine`).
+fn start_voice(
+    cli: &Cli,
+    cfg: &Config,
+    config_path: Option<&std::path::Path>,
+) -> lillith_voice::Voice {
+    let mut vcfg = match config_path {
+        Some(p) => lillith_voice::VoiceConfig::load(p).unwrap_or_else(|e| {
+            tracing::warn!("[voice]: {e}; using defaults");
+            lillith_voice::VoiceConfig::default()
+        }),
+        None => lillith_voice::VoiceConfig::default(),
+    };
+    if cli.no_voice {
+        vcfg.enabled = false;
+    }
+    // One mute flag for SFX and voice (the brain starts from `muted`).
+    vcfg.mute |= cfg.muted;
+    let voice = lillith_voice::Voice::from_config(vcfg);
+    tracing::info!(
+        engine = voice.engine_name(),
+        active = voice.is_active(),
+        muted = voice.muted(),
+        "voice ready"
+    );
+    voice
+}
+
 fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     let backend = Backend::detect_env(cli.backend);
     let (cfg, config_path) = load_config(cli);
@@ -313,6 +353,7 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         mode,
         muted: cfg.muted,
         events: None,
+        sink: None,
     };
     tracing::info!(
         ?backend,
@@ -328,8 +369,12 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         "Lillith overlay (M4): click/hover/drag her; keys while focused (G wander/stay, S sleep, Q/Esc quit)"
     );
     let (feed, _monitor) = start_monitor(cli, &cfg);
+    let voice = start_voice(cli, &cfg, config_path.as_deref());
     let opts = OverlayOptions {
         events: feed,
+        // `[voice] mute` also mutes SFX (one flag, like the menu toggle).
+        muted: opts.muted || voice.muted(),
+        sink: Some(lillith_overlay::SinkHandle::new(VoiceSink(voice))),
         ..opts
     };
     lillith_overlay::run(backend, opts).map_err(|e| anyhow::anyhow!("overlay: {e}"))

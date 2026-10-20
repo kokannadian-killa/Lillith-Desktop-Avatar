@@ -32,4 +32,4 @@ pub mod wayland;
 pub mod x11;
 
 pub use backend::Backend;
-pub use run::{run, EventFeed, OverlayError, OverlayOptions};
+pub use run::{run, ActionSink, EventFeed, OverlayError, OverlayOptions, SinkHandle};

@@ -25,6 +25,32 @@ pub type EventFeed = Arc<Mutex<Receiver<Event>>>;
 /// Most feed events applied per frame (a burst cannot stall rendering).
 pub const MAX_EVENTS_PER_TICK: usize = 16;
 
+/// Receives every action batch the [`Controller`] applies (input, tick,
+/// event and menu batches), e.g. the app's `lillith_voice::Voice`
+/// (`Action::Say` speaks, `Action::Muted` mutes). Called on the overlay
+/// thread right before the batch is applied, so it must not block: queue
+/// the work and return.
+pub trait ActionSink {
+    fn on_actions(&mut self, actions: &[Action]);
+}
+
+/// Shared [`ActionSink`] handle (cloneable so the Wayland → X11 fallback
+/// keeps the same voice).
+#[derive(Clone)]
+pub struct SinkHandle(pub Arc<Mutex<dyn ActionSink>>);
+
+impl SinkHandle {
+    pub fn new(sink: impl ActionSink + 'static) -> Self {
+        Self(Arc::new(Mutex::new(sink)))
+    }
+}
+
+impl std::fmt::Debug for SinkHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SinkHandle")
+    }
+}
+
 /// Px of her window kept on screen when dragging off an edge.
 pub const KEEP_ON_SCREEN: i32 = 64;
 
@@ -72,6 +98,8 @@ pub struct OverlayOptions {
     pub muted: bool,
     /// System-monitor events (`None` = `--no-monitor` / tests).
     pub events: Option<EventFeed>,
+    /// Gets every applied action batch (voice; `None` = silent).
+    pub sink: Option<SinkHandle>,
 }
 
 /// Shared overlay logic, independent of the windowing system.
@@ -89,6 +117,7 @@ pub struct Controller {
     screen: Option<(u32, u32)>,
     quit: bool,
     feed: Option<EventFeed>,
+    sink: Option<SinkHandle>,
 }
 
 impl Controller {
@@ -121,6 +150,7 @@ impl Controller {
             screen: None,
             quit: false,
             feed: opts.events.clone(),
+            sink: opts.sink.clone(),
         }
     }
 
@@ -157,6 +187,15 @@ impl Controller {
 
     /// Applies brain actions to the animator / window.
     pub fn apply(&mut self, actions: Vec<Action>) {
+        if actions.is_empty() {
+            return;
+        }
+        if let Some(sink) = &self.sink {
+            // Non-blocking by contract (the voice only queues the line).
+            if let Ok(mut s) = sink.0.lock() {
+                s.on_actions(&actions);
+            }
+        }
         for a in actions {
             let anim = self.stage.animator_mut();
             match a {
@@ -406,6 +445,7 @@ mod tests {
             mode: MoveMode::Stay,
             muted: false,
             events: None,
+            sink: None,
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -485,6 +525,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             mode,
             muted: false,
             events: None,
+            sink: None,
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -548,6 +589,28 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[derive(Default)]
+    struct Rec(Arc<Mutex<Vec<Action>>>);
+    impl ActionSink for Rec {
+        fn on_actions(&mut self, actions: &[Action]) {
+            self.0.lock().unwrap().extend_from_slice(actions);
+        }
+    }
+
+    #[test]
+    fn every_applied_batch_reaches_the_sink() {
+        let (dir, mut c) = m3_controller("sink", MoveMode::Stay);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        c.sink = Some(SinkHandle::new(Rec(seen.clone())));
+        c.apply(vec![Action::Say("hi".into()), Action::Muted(true)]);
+        // Input batches go through the same path (M key = mute toggle).
+        c.key(Key::Char('m'));
+        let got = seen.lock().unwrap().clone();
+        assert_eq!(&got[..2], &[Action::Say("hi".into()), Action::Muted(true)]);
+        assert!(got.len() >= 2);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn wander_moves_the_window() {
         let (dir, mut c) = m3_controller("m3w", MoveMode::Wander);
@@ -586,6 +649,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             mode: MoveMode::Stay,
             muted: false,
             events: None,
+            sink: None,
         };
         // Either the backend is not compiled in, or the manifest is missing:
         // both are clean errors, never a panic or a hang.

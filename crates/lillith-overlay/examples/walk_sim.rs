@@ -58,6 +58,7 @@ fn main() {
         mode: MoveMode::Wander,
         muted: true,
         events: None,
+        sink: None,
     };
     let mut c = Controller::new(&opts).expect("controller");
     let (w, h) = c.stage.size();
