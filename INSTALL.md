@@ -173,6 +173,7 @@ Stop her with `Q` / `Esc` (click her first so she has keyboard focus) or
 | `--sleepy-after <SECONDS>` | Idle time until drowsy (default 300) |
 | `--asleep-after <SECONDS>` | Idle time until asleep (default 900) |
 | `--reset-position` | Ignore the saved position, start at the default spot |
+| `--baked-jiggle` | Draw the baked `<clip>_jiggle` variants when the animation set has them (engine chest/pigtail/hip springs off while one plays); same as config `baked_jiggle = true` |
 | `--no-save` | Don't write the position back to `config.toml` after a drag |
 | `--exit-after <SECONDS>` | Quit after N seconds (smoke tests, CPU measurements) |
 | `--no-tray`, `--no-voice`, `--no-llm` | Accepted, reserved for M6–M8 (tray, voice and LLM aren't wired yet) |
@@ -223,6 +224,7 @@ opacity = 1.0
 render_hz = 30.0
 physics_hz = 120.0
 pose_cycle_s = 16.0
+baked_jiggle = false   # true: use the baked _jiggle clip variants when present
 muted = false
 
 [overlay]              # where she sits (px from the bottom-left corner)

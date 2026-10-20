@@ -54,12 +54,15 @@ Python/Tk prototypes). Everything runs locally.
   scale, chest, pigtails), sub-stepped at 120 Hz with velocity/offset clamps,
   driven by the tuned `assets/physics.toml` (energy-tiered impulses on
   reactions, footfall bounces, walk start/stop lean).
-- ✅ **95-clip animation library** — the generated set holds 95 clips (44
-  event reactions, 12 blend helpers, 39 regular animations) with per-frame
-  timing, feet anchors and attachment points, played by a priority reaction
-  queue on top of idle life (breathing, blinking every 4–6 s, idle transitions,
-  random idle reactions, pose cycle every 16 s). *The art itself isn't
-  committed yet — see [Assets](#assets).*
+- ✅ **Animation library** — the v2 video-based set in `assets/generated/`
+  holds 97 clips (44 event reactions, 12 blend helpers, idle variants); the
+  image pipeline's jiggle/flirty batch adds up to 197 (113 engine-clean,
+  including tasteful allure poses and `idle_flirt_*` mannerisms, plus 84
+  baked `_jiggle` variants that switch the engine's chest/pigtail/hip springs
+  off while drawn — `--baked-jiggle`). Per-frame timing, feet anchors and
+  attachment points, played by a priority reaction queue on top of idle life
+  (breathing, blinking every 4–6 s, idle transitions, random idle reactions,
+  a mood-based pose cycle every 16 s). *Art storage: see [Assets](#assets).*
 - ✅ **Walk / run** with left/right clips or mirrored fallback.
 - 🗓️ Speech-bubble rendering (lines are chosen and logged today), SFX playback,
   particles, HiDPI buffer scale.

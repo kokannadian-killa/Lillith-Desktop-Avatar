@@ -32,6 +32,7 @@ Out of scope and deliberately excluded (not planned, even where code or docs exi
 | Base idle pose (sitting / rock-on) | pose_map (sitting.png), CreationImagesNeeded, character_fullbody_reference | ART + PY | — |
 | Micro "jiggle": random rotate/shift/scale per frame | v01–v12 | PY (works, looks cheap) | — |
 | Multi-body spring-damper physics (chest, pigtails, root, angle, scale) with tunable stiffness/damping, sub-stepping, velocity clamp | README-SP | PY-missing | — |
+| Baked-jiggle clip variants (`<clip>_jiggle`, engine chest/pigtail/hip springs switched off while drawn) and tasteful allure / `idle_flirt_*` mannerism clips in the mood pose cycle | image pipeline jiggle/flirty batch (2026-10) | ART + Rust (import, spring mask, pose cycle) | `lillith-anim::animator`, `lillith-core::spring::SpringMask`, `tools/import-manifest` |
 | Micro-movement image variants with hysteresis (no flicker) | README-SP | PY-missing (205–221 images not attached) | — |
 | Breathing cycle (inhale 1.2–1.6 s / hold / exhale / settle) + heartbeat opacity pulse | README-SP, phys_breathing | SPEC (PY-missing) | — |
 | Idle transitions every 8–12 s: hip sway, curious lean-forward, shoulder roll, hips shift, soft reset | phys_idle_transitions, prompt_refined_idle_transitions, physics_ref_A–D | ART (keyframe refs) + SPEC | — |

@@ -1,10 +1,20 @@
 # Event mapping: rules.toml ↔ generated clips
 
-Reconciles the 57 `[[rule]]` events in `assets/rules.toml` with the canonical
-generated set (`assets/generated/manifest.json`; at the 82-clip handoff: 44
-`event_<name>` reactions, 26 regular animations and 12 blend helpers. Later
-additions without a rule, such as the strut/tease gesture batch, don't change
-this mapping).
+Reconciles the 57 `[[rule]]` events in `assets/rules.toml` with the generated
+clip sets. Current counts (2026-10-20):
+
+| Set | Clips | Breakdown |
+|---|---|---|
+| v2 video-based set in the repo (`assets/generated/`, Git LFS) | 97 | 44 event, 12 blend, 50 with frame_points; `idle` aliases `idle_a` (`idle_a`/`idle_b` are `variant_of:idle`); all `baked_motion` |
+| jiggle/flirty batch from the image pipeline (build box `/workspace/lillith/assets/generated/`, not in git) | 197 | **113 engine-clean** (44 event, 12 blend, 31 `allure` incl. 10 `idle_flirt_*` mannerisms tagged `idle_variant`; 84 carry a `jiggle_variant`) + **84 baked `<clip>_jiggle`** variants (each `jiggle_of` its clean clip, `disable_springs = ["chest", "pigtails", "hip"]`); 122 with frame_points, 72 with per-frame durations |
+
+Both sets contain every clip `[rule_clips]` names, so the mapping below holds
+for either. Gesture/pose clips without a rule (strut/tease, the allure poses,
+the `idle_flirt_*` mannerisms) don't change this mapping: they are reached
+through the mood pose cycle (`lillith_core::state::cycle_variants`). Baked
+`_jiggle` variants carry their clean clip's `event`/`rule_events` but are never
+mapped by name: with config `baked_jiggle = true` (or `--baked-jiggle`) the
+animator draws the variant in place of the mapped clean clip.
 
 The mapping lives in `assets/rules.toml` under `[rule_clips]` (the older name
 `[event_clips]` is still accepted). It is resolved by
