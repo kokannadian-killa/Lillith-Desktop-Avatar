@@ -1,0 +1,16 @@
+[package]
+name = "lillith-setup"
+description = "First-run LLM setup wizard core: runtime detection (llama-server / Ollama), GGUF scanner + picker data, Ollama Modelfile customizer and the [llm] config table. UI-agnostic."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml_edit = "0.22"
