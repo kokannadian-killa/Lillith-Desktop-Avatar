@@ -52,6 +52,33 @@ fn every_generated_clip_plays_and_renders() {
         !a.blink_frames().is_empty(),
         "blink_wink gives blink frames"
     );
+    // Baked-walk clips (video walk/strut/run takes + their idle blends)
+    // suppress the engine gait; nothing else does.
+    let mut baked: Vec<&str> = m
+        .clips
+        .iter()
+        .filter(|(_, c)| c.bakes_gait())
+        .map(|(n, _)| n.as_str())
+        .collect();
+    baked.sort_unstable();
+    assert_eq!(
+        baked,
+        [
+            "blend_idle_to_walk_left",
+            "blend_idle_to_walk_right",
+            "blend_walk_left_to_idle",
+            "blend_walk_right_to_idle",
+            "run_left",
+            "run_right",
+            "strut_left",
+            "strut_right",
+            "walk_left",
+            "walk_right",
+        ]
+    );
+    for n in &baked {
+        assert!(m.clips[*n].spring_mask().is_empty(), "{n}: gait only");
+    }
     a.walk(Dir::Left, false).unwrap();
     // Starting from idle plays the turn blend first, then hands over to the
     // walk on the frame the blend leads into.

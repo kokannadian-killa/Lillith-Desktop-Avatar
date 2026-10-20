@@ -29,6 +29,9 @@
 //! # (jiggle_variant = "idle_jiggle"); the sibling has jiggle_baked = true,
 //! # jiggle_of = "idle" and the engine spring groups to switch off while it
 //! # is drawn: disable_springs = ["chest", "pigtails", "hip"]
+//! # baked-WALK clips (video walk/strut/run takes) add the non-spring group
+//! # "gait" so the engine gait ([gait] in physics.toml) never drives them:
+//! # disable_springs = ["gait"]
 //! # optional per-frame attachment points (one [x, y] per frame):
 //! # frame_points = { chest_point = [[242, 133], ...], hip_point = [...] }
 //! # optional blend-helper metadata (transition clips between two clips):
@@ -164,7 +167,9 @@ pub struct Clip {
     pub jiggle_variant: Option<String>,
     /// Engine spring groups switched off while this clip is drawn
     /// (`chest`, `pigtails`, `hip`; see [`SpringMask::group`]), so the
-    /// engine adds no motion on top of baked jiggle.
+    /// engine adds no motion on top of baked jiggle. `gait`
+    /// ([`SpringMask::GAIT_GROUP`]) marks a baked walk: the engine gait is
+    /// suppressed while it is drawn (see [`Clip::bakes_gait`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disable_springs: Vec<String>,
     /// Optional per-frame attachment points (cell coords), one entry per
@@ -277,6 +282,13 @@ impl Clip {
             m.insert(c);
         }
         m
+    }
+
+    /// The frames bake the walk itself (legs, arms, hip bob): its
+    /// `disable_springs` names `gait`. The animator then suppresses the
+    /// engine gait (`PhysicsDriver::set_gait_suppressed`) while it is drawn.
+    pub fn bakes_gait(&self) -> bool {
+        SpringMask::names_gait(&self.disable_springs)
     }
 
     /// Tag test (`allure`, `idle_variant`, `blend`, ...).

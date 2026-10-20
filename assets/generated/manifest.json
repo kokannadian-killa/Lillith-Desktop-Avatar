@@ -160,7 +160,8 @@
    "from": "idle",
    "to": "walk_left",
    "from_frame": 0,
-   "to_frame": 12
+   "to_frame": 12,
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 6,
@@ -192,7 +193,8 @@
    "from": "idle",
    "to": "walk_right",
    "from_frame": 0,
-   "to_frame": 5
+   "to_frame": 5,
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 4,
@@ -384,7 +386,8 @@
    "from": "walk_left",
    "to": "idle",
    "from_frame": 10,
-   "to_frame": 0
+   "to_frame": 0,
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 6,
@@ -416,7 +419,8 @@
    "from": "walk_right",
    "to": "idle",
    "from_frame": 9,
-   "to_frame": 0
+   "to_frame": 0,
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 4,
@@ -2965,7 +2969,8 @@
    "frames": "run_left/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 10,
@@ -2992,7 +2997,8 @@
    "frames": "run_right/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 10,
@@ -3291,7 +3297,8 @@
    "tags": [
     "baked_motion"
    ],
-   "allure": true
+   "allure": true,
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 9,
@@ -3319,7 +3326,8 @@
    "tags": [
     "baked_motion"
    ],
-   "allure": true
+   "allure": true,
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 59,
@@ -3708,7 +3716,8 @@
    "contact_frames": [
     3,
     9
-   ]
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 14,
@@ -3755,7 +3764,8 @@
    "contact_frames": [
     3,
     9
-   ]
+   ],
+   "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
    "frame_count": 12,
