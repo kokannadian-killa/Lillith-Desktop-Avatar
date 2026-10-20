@@ -21,6 +21,7 @@ pub mod backend;
 pub mod bubble;
 pub mod drag;
 pub mod input_region;
+pub mod menu_popup;
 pub mod pixels;
 pub mod run;
 pub mod stage;

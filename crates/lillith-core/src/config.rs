@@ -252,12 +252,25 @@ pub enum ConfigError {
 /// Writes `pos` into the `[overlay]` table of `path`, creating the file and
 /// its directory if needed. Other keys are kept (comments are not).
 pub fn save_overlay(path: &Path, pos: &OverlayPos) -> Result<(), ConfigError> {
+    save_key(path, "overlay", toml::Value::try_from(pos)?)
+}
+
+/// Writes the top-level `scale` of `path` (the menu's Size ▸ pick), keeping
+/// the other keys like [`save_overlay`].
+pub fn save_scale(path: &Path, scale: f32) -> Result<(), ConfigError> {
+    // Round to 2 decimals so 0.55 doesn't land as 0.550000011920929.
+    let v = (scale as f64 * 100.0).round() / 100.0;
+    save_key(path, "scale", toml::Value::Float(v))
+}
+
+/// Sets top-level `key` = `value` in `path` (creating file and directory).
+fn save_key(path: &Path, key: &str, value: toml::Value) -> Result<(), ConfigError> {
     let mut table: toml::Table = match std::fs::read_to_string(path) {
         Ok(s) => s.parse()?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => toml::Table::new(),
         Err(e) => return Err(e.into()),
     };
-    table.insert("overlay".into(), toml::Value::try_from(pos)?);
+    table.insert(key.into(), value);
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
@@ -270,6 +283,27 @@ pub fn save_overlay(path: &Path, pos: &OverlayPos) -> Result<(), ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_scale_keeps_other_keys() {
+        let dir = std::env::temp_dir().join(format!("lillith-cfg-scale-{}", std::process::id()));
+        let p = dir.join("config.toml");
+        save_overlay(
+            &p,
+            &OverlayPos {
+                margin_left: 7,
+                ..OverlayPos::default()
+            },
+        )
+        .unwrap();
+        save_scale(&p, 0.75).unwrap();
+        let c = Config::load(&p).unwrap();
+        assert_eq!(c.scale, 0.75);
+        assert_eq!(c.overlay.margin_left, 7);
+        save_scale(&p, 0.45).unwrap();
+        assert_eq!(Config::load(&p).unwrap().scale, 0.45);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn empty_file_gives_defaults() {

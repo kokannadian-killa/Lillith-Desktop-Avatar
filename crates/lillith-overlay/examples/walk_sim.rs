@@ -59,6 +59,7 @@ fn main() {
         muted: true,
         events: None,
         sink: None,
+        settings_path: None,
     };
     let mut c = Controller::new(&opts).expect("controller");
     let (w, h) = c.stage.size();

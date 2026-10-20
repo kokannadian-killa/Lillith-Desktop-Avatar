@@ -354,6 +354,7 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         muted: cfg.muted,
         events: None,
         sink: None,
+        settings_path: config_path.clone(),
     };
     tracing::info!(
         ?backend,

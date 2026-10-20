@@ -22,9 +22,15 @@
 //!     **bounding** shape is then set to her silhouette (alpha ≥
 //!     [`SHAPE_ALPHA`]) so nothing outside her is drawn at all, and the
 //!     pixels are presented opaque and un-premultiplied (hard edge, no box).
+//! - Right-click menu: a second, override-redirect `_NET_WM_WINDOW_TYPE_POPUP_MENU`
+//!   window at the pointer showing [`crate::menu_popup`], with the same
+//!   transparency mode. While it is open our own X connection grabs the
+//!   pointer and keyboard (like any X11 menu): clicks inside pick rows,
+//!   a click anywhere else or Esc closes it, arrows/Enter navigate.
 
 use crate::drag::{Placement, Release};
 use crate::input_region::mask_rects;
+use crate::menu_popup::MenuKey;
 use crate::pixels::{rgba_to_argb_u32, rgba_to_opaque_u32, SHAPE_ALPHA};
 use crate::run::{period, Controller, OverlayError, OverlayOptions, KEEP_ON_SCREEN};
 use lillith_core::interaction::Button;
@@ -43,6 +49,7 @@ use winit::window::{CursorIcon, Window, WindowId, WindowLevel};
 use x11rb::connection::{Connection as _, RequestConnection as _};
 use x11rb::protocol::shape::{self, ConnectionExt as _};
 use x11rb::protocol::xproto::{self, ClientMessageEvent, ConnectionExt as _, EventMask, Rectangle};
+use x11rb::protocol::Event as XEvent;
 use x11rb::rust_connection::RustConnection;
 
 pub use softbuffer;
@@ -140,6 +147,11 @@ impl Xc {
 
     /// Bounding shape = these rectangles (`None` = the whole window).
     fn set_bounding(&self, rects: Option<&[crate::input_region::Rect]>) {
+        self.set_bounding_of(self.win, rects);
+    }
+
+    /// Bounding shape of window `win` (hers or the menu's).
+    fn set_bounding_of(&self, win: u32, rects: Option<&[crate::input_region::Rect]>) {
         if !self.shape {
             return;
         }
@@ -148,7 +160,7 @@ impl Xc {
                 let _ = self.conn.shape_mask(
                     shape::SO::SET,
                     shape::SK::BOUNDING,
-                    self.win,
+                    win,
                     0,
                     0,
                     x11rb::NONE,
@@ -160,7 +172,7 @@ impl Xc {
                     shape::SO::SET,
                     shape::SK::BOUNDING,
                     xproto::ClipOrdering::UNSORTED,
-                    self.win,
+                    win,
                     0,
                     0,
                     &rs,
@@ -172,6 +184,11 @@ impl Xc {
 
     /// Input shape = these rectangles (empty = fully click-through).
     fn set_input(&self, rects: &[crate::input_region::Rect]) {
+        self.set_input_of(self.win, rects);
+    }
+
+    /// Input shape of window `win`.
+    fn set_input_of(&self, win: u32, rects: &[crate::input_region::Rect]) {
         if !self.shape {
             return;
         }
@@ -180,12 +197,64 @@ impl Xc {
             shape::SO::SET,
             shape::SK::INPUT,
             xproto::ClipOrdering::UNSORTED,
-            self.win,
+            win,
             0,
             0,
             &rs,
         );
         let _ = self.conn.flush();
+    }
+
+    /// Grabs pointer + keyboard to `win` for the menu (events come to this
+    /// connection, not winit). `true` once the pointer grab succeeded.
+    fn grab(&self, win: u32) -> bool {
+        let mask = EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::POINTER_MOTION;
+        let ok = self
+            .conn
+            .grab_pointer(
+                false,
+                win,
+                mask,
+                xproto::GrabMode::ASYNC,
+                xproto::GrabMode::ASYNC,
+                x11rb::NONE,
+                x11rb::NONE,
+                x11rb::CURRENT_TIME,
+            )
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .is_some_and(|r| r.status == xproto::GrabStatus::SUCCESS);
+        if ok {
+            let _ = self
+                .conn
+                .grab_keyboard(
+                    false,
+                    win,
+                    x11rb::CURRENT_TIME,
+                    xproto::GrabMode::ASYNC,
+                    xproto::GrabMode::ASYNC,
+                )
+                .ok()
+                .and_then(|c| c.reply().ok());
+        }
+        ok
+    }
+
+    fn ungrab(&self) {
+        let _ = self.conn.ungrab_pointer(x11rb::CURRENT_TIME);
+        let _ = self.conn.ungrab_keyboard(x11rb::CURRENT_TIME);
+        let _ = self.conn.flush();
+    }
+
+    /// First keysym of `keycode` (menu navigation keys only need that).
+    fn keysym(&self, keycode: u8) -> Option<u32> {
+        let r = self
+            .conn
+            .get_keyboard_mapping(keycode, 1)
+            .ok()?
+            .reply()
+            .ok()?;
+        r.keysyms.first().copied()
     }
 
     fn pointer(&self) -> Option<(f64, f64)> {
@@ -261,9 +330,21 @@ struct Live {
     next_cm_check: Instant,
 }
 
+/// The open right-click menu window.
+struct Popup {
+    window: Rc<Window>,
+    surface: softbuffer::Surface<Rc<Window>, Rc<Window>>,
+    xid: u32,
+    /// Pointer + keyboard grabbed on our X connection.
+    grabbed: bool,
+    /// Give up grabbing after this (the menu still works by clicks on it).
+    grab_deadline: Instant,
+}
+
 struct App {
     ctl: Controller,
     live: Option<Live>,
+    popup: Option<Popup>,
     frame: Duration,
     next: Instant,
     last: Instant,
@@ -288,6 +369,7 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
     let mut app = App {
         ctl,
         live: None,
+        popup: None,
         frame: period(opts.render_hz),
         next: now,
         last: now,
@@ -471,6 +553,198 @@ impl App {
         self.ctl.placement = p;
     }
 
+    /// Resizes her window after a menu Size ▸ pick (bottom-left stays put).
+    fn apply_resize(&mut self) {
+        if !self.ctl.take_resized() {
+            return;
+        }
+        let (w, h) = self.ctl.stage.size();
+        if let Some(live) = self.live.as_mut() {
+            let _ = live.window.request_inner_size(PhysicalSize::new(w, h));
+            if let (Some(nw), Some(nh)) = (NonZeroU32::new(w), NonZeroU32::new(h)) {
+                if let Err(e) = live.surface.resize(nw, nh) {
+                    tracing::warn!("softbuffer resize: {e}");
+                }
+            }
+        }
+        if let Err(e) = self.ctl.stage.render() {
+            tracing::warn!("render after resize: {e}");
+        }
+        let p = self.ctl.placement;
+        self.move_to(p);
+        self.pixels_dirty = true;
+        self.mask_dirty = true;
+    }
+
+    /// Shows / hides / redraws the menu window to match the controller.
+    fn sync_menu(&mut self, el: &ActiveEventLoop) {
+        if self.ctl.take_menu_opened() {
+            self.close_popup();
+            match self.open_popup(el) {
+                Ok(p) => self.popup = Some(p),
+                Err(e) => {
+                    tracing::warn!("menu popup: {e}");
+                    self.ctl.close_menu();
+                }
+            }
+        }
+        if self.ctl.menu().is_none() {
+            self.close_popup();
+            return;
+        }
+        self.pump_popup_events();
+        if self.ctl.menu().is_none() {
+            self.close_popup();
+            return;
+        }
+        self.draw_popup();
+    }
+
+    fn open_popup(&mut self, el: &ActiveEventLoop) -> Result<Popup, OverlayError> {
+        let live = self
+            .live
+            .as_ref()
+            .ok_or_else(|| OverlayError::X11("no overlay window yet".into()))?;
+        let (w, h) = self.ctl.menu().map(|m| m.size()).unwrap_or((1, 1));
+        let (mx, my, mw, mh) = live.monitor;
+        let (px, py) = live.xc.pointer().unwrap_or((mx as f64, my as f64));
+        let (px, py) = (px as i32, py as i32);
+        // At the pointer, shifted so every expansion stays on the monitor.
+        let x = px.min(mx + mw as i32 - w as i32).max(mx);
+        let y = py.min(my + mh as i32 - h as i32).max(my);
+        let attrs = Window::default_attributes()
+            .with_title("Lillith menu")
+            .with_name("lillith", "Lillith")
+            .with_transparent(true)
+            .with_decorations(false)
+            .with_resizable(false)
+            .with_override_redirect(true)
+            .with_window_level(WindowLevel::AlwaysOnTop)
+            .with_x11_window_type(vec![WindowType::PopupMenu])
+            .with_inner_size(PhysicalSize::new(w, h))
+            .with_position(PhysicalPosition::new(x, y));
+        let window = Rc::new(
+            el.create_window(attrs)
+                .map_err(|e| OverlayError::X11(format!("create menu window: {e}")))?,
+        );
+        let xid = match window.window_handle().map(|h| h.as_raw()) {
+            Ok(RawWindowHandle::Xlib(h)) => h.window as u32,
+            Ok(RawWindowHandle::Xcb(h)) => h.window.get(),
+            _ => return Err(OverlayError::X11("menu: not an X11 window".into())),
+        };
+        let ctx = softbuffer::Context::new(window.clone())
+            .map_err(|e| OverlayError::X11(format!("softbuffer: {e}")))?;
+        let mut surface = softbuffer::Surface::new(&ctx, window.clone())
+            .map_err(|e| OverlayError::X11(format!("softbuffer: {e}")))?;
+        surface
+            .resize(NonZeroU32::new(w).unwrap(), NonZeroU32::new(h).unwrap())
+            .map_err(|e| OverlayError::X11(format!("softbuffer resize: {e}")))?;
+        if live.alpha == AlphaMode::Shaped {
+            live.xc.set_bounding_of(xid, Some(&[]));
+        }
+        tracing::info!(x, y, size = ?(w, h), xid, "x11 menu popup (override-redirect)");
+        Ok(Popup {
+            window,
+            surface,
+            xid,
+            grabbed: false,
+            grab_deadline: Instant::now() + Duration::from_secs(1),
+        })
+    }
+
+    fn close_popup(&mut self) {
+        if let Some(p) = self.popup.take() {
+            if p.grabbed {
+                if let Some(l) = &self.live {
+                    l.xc.ungrab();
+                }
+            }
+            drop(p);
+        }
+    }
+
+    /// Pointer / key events our grab delivered to our own X connection.
+    fn pump_popup_events(&mut self) {
+        let (Some(live), Some(popup)) = (self.live.as_ref(), self.popup.as_mut()) else {
+            return;
+        };
+        if !popup.grabbed && Instant::now() < popup.grab_deadline {
+            popup.grabbed = live.xc.grab(popup.xid);
+            if popup.grabbed {
+                tracing::debug!("menu grabbed pointer + keyboard");
+            }
+        }
+        let mut evs = Vec::new();
+        while let Ok(Some(ev)) = live.xc.conn.poll_for_event() {
+            evs.push(ev);
+        }
+        for ev in evs {
+            match ev {
+                XEvent::MotionNotify(m) if m.event == popup.xid => {
+                    self.ctl
+                        .menu_pointer(Some((m.event_x as f64, m.event_y as f64)));
+                }
+                XEvent::ButtonPress(b) if b.event == popup.xid => {
+                    // Wheel "buttons" 4-7 are ignored.
+                    if (1..=3).contains(&b.detail) {
+                        let hit = self.ctl.menu_click((b.event_x as f64, b.event_y as f64));
+                        tracing::debug!(?hit, x = b.event_x, y = b.event_y, "menu click");
+                    }
+                }
+                XEvent::KeyPress(k) => {
+                    let key = match live.xc.keysym(k.detail) {
+                        Some(0xff1b) => Some(MenuKey::Escape),
+                        Some(0xff52) => Some(MenuKey::Up),
+                        Some(0xff54) => Some(MenuKey::Down),
+                        Some(0xff51) => Some(MenuKey::Left),
+                        Some(0xff53) => Some(MenuKey::Right),
+                        Some(0xff0d | 0xff8d | 0x20) => Some(MenuKey::Enter),
+                        _ => None,
+                    };
+                    if let Some(k) = key {
+                        let _ = self.ctl.menu_key(k);
+                    }
+                }
+                _ => {}
+            }
+            if self.ctl.menu().is_none() {
+                break;
+            }
+        }
+    }
+
+    fn draw_popup(&mut self) {
+        let (Some(live), Some(popup)) = (self.live.as_ref(), self.popup.as_mut()) else {
+            return;
+        };
+        let alpha = live.alpha;
+        let Some(pm) = self.ctl.render_menu() else {
+            return;
+        };
+        let (data, w, h) = (pm.data().to_vec(), pm.width(), pm.height());
+        let menu = self.ctl.menu().expect("menu open");
+        let content = menu.region();
+        if alpha == AlphaMode::Shaped {
+            let rects = mask_rects(&data, w, h, SHAPE_ALPHA, 1);
+            live.xc.set_bounding_of(popup.xid, Some(&rects));
+        } else {
+            live.xc.set_bounding_of(popup.xid, None);
+        }
+        live.xc.set_input_of(popup.xid, &content);
+        match popup.surface.buffer_mut() {
+            Ok(mut buf) => {
+                match alpha {
+                    AlphaMode::Composited => rgba_to_argb_u32(&data, &mut buf, 255),
+                    AlphaMode::Shaped => rgba_to_opaque_u32(&data, &mut buf, SHAPE_ALPHA),
+                }
+                if let Err(e) = buf.present() {
+                    tracing::warn!("menu present: {e}");
+                }
+            }
+            Err(e) => tracing::warn!("menu buffer: {e}"),
+        }
+    }
+
     fn fail(&mut self, el: &ActiveEventLoop, e: OverlayError) {
         self.error = Some(e);
         el.exit();
@@ -496,7 +770,42 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn window_event(&mut self, el: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        if self.popup.as_ref().is_some_and(|p| p.window.id() == id) {
+            // The menu's input arrives through our grab (pump_popup_events);
+            // winit only tells us when it needs repainting.
+            if matches!(event, WindowEvent::RedrawRequested) {
+                self.ctl.invalidate_menu();
+                self.draw_popup();
+            }
+            return;
+        }
+        self.window_event_main(el, event);
+        self.sync_menu(el);
+    }
+
+    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        self.about_to_wait_main(el);
+        if self.ctl.quit_requested() {
+            el.exit();
+            return;
+        }
+        self.sync_menu(el);
+        self.apply_resize();
+        if self.pixels_dirty || self.mask_dirty {
+            self.draw();
+        }
+        if self.popup.is_some() {
+            // Grabbed menu events arrive on our own connection, which does
+            // not wake winit: poll it at ~100 Hz while the menu is open.
+            let soon = Instant::now() + Duration::from_millis(10);
+            el.set_control_flow(ControlFlow::WaitUntil(self.next.min(soon)));
+        }
+    }
+}
+
+impl App {
+    fn window_event_main(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => el.exit(),
             WindowEvent::RedrawRequested => {
@@ -592,7 +901,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+    fn about_to_wait_main(&mut self, el: &ActiveEventLoop) {
         if self.ctl.quit_requested() {
             el.exit();
             return;
