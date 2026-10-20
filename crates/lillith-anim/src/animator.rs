@@ -609,12 +609,22 @@ impl Animator {
 
     /// Applies the drawn clip's `disable_springs` to the physics: the named
     /// channels are parked at rest and ignore kicks while it is drawn, and
-    /// come back (from rest) as soon as a clip without them is drawn.
+    /// come back (from rest) as soon as a clip without them is drawn. A
+    /// `gait` entry ([`Clip::bakes_gait`]) suppresses the driver's engine
+    /// gait the same way.
     fn sync_spring_mask(&mut self) {
-        let mask = self.current().clip.spring_mask();
+        let clip = self.current().clip;
+        let (mask, gait) = (clip.spring_mask(), clip.bakes_gait());
+        self.apply_clip_mask(mask, gait);
+    }
+
+    fn apply_clip_mask(&mut self, mask: SpringMask, bakes_gait: bool) {
         if mask != self.spring_mask {
             self.spring_mask = mask;
             self.physics_mut().set_suppressed(mask);
+        }
+        if let Some(d) = &mut self.driver {
+            d.set_gait_suppressed(bakes_gait);
         }
     }
 
@@ -832,11 +842,9 @@ impl Animator {
         let sign = if flip { -1.0 } else { 1.0 };
         // Mask first, so a baked-jiggle clip's own start kick is dropped on
         // the channels it disables.
-        let mask = self.manifest.clips[self.drawn(&clip)].spring_mask();
-        if mask != self.spring_mask {
-            self.spring_mask = mask;
-            self.physics_mut().set_suppressed(mask);
-        }
+        let drawn = &self.manifest.clips[self.drawn(&clip)];
+        let (mask, gait) = (drawn.spring_mask(), drawn.bakes_gait());
+        self.apply_clip_mask(mask, gait);
         match &mut self.driver {
             Some(d) => {
                 d.set_facing(!flip);
@@ -1339,7 +1347,17 @@ mod tests {
             max_y = max_y.max(a.current().transform.y);
         }
         assert!(max_chest > 1.5, "chest {max_chest}");
-        assert!(max_y > 0.1, "root y {max_y}");
+        // physics.toml walk_footfall.root_y = 0 (physics-lab retune): the
+        // baked walk frames / engine [gait] hip bob own the vertical step,
+        // a root_y kick on top would double it. Runs still kick root_y.
+        assert!(max_y < 0.05, "walk root y {max_y}");
+        a.walk(Dir::Right, true).unwrap();
+        let mut max_y = 0f32;
+        for _ in 0..120 {
+            a.tick(1.0 / 60.0);
+            max_y = max_y.max(a.current().transform.y);
+        }
+        assert!(max_y > 0.1, "run root y {max_y}");
     }
 
     #[test]
@@ -1380,7 +1398,8 @@ mod tests {
             lo = lo.min(s);
             hi = hi.max(s);
         }
-        assert!(hi > 1.003 && lo < 0.997, "{lo}..{hi}");
+        // physics.toml breathing.scale_amplitude 0.003 (physics-lab retune).
+        assert!(hi > 1.0015 && lo < 0.9985, "{lo}..{hi}");
         assert!(hi < 1.02 && lo > 0.98);
     }
 
@@ -1691,6 +1710,65 @@ mod tests {
                 "restored {driver}: {c} {p} {x}"
             );
         }
+    }
+
+    /// idle + a baked walk_right (`disable_springs = ["gait"]`) + an
+    /// engine-clean walk_left (6 frames @ 10 fps).
+    fn gait_manifest() -> Manifest {
+        let mut s = String::new();
+        for (name, extra) in [
+            ("idle", ""),
+            ("walk_right", "tags = [\"baked_motion\"]\ndisable_springs = [\"gait\"]\n"),
+            ("walk_left", ""),
+        ] {
+            s += &format!("[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\n{extra}frames = [");
+            for i in 0..6 {
+                s += &format!(
+                    "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                    i * 400
+                );
+            }
+            s += "]\n";
+        }
+        Manifest::from_toml_str(&s).unwrap()
+    }
+
+    #[test]
+    fn engine_gait_is_off_by_default_and_skips_baked_walk_clips() {
+        let mut a = Animator::new(gait_manifest(), driven()).unwrap();
+        assert!(a.manifest().clips["walk_right"].bakes_gait());
+        assert!(!a.manifest().clips["walk_left"].bakes_gait());
+        assert!(a.spring_mask().is_empty(), "gait is not a spring channel");
+        // Bundled physics.toml: [gait] enabled = false.
+        assert!(!a.driver().unwrap().gait_enabled());
+        a.walk(Dir::Left, false).unwrap();
+        run(&mut a, 2.0);
+        assert_eq!(a.physics_overlay().unwrap().gait.gait_amp, 0.0);
+        a.stand();
+        run(&mut a, 1.0);
+
+        // Ko flips it on.
+        a.driver_mut().unwrap().set_gait_enabled(true);
+        // Baked walk: suppressed, nothing procedural on top of the video.
+        a.walk(Dir::Right, false).unwrap();
+        assert_eq!(a.current().clip_name, "walk_right");
+        assert!(a.driver().unwrap().gait_suppressed());
+        assert!(a.spring_mask().is_empty(), "jiggle springs untouched");
+        run(&mut a, 2.0);
+        let g = a.physics_overlay().unwrap().gait;
+        assert_eq!((g.gait_amp, g.hip_bob_px, g.left_arm_deg), (0.0, 0.0, 0.0));
+        // Engine-clean walk: the gait drives it.
+        a.walk(Dir::Left, false).unwrap();
+        assert_eq!(a.current().clip_name, "walk_left");
+        let d = a.driver().unwrap();
+        assert!(!d.gait_suppressed() && d.gait_active());
+        run(&mut a, 2.0);
+        let g = a.physics_overlay().unwrap().gait;
+        assert!(g.gait_amp > 0.99, "stride {}", g.gait_amp);
+        assert!(g.left_arm_deg.abs() + g.right_arm_deg.abs() > 1.0);
+        // Back to idle: not a baked clip, gait ramps out on its own.
+        a.stand();
+        assert!(!a.driver().unwrap().gait_suppressed());
     }
 
     #[test]

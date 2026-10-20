@@ -309,6 +309,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front -> left", "baked_motion", "blend"]
+disable_springs = ["gait"]
 
 [clips.blend_idle_to_walk_left.blend]
 from = "idle"
@@ -365,6 +366,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front -> right", "baked_motion", "blend"]
+disable_springs = ["gait"]
 
 [clips.blend_idle_to_walk_right.blend]
 from = "idle"
@@ -680,6 +682,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:left -> front", "baked_motion", "blend"]
+disable_springs = ["gait"]
 
 [clips.blend_walk_left_to_idle.blend]
 from = "walk_left"
@@ -736,6 +739,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:right -> front", "baked_motion", "blend"]
+disable_springs = ["gait"]
 
 [clips.blend_walk_right_to_idle.blend]
 from = "walk_right"
@@ -13532,6 +13536,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:left", "baked_motion"]
+disable_springs = ["gait"]
 
 [[clips.run_left.frames]]
 x = 0
@@ -13610,6 +13615,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:right", "baked_motion"]
+disable_springs = ["gait"]
 
 [[clips.run_right.frames]]
 x = 0
@@ -14996,6 +15002,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.537
 tags = ["canonical", "facing:left", "baked_motion", "allure"]
+disable_springs = ["gait"]
 
 [[clips.strut_left.frames]]
 x = 0
@@ -15067,6 +15074,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.537
 tags = ["canonical", "facing:right", "baked_motion", "allure"]
+disable_springs = ["gait"]
 
 [[clips.strut_right.frames]]
 x = 0
@@ -16616,6 +16624,7 @@ scale = 0.54
 tags = ["canonical", "facing:left", "baked_motion"]
 root_motion = [-20.0, -21.0, -21.0, -18.0, -22.0, -21.0, -22.0, -21.0, -22.0, -10.0, -18.0, -22.0, -21.0, -23.0]
 contact_frames = [3, 9]
+disable_springs = ["gait"]
 
 [[clips.walk_left.frames]]
 x = 0
@@ -16724,6 +16733,7 @@ scale = 0.54
 tags = ["canonical", "facing:right", "baked_motion"]
 root_motion = [20.0, 21.0, 21.0, 18.0, 22.0, 21.0, 22.0, 21.0, 22.0, 10.0, 18.0, 22.0, 21.0, 23.0]
 contact_frames = [3, 9]
+disable_springs = ["gait"]
 
 [[clips.walk_right.frames]]
 x = 0
