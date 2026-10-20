@@ -160,7 +160,7 @@
    "from": "idle",
    "to": "walk_left",
    "from_frame": 0,
-   "to_frame": 0
+   "to_frame": 12
   },
   {
    "frame_count": 6,
@@ -192,7 +192,7 @@
    "from": "idle",
    "to": "walk_right",
    "from_frame": 0,
-   "to_frame": 0
+   "to_frame": 5
   },
   {
    "frame_count": 4,
@@ -383,7 +383,7 @@
    "blend": true,
    "from": "walk_left",
    "to": "idle",
-   "from_frame": 0,
+   "from_frame": 10,
    "to_frame": 0
   },
   {
@@ -415,7 +415,7 @@
    "blend": true,
    "from": "walk_right",
    "to": "idle",
-   "from_frame": 0,
+   "from_frame": 9,
    "to_frame": 0
   },
   {
@@ -3688,6 +3688,26 @@
    "frames": "walk_left/frames/",
    "tags": [
     "baked_motion"
+   ],
+   "root_motion": [
+    -20.0,
+    -21.0,
+    -21.0,
+    -18.0,
+    -22.0,
+    -21.0,
+    -22.0,
+    -21.0,
+    -22.0,
+    -10.0,
+    -18.0,
+    -22.0,
+    -21.0,
+    -23.0
+   ],
+   "contact_frames": [
+    3,
+    9
    ]
   },
   {
@@ -3715,6 +3735,26 @@
    "frames": "walk_right/frames/",
    "tags": [
     "baked_motion"
+   ],
+   "root_motion": [
+    20.0,
+    21.0,
+    21.0,
+    18.0,
+    22.0,
+    21.0,
+    22.0,
+    21.0,
+    22.0,
+    10.0,
+    18.0,
+    22.0,
+    21.0,
+    23.0
+   ],
+   "contact_frames": [
+    3,
+    9
    ]
   },
   {

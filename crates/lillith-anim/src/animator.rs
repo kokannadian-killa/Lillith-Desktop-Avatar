@@ -93,6 +93,12 @@ pub struct AnimatorConfig {
     /// whenever one exists. The sibling's `disable_springs` then switches the
     /// matching engine springs off while it is drawn (no double bounce).
     pub prefer_jiggle_variants: bool,
+    /// Play the manifest's blend helpers (`blend_idle_to_walk_*`,
+    /// `blend_walk_*_to_idle`) when a walk starts from idle or stops,
+    /// instead of cutting straight between the front-facing idle and the
+    /// side-on walk. The stop waits (at most one cycle) for the walk frame
+    /// the blend was cut from, so the legs don't jump.
+    pub walk_blends: bool,
 }
 
 /// Clip tag: the frames already contain bouncy secondary motion.
@@ -119,6 +125,7 @@ impl Default for AnimatorConfig {
             physics_driver: false,
             baked_motion_gain: 0.2,
             prefer_jiggle_variants: false,
+            walk_blends: true,
         }
     }
 }
@@ -307,6 +314,17 @@ pub struct Animator {
     variant_rng: u64,
     /// Springs switched off for the clip drawn now (its `disable_springs`).
     spring_mask: SpringMask,
+    /// Root motion (cell px, +x = right on screen) the drawn locomotion
+    /// frames advanced since the last [`Animator::take_root_motion`].
+    root_dx: f32,
+    /// Footfalls fired so far (alternates the pigtail sway).
+    foot: u32,
+    /// A walk→idle blend waiting for its matching walk frame.
+    stopping: Option<String>,
+    /// Seconds spent waiting in `stopping`.
+    stop_wait_s: f32,
+    /// After an idle→walk blend: the walk clip and the frame to resume on.
+    entry: Option<(String, usize)>,
 }
 
 /// Variant clips of `base` (tag `variant_of:<base>`), sorted by name.
@@ -393,6 +411,11 @@ impl Animator {
             variant_age: 0.0,
             variant_rng: cfg.seed | 1,
             spring_mask: SpringMask::NONE,
+            root_dx: 0.0,
+            foot: 0,
+            stopping: None,
+            stop_wait_s: 0.0,
+            entry: None,
             manifest,
             cfg,
         })
@@ -604,9 +627,17 @@ impl Animator {
 
     /// Switches the base clip (restarts it), e.g. `idle`, `sleep`, `sit_swing`.
     pub fn set_base(&mut self, name: &str, flip: bool) -> Result<(), AnimError> {
-        let clip = self.clip(name)?;
+        self.clip(name)?;
         if self.base != name || self.base_flip != flip {
-            self.base_player = ClipPlayer::for_clip(clip);
+            if self.stopping.take().is_some() {
+                // A pending walk stop overtaken by another base (e.g. a
+                // drag): the locomotion still has to end.
+                if let Some(d) = &mut self.driver {
+                    d.set_motion(Motion::Idle);
+                }
+            }
+            self.entry = None;
+            self.base_player = ClipPlayer::for_clip(&self.manifest.clips[name]);
             if name == self.idle_base && !self.idle_variants.is_empty() {
                 if self.variant_due() {
                     self.next_idle_variant();
@@ -649,11 +680,16 @@ impl Animator {
         let (name, flip) = self.locomotion_clip(dir, running).ok_or_else(|| {
             AnimError::UnknownClip(if running { "run_*" } else { "walk_*" }.into())
         })?;
-        let starting = self.base != name;
+        let starting = self.base != name || self.base_flip != flip;
+        let from_idle = self.base == self.idle_base;
+        // A new walk order cancels a pending stop.
+        self.stopping = None;
         self.set_base(&name, flip)?;
         if starting {
             let s = if dir == Dir::Right { 1.0 } else { -1.0 };
+            let frame_footfalls = self.manifest.clips[&name].contact_frames.is_some();
             if let Some(d) = &mut self.driver {
+                d.set_frame_footfalls(frame_footfalls);
                 let vx = s * d.config().walk.demo_speed_px_s * if running { 2.0 } else { 1.0 };
                 let cycle_s = self.manifest.clips[&name].duration_s();
                 // Leave the current locomotion first so a direction change
@@ -670,12 +706,104 @@ impl Animator {
                     .impulse(Channel::Angle, s * if running { 2.0 * tip } else { tip });
                 self.physics.impulse(Channel::Pigtail, -s * 40.0);
             }
+            self.foot = 0;
+            if from_idle && self.cfg.walk_blends && self.overlay.is_none() {
+                let idle = self.idle_base.clone();
+                if let Some(b) = self.blend_between(&idle, &name) {
+                    let to = self.manifest.clips[&b]
+                        .blend
+                        .as_ref()
+                        .map_or(0, |bl| bl.to_frame as usize);
+                    let dur = ClipPlayer::for_clip(&self.manifest.clips[&b]).duration_s();
+                    self.start_overlay(b, flip, OverlayKind::Transition { remaining_s: dur });
+                    self.entry = Some((name.clone(), to));
+                }
+            }
         }
         Ok(())
     }
 
-    /// Back to the idle base; a walk→stop overshoots the other way.
+    /// The blend helper clip from `from` to `to`, if the manifest has one.
+    fn blend_between(&self, from: &str, to: &str) -> Option<String> {
+        self.manifest
+            .clips
+            .iter()
+            .find(|(_, c)| {
+                c.blend
+                    .as_ref()
+                    .is_some_and(|b| b.from == from && b.to == to)
+            })
+            .map(|(n, _)| n.clone())
+    }
+
+    /// `root_motion` of the drawn clip `name` (or of the clean clip a
+    /// baked-jiggle sibling was made from).
+    fn root_motion_of(&self, name: &str) -> Option<&[f32]> {
+        let c = self.manifest.clips.get(name)?;
+        c.root_motion.as_deref().or_else(|| {
+            c.jiggle_of
+                .as_deref()
+                .and_then(|o| self.manifest.clips.get(o))
+                .and_then(|o| o.root_motion.as_deref())
+        })
+    }
+
+    /// `contact_frames` of the drawn clip `name` (see [`Self::root_motion_of`]).
+    fn contact_frames_of(&self, name: &str) -> Option<&[usize]> {
+        let c = self.manifest.clips.get(name)?;
+        c.contact_frames.as_deref().or_else(|| {
+            c.jiggle_of
+                .as_deref()
+                .and_then(|o| self.manifest.clips.get(o))
+                .and_then(|o| o.contact_frames.as_deref())
+        })
+    }
+
+    /// `true` if the base clip is a locomotion cycle with `root_motion`: the
+    /// window should then move by [`Animator::take_root_motion`] instead of
+    /// at a fixed speed, so the planted foot stays put on the desktop.
+    pub fn base_has_root_motion(&self) -> bool {
+        self.root_motion_of(self.drawn_base(&self.base)).is_some()
+    }
+
+    /// Ground advance (cell px, +x = right on screen) of the locomotion
+    /// frames drawn since the last call; resets it. Multiply by the overlay
+    /// scale for screen px.
+    pub fn take_root_motion(&mut self) -> f32 {
+        std::mem::take(&mut self.root_dx)
+    }
+
+    /// `true` while a stop is waiting for the walk→idle blend's frame.
+    pub fn stopping(&self) -> bool {
+        self.stopping.is_some()
+    }
+
+    /// Back to the idle base; a walk→stop overshoots the other way. With
+    /// [`AnimatorConfig::walk_blends`] and a `blend_<walk>_to_idle` clip, the
+    /// walk carries on until it reaches the frame the blend starts from
+    /// (or the matching frame of the other step), then the blend plays.
     pub fn stand(&mut self) {
+        if self.stopping.is_some() {
+            return;
+        }
+        if self.base != self.idle_base
+            && self.cfg.walk_blends
+            && self.overlay.is_none()
+            && footfall_for(&self.base).is_some()
+        {
+            let (base, idle) = (self.base.clone(), self.idle_base.clone());
+            if let Some(b) = self.blend_between(&base, &idle) {
+                self.stopping = Some(b);
+                self.stop_wait_s = 0.0;
+                return;
+            }
+        }
+        self.finish_stand(None);
+    }
+
+    /// The actual switch to idle, optionally through `blend`.
+    fn finish_stand(&mut self, blend: Option<String>) {
+        self.stopping = None;
         if self.base != self.idle_base {
             let s = if self.base_flip || self.base.ends_with("_left") {
                 -1.0
@@ -689,8 +817,13 @@ impl Animator {
                 self.physics.impulse(Channel::Pigtail, s * 50.0);
                 self.physics.impulse(Channel::Chest, 25.0);
             }
+            let flip = self.base_flip;
             let idle = self.idle_base.clone();
             let _ = self.set_base(&idle, false);
+            if let Some(b) = blend {
+                let dur = ClipPlayer::for_clip(&self.manifest.clips[&b]).duration_s();
+                self.start_overlay(b, flip, OverlayKind::Transition { remaining_s: dur });
+            }
         }
     }
 
@@ -886,7 +1019,19 @@ impl Animator {
             };
         }
         if done {
-            self.overlay = None;
+            let ended = self.overlay.take().map(|o| o.clip);
+            // An idle→walk blend hands over on the walk frame it leads into.
+            if let (Some(c), Some((walk, f))) = (ended, self.entry.clone()) {
+                let leads_in = self.manifest.clips[&c]
+                    .blend
+                    .as_ref()
+                    .is_some_and(|b| b.to == walk);
+                if leads_in && self.base == walk {
+                    self.entry = None;
+                    self.base_player = ClipPlayer::for_clip(&self.manifest.clips[&walk]);
+                    self.base_player.seek(f);
+                }
+            }
             if let Some(q) = self.queue.pop_front() {
                 self.start_overlay(
                     q.clip,
@@ -905,15 +1050,66 @@ impl Animator {
         };
         let key = (name.clone(), frame);
         if self.last_key.as_ref() != Some(&key) {
-            // (The driver derives footfalls from the locomotion cycle.)
-            if let Some(kick) = footfall_for(&name).filter(|_| self.driver.is_none()) {
-                let n = self.manifest.clips[&name].frames.len();
-                let half = (n / 2).max(1);
-                if frame % half == 0 {
-                    kick.apply(&mut self.physics, if flip { -1.0 } else { 1.0 });
+            let sign = if flip { -1.0 } else { 1.0 };
+            // Root motion: the frames stepped through on the same clip
+            // (normally one; more after a long tick).
+            if let (Some((prev, pf)), Some(rm)) = (&self.last_key, self.root_motion_of(&name)) {
+                if *prev == name && !rm.is_empty() {
+                    let n = rm.len();
+                    let mut k = *pf % n;
+                    let mut dx = 0.0;
+                    for _ in 0..n {
+                        if k == frame {
+                            break;
+                        }
+                        dx += rm[k];
+                        k = (k + 1) % n;
+                    }
+                    self.root_dx += sign * dx;
+                }
+            }
+            // Footfalls: on the art's contact frames when the clip lists
+            // them, else twice per cycle (legacy) / cycle-derived (driver).
+            if let Some(kick) = footfall_for(&name) {
+                if let Some(cf) = self.contact_frames_of(&name) {
+                    if cf.contains(&frame) {
+                        let foot = self.foot;
+                        self.foot += 1;
+                        match &mut self.driver {
+                            Some(d) => d.on_footfall(foot),
+                            None => kick.apply(&mut self.physics, sign),
+                        }
+                    }
+                } else if self.driver.is_none() {
+                    let n = self.manifest.clips[&name].frames.len();
+                    let half = (n / 2).max(1);
+                    if frame % half == 0 {
+                        kick.apply(&mut self.physics, sign);
+                    }
+                }
+            }
+            // A pending stop: hand over to the walk→idle blend on the frame
+            // it was cut from (or the same pose on the other foot).
+            if let Some(b) = self.stopping.clone() {
+                let from = self.manifest.clips[&b]
+                    .blend
+                    .as_ref()
+                    .map_or(0, |bl| bl.from_frame as usize);
+                let walking = self.drawn(&self.base) == name;
+                let n = self.manifest.clips[&name].frames.len().max(1);
+                if walking && (frame == from % n || frame == (from + n / 2) % n) {
+                    self.finish_stand(Some(b));
                 }
             }
             self.last_key = Some(key);
+        }
+        if self.stopping.is_some() {
+            // Never wait more than one cycle (or behind a reaction).
+            self.stop_wait_s += dt;
+            let cycle = self.manifest.clips[&self.base].duration_s();
+            if self.overlay.is_some() || self.stop_wait_s > cycle + 0.05 {
+                self.finish_stand(None);
+            }
         }
 
         self.sync_spring_mask();

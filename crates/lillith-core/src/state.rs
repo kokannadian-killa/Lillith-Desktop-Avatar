@@ -57,7 +57,13 @@ pub struct BehaviorConfig {
     pub left_repeat_s: f32,
     /// Pause between wander walks, `[min, max]` s.
     pub wander_every_s: (f32, f32),
+    /// Glide speed for walks whose clip has no `root_motion`. Walk clips
+    /// with root motion set their own pace (see `walk_root_motion`).
     pub wander_speed_px_s: f32,
+    /// Move the window by the walk clip's measured root motion (the overlay
+    /// feeds [`Brain::root_motion`]) so the planted foot stays put on the
+    /// desktop, instead of gliding at `wander_speed_px_s`.
+    pub walk_root_motion: bool,
     /// Shortest walk worth taking (px).
     pub wander_min_step_px: f32,
     /// Events at or above this priority wake her up.
@@ -79,6 +85,7 @@ impl Default for BehaviorConfig {
             left_repeat_s: 4.0,
             wander_every_s: (60.0, 120.0),
             wander_speed_px_s: 60.0,
+            walk_root_motion: true,
             wander_min_step_px: 120.0,
             event_wake_priority: 80,
             idle: crate::idle::IdleConfig::default(),
@@ -280,6 +287,8 @@ pub struct Brain {
     x: f32,
     area: Option<(f32, f32)>,
     muted: bool,
+    /// The overlay drives walks by root motion right now.
+    root_motion: bool,
     out: Vec<Action>,
 }
 
@@ -316,6 +325,7 @@ impl Brain {
             x: 0.0,
             area: None,
             muted: false,
+            root_motion: false,
             out: Vec::new(),
         }
     }
@@ -371,6 +381,56 @@ impl Brain {
     /// Current x (after a drop or at start-up).
     pub fn set_position(&mut self, x: f32) {
         self.x = x;
+    }
+
+    /// The overlay reports whether the drawn walk has root motion. While on
+    /// (and `walk_root_motion` is set) walks advance only through
+    /// [`Brain::root_motion`], not at `wander_speed_px_s`.
+    pub fn set_root_motion(&mut self, on: bool) {
+        self.root_motion = on && self.cfg.walk_root_motion;
+    }
+
+    /// Ground the walk animation covered this tick (screen px, signed,
+    /// +x = right). While walking she advances by it (never past the
+    /// target, which ends the walk); right after a stop it carries the last
+    /// steps of the walk-out, clamped to the wander area.
+    pub fn root_motion(&mut self, dx: f32) -> Vec<Action> {
+        if dx == 0.0 || !self.root_motion {
+            return self.take();
+        }
+        match self.phase {
+            Phase::Walking { target, .. } => {
+                let d = target - self.x;
+                if dx.signum() != d.signum() || dx.abs() >= d.abs() {
+                    self.x = target;
+                    self.phase = Phase::Idle;
+                    self.out.push(Action::MoveTo {
+                        left: self.x.round() as i32,
+                    });
+                    self.out.push(Action::Stand);
+                    self.schedule_wander();
+                } else {
+                    self.x += dx;
+                    self.out.push(Action::MoveTo {
+                        left: self.x.round() as i32,
+                    });
+                }
+            }
+            Phase::Idle => {
+                let mut x = self.x + dx;
+                if let Some((lo, hi)) = self.area {
+                    x = x.clamp(lo, hi);
+                }
+                if x != self.x {
+                    self.x = x;
+                    self.out.push(Action::MoveTo {
+                        left: self.x.round() as i32,
+                    });
+                }
+            }
+            _ => {}
+        }
+        self.take()
     }
 
     pub fn set_mode(&mut self, mode: MoveMode) -> Vec<Action> {
@@ -485,7 +545,8 @@ impl Brain {
         }
 
         // Walking.
-        if let Phase::Walking { target, .. } = self.phase {
+        // (With root motion on, the overlay advances her via `root_motion`.)
+        if let (Phase::Walking { target, .. }, false) = (self.phase, self.root_motion) {
             let step = self.cfg.wander_speed_px_s * dt;
             let d = target - self.x;
             if d.abs() <= step {

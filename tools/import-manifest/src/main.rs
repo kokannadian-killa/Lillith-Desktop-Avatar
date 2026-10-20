@@ -37,7 +37,10 @@
 //! - blend helpers (`blend: true`, `from`, `to`, `from_frame`, `to_frame`,
 //!   optional `blend_t` / `easing`) -> `blend = { ... }` plus a `blend` tag.
 //!   Blend clips describe `scale` as text ("interpolated ..."); that becomes a
-//!   `scale:interpolated` tag.
+//!   `scale:interpolated` tag;
+//! - locomotion metadata `root_motion` (one cell-px advance per frame) and
+//!   `contact_frames` (heel-strike frames) -> the clip fields of the same
+//!   names.
 //!
 //! Baked-jiggle batch (2026-10, 197 clips):
 //! - `jiggle_baked`, `jiggle_of` (on the `<name>_jiggle` variant) and
@@ -316,6 +319,9 @@ fn convert(
         seat_y: typed_field(&anim.name, &anim.extra, side, "seat_y")?,
         seat_x_range: typed_field(&anim.name, &anim.extra, side, "seat_x_range")?,
         feet_lowest_y: typed_field(&anim.name, &anim.extra, side, "feet_lowest_y")?,
+        // Locomotion: per-frame root motion and footfall frames (in-place cycles).
+        root_motion: typed_field(&anim.name, &anim.extra, side, "root_motion")?,
+        contact_frames: typed_field(&anim.name, &anim.extra, side, "contact_frames")?,
         // Event reaction metadata: which base clip/frames it composes from.
         event: typed_field(&anim.name, &anim.extra, side, "event")?,
         base_clip: typed_field(&anim.name, &anim.extra, side, "base_clip")?,
@@ -739,7 +745,8 @@ mod tests {
         )
         .unwrap();
         let seat_side: Value = serde_json::from_str(
-            r#"{ "seat_y": 230, "seat_x_range": [136, 279], "feet_lowest_y": 364 }"#,
+            r#"{ "seat_y": 230, "seat_x_range": [136, 279], "feet_lowest_y": 364,
+                 "root_motion": [20.5], "contact_frames": [0] }"#,
         )
         .unwrap();
         let a = &json.animations;
@@ -752,6 +759,9 @@ mod tests {
         assert_eq!(sit.seat_y, Some(230));
         assert_eq!(sit.seat_x_range, Some((136, 279)));
         assert_eq!(sit.feet_lowest_y, Some(364));
+        assert_eq!(sit.root_motion.as_deref(), Some(&[20.5][..]));
+        assert_eq!(sit.contact_frames.as_deref(), Some(&[0][..]));
+        assert_eq!(think.root_motion, None);
         // Not misread as attachment points; feet anchor untouched.
         assert!(sit.points.is_empty());
         assert_eq!(sit.frames[0].anchor, (200, 392));

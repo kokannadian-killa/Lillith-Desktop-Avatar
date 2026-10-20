@@ -278,6 +278,9 @@ pub struct PhysicsDriver {
     facing: f32,
     walk_phase: f32,
     foot: u32,
+    /// Footfalls come from the clip player ([`PhysicsDriver::on_footfall`]
+    /// on the art's contact frames) instead of fixed cycle phases.
+    frame_footfalls: bool,
     // gait (only active with a [gait] table)
     gait_cycle: f32,
     gait_lin: f32,
@@ -414,6 +417,7 @@ impl PhysicsDriver {
             facing: 1.0,
             walk_phase: 0.0,
             foot: 0,
+            frame_footfalls: false,
             gait_cycle,
             gait_lin: 0.0,
             arm_l,
@@ -560,6 +564,13 @@ impl PhysicsDriver {
         self.mood_from = self.mood_to;
         self.blend_t = 1.0;
         self.apply_mood_params();
+    }
+
+    /// `true`: locomotion footfalls are fed frame-accurately by the clip
+    /// player through [`PhysicsDriver::on_footfall`]; the cycle-derived ones
+    /// (fixed phases 0 and 1/2 of the cycle) are skipped.
+    pub fn set_frame_footfalls(&mut self, on: bool) {
+        self.frame_footfalls = on;
     }
 
     pub fn set_motion(&mut self, m: Motion) {
@@ -1409,8 +1420,9 @@ impl PhysicsDriver {
             let n = c.walk.footfalls_per_cycle.max(1) as f32;
             let before = (self.walk_phase * n).floor();
             self.walk_phase += h / cycle.max(0.05);
-            if (self.walk_phase * n).floor() > before
-                || (self.walk_phase <= h / cycle && self.foot == 0)
+            if !self.frame_footfalls
+                && ((self.walk_phase * n).floor() > before
+                    || (self.walk_phase <= h / cycle && self.foot == 0))
             {
                 let foot = self.foot;
                 self.foot += 1;
