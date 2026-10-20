@@ -220,6 +220,14 @@ fn convert(
     if let Some(f) = &anim.facing {
         tags.push(format!("facing:{f}"));
     }
+    // Free-form tags from the entry (else the per-animation JSON), e.g.
+    // `baked_motion` or `variant_of:idle` (generated_v2).
+    let json_tags: Option<Vec<String>> = typed_field(&anim.name, &anim.extra, side, "tags")?;
+    for t in json_tags.unwrap_or_default() {
+        if !tags.contains(&t) {
+            tags.push(t);
+        }
+    }
     // Held/dragged poses keep the shared feet anchor (so swapping clips
     // doesn't jump); record how far the feet hang above it.
     if let Some(px) = int_field(&anim.extra, side, "feet_off_ground_px") {

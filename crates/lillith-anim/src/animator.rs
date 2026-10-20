@@ -83,7 +83,20 @@ pub struct AnimatorConfig {
     /// Drive the springs with the physics.toml [`PhysicsDriver`] instead of
     /// the built-in kick tables (off by default; the app turns it on).
     pub physics_driver: bool,
+    /// Gain on the engine's secondary motion (chest/pigtail springs and the
+    /// breathing scale) while a clip tagged [`BAKED_MOTION_TAG`] is drawn.
+    /// Video-based (generated_v2) clips bake bounce and hair/tail follow-through
+    /// into the pixels; full engine springs on top would double the motion.
+    /// 1.0 = no change, 0.0 = off. Root offset/angle (drag, footfalls) stay.
+    pub baked_motion_gain: f32,
 }
+
+/// Clip tag: the frames already contain bouncy secondary motion.
+pub const BAKED_MOTION_TAG: &str = "baked_motion";
+/// Clip tag prefix: `variant_of:<clip>` marks an alternative take of `<clip>`.
+/// While `<clip>` is the idle base, the animator draws one of its variants
+/// and picks a new one at random at every loop end.
+pub const VARIANT_OF_TAG: &str = "variant_of:";
 
 impl Default for AnimatorConfig {
     fn default() -> Self {
@@ -99,6 +112,7 @@ impl Default for AnimatorConfig {
             blink_clip: "blink_wink".into(),
             idle_enabled: true,
             physics_driver: false,
+            baked_motion_gain: 0.2,
         }
     }
 }
@@ -277,6 +291,25 @@ pub struct Animator {
     driver: Option<PhysicsDriver>,
     last_key: Option<(String, usize)>,
     idle_base: String,
+    /// Clips tagged `variant_of:<idle_base>` (sorted); empty = no cycling.
+    idle_variants: Vec<String>,
+    /// Index into `idle_variants` currently drawn for the idle base.
+    idle_pick: usize,
+    /// xorshift state for the variant pick (seeded from `cfg.seed`).
+    variant_rng: u64,
+}
+
+/// Variant clips of `base` (tag `variant_of:<base>`), sorted by name.
+fn variants_of(manifest: &Manifest, base: &str) -> Vec<String> {
+    let tag = format!("{VARIANT_OF_TAG}{base}");
+    let mut v: Vec<String> = manifest
+        .clips
+        .iter()
+        .filter(|(_, c)| c.tags.iter().any(|t| *t == tag))
+        .map(|(n, _)| n.clone())
+        .collect();
+    v.sort();
+    v
 }
 
 fn once_player(clip: &Clip) -> ClipPlayer {
@@ -317,7 +350,9 @@ impl Animator {
                 .ok_or(AnimError::Empty)?
                 .clone()
         };
-        let base_player = ClipPlayer::for_clip(&manifest.clips[&idle_base]);
+        let idle_variants = variants_of(&manifest, &idle_base);
+        let base_player =
+            ClipPlayer::for_clip(&manifest.clips[idle_variants.first().unwrap_or(&idle_base)]);
         let idle = IdleLife::with_available(cfg.idle.clone(), cfg.seed, |n| {
             manifest.clips.contains_key(n)
         });
@@ -343,6 +378,9 @@ impl Animator {
             physics,
             driver,
             last_key: None,
+            idle_variants,
+            idle_pick: 0,
+            variant_rng: cfg.seed | 1,
             manifest,
             cfg,
         })
@@ -431,6 +469,53 @@ impl Animator {
         self.cfg.idle_enabled = on;
     }
 
+    /// The clip actually drawn for base `name`: a variant for the idle base
+    /// when variants exist, else `name` itself.
+    fn drawn_base<'a>(&'a self, name: &'a str) -> &'a str {
+        if name == self.idle_base && !self.idle_variants.is_empty() {
+            &self.idle_variants[self.idle_pick]
+        } else {
+            name
+        }
+    }
+
+    /// Idle variant currently drawn, if the idle base has variants.
+    pub fn idle_variant(&self) -> Option<&str> {
+        self.idle_variants.get(self.idle_pick).map(String::as_str)
+    }
+
+    /// Picks the next idle variant at random (never the same one twice in a
+    /// row when there are two or more) and restarts the base player on it.
+    fn next_idle_variant(&mut self) {
+        let n = self.idle_variants.len();
+        if n < 2 {
+            return;
+        }
+        let mut x = self.variant_rng;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.variant_rng = x;
+        let step = 1 + (x % (n as u64 - 1)) as usize;
+        self.idle_pick = (self.idle_pick + step) % n;
+        let clip = &self.manifest.clips[&self.idle_variants[self.idle_pick]];
+        self.base_player = ClipPlayer::for_clip(clip);
+    }
+
+    /// Spring transform for a frame of `clip`: secondary channels (chest,
+    /// pigtail, breathing scale) are scaled by `baked_motion_gain` when the
+    /// clip is tagged [`BAKED_MOTION_TAG`].
+    fn transform_for(&self, clip: &Clip) -> Transform {
+        let mut t = self.physics().transform();
+        if clip.tags.iter().any(|x| x == BAKED_MOTION_TAG) {
+            let g = self.cfg.baked_motion_gain;
+            t.chest_offset *= g;
+            t.pigtail_offset *= g;
+            t.scale = 1.0 + (t.scale - 1.0) * g;
+        }
+        t
+    }
+
     fn clip(&self, name: &str) -> Result<&Clip, AnimError> {
         self.manifest
             .clips
@@ -443,6 +528,9 @@ impl Animator {
         let clip = self.clip(name)?;
         if self.base != name || self.base_flip != flip {
             self.base_player = ClipPlayer::for_clip(clip);
+            if name == self.idle_base && !self.idle_variants.is_empty() {
+                self.next_idle_variant();
+            }
             self.base = name.to_string();
             self.base_flip = flip;
         }
@@ -677,7 +765,12 @@ impl Animator {
                 .set_target(Channel::Chest, self.cfg.breath_chest * b);
         }
 
+        let before = self.base_player.frame();
         self.base_player.advance(dt);
+        // Idle variants: a new random take at every loop end of the idle base.
+        if self.base == self.idle_base && self.base_player.frame() < before {
+            self.next_idle_variant();
+        }
         if let Some(bl) = &mut self.blink {
             bl.elapsed += dt;
             if bl.elapsed >= *bl.ends.last().unwrap_or(&0.0) {
@@ -734,9 +827,9 @@ impl Animator {
 
     /// The frame to draw now, with the spring transform.
     pub fn current(&self) -> FrameRef<'_> {
-        let transform = self.physics().transform();
         if let Some(o) = &self.overlay {
             let clip = &self.manifest.clips[&o.clip];
+            let transform = self.transform_for(clip);
             let frame = o.player.frame().min(clip.frames.len() - 1);
             return FrameRef {
                 clip_name: &o.clip,
@@ -763,6 +856,7 @@ impl Animator {
                 .get_key_value(&self.cfg.blink_clip)
                 .expect("blink clip checked on start");
             let frame = bl.frames[idx].min(clip.frames.len() - 1);
+            let transform = self.transform_for(clip);
             return FrameRef {
                 clip_name: name,
                 clip,
@@ -773,10 +867,12 @@ impl Animator {
                 transform,
             };
         }
-        let clip = &self.manifest.clips[&self.base];
+        let name = self.drawn_base(&self.base);
+        let clip = &self.manifest.clips[name];
         let frame = self.base_player.frame().min(clip.frames.len() - 1);
+        let transform = self.transform_for(clip);
         FrameRef {
-            clip_name: &self.base,
+            clip_name: name,
             clip,
             frame,
             rect: clip.frames[frame],
@@ -1091,5 +1187,87 @@ mod tests {
         run(&mut a, 1.0);
         assert!(a.current().transform.angle.abs() > 0.05, "dangling sway");
         a.set_dragged(None);
+    }
+
+    /// idle (alias) + two tagged variants with baked motion, 4 frames @ 10 fps.
+    fn variant_manifest() -> Manifest {
+        let mut s = String::new();
+        for (name, tags) in [
+            ("idle", "[\"baked_motion\"]"),
+            ("idle_a", "[\"baked_motion\", \"variant_of:idle\"]"),
+            ("idle_b", "[\"baked_motion\", \"variant_of:idle\"]"),
+            ("wave", "[]"),
+        ] {
+            s += &format!("[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\nmode = \"loop\"\ntags = {tags}\nframes = [");
+            for i in 0..4 {
+                s += &format!(
+                    "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                    i * 400
+                );
+            }
+            s += "]\n";
+        }
+        Manifest::from_toml_str(&s).unwrap()
+    }
+
+    #[test]
+    fn idle_variants_cycle_at_loop_end() {
+        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+        assert_eq!(a.base(), "idle");
+        let mut seen = std::collections::BTreeSet::new();
+        let mut last = a.current().clip_name.to_string();
+        let mut switches = 0;
+        for _ in 0..(20 * 60) {
+            a.tick(1.0 / 60.0);
+            let c = a.current().clip_name.to_string();
+            assert!(c == "idle_a" || c == "idle_b", "drew {c}");
+            if c != last {
+                switches += 1;
+                last = c.clone();
+            }
+            seen.insert(c);
+        }
+        assert_eq!(seen.len(), 2, "both variants drawn");
+        // 0.4 s loops for 20 s: ~50 loop ends, two variants -> always alternate.
+        assert!(switches > 30, "{switches} switches");
+        // Leaving and re-entering idle keeps drawing a variant.
+        a.set_base("wave", false).unwrap();
+        a.tick(0.05);
+        assert_eq!(a.current().clip_name, "wave");
+        a.stand();
+        assert!(a.current().clip_name.starts_with("idle_"));
+    }
+
+    #[test]
+    fn baked_motion_clips_damp_secondary_springs() {
+        let cfg = AnimatorConfig {
+            baked_motion_gain: 0.0,
+            ..quiet()
+        };
+        let mut a = Animator::new(variant_manifest(), cfg).unwrap();
+        a.physics_mut().impulse(Channel::Chest, 80.0);
+        a.physics_mut().impulse(Channel::Pigtail, 80.0);
+        let mut max_baked: f32 = 0.0;
+        for _ in 0..60 {
+            a.tick(1.0 / 60.0);
+            let t = a.current().transform;
+            max_baked = max_baked
+                .max(t.chest_offset.abs())
+                .max(t.pigtail_offset.abs())
+                .max((t.scale - 1.0).abs());
+        }
+        assert!(max_baked < 1e-6, "baked clip still moved {max_baked}");
+        // Untagged clip: full springs.
+        a.set_base("wave", false).unwrap();
+        a.physics_mut().impulse(Channel::Chest, 80.0);
+        let mut max_plain: f32 = 0.0;
+        for _ in 0..60 {
+            a.tick(1.0 / 60.0);
+            max_plain = max_plain.max(a.current().transform.chest_offset.abs());
+        }
+        assert!(
+            max_plain > 0.5,
+            "untagged clip lost its springs {max_plain}"
+        );
     }
 }
