@@ -1,0 +1,217 @@
+{
+  "name": "event_browser_bookmark",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_browser_bookmark_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "browser.bookmark",
+  "rule_events": [
+    "browser.bookmark"
+  ],
+  "event_slug": "browser_bookmark",
+  "base_clip": "dance",
+  "base_frames": [
+    17,
+    19,
+    22,
+    25,
+    28,
+    30,
+    30,
+    30,
+    30,
+    30
+  ],
+  "source_files": [
+    "../../source/video/dance/dance_v3_a.mp4"
+  ],
+  "effects": [
+    "winking dance beat; a rose star on a magenta ribbon pops in with sparkles"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    328,
+    98
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        328,
+        98
+      ],
+      [
+        329,
+        99
+      ],
+      [
+        327,
+        98
+      ],
+      [
+        324,
+        100
+      ],
+      [
+        323,
+        102
+      ],
+      [
+        323,
+        104
+      ],
+      [
+        324,
+        105
+      ],
+      [
+        324,
+        105
+      ],
+      [
+        324,
+        105
+      ],
+      [
+        324,
+        105
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      10.3,
+      -1.5
+    ],
+    [
+      11.3,
+      -1.2
+    ],
+    [
+      8.7,
+      -1.6
+    ],
+    [
+      5.6,
+      -0.3
+    ],
+    [
+      5.0,
+      1.8
+    ],
+    [
+      5.4,
+      4.0
+    ],
+    [
+      5.6,
+      5.4
+    ],
+    [
+      5.6,
+      5.4
+    ],
+    [
+      5.6,
+      5.4
+    ],
+    [
+      5.6,
+      5.4
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/dance (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): winking dance beat; a rose star on a magenta ribbon pops in with sparkles.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      107,
+      312,
+      17,
+      392
+    ],
+    [
+      140,
+      286,
+      23,
+      387
+    ],
+    [
+      142,
+      337,
+      17,
+      392
+    ],
+    [
+      137,
+      343,
+      25,
+      392
+    ],
+    [
+      145,
+      352,
+      19,
+      392
+    ],
+    [
+      146,
+      353,
+      25,
+      386
+    ],
+    [
+      146,
+      352,
+      25,
+      386
+    ],
+    [
+      146,
+      354,
+      25,
+      386
+    ],
+    [
+      146,
+      352,
+      25,
+      386
+    ],
+    [
+      146,
+      354,
+      25,
+      386
+    ]
+  ]
+}

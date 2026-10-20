@@ -18,9 +18,20 @@
 //! # feet_lowest_y = 364
 //! # optional event reaction metadata: event = "cpu_busy",
 //! # base_clip = "facepalm", base_frames = [0, 1, ...] (one per frame)
+//! # rule_events = ["window.opened.folder"]  # every rule event it serves
+//! # optional baked-jiggle pairing: the clean clip names its baked sibling
+//! # (jiggle_variant = "idle_jiggle"); the sibling has jiggle_baked = true,
+//! # jiggle_of = "idle" and the engine spring groups to switch off while it
+//! # is drawn: disable_springs = ["chest", "pigtails", "hip"]
+//! # optional per-frame attachment points (one [x, y] per frame):
+//! # frame_points = { chest_point = [[242, 133], ...], hip_point = [...] }
+//! # optional blend-helper metadata (transition clips between two clips):
+//! # blend = { from = "idle", to = "wave", from_frame = 9, to_frame = 0,
+//! #           blend_t = [0.2, 0.4, 0.6, 0.8], easing = "smoothstep" }
 //! frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
 //! ```
 
+use lillith_core::spring::SpringMask;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -57,6 +68,22 @@ pub enum LoopMode {
     #[default]
     Loop,
     Once,
+}
+
+/// Blend-helper metadata: the clip bridges `from` (after `from_frame`) to
+/// `to` (before `to_frame`); it plays once and its endpoints are not
+/// repeated inside the clip.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Blend {
+    pub from: String,
+    pub to: String,
+    pub from_frame: u32,
+    pub to_frame: u32,
+    /// Interpolation parameter of each in-between frame (informational).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend_t: Option<Vec<f32>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub easing: Option<String>,
 }
 
 /// A named clip: an ordered list of frames on one atlas page.
@@ -106,6 +133,31 @@ pub struct Clip {
     /// Optional frame index into `base_clip` for each of this clip's frames.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_frames: Option<Vec<u32>>,
+    /// Every dotted rule event this clip serves (superset of `event`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rule_events: Vec<String>,
+    /// The frames already contain baked secondary motion (jiggle variant).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub jiggle_baked: bool,
+    /// For a baked-jiggle variant: the engine-clean clip it was baked from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jiggle_of: Option<String>,
+    /// For an engine-clean clip: its baked-jiggle sibling, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jiggle_variant: Option<String>,
+    /// Engine spring groups switched off while this clip is drawn
+    /// (`chest`, `pigtails`, `hip`; see [`SpringMask::group`]), so the
+    /// engine adds no motion on top of baked jiggle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disable_springs: Vec<String>,
+    /// Optional per-frame attachment points (cell coords), one entry per
+    /// frame, e.g. `chest_point` for the jiggle springs. Clip-level medians
+    /// stay in [`Clip::points`].
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub frame_points: BTreeMap<String, Vec<(i32, i32)>>,
+    /// Optional blend-helper metadata (transition between two clips).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend: Option<Blend>,
     pub frames: Vec<FrameRect>,
 }
 
@@ -126,9 +178,20 @@ impl Default for Clip {
             event: None,
             base_clip: None,
             base_frames: None,
+            rule_events: Vec::new(),
+            jiggle_baked: false,
+            jiggle_of: None,
+            jiggle_variant: None,
+            disable_springs: Vec::new(),
+            frame_points: BTreeMap::new(),
+            blend: None,
             frames: Vec::new(),
         }
     }
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 fn default_fps() -> f32 {
@@ -153,6 +216,45 @@ impl Clip {
     /// Named attachment point, if the clip defines it.
     pub fn point(&self, name: &str) -> Option<(i32, i32)> {
         self.points.get(name).copied()
+    }
+
+    /// Attachment point `name` on `frame`: the per-frame value when the clip
+    /// has `frame_points`, else the clip-level [`Clip::points`] value.
+    pub fn point_at(&self, name: &str, frame: usize) -> Option<(i32, i32)> {
+        self.frame_points
+            .get(name)
+            .and_then(|v| v.get(frame).copied())
+            .or_else(|| self.point(name))
+    }
+
+    /// `true` for blend-helper (transition) clips.
+    pub fn is_blend(&self) -> bool {
+        self.blend.is_some()
+    }
+
+    /// `true` if this clip reacts to rule event `event` (`event` or
+    /// `rule_events`).
+    pub fn serves_event(&self, event: &str) -> bool {
+        self.event.as_deref() == Some(event) || self.rule_events.iter().any(|e| e == event)
+    }
+
+    /// Engine spring channels to switch off while this clip is drawn
+    /// (from [`Clip::disable_springs`]; unknown names are rejected on load).
+    pub fn spring_mask(&self) -> SpringMask {
+        let mut m = SpringMask::NONE;
+        for c in self
+            .disable_springs
+            .iter()
+            .filter_map(|g| SpringMask::group(g))
+        {
+            m.insert(c);
+        }
+        m
+    }
+
+    /// Tag test (`allure`, `idle_variant`, `blend`, ...).
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.tags.iter().any(|t| t == tag)
     }
 
     /// Total length of one pass through the clip, in seconds.
@@ -191,6 +293,23 @@ impl Clip {
                     self.frames.len()
                 )));
             }
+        }
+        for (pname, v) in &self.frame_points {
+            if v.len() != self.frames.len() {
+                return Err(bad(format!(
+                    "frame_points.{pname} has {} entries but clip has {} frames",
+                    v.len(),
+                    self.frames.len()
+                )));
+            }
+        }
+        if let Some(b) = &self.blend {
+            if b.from.is_empty() || b.to.is_empty() {
+                return Err(bad("blend.from / blend.to must be set".into()));
+            }
+        }
+        if let Err(g) = SpringMask::from_groups(&self.disable_springs) {
+            return Err(bad(format!("disable_springs: unknown spring group `{g}`")));
         }
         if let Some((x0, x1)) = self.seat_x_range {
             if x0 > x1 {
@@ -238,6 +357,49 @@ impl Manifest {
                         "base_frames index {i} out of range for `{base}` ({} frames)",
                         b.frames.len()
                     )));
+                }
+            }
+            // Jiggle pairs must point at existing clips with the same frame
+            // count (the animator swaps one for the other mid-play).
+            for (field, other) in [
+                ("jiggle_of", &clip.jiggle_of),
+                ("jiggle_variant", &clip.jiggle_variant),
+            ] {
+                let Some(other) = other else { continue };
+                let bad = |reason: String| AtlasError::InvalidClip {
+                    clip: name.clone(),
+                    reason,
+                };
+                let Some(o) = m.clips.get(other) else {
+                    return Err(bad(format!("{field} `{other}` not in manifest")));
+                };
+                if o.frames.len() != clip.frames.len() {
+                    return Err(bad(format!(
+                        "{field} `{other}` has {} frames, this clip {}",
+                        o.frames.len(),
+                        clip.frames.len()
+                    )));
+                }
+            }
+            // Blend helpers must bridge existing clips at valid frames.
+            if let Some(bl) = &clip.blend {
+                for (end, cname, frame) in [
+                    ("from", &bl.from, bl.from_frame),
+                    ("to", &bl.to, bl.to_frame),
+                ] {
+                    let bad = |reason: String| AtlasError::InvalidClip {
+                        clip: name.clone(),
+                        reason,
+                    };
+                    let Some(c) = m.clips.get(cname) else {
+                        return Err(bad(format!("blend.{end} `{cname}` not in manifest")));
+                    };
+                    if frame as usize >= c.frames.len() {
+                        return Err(bad(format!(
+                            "blend.{end}_frame {frame} out of range for `{cname}` ({} frames)",
+                            c.frames.len()
+                        )));
+                    }
                 }
             }
         }
@@ -442,6 +604,20 @@ mod tests {
                 event: Some("cpu_busy".into()),
                 base_clip: Some("a".into()),
                 base_frames: Some(vec![0]),
+                rule_events: vec!["cpu.high".into()],
+                jiggle_baked: true,
+                jiggle_of: Some("a".into()),
+                jiggle_variant: Some("a".into()),
+                disable_springs: vec!["chest".into(), "pigtails".into(), "hip".into()],
+                frame_points: [("chest_point".to_string(), vec![(240, 130)])].into(),
+                blend: Some(Blend {
+                    from: "a".into(),
+                    to: "a".into(),
+                    from_frame: 0,
+                    to_frame: 0,
+                    blend_t: Some(vec![0.5]),
+                    easing: Some("smoothstep".into()),
+                }),
                 frames: vec![FrameRect {
                     x: 0,
                     y: 0,
@@ -454,5 +630,98 @@ mod tests {
         let s = toml::to_string(&m).unwrap();
         let back = Manifest::from_toml_str(&s).unwrap();
         assert_eq!(back.clips, m.clips);
+    }
+
+    #[test]
+    fn frame_points_and_blend_metadata() {
+        let m = Manifest::from_toml_str(
+            r#"
+            [clips.idle]
+            page = "i.png"
+            points = { chest_point = [240, 130] }
+            frame_points = { chest_point = [[241, 131], [243, 129]] }
+            frames = [ { x = 0, y = 0, w = 4, h = 4 }, { x = 4, y = 0, w = 4, h = 4 } ]
+            [clips.wave]
+            page = "w.png"
+            rule_events = ["window.closed"]
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.blend_idle_to_wave]
+            page = "b.png"
+            mode = "once"
+            blend = { from = "idle", to = "wave", from_frame = 1, to_frame = 0, blend_t = [0.5] }
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            "#,
+        )
+        .unwrap();
+        let idle = &m.clips["idle"];
+        assert_eq!(idle.point_at("chest_point", 1), Some((243, 129)));
+        assert_eq!(
+            idle.point_at("chest_point", 9),
+            Some((240, 130)),
+            "falls back"
+        );
+        assert_eq!(idle.point_at("hip_point", 0), None);
+        let b = &m.clips["blend_idle_to_wave"];
+        assert!(b.is_blend() && !idle.is_blend());
+        assert_eq!(b.blend.as_ref().unwrap().to, "wave");
+        assert!(m.clips["wave"].serves_event("window.closed"));
+        assert!(!m.clips["wave"].serves_event("cpu.high"));
+        // Round trip keeps everything.
+        let back = Manifest::from_toml_str(&toml::to_string(&m).unwrap()).unwrap();
+        assert_eq!(back.clips, m.clips);
+    }
+
+    #[test]
+    fn rejects_bad_frame_points_and_blends() {
+        let base = "[clips.idle]\npage = \"i.png\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]\n";
+        for clip in [
+            // wrong frame_points length
+            "[clips.e]\npage = \"e.png\"\nframe_points = { chest_point = [[1, 1], [2, 2]] }\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
+            // unknown blend target
+            "[clips.e]\npage = \"e.png\"\nblend = { from = \"idle\", to = \"nope\", from_frame = 0, to_frame = 0 }\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
+            // blend frame out of range
+            "[clips.e]\npage = \"e.png\"\nblend = { from = \"idle\", to = \"idle\", from_frame = 3, to_frame = 0 }\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
+        ] {
+            let err = Manifest::from_toml_str(&format!("{base}\n{clip}")).unwrap_err();
+            assert!(matches!(err, AtlasError::InvalidClip { .. }), "{err}");
+        }
+    }
+
+    #[test]
+    fn jiggle_pairs_and_disable_springs() {
+        use lillith_core::spring::Channel;
+        let m = Manifest::from_toml_str(
+            r#"
+            [clips.idle]
+            page = "i.png"
+            jiggle_variant = "idle_jiggle"
+            frames = [ { x = 0, y = 0, w = 4, h = 4 }, { x = 4, y = 0, w = 4, h = 4 } ]
+            [clips.idle_jiggle]
+            page = "j.png"
+            jiggle_baked = true
+            jiggle_of = "idle"
+            disable_springs = ["chest", "pigtails", "hip"]
+            frames = [ { x = 0, y = 0, w = 4, h = 4 }, { x = 4, y = 0, w = 4, h = 4 } ]
+            "#,
+        )
+        .unwrap();
+        let (idle, j) = (&m.clips["idle"], &m.clips["idle_jiggle"]);
+        assert!(idle.spring_mask().is_empty() && !idle.jiggle_baked);
+        assert!(j.jiggle_baked);
+        let mask = j.spring_mask();
+        for c in [Channel::Chest, Channel::Pigtail, Channel::RootX] {
+            assert!(mask.contains(c), "{c:?}");
+        }
+        assert!(!mask.contains(Channel::RootY) && !mask.contains(Channel::Angle));
+
+        let base = "[clips.idle]\npage = \"i.png\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]\n";
+        for clip in [
+            "[clips.e]\npage = \"e.png\"\ndisable_springs = [\"elbow\"]\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
+            "[clips.e]\npage = \"e.png\"\njiggle_of = \"nope\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
+            "[clips.e]\npage = \"e.png\"\njiggle_variant = \"idle\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 }, { x = 1, y = 0, w = 1, h = 1 } ]",
+        ] {
+            let err = Manifest::from_toml_str(&format!("{base}\n{clip}")).unwrap_err();
+            assert!(matches!(err, AtlasError::InvalidClip { .. }), "{err}");
+        }
     }
 }

@@ -1,0 +1,217 @@
+{
+  "name": "event_net_lost",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_net_lost_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "net.lost",
+  "rule_events": [
+    "net.lost"
+  ],
+  "event_slug": "net_lost",
+  "base_clip": "_poses/pose_pout",
+  "base_frames": [
+    0,
+    3,
+    5,
+    8,
+    10,
+    13,
+    15,
+    18,
+    20,
+    23
+  ],
+  "source_files": [
+    "../../../source/video/pose_pout/pose_pout_v3_a.mp4"
+  ],
+  "effects": [
+    "arms-crossed pout with a huff while the wifi icon cracks (rose zig-zag) and its arcs droop and grey out"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    293,
+    81
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        293,
+        81
+      ],
+      [
+        293,
+        82
+      ],
+      [
+        297,
+        83
+      ],
+      [
+        304,
+        85
+      ],
+      [
+        305,
+        84
+      ],
+      [
+        299,
+        82
+      ],
+      [
+        294,
+        81
+      ],
+      [
+        293,
+        81
+      ],
+      [
+        293,
+        81
+      ],
+      [
+        292,
+        81
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      0.5,
+      0.9
+    ],
+    [
+      1.0,
+      1.8
+    ],
+    [
+      5.3,
+      3.3
+    ],
+    [
+      12.4,
+      4.6
+    ],
+    [
+      13.0,
+      3.9
+    ],
+    [
+      6.7,
+      1.6
+    ],
+    [
+      2.3,
+      0.8
+    ],
+    [
+      1.3,
+      1.1
+    ],
+    [
+      0.8,
+      1.1
+    ],
+    [
+      0.4,
+      0.8
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/_poses/pose_pout (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): arms-crossed pout with a huff while the wifi icon cracks (rose zig-zag) and its arcs droop and grey out.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      137,
+      318,
+      22,
+      392
+    ],
+    [
+      137,
+      319,
+      22,
+      392
+    ],
+    [
+      136,
+      323,
+      22,
+      392
+    ],
+    [
+      132,
+      330,
+      34,
+      392
+    ],
+    [
+      131,
+      330,
+      34,
+      392
+    ],
+    [
+      130,
+      336,
+      22,
+      392
+    ],
+    [
+      136,
+      332,
+      22,
+      392
+    ],
+    [
+      140,
+      331,
+      22,
+      392
+    ],
+    [
+      138,
+      330,
+      22,
+      392
+    ],
+    [
+      137,
+      330,
+      22,
+      392
+    ]
+  ]
+}

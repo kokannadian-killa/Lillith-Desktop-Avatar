@@ -1,0 +1,263 @@
+{
+  "name": "event_window_opened_browser",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_window_opened_browser_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "window.opened.browser",
+  "rule_events": [
+    "window.opened.browser"
+  ],
+  "event_slug": "window_opened_browser",
+  "base_clip": "salute",
+  "base_frames": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "source_files": [
+    "../../source/video/salute/salute_v3_a.mp4"
+  ],
+  "effects": [
+    "hand-shading \"looking out\" pose as a browser window pops in: tabs, address bar, a filling ice-cyan load bar, then content lines"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    298,
+    80
+  ],
+  "window_origin": [
+    262,
+    54
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        298,
+        80
+      ],
+      [
+        298,
+        80
+      ],
+      [
+        299,
+        80
+      ],
+      [
+        298,
+        82
+      ],
+      [
+        298,
+        86
+      ],
+      [
+        298,
+        85
+      ],
+      [
+        298,
+        79
+      ],
+      [
+        298,
+        76
+      ],
+      [
+        298,
+        76
+      ],
+      [
+        298,
+        78
+      ]
+    ],
+    "window_origin": [
+      [
+        262,
+        54
+      ],
+      [
+        262,
+        54
+      ],
+      [
+        263,
+        54
+      ],
+      [
+        262,
+        56
+      ],
+      [
+        262,
+        60
+      ],
+      [
+        262,
+        59
+      ],
+      [
+        262,
+        53
+      ],
+      [
+        262,
+        50
+      ],
+      [
+        262,
+        50
+      ],
+      [
+        262,
+        52
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      0.1,
+      1.8
+    ],
+    [
+      0.3,
+      1.5
+    ],
+    [
+      0.5,
+      1.6
+    ],
+    [
+      0.4,
+      4.3
+    ],
+    [
+      0.1,
+      7.9
+    ],
+    [
+      -0.1,
+      6.9
+    ],
+    [
+      -0.1,
+      1.3
+    ],
+    [
+      0.0,
+      -2.4
+    ],
+    [
+      0.1,
+      -1.9
+    ],
+    [
+      0.1,
+      -0.1
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/salute (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): hand-shading \"looking out\" pose as a browser window pops in: tabs, address bar, a filling ice-cyan load bar, then content lines.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      127,
+      273,
+      24,
+      392
+    ],
+    [
+      127,
+      304,
+      19,
+      391
+    ],
+    [
+      129,
+      345,
+      18,
+      389
+    ],
+    [
+      131,
+      334,
+      25,
+      391
+    ],
+    [
+      132,
+      334,
+      36,
+      392
+    ],
+    [
+      131,
+      334,
+      33,
+      392
+    ],
+    [
+      128,
+      334,
+      19,
+      391
+    ],
+    [
+      127,
+      334,
+      18,
+      388
+    ],
+    [
+      127,
+      342,
+      18,
+      389
+    ],
+    [
+      127,
+      342,
+      22,
+      392
+    ]
+  ]
+}

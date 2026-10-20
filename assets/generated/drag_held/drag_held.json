@@ -1,0 +1,295 @@
+{
+  "name": "drag_held",
+  "placeholder": false,
+  "frame_count": 19,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "drag_held_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front (dangling)",
+  "source_files": [
+    "../../source/video/drag_held/drag_held_v3_d.mp4"
+  ],
+  "source_frame_range": {
+    "first": 27,
+    "last": 63,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5,
+    633.5
+  ],
+  "horn_fix": {
+    "ref_horn_px": 679,
+    "ref_hue_median": 268.9,
+    "mean_hue_shift_deg_per_frame": [
+      9.7,
+      8.3,
+      8.1,
+      7.3,
+      9.1,
+      9.4,
+      6.4,
+      8.2,
+      10.5,
+      10.9,
+      9.1,
+      10.9,
+      11.4,
+      10.8,
+      9.4,
+      8.1,
+      5.5,
+      6.7,
+      7.0
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Redo (variant d of 3 attempts): lifted from above, boots off the ground, legs kicking, arms flailing, indignant face. A bit of the off-screen grabbing hand is visible above her head (the model drew it). Loop cut f27-f63 (1.6 s); the kicking is chaotic so the loop seam is a visible but small pop. Placed like the old clip (aligned on the head). grab_point recomputed.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      93,
+      305,
+      2,
+      353
+    ],
+    [
+      69,
+      325,
+      2,
+      333
+    ],
+    [
+      87,
+      304,
+      2,
+      342
+    ],
+    [
+      115,
+      280,
+      2,
+      368
+    ],
+    [
+      92,
+      305,
+      2,
+      368
+    ],
+    [
+      70,
+      323,
+      2,
+      364
+    ],
+    [
+      72,
+      319,
+      2,
+      343
+    ],
+    [
+      68,
+      299,
+      2,
+      343
+    ],
+    [
+      97,
+      276,
+      2,
+      369
+    ],
+    [
+      109,
+      293,
+      2,
+      369
+    ],
+    [
+      68,
+      327,
+      2,
+      346
+    ],
+    [
+      57,
+      334,
+      2,
+      308
+    ],
+    [
+      46,
+      347,
+      2,
+      303
+    ],
+    [
+      92,
+      312,
+      2,
+      347
+    ],
+    [
+      72,
+      318,
+      2,
+      370
+    ],
+    [
+      77,
+      309,
+      2,
+      359
+    ],
+    [
+      87,
+      306,
+      2,
+      342
+    ],
+    [
+      86,
+      306,
+      2,
+      348
+    ],
+    [
+      63,
+      309,
+      2,
+      369
+    ]
+  ],
+  "grab_point": [
+    195,
+    33
+  ],
+  "frame_points": {
+    "grab_point": [
+      [
+        195,
+        34
+      ],
+      [
+        195,
+        31
+      ],
+      [
+        196,
+        32
+      ],
+      [
+        197,
+        35
+      ],
+      [
+        195,
+        37
+      ],
+      [
+        194,
+        35
+      ],
+      [
+        198,
+        32
+      ],
+      [
+        197,
+        33
+      ],
+      [
+        205,
+        37
+      ],
+      [
+        194,
+        37
+      ],
+      [
+        195,
+        32
+      ],
+      [
+        196,
+        30
+      ],
+      [
+        196,
+        31
+      ],
+      [
+        195,
+        35
+      ],
+      [
+        194,
+        36
+      ],
+      [
+        193,
+        33
+      ],
+      [
+        192,
+        30
+      ],
+      [
+        192,
+        30
+      ],
+      [
+        192,
+        33
+      ]
+    ]
+  },
+  "grab_point_note": "Recomputed for the v2 clip: where the drawn off-screen hand meets her head (first row of her head below the thin hand stub), per frame in frame_points, clip value = median. Old clip pinned the back of the neck [200,76]; here the model grabs the top of her head, so the pin point is higher on the figure."
+}

@@ -1,0 +1,263 @@
+{
+  "name": "event_vpn_up",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_vpn_up_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "vpn.up",
+  "rule_events": [
+    "vpn.up"
+  ],
+  "event_slug": "vpn_up",
+  "base_clip": "_poses/pose_shush",
+  "base_frames": [
+    0,
+    3,
+    5,
+    8,
+    10,
+    13,
+    15,
+    18,
+    20,
+    23
+  ],
+  "source_files": [
+    "../../../source/video/pose_shush/pose_shush_v3_a.mp4"
+  ],
+  "effects": [
+    "winking shush; she shimmers semi-cloaked while a keyhole shield pops in and flips to a check"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    292,
+    66
+  ],
+  "finger_point": [
+    191,
+    73
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        292,
+        66
+      ],
+      [
+        292,
+        67
+      ],
+      [
+        293,
+        67
+      ],
+      [
+        294,
+        67
+      ],
+      [
+        293,
+        67
+      ],
+      [
+        293,
+        67
+      ],
+      [
+        294,
+        67
+      ],
+      [
+        293,
+        67
+      ],
+      [
+        292,
+        67
+      ],
+      [
+        292,
+        66
+      ]
+    ],
+    "finger_point": [
+      [
+        191,
+        73
+      ],
+      [
+        191,
+        74
+      ],
+      [
+        192,
+        74
+      ],
+      [
+        193,
+        74
+      ],
+      [
+        192,
+        74
+      ],
+      [
+        192,
+        74
+      ],
+      [
+        193,
+        74
+      ],
+      [
+        192,
+        74
+      ],
+      [
+        191,
+        74
+      ],
+      [
+        191,
+        73
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      -0.3,
+      1.8
+    ],
+    [
+      -0.4,
+      2.5
+    ],
+    [
+      0.7,
+      2.7
+    ],
+    [
+      1.6,
+      3.0
+    ],
+    [
+      1.0,
+      3.0
+    ],
+    [
+      1.1,
+      3.0
+    ],
+    [
+      1.6,
+      3.3
+    ],
+    [
+      0.8,
+      3.1
+    ],
+    [
+      -0.3,
+      2.9
+    ],
+    [
+      -0.2,
+      2.2
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/_poses/pose_shush (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): winking shush; she shimmers semi-cloaked while a keyhole shield pops in and flips to a check.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      148,
+      275,
+      23,
+      392
+    ],
+    [
+      148,
+      303,
+      26,
+      392
+    ],
+    [
+      148,
+      315,
+      24,
+      392
+    ],
+    [
+      148,
+      313,
+      24,
+      392
+    ],
+    [
+      148,
+      313,
+      25,
+      392
+    ],
+    [
+      148,
+      324,
+      25,
+      392
+    ],
+    [
+      148,
+      324,
+      26,
+      392
+    ],
+    [
+      148,
+      323,
+      24,
+      392
+    ],
+    [
+      148,
+      322,
+      26,
+      392
+    ],
+    [
+      148,
+      322,
+      24,
+      392
+    ]
+  ]
+}

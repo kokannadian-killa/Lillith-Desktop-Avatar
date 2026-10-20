@@ -1,0 +1,250 @@
+{
+  "name": "wake",
+  "placeholder": false,
+  "frame_count": 21,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "wake_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 4.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "right side -> front",
+  "source_files": [
+    "../../source/video/wake/wake_v3_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 121,
+    "step": 6,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0,
+    636.0
+  ],
+  "horn_fix": {
+    "ref_horn_px": 243,
+    "ref_hue_median": 261.8,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      1.4,
+      1.5,
+      11.0,
+      11.7,
+      11.6,
+      12.6,
+      3.8,
+      -5.6,
+      -8.4,
+      -1.7,
+      -3.0,
+      1.1,
+      6.3,
+      -13.7,
+      -14.3,
+      -11.6,
+      -1.3,
+      -3.9,
+      -4.8,
+      -4.0
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "One-shot wake: seated doze -> yawn/eye rub -> rise -> overhead stretch -> front idle. Generated from a composite start still (sleep_side_02 shrunk to idle framing, _stills/sleep_side_02_idleframing.png) so the camera never zooms and one scale (0.54) holds; the seated figure is head-matched to the old 0.29 sleep. Ends on the idle still. Timings derived from old profile.",
+  "frame_durations_ms": [
+    413,
+    275,
+    275,
+    147,
+    147,
+    239,
+    239,
+    367,
+    183,
+    183,
+    202,
+    202,
+    165,
+    257,
+    257,
+    220,
+    220,
+    413,
+    413,
+    183,
+    600
+  ],
+  "durations_note": "Derived from old wake frame_durations_ms: profile resampled to 21 frames and scaled to the real video time (5000 ms), final hold 600 ms kept.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      114,
+      296,
+      199,
+      390
+    ],
+    [
+      114,
+      296,
+      198,
+      390
+    ],
+    [
+      114,
+      296,
+      191,
+      390
+    ],
+    [
+      114,
+      296,
+      191,
+      390
+    ],
+    [
+      114,
+      296,
+      195,
+      390
+    ],
+    [
+      105,
+      296,
+      198,
+      390
+    ],
+    [
+      94,
+      296,
+      197,
+      390
+    ],
+    [
+      98,
+      271,
+      195,
+      392
+    ],
+    [
+      121,
+      265,
+      208,
+      392
+    ],
+    [
+      128,
+      293,
+      205,
+      392
+    ],
+    [
+      156,
+      307,
+      158,
+      392
+    ],
+    [
+      100,
+      294,
+      83,
+      391
+    ],
+    [
+      101,
+      308,
+      37,
+      390
+    ],
+    [
+      116,
+      319,
+      16,
+      390
+    ],
+    [
+      116,
+      276,
+      16,
+      390
+    ],
+    [
+      86,
+      265,
+      18,
+      390
+    ],
+    [
+      61,
+      289,
+      27,
+      391
+    ],
+    [
+      64,
+      324,
+      20,
+      391
+    ],
+    [
+      126,
+      281,
+      20,
+      391
+    ],
+    [
+      148,
+      272,
+      20,
+      391
+    ],
+    [
+      139,
+      275,
+      20,
+      391
+    ]
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "name": "blend_idle_to_wave",
+  "placeholder": false,
+  "frame_count": 4,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "blend_idle_to_wave_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.535,
+  "body_anchor_x": 200,
+  "from_clip": "idle_a",
+  "to_clip": "wave",
+  "source_frames": {
+    "idle_a": 0,
+    "wave": 0
+  },
+  "facing": "front",
+  "source_files": [
+    "../../source/video/blend_idle_to_wave/blend_idle_to_wave_v3_a.mp4"
+  ],
+  "source_video_frames": [
+    6,
+    11,
+    15,
+    20
+  ],
+  "horn_fix": {
+    "ref_horn_px": 620,
+    "ref_hue_median": 275.4,
+    "mean_hue_shift_deg_per_frame": [
+      -0.9,
+      1.4,
+      -0.6,
+      0.8
+    ]
+  },
+  "blend_method": "real transition video (Grok Imagine I2V, first frame = clip A boundary frame, last = clip B boundary frame); placement registered to both clips, scale/offset interpolated; interior frames only",
+  "scale_from_to": [
+    0.54,
+    0.53
+  ],
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "pigtails",
+    "tail"
+  ],
+  "notes": "Transition helper idle -> wave: 4 frames from a dedicated transition video between idle_a[0] and wave[0]. idle endpoints use idle_a frame 0 (= idle_b frame 0 = idle still).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      108,
+      261,
+      21,
+      392
+    ],
+    [
+      99,
+      261,
+      22,
+      392
+    ],
+    [
+      132,
+      293,
+      18,
+      392
+    ],
+    [
+      130,
+      317,
+      26,
+      392
+    ]
+  ]
+}

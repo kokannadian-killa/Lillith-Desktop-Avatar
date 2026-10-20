@@ -16,13 +16,26 @@
 //! Physics: breathing drives the scale/chest spring targets; reactions apply
 //! impulses on start ([`kick_for`]); walk/run/dance apply footfall impulses
 //! twice per cycle; starting/stopping a walk tips the angle spring. There is
-//! no random per-frame jitter.
+//! no random per-frame jitter. The tier values, footfalls and breathing
+//! amplitudes come from the bundled `assets/physics.toml`
+//! (`[impulse_recipes]` high/medium/low, `[walk]`, `[breathing]`).
+//!
+//! With [`AnimatorConfig::physics_driver`] on, a
+//! [`lillith_core::physics_driver::PhysicsDriver`] runs the springs instead:
+//! clip starts go through `on_clip_start` (per-clip recipes, impact-frame
+//! delays, double bounces, baked idle clips get kicks only), walking through
+//! `set_motion` (cycle-derived footfalls, pigtail trail), breathing through
+//! its shaped breath curve, and [`Animator::on_event`] / [`Animator::set_mood`]
+//! feed rule events and moods.
 
 use crate::atlas::{Clip, FrameRect, LoopMode, Manifest};
 use crate::player::ClipPlayer;
 use lillith_core::config::Springs;
 use lillith_core::idle::{IdleConfig, IdleCue, IdleLife};
-use lillith_core::spring::{Channel, Physics, Transform};
+use lillith_core::mood::Mood;
+use lillith_core::physics_config::{PhysicsConfig, Recipe};
+use lillith_core::physics_driver::{Motion, Overlay as PhysicsOverlay, PhysicsDriver};
+use lillith_core::spring::{Channel, Physics, SpringMask, Transform};
 use std::collections::VecDeque;
 
 /// Errors from the animator.
@@ -67,7 +80,28 @@ pub struct AnimatorConfig {
     pub blink_clip: String,
     /// Run idle life (blinks/transitions/idle reactions). Off for previews.
     pub idle_enabled: bool,
+    /// Drive the springs with the physics.toml [`PhysicsDriver`] instead of
+    /// the built-in kick tables (off by default; the app turns it on).
+    pub physics_driver: bool,
+    /// Gain on the engine's secondary motion (chest/pigtail springs and the
+    /// breathing scale) while a clip tagged [`BAKED_MOTION_TAG`] is drawn.
+    /// Video-based (generated_v2) clips bake bounce and hair/tail follow-through
+    /// into the pixels; full engine springs on top would double the motion.
+    /// 1.0 = no change, 0.0 = off. Root offset/angle (drag, footfalls) stay.
+    pub baked_motion_gain: f32,
+    /// Draw a clip's baked-jiggle sibling (`jiggle_variant`) in its place
+    /// whenever one exists. The sibling's `disable_springs` then switches the
+    /// matching engine springs off while it is drawn (no double bounce).
+    pub prefer_jiggle_variants: bool,
 }
+
+/// Clip tag: the frames already contain bouncy secondary motion.
+pub const BAKED_MOTION_TAG: &str = "baked_motion";
+/// Clip tag prefix: `variant_of:<clip>` marks an alternative take of `<clip>`.
+/// While `<clip>` is the idle base, the animator draws one of its variants
+/// and picks a new one at random at a loop end once the current take has
+/// played for [`IdleConfig::variant_hold_s`].
+pub const VARIANT_OF_TAG: &str = "variant_of:";
 
 impl Default for AnimatorConfig {
     fn default() -> Self {
@@ -76,10 +110,15 @@ impl Default for AnimatorConfig {
             physics_hz: 120.0,
             idle: IdleConfig::default(),
             seed: 0x1111_7777,
-            breath_scale: 0.006,
+            breath_scale: physics_toml().breathing.scale_amplitude,
+            // Legacy path keeps M2's +1.2 px chest breath; physics.toml uses
+            // -0.6 px (inhale lifts, preview pass 2), applied in driver mode.
             breath_chest: 1.2,
             blink_clip: "blink_wink".into(),
             idle_enabled: true,
+            physics_driver: false,
+            baked_motion_gain: 0.2,
+            prefer_jiggle_variants: false,
         }
     }
 }
@@ -142,56 +181,61 @@ pub const LOW_ENERGY: &[&str] = &[
     "event_incognito",
 ];
 
+fn physics_toml() -> &'static PhysicsConfig {
+    PhysicsConfig::bundled_shared()
+}
+
+/// A physics.toml recipe flattened to one simultaneous kick (delays and
+/// double bounces are the driver's job).
+fn recipe_kick(name: &str) -> Kick {
+    let mut k = Kick::default();
+    let Some(Recipe { impulses, .. }) = physics_toml().impulse_recipes.get(name) else {
+        return k;
+    };
+    for i in impulses {
+        match Channel::from_name(&i.channel) {
+            Some(Channel::RootY) => k.root_y += i.strength,
+            Some(Channel::Angle) => k.angle += i.strength,
+            Some(Channel::Scale) => k.scale += i.strength,
+            Some(Channel::Chest) => k.chest += i.strength,
+            Some(Channel::Pigtail) => k.pigtail += i.strength,
+            _ => {}
+        }
+    }
+    k
+}
+
 /// Impulse to apply when `name` starts as a reaction/transition.
 /// High-energy clips get a real bounce; other gestures and every remaining
-/// `event_*` clip a medium one; idle-ish clips a gentle sway.
+/// `event_*` clip a medium one; idle-ish clips a gentle sway. Values are
+/// physics.toml `[impulse_recipes]` `high` / `medium` / `low`.
 pub fn kick_for(name: &str) -> Kick {
     if HIGH_ENERGY.contains(&name) {
-        Kick {
-            root_y: -90.0,
-            angle: 0.6,
-            scale: 0.35,
-            chest: 70.0,
-            pigtail: 90.0,
-        }
+        recipe_kick("high")
     } else if LOW_ENERGY.contains(&name) {
-        Kick {
-            root_y: 0.0,
-            angle: 0.12,
-            scale: 0.0,
-            chest: 18.0,
-            pigtail: 30.0,
-        }
+        recipe_kick("low")
     } else {
-        Kick {
-            root_y: -40.0,
-            angle: 0.3,
-            scale: 0.15,
-            chest: 40.0,
-            pigtail: 55.0,
-        }
+        recipe_kick("medium")
     }
 }
 
 /// Footfall impulse for locomotion clips (`None` for non-locomotion).
+/// Values are physics.toml `[walk]` `walk_footfall` / `run_footfall`.
 pub fn footfall_for(name: &str) -> Option<Kick> {
-    if name.starts_with("run") {
-        Some(Kick {
-            root_y: 30.0,
-            chest: 45.0,
-            pigtail: 35.0,
-            ..Kick::default()
-        })
+    let w = &physics_toml().walk;
+    let f = if name.starts_with("run") {
+        w.run_footfall
     } else if name.starts_with("walk") || name == "dance" {
-        Some(Kick {
-            root_y: 10.0,
-            chest: 22.0,
-            pigtail: 18.0,
-            ..Kick::default()
-        })
+        w.walk_footfall
     } else {
-        None
-    }
+        return None;
+    };
+    Some(Kick {
+        root_y: f.root_y,
+        chest: f.chest,
+        pigtail: f.pigtails,
+        ..Kick::default()
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -249,8 +293,33 @@ pub struct Animator {
     blink_frames: Vec<usize>,
     idle: IdleLife,
     physics: Physics,
+    /// Present when [`AnimatorConfig::physics_driver`] is on; owns the springs.
+    driver: Option<PhysicsDriver>,
     last_key: Option<(String, usize)>,
     idle_base: String,
+    /// Clips tagged `variant_of:<idle_base>` (sorted); empty = no cycling.
+    idle_variants: Vec<String>,
+    /// Index into `idle_variants` currently drawn for the idle base.
+    idle_pick: usize,
+    /// Seconds the current idle take has been drawn.
+    variant_age: f32,
+    /// xorshift state for the variant pick (seeded from `cfg.seed`).
+    variant_rng: u64,
+    /// Springs switched off for the clip drawn now (its `disable_springs`).
+    spring_mask: SpringMask,
+}
+
+/// Variant clips of `base` (tag `variant_of:<base>`), sorted by name.
+fn variants_of(manifest: &Manifest, base: &str) -> Vec<String> {
+    let tag = format!("{VARIANT_OF_TAG}{base}");
+    let mut v: Vec<String> = manifest
+        .clips
+        .iter()
+        .filter(|(_, c)| c.tags.iter().any(|t| *t == tag))
+        .map(|(n, _)| n.clone())
+        .collect();
+    v.sort();
+    v
 }
 
 fn once_player(clip: &Clip) -> ClipPlayer {
@@ -291,7 +360,9 @@ impl Animator {
                 .ok_or(AnimError::Empty)?
                 .clone()
         };
-        let base_player = ClipPlayer::for_clip(&manifest.clips[&idle_base]);
+        let idle_variants = variants_of(&manifest, &idle_base);
+        let base_player =
+            ClipPlayer::for_clip(&manifest.clips[idle_variants.first().unwrap_or(&idle_base)]);
         let idle = IdleLife::with_available(cfg.idle.clone(), cfg.seed, |n| {
             manifest.clips.contains_key(n)
         });
@@ -301,6 +372,9 @@ impl Animator {
             .map(auto_blink_frames)
             .unwrap_or_default();
         let physics = Physics::new(&cfg.springs, cfg.physics_hz);
+        let driver = cfg
+            .physics_driver
+            .then(|| PhysicsDriver::bundled(&cfg.springs, cfg.physics_hz, cfg.seed));
         Ok(Self {
             base: idle_base.clone(),
             idle_base,
@@ -312,7 +386,13 @@ impl Animator {
             blink_frames,
             idle,
             physics,
+            driver,
             last_key: None,
+            idle_variants,
+            idle_pick: 0,
+            variant_age: 0.0,
+            variant_rng: cfg.seed | 1,
+            spring_mask: SpringMask::NONE,
             manifest,
             cfg,
         })
@@ -332,11 +412,56 @@ impl Animator {
     }
 
     pub fn physics(&self) -> &Physics {
-        &self.physics
+        match &self.driver {
+            Some(d) => d.physics(),
+            None => &self.physics,
+        }
     }
 
     pub fn physics_mut(&mut self) -> &mut Physics {
-        &mut self.physics
+        match &mut self.driver {
+            Some(d) => d.physics_mut(),
+            None => &mut self.physics,
+        }
+    }
+
+    /// The physics.toml driver, when [`AnimatorConfig::physics_driver`] is on.
+    pub fn driver(&self) -> Option<&PhysicsDriver> {
+        self.driver.as_ref()
+    }
+
+    pub fn driver_mut(&mut self) -> Option<&mut PhysicsDriver> {
+        self.driver.as_mut()
+    }
+
+    /// Procedural tail/horn/glow overlay (driver mode only).
+    pub fn physics_overlay(&self) -> Option<PhysicsOverlay> {
+        self.driver.as_ref().map(PhysicsDriver::overlay)
+    }
+
+    /// Feeds a fired rule event (dotted name) to the driver: its mood and
+    /// impulse recipe. Call it next to `react(clip)`; the clip start is then
+    /// not kicked twice. Returns `false` without a driver or for unknown events.
+    pub fn on_event(&mut self, event: &str) -> bool {
+        self.driver.as_mut().is_some_and(|d| d.on_event(event))
+    }
+
+    /// Mood change for the springs (driver mode; no-op otherwise).
+    pub fn set_mood(&mut self, mood: Mood) {
+        if let Some(d) = &mut self.driver {
+            d.set_mood(mood);
+        }
+    }
+
+    /// Held by the cursor (`Some(cursor vx px/s)`) or released (`None`):
+    /// dangling sway and a soft drop (driver mode; no-op otherwise).
+    pub fn set_dragged(&mut self, vx: Option<f32>) {
+        if let Some(d) = &mut self.driver {
+            d.set_motion(match vx {
+                Some(vx) => Motion::Dragged { vx },
+                None => Motion::Idle,
+            });
+        }
     }
 
     pub fn idle_life(&self) -> &IdleLife {
@@ -356,6 +481,120 @@ impl Animator {
         self.cfg.idle_enabled = on;
     }
 
+    /// The clip actually drawn for base `name`: a variant for the idle base
+    /// when variants exist, else `name` itself.
+    fn drawn_base<'a>(&'a self, name: &'a str) -> &'a str {
+        if name == self.idle_base && !self.idle_variants.is_empty() {
+            &self.idle_variants[self.idle_pick]
+        } else {
+            name
+        }
+    }
+
+    /// Idle variant currently drawn, if the idle base has variants.
+    pub fn idle_variant(&self) -> Option<&str> {
+        self.idle_variants.get(self.idle_pick).map(String::as_str)
+    }
+
+    /// Picks the next idle variant at random (never the same one twice in a
+    /// row when there are two or more) and restarts the base player on it.
+    fn next_idle_variant(&mut self) {
+        let n = self.idle_variants.len();
+        if n < 2 {
+            return;
+        }
+        let mut x = self.variant_rng;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.variant_rng = x;
+        let step = 1 + (x % (n as u64 - 1)) as usize;
+        self.idle_pick = (self.idle_pick + step) % n;
+        let clip = &self.manifest.clips[&self.idle_variants[self.idle_pick]];
+        self.base_player = ClipPlayer::for_clip(clip);
+        self.variant_age = 0.0;
+    }
+
+    /// `true` once the current idle take has been on long enough to switch.
+    fn variant_due(&self) -> bool {
+        self.variant_age >= self.cfg.idle.variant_hold_s
+    }
+
+    /// Spring transform for a frame of `clip`: secondary channels (chest,
+    /// pigtail, breathing scale) are scaled by `baked_motion_gain` when the
+    /// clip is tagged [`BAKED_MOTION_TAG`].
+    fn transform_for(&self, clip: &Clip) -> Transform {
+        let mut t = self.physics().transform();
+        // Baked-jiggle clips: their disabled springs read as rest, even
+        // before the next tick parks them (see `sync_spring_mask`).
+        let m = clip.spring_mask();
+        let rest = Transform::IDENTITY;
+        if m.contains(Channel::RootX) {
+            t.x = rest.x;
+        }
+        if m.contains(Channel::RootY) {
+            t.y = rest.y;
+        }
+        if m.contains(Channel::Angle) {
+            t.angle = rest.angle;
+        }
+        if m.contains(Channel::Scale) {
+            t.scale = rest.scale;
+        }
+        if m.contains(Channel::Chest) {
+            t.chest_offset = rest.chest_offset;
+        }
+        if m.contains(Channel::Pigtail) {
+            t.pigtail_offset = rest.pigtail_offset;
+        }
+        if clip.tags.iter().any(|x| x == BAKED_MOTION_TAG) {
+            let g = self.cfg.baked_motion_gain;
+            t.chest_offset *= g;
+            t.pigtail_offset *= g;
+            t.scale = 1.0 + (t.scale - 1.0) * g;
+        }
+        t
+    }
+
+    /// The clip actually drawn for `name`: its baked-jiggle sibling when
+    /// [`AnimatorConfig::prefer_jiggle_variants`] is on and one exists.
+    fn drawn<'a>(&'a self, name: &'a str) -> &'a str {
+        if self.cfg.prefer_jiggle_variants {
+            if let Some(v) = self.manifest.clips[name]
+                .jiggle_variant
+                .as_deref()
+                .filter(|v| self.manifest.clips.contains_key(*v))
+            {
+                return v;
+            }
+        }
+        name
+    }
+
+    /// Draw baked-jiggle siblings in place of clean clips (see
+    /// [`AnimatorConfig::prefer_jiggle_variants`]).
+    pub fn set_prefer_jiggle_variants(&mut self, on: bool) {
+        self.cfg.prefer_jiggle_variants = on;
+        self.sync_spring_mask();
+    }
+
+    /// Engine springs switched off right now (the drawn clip's
+    /// `disable_springs`; empty for engine-clean clips).
+    pub fn spring_mask(&self) -> SpringMask {
+        self.spring_mask
+    }
+
+    /// Applies the drawn clip's `disable_springs` to the physics: the named
+    /// channels are parked at rest and ignore kicks while it is drawn, and
+    /// come back (from rest) as soon as a clip without them is drawn.
+    fn sync_spring_mask(&mut self) {
+        let mask = self.current().clip.spring_mask();
+        if mask != self.spring_mask {
+            self.spring_mask = mask;
+            self.physics_mut().set_suppressed(mask);
+        }
+    }
+
     fn clip(&self, name: &str) -> Result<&Clip, AnimError> {
         self.manifest
             .clips
@@ -368,9 +607,19 @@ impl Animator {
         let clip = self.clip(name)?;
         if self.base != name || self.base_flip != flip {
             self.base_player = ClipPlayer::for_clip(clip);
+            if name == self.idle_base && !self.idle_variants.is_empty() {
+                if self.variant_due() {
+                    self.next_idle_variant();
+                } else {
+                    // Back to idle: resume the same take.
+                    let clip = &self.manifest.clips[&self.idle_variants[self.idle_pick]];
+                    self.base_player = ClipPlayer::for_clip(clip);
+                }
+            }
             self.base = name.to_string();
             self.base_flip = flip;
         }
+        self.sync_spring_mask();
         Ok(())
     }
 
@@ -404,9 +653,23 @@ impl Animator {
         self.set_base(&name, flip)?;
         if starting {
             let s = if dir == Dir::Right { 1.0 } else { -1.0 };
-            self.physics
-                .impulse(Channel::Angle, s * if running { 0.5 } else { 0.25 });
-            self.physics.impulse(Channel::Pigtail, -s * 40.0);
+            if let Some(d) = &mut self.driver {
+                let vx = s * d.config().walk.demo_speed_px_s * if running { 2.0 } else { 1.0 };
+                let cycle_s = self.manifest.clips[&name].duration_s();
+                // Leave the current locomotion first so a direction change
+                // re-tips the body.
+                d.set_motion(Motion::Idle);
+                d.set_motion(if running {
+                    Motion::Running { vx, cycle_s }
+                } else {
+                    Motion::Walking { vx, cycle_s }
+                });
+            } else {
+                let tip = physics_toml().walk.start_tip_angle;
+                self.physics
+                    .impulse(Channel::Angle, s * if running { 2.0 * tip } else { tip });
+                self.physics.impulse(Channel::Pigtail, -s * 40.0);
+            }
         }
         Ok(())
     }
@@ -419,7 +682,9 @@ impl Animator {
             } else {
                 1.0
             };
-            if footfall_for(&self.base).is_some() {
+            if let Some(d) = &mut self.driver {
+                d.set_motion(Motion::Idle);
+            } else if footfall_for(&self.base).is_some() {
                 self.physics.impulse(Channel::Angle, -s * 0.3);
                 self.physics.impulse(Channel::Pigtail, s * 50.0);
                 self.physics.impulse(Channel::Chest, 25.0);
@@ -432,7 +697,20 @@ impl Animator {
     fn start_overlay(&mut self, clip: String, flip: bool, kind: OverlayKind) {
         let player = once_player(&self.manifest.clips[&clip]);
         let sign = if flip { -1.0 } else { 1.0 };
-        kick_for(&clip).apply(&mut self.physics, sign);
+        // Mask first, so a baked-jiggle clip's own start kick is dropped on
+        // the channels it disables.
+        let mask = self.manifest.clips[self.drawn(&clip)].spring_mask();
+        if mask != self.spring_mask {
+            self.spring_mask = mask;
+            self.physics_mut().set_suppressed(mask);
+        }
+        match &mut self.driver {
+            Some(d) => {
+                d.set_facing(!flip);
+                d.on_clip_start(&clip);
+            }
+            None => kick_for(&clip).apply(&mut self.physics, sign),
+        }
         self.blink = None;
         self.overlay = Some(Overlay {
             clip,
@@ -570,14 +848,26 @@ impl Animator {
             }
         }
 
-        // Breathing drives spring targets (the springs smooth it).
-        let b = self.idle.breath();
-        self.physics
-            .set_target(Channel::Scale, 1.0 + self.cfg.breath_scale * b);
-        self.physics
-            .set_target(Channel::Chest, self.cfg.breath_chest * b);
+        // Breathing drives spring targets (the springs smooth it). The
+        // driver has its own shaped breath curve.
+        if self.driver.is_none() {
+            let b = self.idle.breath();
+            self.physics
+                .set_target(Channel::Scale, 1.0 + self.cfg.breath_scale * b);
+            self.physics
+                .set_target(Channel::Chest, self.cfg.breath_chest * b);
+        }
 
+        let before = self.base_player.frame();
         self.base_player.advance(dt);
+        // Idle variants: a new random take at a loop end of the idle base,
+        // once the current one has been held long enough.
+        if self.base == self.idle_base {
+            self.variant_age += dt;
+            if self.base_player.frame() < before && self.variant_due() {
+                self.next_idle_variant();
+            }
+        }
         if let Some(bl) = &mut self.blink {
             bl.elapsed += dt;
             if bl.elapsed >= *bl.ends.last().unwrap_or(&0.0) {
@@ -615,7 +905,8 @@ impl Animator {
         };
         let key = (name.clone(), frame);
         if self.last_key.as_ref() != Some(&key) {
-            if let Some(kick) = footfall_for(&name) {
+            // (The driver derives footfalls from the locomotion cycle.)
+            if let Some(kick) = footfall_for(&name).filter(|_| self.driver.is_none()) {
                 let n = self.manifest.clips[&name].frames.len();
                 let half = (n / 2).max(1);
                 if frame % half == 0 {
@@ -625,17 +916,22 @@ impl Animator {
             self.last_key = Some(key);
         }
 
-        self.physics.step(dt);
+        self.sync_spring_mask();
+        match &mut self.driver {
+            Some(d) => d.tick(dt),
+            None => self.physics.step(dt),
+        }
     }
 
     /// The frame to draw now, with the spring transform.
     pub fn current(&self) -> FrameRef<'_> {
-        let transform = self.physics.transform();
         if let Some(o) = &self.overlay {
-            let clip = &self.manifest.clips[&o.clip];
+            let name = self.drawn(&o.clip);
+            let clip = &self.manifest.clips[name];
+            let transform = self.transform_for(clip);
             let frame = o.player.frame().min(clip.frames.len() - 1);
             return FrameRef {
-                clip_name: &o.clip,
+                clip_name: name,
                 clip,
                 frame,
                 rect: clip.frames[frame],
@@ -659,6 +955,7 @@ impl Animator {
                 .get_key_value(&self.cfg.blink_clip)
                 .expect("blink clip checked on start");
             let frame = bl.frames[idx].min(clip.frames.len() - 1);
+            let transform = self.transform_for(clip);
             return FrameRef {
                 clip_name: name,
                 clip,
@@ -669,10 +966,12 @@ impl Animator {
                 transform,
             };
         }
-        let clip = &self.manifest.clips[&self.base];
+        let name = self.drawn(self.drawn_base(&self.base));
+        let clip = &self.manifest.clips[name];
         let frame = self.base_player.frame().min(clip.frames.len() - 1);
+        let transform = self.transform_for(clip);
         FrameRef {
-            clip_name: &self.base,
+            clip_name: name,
             clip,
             frame,
             rect: clip.frames[frame],
@@ -849,7 +1148,12 @@ mod tests {
 
     #[test]
     fn idle_life_drives_blink_and_transitions() {
-        let mut a = Animator::new(manifest(), AnimatorConfig::default()).unwrap();
+        // Scheduler mechanics with the old busy timings (40 s window).
+        let cfg = AnimatorConfig {
+            idle: lillith_core::idle::IdleConfig::lively(),
+            ..AnimatorConfig::default()
+        };
+        let mut a = Animator::new(manifest(), cfg).unwrap();
         assert_eq!(a.blink_frames(), [1, 2, 3]);
         let mut saw = (false, false, false);
         for _ in 0..(40 * 60) {
@@ -899,5 +1203,318 @@ mod tests {
         assert_eq!(a.overlay_clip(), Some("hip_sway"));
         run(&mut a, 0.2);
         assert_eq!(a.overlay_clip(), None);
+    }
+
+    fn driven() -> AnimatorConfig {
+        AnimatorConfig {
+            physics_driver: true,
+            ..quiet()
+        }
+    }
+
+    #[test]
+    fn kick_tables_come_from_physics_toml() {
+        let cfg = PhysicsConfig::bundled_shared();
+        let high = &cfg.impulse_recipes["high"].impulses;
+        let k = kick_for("knife_tap");
+        assert_eq!(
+            k.chest,
+            high.iter().find(|i| i.channel == "chest").unwrap().strength
+        );
+        assert_eq!(k.root_y, -90.0);
+        assert_eq!(
+            footfall_for("walk_right").unwrap().chest,
+            cfg.walk.walk_footfall.chest
+        );
+        assert_eq!(
+            footfall_for("run_left").unwrap().root_y,
+            cfg.walk.run_footfall.root_y
+        );
+        let d = AnimatorConfig::default();
+        assert_eq!(d.breath_scale, cfg.breathing.scale_amplitude);
+        assert_eq!(d.breath_chest, 1.2, "legacy M2 chest breath");
+        assert!(!d.physics_driver);
+    }
+
+    #[test]
+    fn driver_mode_knife_tap_lands_on_impact_frame() {
+        let mut a = Animator::new(manifest(), driven()).unwrap();
+        assert!(a.driver().is_some());
+        run(&mut a, 2.0);
+        let calm = a.physics().chest.velocity.abs();
+        a.react("knife_tap", 1).unwrap();
+        run(&mut a, 0.3); // impact frame is 0.4 s in
+        assert!(a.physics().chest.velocity.abs() < calm + 5.0, "too early");
+        let mut peak = 0f32;
+        for _ in 0..60 {
+            a.tick(1.0 / 60.0);
+            peak = peak.max(a.current().transform.chest_offset.abs());
+        }
+        assert!(peak > 1.0, "knife_tap chest jiggle {peak}");
+        assert!(a.physics_overlay().is_some());
+    }
+
+    #[test]
+    fn driver_mode_cpu_high_event_and_clip() {
+        let mut a = Animator::new(manifest(), driven()).unwrap();
+        run(&mut a, 1.0);
+        assert!(a.on_event("cpu.high"));
+        assert_eq!(a.driver().unwrap().mood(), Mood::Alert);
+        a.react("event_cpu_busy", 5).unwrap(); // deduped against the event
+        let mut hop = 0f32;
+        for _ in 0..60 {
+            a.tick(1.0 / 60.0);
+            hop = hop.min(a.current().transform.y);
+        }
+        assert!(hop < -2.0, "hop {hop}");
+        assert!(!a.on_event("no.such.event"));
+        // Without a driver, events are ignored.
+        let mut plain = Animator::new(manifest(), quiet()).unwrap();
+        assert!(!plain.on_event("cpu.high"));
+    }
+
+    #[test]
+    fn driver_mode_walk_bounces_and_settles() {
+        let mut a = Animator::new(manifest(), driven()).unwrap();
+        a.walk(Dir::Right, false).unwrap();
+        let mut max_chest = 0f32;
+        for _ in 0..180 {
+            a.tick(1.0 / 60.0);
+            max_chest = max_chest.max(a.current().transform.chest_offset.abs());
+        }
+        assert!(max_chest > 1.0, "chest {max_chest}");
+        a.stand();
+        run(&mut a, 5.0);
+        let t = a.current().transform;
+        assert!(t.y.abs() < 0.1 && t.angle.abs() < 0.01, "{t:?}");
+        a.set_dragged(Some(300.0));
+        run(&mut a, 1.0);
+        assert!(a.current().transform.angle.abs() > 0.05, "dangling sway");
+        a.set_dragged(None);
+    }
+
+    /// idle (alias) + two tagged variants with baked motion, 4 frames @ 10 fps.
+    fn variant_manifest() -> Manifest {
+        let mut s = String::new();
+        for (name, tags) in [
+            ("idle", "[\"baked_motion\"]"),
+            ("idle_a", "[\"baked_motion\", \"variant_of:idle\"]"),
+            ("idle_b", "[\"baked_motion\", \"variant_of:idle\"]"),
+            ("wave", "[]"),
+        ] {
+            s += &format!("[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\nmode = \"loop\"\ntags = {tags}\nframes = [");
+            for i in 0..4 {
+                s += &format!(
+                    "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                    i * 400
+                );
+            }
+            s += "]\n";
+        }
+        Manifest::from_toml_str(&s).unwrap()
+    }
+
+    #[test]
+    fn idle_variants_cycle_at_loop_end() {
+        let mut cfg = quiet();
+        cfg.idle.variant_hold_s = 0.0;
+        let mut a = Animator::new(variant_manifest(), cfg).unwrap();
+        assert_eq!(a.base(), "idle");
+        let mut seen = std::collections::BTreeSet::new();
+        let mut last = a.current().clip_name.to_string();
+        let mut switches = 0;
+        for _ in 0..(20 * 60) {
+            a.tick(1.0 / 60.0);
+            let c = a.current().clip_name.to_string();
+            assert!(c == "idle_a" || c == "idle_b", "drew {c}");
+            if c != last {
+                switches += 1;
+                last = c.clone();
+            }
+            seen.insert(c);
+        }
+        assert_eq!(seen.len(), 2, "both variants drawn");
+        // 0.4 s loops for 20 s: ~50 loop ends, two variants -> always alternate.
+        assert!(switches > 30, "{switches} switches");
+        // Leaving and re-entering idle keeps drawing a variant.
+        a.set_base("wave", false).unwrap();
+        a.tick(0.05);
+        assert_eq!(a.current().clip_name, "wave");
+        a.stand();
+        assert!(a.current().clip_name.starts_with("idle_"));
+    }
+
+    #[test]
+    fn idle_variants_are_held_by_default() {
+        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+        assert_eq!(a.cfg.idle.variant_hold_s, 30.0);
+        let mut last = a.current().clip_name.to_string();
+        let mut switches = Vec::new();
+        for i in 0..(70 * 60) {
+            a.tick(1.0 / 60.0);
+            let c = a.current().clip_name.to_string();
+            if c != last {
+                switches.push(i as f32 / 60.0);
+                last = c;
+            }
+        }
+        // 0.4 s loops, 30 s hold: two switches in 70 s, not ~175.
+        assert_eq!(switches.len(), 2, "{switches:?}");
+        assert!(switches[0] >= 29.9 && switches[0] <= 30.5, "{switches:?}");
+    }
+
+    #[test]
+    fn baked_motion_clips_damp_secondary_springs() {
+        let cfg = AnimatorConfig {
+            baked_motion_gain: 0.0,
+            ..quiet()
+        };
+        let mut a = Animator::new(variant_manifest(), cfg).unwrap();
+        a.physics_mut().impulse(Channel::Chest, 80.0);
+        a.physics_mut().impulse(Channel::Pigtail, 80.0);
+        let mut max_baked: f32 = 0.0;
+        for _ in 0..60 {
+            a.tick(1.0 / 60.0);
+            let t = a.current().transform;
+            max_baked = max_baked
+                .max(t.chest_offset.abs())
+                .max(t.pigtail_offset.abs())
+                .max((t.scale - 1.0).abs());
+        }
+        assert!(max_baked < 1e-6, "baked clip still moved {max_baked}");
+        // Untagged clip: full springs.
+        a.set_base("wave", false).unwrap();
+        a.physics_mut().impulse(Channel::Chest, 80.0);
+        let mut max_plain: f32 = 0.0;
+        for _ in 0..60 {
+            a.tick(1.0 / 60.0);
+            max_plain = max_plain.max(a.current().transform.chest_offset.abs());
+        }
+        assert!(
+            max_plain > 0.5,
+            "untagged clip lost its springs {max_plain}"
+        );
+    }
+
+    /// idle + knife_tap with baked-jiggle siblings (6 frames @ 10 fps).
+    fn jiggle_manifest() -> Manifest {
+        let mut s = String::new();
+        for (name, extra) in [
+            ("idle", "mode = \"loop\"\njiggle_variant = \"idle_jiggle\"\n"),
+            (
+                "idle_jiggle",
+                "mode = \"loop\"\njiggle_baked = true\njiggle_of = \"idle\"\ndisable_springs = [\"chest\", \"pigtails\", \"hip\"]\n",
+            ),
+            ("knife_tap", "mode = \"once\"\njiggle_variant = \"knife_tap_jiggle\"\n"),
+            (
+                "knife_tap_jiggle",
+                "mode = \"once\"\njiggle_baked = true\njiggle_of = \"knife_tap\"\ndisable_springs = [\"chest\", \"pigtails\", \"hip\"]\n",
+            ),
+            ("wave", "mode = \"once\"\n"),
+        ] {
+            s += &format!("[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\n{extra}frames = [");
+            for i in 0..6 {
+                s += &format!(
+                    "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                    i * 400
+                );
+            }
+            s += "]\n";
+        }
+        Manifest::from_toml_str(&s).unwrap()
+    }
+
+    /// Largest |chest|, |pigtail|, |root x| and |root y| offsets over `secs`.
+    fn peaks(a: &mut Animator, secs: f32) -> (f32, f32, f32, f32) {
+        let mut m = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+        for _ in 0..(secs * 60.0).round() as usize {
+            a.tick(1.0 / 60.0);
+            let t = a.current().transform;
+            m = (
+                m.0.max(t.chest_offset.abs()),
+                m.1.max(t.pigtail_offset.abs()),
+                m.2.max(t.x.abs()),
+                m.3.max(t.y.abs()),
+            );
+        }
+        m
+    }
+
+    fn kick_all(a: &mut Animator) {
+        for c in [
+            Channel::Chest,
+            Channel::Pigtail,
+            Channel::RootX,
+            Channel::RootY,
+        ] {
+            a.physics_mut().impulse(c, 80.0);
+        }
+    }
+
+    #[test]
+    fn jiggle_clip_disables_chest_pigtail_hip_springs_and_normal_clip_does_not() {
+        for driver in [false, true] {
+            let cfg = AnimatorConfig {
+                physics_driver: driver,
+                ..quiet()
+            };
+            let mut a = Animator::new(jiggle_manifest(), cfg).unwrap();
+            // Normal clip: full springs.
+            a.react("wave", 1).unwrap();
+            assert!(a.spring_mask().is_empty());
+            kick_all(&mut a);
+            let (c, p, x, _) = peaks(&mut a, 0.3);
+            assert!(
+                c > 0.3 && p > 0.3 && x > 0.3,
+                "normal clip {driver}: {c} {p} {x}"
+            );
+            run(&mut a, 3.0);
+
+            // Baked jiggle clip: chest/pigtails/hip (root x) parked at rest,
+            // kicks dropped; root y (footfalls/hops) still live.
+            a.react("knife_tap_jiggle", 2).unwrap();
+            assert_eq!(a.current().clip_name, "knife_tap_jiggle");
+            let m = a.spring_mask();
+            for ch in [Channel::Chest, Channel::Pigtail, Channel::RootX] {
+                assert!(m.contains(ch), "{ch:?}");
+            }
+            assert!(!m.contains(Channel::RootY) && !m.contains(Channel::Angle));
+            kick_all(&mut a);
+            let (c, p, x, y) = peaks(&mut a, 0.5);
+            assert_eq!((c, p, x), (0.0, 0.0, 0.0), "double bounce {driver}");
+            assert!(y > 0.1, "root_y stays live {driver}: {y}");
+
+            // Restored once a clean clip is drawn again (the base).
+            run(&mut a, 1.0);
+            assert_eq!(a.current().clip_name, "idle");
+            assert!(a.spring_mask().is_empty());
+            kick_all(&mut a);
+            let (c, p, x, _) = peaks(&mut a, 0.3);
+            assert!(
+                c > 0.3 && p > 0.3 && x > 0.3,
+                "restored {driver}: {c} {p} {x}"
+            );
+        }
+    }
+
+    #[test]
+    fn prefer_jiggle_variants_draws_baked_sibling_with_springs_off() {
+        let mut a = Animator::new(jiggle_manifest(), quiet()).unwrap();
+        assert_eq!(a.current().clip_name, "idle");
+        a.set_prefer_jiggle_variants(true);
+        assert_eq!(a.current().clip_name, "idle_jiggle");
+        assert!(a.spring_mask().contains(Channel::Chest));
+        a.react("knife_tap", 1).unwrap();
+        assert_eq!(a.current().clip_name, "knife_tap_jiggle");
+        // No sibling: drawn as is, springs on.
+        run(&mut a, 1.0);
+        a.react("wave", 1).unwrap();
+        assert_eq!(a.current().clip_name, "wave");
+        a.tick(1.0 / 60.0);
+        assert!(a.spring_mask().is_empty());
+        a.set_prefer_jiggle_variants(false);
+        run(&mut a, 1.0);
+        assert_eq!(a.current().clip_name, "idle");
+        assert!(a.spring_mask().is_empty());
     }
 }

@@ -1,0 +1,397 @@
+{
+  "name": "hip_pop_wink",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "hip_pop_wink_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/hip_pop_wink/hip_pop_wink_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 47,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 617,
+    "ref_hue_median": 277.2,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      0.1,
+      -1.0,
+      0.5,
+      -1.4,
+      0.2,
+      3.2,
+      0.7,
+      -1.1,
+      1.6,
+      3.5,
+      2.8,
+      1.7,
+      1.4,
+      1.5,
+      1.1,
+      1.2,
+      0.6,
+      2.0,
+      1.2,
+      2.1,
+      0.9,
+      0.5,
+      0.3
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "frame_durations_ms": [
+    63,
+    63,
+    63,
+    63,
+    63,
+    63,
+    63,
+    186,
+    186,
+    63,
+    63,
+    63,
+    63,
+    63,
+    63,
+    63,
+    63,
+    63,
+    63,
+    169,
+    169,
+    63,
+    63,
+    143
+  ],
+  "durations_note": "Derived from old hip_pop_wink frame_durations_ms: profile resampled to 24 frames and scaled to the real video time (1917 ms), final hold 143 ms kept.",
+  "frame_points": {
+    "sparkle_point": [
+      [
+        252,
+        59
+      ],
+      [
+        252,
+        60
+      ],
+      [
+        252,
+        60
+      ],
+      [
+        251,
+        62
+      ],
+      [
+        251,
+        64
+      ],
+      [
+        249,
+        62
+      ],
+      [
+        247,
+        56
+      ],
+      [
+        245,
+        50
+      ],
+      [
+        244,
+        50
+      ],
+      [
+        245,
+        52
+      ],
+      [
+        246,
+        53
+      ],
+      [
+        246,
+        52
+      ],
+      [
+        246,
+        52
+      ],
+      [
+        245,
+        52
+      ],
+      [
+        245,
+        52
+      ],
+      [
+        246,
+        51
+      ],
+      [
+        246,
+        51
+      ],
+      [
+        246,
+        52
+      ],
+      [
+        246,
+        54
+      ],
+      [
+        248,
+        56
+      ],
+      [
+        250,
+        57
+      ],
+      [
+        251,
+        58
+      ],
+      [
+        252,
+        59
+      ],
+      [
+        252,
+        59
+      ]
+    ]
+  },
+  "sparkle_point": [
+    245,
+    52
+  ],
+  "effects_overlay": {
+    "painter": "generated/_tools/build_allure.py shapes (heart / Pen.sparkle), redrawn by _tools/allure_fx_v2.py",
+    "frames": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17
+    ],
+    "tracking": "head crown",
+    "match_scores": []
+  },
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      140,
+      277,
+      22,
+      392
+    ],
+    [
+      140,
+      277,
+      22,
+      392
+    ],
+    [
+      142,
+      278,
+      23,
+      392
+    ],
+    [
+      145,
+      278,
+      25,
+      392
+    ],
+    [
+      146,
+      278,
+      29,
+      392
+    ],
+    [
+      143,
+      282,
+      27,
+      392
+    ],
+    [
+      134,
+      296,
+      17,
+      392
+    ],
+    [
+      132,
+      291,
+      13,
+      392
+    ],
+    [
+      136,
+      282,
+      13,
+      392
+    ],
+    [
+      122,
+      275,
+      14,
+      392
+    ],
+    [
+      123,
+      275,
+      14,
+      392
+    ],
+    [
+      127,
+      275,
+      13,
+      392
+    ],
+    [
+      129,
+      275,
+      13,
+      392
+    ],
+    [
+      130,
+      275,
+      13,
+      392
+    ],
+    [
+      130,
+      275,
+      13,
+      392
+    ],
+    [
+      130,
+      275,
+      13,
+      392
+    ],
+    [
+      131,
+      275,
+      13,
+      392
+    ],
+    [
+      132,
+      275,
+      13,
+      392
+    ],
+    [
+      136,
+      274,
+      14,
+      392
+    ],
+    [
+      135,
+      281,
+      18,
+      392
+    ],
+    [
+      140,
+      298,
+      20,
+      392
+    ],
+    [
+      136,
+      297,
+      21,
+      392
+    ],
+    [
+      130,
+      276,
+      22,
+      392
+    ],
+    [
+      136,
+      277,
+      22,
+      392
+    ]
+  ]
+}

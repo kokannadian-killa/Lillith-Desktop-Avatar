@@ -1,0 +1,146 @@
+{
+  "name": "tail_wag",
+  "placeholder": false,
+  "frame_count": 11,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "tail_wag_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/tail_wag/tail_wag_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 37,
+    "last": 57,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0
+  ],
+  "horn_fix": {
+    "ref_horn_px": 629,
+    "ref_hue_median": 278.4,
+    "mean_hue_shift_deg_per_frame": [
+      1.4,
+      0.1,
+      1.6,
+      0.2,
+      0.1,
+      -1.2,
+      -0.0,
+      1.0,
+      4.0,
+      2.4,
+      1.9
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Excited tail wag + hip wiggle, 0.92 s loop cut (f37-f57).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      131,
+      273,
+      24,
+      392
+    ],
+    [
+      129,
+      257,
+      35,
+      392
+    ],
+    [
+      132,
+      262,
+      43,
+      392
+    ],
+    [
+      137,
+      275,
+      34,
+      392
+    ],
+    [
+      135,
+      270,
+      23,
+      392
+    ],
+    [
+      132,
+      275,
+      22,
+      392
+    ],
+    [
+      129,
+      269,
+      31,
+      392
+    ],
+    [
+      130,
+      257,
+      42,
+      392
+    ],
+    [
+      134,
+      270,
+      40,
+      392
+    ],
+    [
+      136,
+      274,
+      27,
+      392
+    ],
+    [
+      133,
+      260,
+      21,
+      392
+    ]
+  ]
+}

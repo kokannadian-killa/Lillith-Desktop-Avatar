@@ -1,0 +1,277 @@
+{
+  "name": "cheeky_tongue_wink",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "cheeky_tongue_wink_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 6.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/cheeky_tongue_wink/cheeky_tongue_wink_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 93,
+    "step": 4,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 620,
+    "ref_hue_median": 276.0,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      -0.4,
+      -0.2,
+      -0.7,
+      -2.6,
+      0.2,
+      1.4,
+      1.7,
+      4.1,
+      -6.7,
+      -21.7,
+      -4.7,
+      5.3,
+      -0.5,
+      -0.4,
+      -1.2,
+      -0.5,
+      -0.4,
+      -0.2,
+      -0.5,
+      -0.0,
+      -0.1,
+      -0.6,
+      -0.7
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Once: tongue out + wink + rock-on sign with a hop, back to idle; timings from old.",
+  "frame_durations_ms": [
+    94,
+    94,
+    94,
+    94,
+    94,
+    94,
+    94,
+    94,
+    94,
+    188,
+    188,
+    188,
+    188,
+    188,
+    828,
+    188,
+    188,
+    188,
+    188,
+    188,
+    94,
+    94,
+    94,
+    1210
+  ],
+  "durations_note": "Derived from old cheeky_tongue_wink frame_durations_ms: profile resampled to 24 frames and scaled to the real video time (3833 ms), final hold 1210 ms kept.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      139,
+      277,
+      21,
+      392
+    ],
+    [
+      138,
+      277,
+      21,
+      392
+    ],
+    [
+      100,
+      278,
+      21,
+      392
+    ],
+    [
+      89,
+      279,
+      21,
+      392
+    ],
+    [
+      125,
+      279,
+      21,
+      392
+    ],
+    [
+      125,
+      278,
+      21,
+      392
+    ],
+    [
+      125,
+      278,
+      25,
+      392
+    ],
+    [
+      125,
+      278,
+      36,
+      392
+    ],
+    [
+      125,
+      277,
+      41,
+      392
+    ],
+    [
+      125,
+      270,
+      17,
+      389
+    ],
+    [
+      125,
+      279,
+      17,
+      370
+    ],
+    [
+      125,
+      282,
+      17,
+      388
+    ],
+    [
+      125,
+      279,
+      24,
+      392
+    ],
+    [
+      126,
+      274,
+      21,
+      392
+    ],
+    [
+      106,
+      266,
+      21,
+      392
+    ],
+    [
+      103,
+      281,
+      21,
+      392
+    ],
+    [
+      145,
+      277,
+      21,
+      392
+    ],
+    [
+      148,
+      283,
+      21,
+      392
+    ],
+    [
+      140,
+      281,
+      21,
+      392
+    ],
+    [
+      136,
+      277,
+      21,
+      392
+    ],
+    [
+      138,
+      276,
+      21,
+      392
+    ],
+    [
+      139,
+      276,
+      21,
+      392
+    ],
+    [
+      139,
+      277,
+      21,
+      392
+    ],
+    [
+      139,
+      277,
+      21,
+      392
+    ]
+  ]
+}

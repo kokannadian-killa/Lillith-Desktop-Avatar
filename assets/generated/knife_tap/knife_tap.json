@@ -1,0 +1,170 @@
+{
+  "name": "knife_tap",
+  "placeholder": false,
+  "frame_count": 14,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "knife_tap_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.535,
+  "body_anchor_x": 200,
+  "facing": "front 3/4",
+  "source_files": [
+    "../../source/video/knife_tap/knife_tap_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 45,
+    "last": 71,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 573,
+    "ref_hue_median": 270.6,
+    "mean_hue_shift_deg_per_frame": [
+      -0.2,
+      -0.3,
+      -0.3,
+      -1.0,
+      0.0,
+      -0.5,
+      0.7,
+      0.1,
+      -1.1,
+      -1.4,
+      -1.5,
+      -1.8,
+      -1.9,
+      -0.5
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Cocky knife-palm tap with body groove, 1.17 s loop cut (f45-f71).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      117,
+      326,
+      23,
+      392
+    ],
+    [
+      117,
+      328,
+      23,
+      392
+    ],
+    [
+      118,
+      338,
+      25,
+      392
+    ],
+    [
+      119,
+      346,
+      27,
+      392
+    ],
+    [
+      123,
+      322,
+      32,
+      392
+    ],
+    [
+      126,
+      290,
+      33,
+      392
+    ],
+    [
+      124,
+      281,
+      30,
+      392
+    ],
+    [
+      120,
+      281,
+      25,
+      392
+    ],
+    [
+      118,
+      284,
+      23,
+      392
+    ],
+    [
+      118,
+      307,
+      24,
+      392
+    ],
+    [
+      115,
+      334,
+      24,
+      392
+    ],
+    [
+      114,
+      348,
+      23,
+      392
+    ],
+    [
+      115,
+      340,
+      23,
+      392
+    ],
+    [
+      117,
+      329,
+      23,
+      392
+    ]
+  ]
+}

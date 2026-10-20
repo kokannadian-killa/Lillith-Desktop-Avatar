@@ -1,0 +1,242 @@
+{
+  "name": "hip_sway",
+  "placeholder": false,
+  "frame_count": 23,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "hip_sway_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/hip_sway/hip_sway_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 45,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 625,
+    "ref_hue_median": 277.8,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      1.0,
+      1.1,
+      2.2,
+      2.8,
+      2.7,
+      1.4,
+      3.2,
+      4.3,
+      4.7,
+      3.9,
+      3.4,
+      1.4,
+      3.2,
+      3.0,
+      2.9,
+      3.6,
+      3.0,
+      2.1,
+      -0.0,
+      0.4,
+      -0.4,
+      -0.4
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      139,
+      277,
+      22,
+      392
+    ],
+    [
+      139,
+      276,
+      22,
+      392
+    ],
+    [
+      137,
+      269,
+      22,
+      392
+    ],
+    [
+      138,
+      261,
+      24,
+      392
+    ],
+    [
+      141,
+      263,
+      25,
+      392
+    ],
+    [
+      146,
+      269,
+      26,
+      392
+    ],
+    [
+      151,
+      277,
+      26,
+      392
+    ],
+    [
+      150,
+      282,
+      29,
+      392
+    ],
+    [
+      150,
+      305,
+      31,
+      392
+    ],
+    [
+      152,
+      328,
+      31,
+      392
+    ],
+    [
+      153,
+      332,
+      29,
+      392
+    ],
+    [
+      148,
+      301,
+      26,
+      392
+    ],
+    [
+      140,
+      271,
+      25,
+      392
+    ],
+    [
+      131,
+      255,
+      24,
+      392
+    ],
+    [
+      126,
+      255,
+      27,
+      392
+    ],
+    [
+      114,
+      252,
+      28,
+      392
+    ],
+    [
+      87,
+      249,
+      27,
+      392
+    ],
+    [
+      85,
+      250,
+      25,
+      392
+    ],
+    [
+      108,
+      254,
+      23,
+      392
+    ],
+    [
+      128,
+      258,
+      22,
+      392
+    ],
+    [
+      133,
+      261,
+      22,
+      392
+    ],
+    [
+      135,
+      262,
+      22,
+      392
+    ],
+    [
+      137,
+      273,
+      22,
+      392
+    ]
+  ]
+}

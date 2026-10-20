@@ -1,0 +1,218 @@
+{
+  "name": "event_error",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_error_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.528,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "journal.error",
+  "rule_events": [
+    "journal.error",
+    "app.crash"
+  ],
+  "event_slug": "error",
+  "base_clip": "facepalm",
+  "base_frames": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "source_files": [
+    "../../source/video/facepalm/facepalm_v3_a.mp4"
+  ],
+  "effects": [
+    "facepalm + rose warning triangle with \"!\" that shakes and glows"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    293,
+    64
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        293,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        293,
+        64
+      ],
+      [
+        293,
+        64
+      ],
+      [
+        292,
+        66
+      ],
+      [
+        293,
+        69
+      ],
+      [
+        295,
+        69
+      ],
+      [
+        294,
+        66
+      ],
+      [
+        292,
+        64
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      1.0,
+      0.4
+    ],
+    [
+      0.4,
+      0.1
+    ],
+    [
+      0.3,
+      -0.1
+    ],
+    [
+      0.8,
+      -0.3
+    ],
+    [
+      1.0,
+      0.1
+    ],
+    [
+      0.1,
+      2.1
+    ],
+    [
+      0.5,
+      4.6
+    ],
+    [
+      2.6,
+      4.6
+    ],
+    [
+      2.2,
+      2.1
+    ],
+    [
+      -0.2,
+      0.0
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/facepalm (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): facepalm + rose warning triangle with \"!\" that shakes and glows.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      145,
+      327,
+      22,
+      392
+    ],
+    [
+      145,
+      329,
+      22,
+      392
+    ],
+    [
+      145,
+      328,
+      22,
+      392
+    ],
+    [
+      144,
+      320,
+      22,
+      392
+    ],
+    [
+      143,
+      323,
+      23,
+      392
+    ],
+    [
+      141,
+      328,
+      29,
+      392
+    ],
+    [
+      138,
+      329,
+      31,
+      392
+    ],
+    [
+      134,
+      327,
+      33,
+      392
+    ],
+    [
+      120,
+      320,
+      28,
+      392
+    ],
+    [
+      121,
+      326,
+      23,
+      392
+    ]
+  ]
+}

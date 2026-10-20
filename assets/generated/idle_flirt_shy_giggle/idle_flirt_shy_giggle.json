@@ -1,0 +1,434 @@
+{
+  "name": "idle_flirt_shy_giggle",
+  "placeholder": false,
+  "frame_count": 47,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "idle_flirt_shy_giggle_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/idle_flirt_shy_giggle/idle_flirt_shy_giggle_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 93,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 624,
+    "ref_hue_median": 276.1,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      0.1,
+      -0.2,
+      0.2,
+      -0.1,
+      -0.1,
+      0.2,
+      0.7,
+      0.7,
+      1.1,
+      1.6,
+      1.8,
+      1.8,
+      2.0,
+      1.2,
+      1.2,
+      0.2,
+      0.8,
+      1.5,
+      0.4,
+      1.2,
+      1.7,
+      1.5,
+      1.4,
+      2.1,
+      -0.0,
+      1.4,
+      2.5,
+      -0.4,
+      -0.8,
+      -0.2,
+      0.2,
+      1.2,
+      2.1,
+      0.4,
+      0.3,
+      0.6,
+      0.9,
+      0.8,
+      0.4,
+      0.1,
+      -0.1,
+      -0.2,
+      0.5,
+      0.3,
+      0.1,
+      -0.1
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Idle variant: giggles behind her hand, small happy bounces on her toes; whole 4 s video (first = last = idle still). Also serves bounce_giggle (manifest alias; same motion in v1).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      139,
+      277,
+      21,
+      392
+    ],
+    [
+      139,
+      277,
+      21,
+      392
+    ],
+    [
+      139,
+      277,
+      21,
+      392
+    ],
+    [
+      139,
+      277,
+      21,
+      392
+    ],
+    [
+      139,
+      277,
+      21,
+      392
+    ],
+    [
+      139,
+      277,
+      21,
+      392
+    ],
+    [
+      137,
+      277,
+      21,
+      392
+    ],
+    [
+      135,
+      277,
+      21,
+      392
+    ],
+    [
+      135,
+      277,
+      22,
+      392
+    ],
+    [
+      146,
+      277,
+      23,
+      392
+    ],
+    [
+      151,
+      281,
+      24,
+      392
+    ],
+    [
+      150,
+      293,
+      24,
+      392
+    ],
+    [
+      150,
+      298,
+      23,
+      392
+    ],
+    [
+      151,
+      296,
+      24,
+      392
+    ],
+    [
+      150,
+      293,
+      27,
+      392
+    ],
+    [
+      151,
+      280,
+      22,
+      392
+    ],
+    [
+      149,
+      272,
+      19,
+      392
+    ],
+    [
+      126,
+      274,
+      25,
+      392
+    ],
+    [
+      118,
+      272,
+      24,
+      392
+    ],
+    [
+      123,
+      270,
+      22,
+      392
+    ],
+    [
+      140,
+      270,
+      27,
+      392
+    ],
+    [
+      153,
+      270,
+      24,
+      392
+    ],
+    [
+      150,
+      298,
+      20,
+      392
+    ],
+    [
+      145,
+      297,
+      25,
+      392
+    ],
+    [
+      146,
+      290,
+      22,
+      392
+    ],
+    [
+      150,
+      277,
+      21,
+      392
+    ],
+    [
+      151,
+      270,
+      27,
+      392
+    ],
+    [
+      125,
+      269,
+      24,
+      392
+    ],
+    [
+      118,
+      270,
+      21,
+      392
+    ],
+    [
+      121,
+      271,
+      26,
+      392
+    ],
+    [
+      125,
+      272,
+      26,
+      392
+    ],
+    [
+      136,
+      271,
+      21,
+      392
+    ],
+    [
+      153,
+      272,
+      25,
+      392
+    ],
+    [
+      153,
+      290,
+      26,
+      392
+    ],
+    [
+      153,
+      302,
+      21,
+      392
+    ],
+    [
+      149,
+      297,
+      24,
+      392
+    ],
+    [
+      146,
+      294,
+      27,
+      392
+    ],
+    [
+      147,
+      292,
+      27,
+      392
+    ],
+    [
+      149,
+      292,
+      27,
+      392
+    ],
+    [
+      150,
+      291,
+      27,
+      392
+    ],
+    [
+      151,
+      291,
+      27,
+      392
+    ],
+    [
+      151,
+      291,
+      26,
+      392
+    ],
+    [
+      151,
+      291,
+      24,
+      392
+    ],
+    [
+      150,
+      290,
+      22,
+      392
+    ],
+    [
+      150,
+      287,
+      21,
+      392
+    ],
+    [
+      142,
+      284,
+      21,
+      392
+    ],
+    [
+      135,
+      281,
+      21,
+      392
+    ]
+  ]
+}

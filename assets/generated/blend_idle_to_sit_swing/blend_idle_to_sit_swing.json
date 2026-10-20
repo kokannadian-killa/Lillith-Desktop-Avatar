@@ -1,0 +1,103 @@
+{
+  "name": "blend_idle_to_sit_swing",
+  "placeholder": false,
+  "frame_count": 6,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "blend_idle_to_sit_swing_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.52,
+  "body_anchor_x": 200,
+  "from_clip": "idle_a",
+  "to_clip": "sit_swing",
+  "source_frames": {
+    "idle_a": 0,
+    "sit_swing": 0
+  },
+  "facing": "front -> right (seated)",
+  "source_files": [
+    "../../source/video/blend_idle_to_sit_swing/blend_idle_to_sit_swing_v3_a.mp4"
+  ],
+  "source_video_frames": [
+    8,
+    15,
+    22,
+    28,
+    35,
+    42
+  ],
+  "horn_fix": {
+    "ref_horn_px": 620,
+    "ref_hue_median": 275.4,
+    "mean_hue_shift_deg_per_frame": [
+      -1.0,
+      1.5,
+      2.8,
+      3.5,
+      5.8,
+      4.6
+    ]
+  },
+  "blend_method": "real transition video (Grok Imagine I2V, first frame = clip A boundary frame, last = clip B boundary frame); placement registered to both clips, scale/offset interpolated; interior frames only",
+  "scale_from_to": [
+    0.54,
+    0.5
+  ],
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "pigtails",
+    "tail"
+  ],
+  "notes": "Transition helper idle -> sit_swing: 6 frames from a dedicated transition video between idle_a[0] and sit_swing[0]. idle endpoints use idle_a frame 0 (= idle_b frame 0 = idle still).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      129,
+      267,
+      17,
+      387
+    ],
+    [
+      131,
+      251,
+      16,
+      383
+    ],
+    [
+      100,
+      275,
+      25,
+      379
+    ],
+    [
+      93,
+      282,
+      37,
+      377
+    ],
+    [
+      110,
+      272,
+      28,
+      374
+    ],
+    [
+      45,
+      274,
+      17,
+      369
+    ]
+  ]
+}

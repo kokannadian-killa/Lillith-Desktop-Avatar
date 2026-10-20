@@ -1,0 +1,95 @@
+{
+  "name": "blend_sleep_to_wake",
+  "placeholder": false,
+  "frame_count": 5,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "blend_sleep_to_wake_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 8.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.537,
+  "body_anchor_x": 200,
+  "from_clip": "sleep",
+  "to_clip": "wake",
+  "source_frames": {
+    "sleep": 23,
+    "wake": 0
+  },
+  "facing": "right side (seated)",
+  "source_files": [
+    "../../source/video/blend_sleep_to_wake/blend_sleep_to_wake_v3_a.mp4"
+  ],
+  "source_video_frames": [
+    13,
+    25,
+    37,
+    49,
+    61
+  ],
+  "horn_fix": {
+    "ref_horn_px": 264,
+    "ref_hue_median": 265.1,
+    "mean_hue_shift_deg_per_frame": [
+      -5.5,
+      -7.5,
+      -2.3,
+      -0.9,
+      -0.8
+    ]
+  },
+  "blend_method": "real transition video (Grok Imagine I2V, first frame = clip A boundary frame, last = clip B boundary frame); placement registered to both clips, scale/offset interpolated; interior frames only",
+  "scale_from_to": [
+    0.5342857142857143,
+    0.54
+  ],
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "pigtails",
+    "tail"
+  ],
+  "notes": "Transition helper sleep -> wake: 5 frames from a dedicated transition video between sleep[23] and wake[0]. idle endpoints use idle_a frame 0 (= idle_b frame 0 = idle still).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      105,
+      295,
+      209,
+      389
+    ],
+    [
+      116,
+      295,
+      209,
+      389
+    ],
+    [
+      111,
+      296,
+      199,
+      390
+    ],
+    [
+      114,
+      296,
+      198,
+      389
+    ],
+    [
+      114,
+      295,
+      199,
+      389
+    ]
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "name": "event_notification",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_notification_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "notify.received",
+  "rule_events": [
+    "notify.received"
+  ],
+  "event_slug": "notification",
+  "base_clip": "tail_wag",
+  "base_frames": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "source_files": [
+    "../../source/video/tail_wag/tail_wag_v3_a.mp4"
+  ],
+  "effects": [
+    "tail wag + ringing magenta bell with a rose \"1\" badge"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    292,
+    67
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        292,
+        67
+      ],
+      [
+        292,
+        72
+      ],
+      [
+        292,
+        74
+      ],
+      [
+        292,
+        72
+      ],
+      [
+        292,
+        68
+      ],
+      [
+        292,
+        71
+      ],
+      [
+        292,
+        75
+      ],
+      [
+        292,
+        74
+      ],
+      [
+        292,
+        68
+      ],
+      [
+        292,
+        65
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      0.4,
+      3.4
+    ],
+    [
+      0.4,
+      7.8
+    ],
+    [
+      0.1,
+      10.3
+    ],
+    [
+      0.1,
+      7.5
+    ],
+    [
+      0.2,
+      4.5
+    ],
+    [
+      0.3,
+      7.0
+    ],
+    [
+      0.2,
+      11.2
+    ],
+    [
+      0.1,
+      10.0
+    ],
+    [
+      0.0,
+      4.5
+    ],
+    [
+      0.0,
+      0.8
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/tail_wag (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): tail wag + ringing magenta bell with a rose \"1\" badge.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      131,
+      308,
+      24,
+      392
+    ],
+    [
+      130,
+      300,
+      35,
+      392
+    ],
+    [
+      132,
+      315,
+      44,
+      392
+    ],
+    [
+      137,
+      316,
+      34,
+      392
+    ],
+    [
+      136,
+      316,
+      23,
+      392
+    ],
+    [
+      130,
+      316,
+      31,
+      392
+    ],
+    [
+      130,
+      316,
+      43,
+      392
+    ],
+    [
+      135,
+      315,
+      40,
+      392
+    ],
+    [
+      136,
+      315,
+      27,
+      392
+    ],
+    [
+      134,
+      315,
+      21,
+      392
+    ]
+  ]
+}

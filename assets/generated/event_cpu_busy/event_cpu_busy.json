@@ -1,0 +1,217 @@
+{
+  "name": "event_cpu_busy",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_cpu_busy_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.528,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "cpu.high",
+  "rule_events": [
+    "cpu.high"
+  ],
+  "event_slug": "cpu_busy",
+  "base_clip": "facepalm",
+  "base_frames": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "source_files": [
+    "../../source/video/facepalm/facepalm_v3_a.mp4"
+  ],
+  "effects": [
+    "facepalm + CPU chip heating from ice-cyan to rose with heat shimmer, sweat drop"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    293,
+    64
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        293,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        293,
+        64
+      ],
+      [
+        293,
+        64
+      ],
+      [
+        292,
+        66
+      ],
+      [
+        293,
+        69
+      ],
+      [
+        295,
+        69
+      ],
+      [
+        294,
+        66
+      ],
+      [
+        292,
+        64
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      1.0,
+      0.4
+    ],
+    [
+      0.4,
+      0.1
+    ],
+    [
+      0.3,
+      -0.1
+    ],
+    [
+      0.8,
+      -0.3
+    ],
+    [
+      1.0,
+      0.1
+    ],
+    [
+      0.1,
+      2.1
+    ],
+    [
+      0.5,
+      4.6
+    ],
+    [
+      2.6,
+      4.6
+    ],
+    [
+      2.2,
+      2.1
+    ],
+    [
+      -0.2,
+      0.0
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/facepalm (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): facepalm + CPU chip heating from ice-cyan to rose with heat shimmer, sweat drop.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      145,
+      324,
+      12,
+      392
+    ],
+    [
+      145,
+      324,
+      12,
+      392
+    ],
+    [
+      145,
+      324,
+      12,
+      392
+    ],
+    [
+      144,
+      325,
+      11,
+      392
+    ],
+    [
+      143,
+      326,
+      12,
+      392
+    ],
+    [
+      141,
+      326,
+      14,
+      392
+    ],
+    [
+      138,
+      327,
+      16,
+      392
+    ],
+    [
+      134,
+      329,
+      16,
+      392
+    ],
+    [
+      120,
+      329,
+      14,
+      392
+    ],
+    [
+      121,
+      327,
+      12,
+      392
+    ]
+  ]
+}

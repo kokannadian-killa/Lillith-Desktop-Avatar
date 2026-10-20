@@ -1,0 +1,277 @@
+{
+  "name": "lean_tease",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "lean_tease_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "3/4 front",
+  "source_files": [
+    "../../source/video/lean_tease/lean_tease_v3_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 47,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 629,
+    "ref_hue_median": 276.8,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      -0.3,
+      0.0,
+      -0.8,
+      0.4,
+      0.6,
+      0.2,
+      3.9,
+      2.7,
+      4.4,
+      4.2,
+      1.0,
+      2.0,
+      5.0,
+      4.8,
+      3.0,
+      -0.8,
+      0.4,
+      2.1,
+      5.0,
+      5.3,
+      2.1,
+      2.2,
+      0.5
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "frame_durations_ms": [
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    179,
+    179,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    141,
+    141,
+    420
+  ],
+  "durations_note": "Derived from old lean_tease frame_durations_ms: profile resampled to 24 frames and scaled to the real video time (1917 ms), final hold 420 ms kept.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      139,
+      277,
+      22,
+      392
+    ],
+    [
+      124,
+      278,
+      22,
+      392
+    ],
+    [
+      98,
+      278,
+      22,
+      392
+    ],
+    [
+      105,
+      279,
+      22,
+      392
+    ],
+    [
+      135,
+      280,
+      23,
+      392
+    ],
+    [
+      138,
+      282,
+      22,
+      392
+    ],
+    [
+      138,
+      289,
+      23,
+      392
+    ],
+    [
+      139,
+      300,
+      28,
+      392
+    ],
+    [
+      139,
+      306,
+      32,
+      392
+    ],
+    [
+      139,
+      306,
+      31,
+      392
+    ],
+    [
+      140,
+      301,
+      26,
+      392
+    ],
+    [
+      142,
+      288,
+      25,
+      392
+    ],
+    [
+      145,
+      269,
+      25,
+      392
+    ],
+    [
+      140,
+      260,
+      29,
+      392
+    ],
+    [
+      139,
+      259,
+      30,
+      392
+    ],
+    [
+      146,
+      261,
+      27,
+      392
+    ],
+    [
+      146,
+      276,
+      25,
+      392
+    ],
+    [
+      144,
+      295,
+      22,
+      392
+    ],
+    [
+      143,
+      305,
+      26,
+      392
+    ],
+    [
+      144,
+      306,
+      30,
+      392
+    ],
+    [
+      145,
+      304,
+      29,
+      392
+    ],
+    [
+      131,
+      299,
+      26,
+      392
+    ],
+    [
+      113,
+      291,
+      23,
+      392
+    ],
+    [
+      114,
+      284,
+      23,
+      392
+    ]
+  ]
+}

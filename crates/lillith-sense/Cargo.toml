@@ -1,6 +1,6 @@
 [package]
 name = "lillith-sense"
-description = "System-monitor event sources for Lillith: sysinfo, D-Bus (UPower, NetworkManager, UDisks2, Notifications), inotify, journald and the KWin bridge."
+description = "System-monitor event sources for Lillith: procfs/sysfs polling, desktop idle, notifications and the KWin bridge (D-Bus), inotify, journald."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -19,19 +19,26 @@ pulse = ["dep:libpulse-binding"]
 journal = ["dep:systemd"]
 # Wayland clipboard watcher.
 clipboard = ["dep:wl-clipboard-rs"]
-# X11 window list fallback (replaces wmctrl/xdotool).
+# X11: desktop idle via MIT-SCREEN-SAVER (and later the window list fallback).
 x11 = ["dep:x11rb"]
+# Wayland desktop idle via ext-idle-notify-v1 (pure Rust, no system libs).
+wayland-idle = ["dep:wayland-client", "dep:wayland-protocols"]
 
 [dependencies]
 lillith-core.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
-sysinfo.workspace = true
 zbus.workspace = true
 notify.workspace = true
 bluer = { workspace = true, optional = true, features = ["bluetoothd"] }
 libpulse-binding = { workspace = true, optional = true }
 systemd = { workspace = true, optional = true, features = ["journal"] }
 wl-clipboard-rs = { workspace = true, optional = true }
-x11rb = { workspace = true, optional = true }
+x11rb = { workspace = true, optional = true, features = ["screensaver"] }
+wayland-client = { workspace = true, optional = true }
+wayland-protocols = { workspace = true, optional = true }
+futures-util = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

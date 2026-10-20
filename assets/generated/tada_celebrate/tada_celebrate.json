@@ -1,0 +1,214 @@
+{
+  "name": "tada_celebrate",
+  "placeholder": false,
+  "frame_count": 17,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "tada_celebrate_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 8.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.535,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/tada_celebrate/tada_celebrate_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 49,
+    "step": 3,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 611,
+    "ref_hue_median": 277.4,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      0.5,
+      0.3,
+      4.7,
+      -2.1,
+      -14.1,
+      -37.1,
+      -20.6,
+      -24.8,
+      -10.6,
+      -12.0,
+      -15.5,
+      -16.1,
+      -15.7,
+      -17.0,
+      -17.6,
+      -17.3
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Hop + arms-up ta-da, one-shot from the idle still to the tada_01 pose (video 2 s, every 3rd frame). Timings derived from old (accelerating profile + 500 ms final hold).",
+  "frame_durations_ms": [
+    112,
+    112,
+    87,
+    87,
+    99,
+    112,
+    112,
+    112,
+    112,
+    124,
+    124,
+    137,
+    149,
+    149,
+    174,
+    199,
+    500
+  ],
+  "durations_note": "Derived from old tada_celebrate frame_durations_ms: profile resampled to 17 frames and scaled to the real video time (2000 ms), final hold 500 ms kept.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      140,
+      277,
+      20,
+      387
+    ],
+    [
+      138,
+      282,
+      31,
+      387
+    ],
+    [
+      139,
+      285,
+      57,
+      387
+    ],
+    [
+      145,
+      288,
+      64,
+      387
+    ],
+    [
+      138,
+      282,
+      28,
+      387
+    ],
+    [
+      129,
+      281,
+      16,
+      358
+    ],
+    [
+      136,
+      274,
+      16,
+      336
+    ],
+    [
+      128,
+      282,
+      16,
+      376
+    ],
+    [
+      94,
+      313,
+      36,
+      391
+    ],
+    [
+      79,
+      327,
+      36,
+      391
+    ],
+    [
+      80,
+      325,
+      24,
+      391
+    ],
+    [
+      84,
+      321,
+      18,
+      391
+    ],
+    [
+      86,
+      318,
+      19,
+      391
+    ],
+    [
+      86,
+      318,
+      19,
+      391
+    ],
+    [
+      86,
+      318,
+      19,
+      391
+    ],
+    [
+      86,
+      317,
+      20,
+      391
+    ],
+    [
+      87,
+      317,
+      20,
+      391
+    ]
+  ]
+}
