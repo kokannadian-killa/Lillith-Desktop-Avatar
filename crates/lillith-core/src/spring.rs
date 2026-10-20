@@ -155,6 +155,90 @@ impl Channel {
     }
 }
 
+impl Channel {
+    fn bit(self) -> u8 {
+        1 << (self as u8)
+    }
+}
+
+/// A set of spring channels the engine must leave alone, e.g. while a clip
+/// whose frames already contain baked jiggle is drawn (manifest
+/// `engine_springs: "disable chest/pigtails/hip for this clip"`).
+///
+/// Art-side group names map onto channels: `chest` → [`Channel::Chest`],
+/// `pigtails`/`pigtail`/`pig` → [`Channel::Pigtail`], `hip` → [`Channel::RootX`]
+/// (the lateral hip/root sway; physics.toml plants root motion at the hip).
+/// Every [`Channel::from_name`] name is accepted as well.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct SpringMask(u8);
+
+impl SpringMask {
+    pub const NONE: Self = Self(0);
+
+    /// Mask with exactly `channels`.
+    pub fn of(channels: &[Channel]) -> Self {
+        Self(channels.iter().fold(0, |m, c| m | c.bit()))
+    }
+
+    pub fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn contains(self, c: Channel) -> bool {
+        self.0 & c.bit() != 0
+    }
+
+    pub fn insert(&mut self, c: Channel) {
+        self.0 |= c.bit();
+    }
+
+    /// Channels in the mask, in [`Channel::ALL`] order.
+    pub fn channels(self) -> impl Iterator<Item = Channel> {
+        Channel::ALL.into_iter().filter(move |&c| self.contains(c))
+    }
+
+    /// Channel for one art-side group name (`chest`, `pigtails`, `hip`, or
+    /// any [`Channel::from_name`] name). `None` for unknown names.
+    pub fn group(name: &str) -> Option<Channel> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "hip" | "hips" => Some(Channel::RootX),
+            other => Channel::from_name(other),
+        }
+    }
+
+    /// Mask from group names; unknown names are returned as the error.
+    pub fn from_groups<S: AsRef<str>>(names: &[S]) -> Result<Self, String> {
+        let mut m = Self::NONE;
+        for n in names {
+            m.insert(Self::group(n.as_ref()).ok_or_else(|| n.as_ref().to_string())?);
+        }
+        Ok(m)
+    }
+
+    /// Group names named in a free-text `engine_springs` directive such as
+    /// `"disable chest/pigtails/hip for this clip"`: the words between
+    /// `disable` and the first non-channel word (separators `/`, `,`, `+`,
+    /// `and`, whitespace). Empty when the text has no `disable`.
+    pub fn parse_directive(text: &str) -> Vec<String> {
+        let lower = text.to_ascii_lowercase();
+        let Some(i) = lower.find("disable") else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for w in lower[i + "disable".len()..]
+            .split(|c: char| c == '/' || c == ',' || c == '+' || c.is_whitespace())
+            .filter(|w| !w.is_empty() && *w != "and" && *w != "the")
+        {
+            if Self::group(w).is_some() {
+                out.push(w.to_string());
+            } else if !out.is_empty() {
+                break;
+            }
+        }
+        out
+    }
+}
+
 /// The spring-driven transform applied on top of the current sprite frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Transform {
@@ -202,6 +286,8 @@ pub struct Physics {
     pub pigtail_sway_gain: f32,
     /// Sub-step rate (README-SP: 120 Hz).
     pub hz: f32,
+    /// Channels currently switched off (see [`Physics::set_suppressed`]).
+    pub suppressed: SpringMask,
 }
 
 impl Default for Physics {
@@ -237,6 +323,7 @@ impl Physics {
             chest_bounce_gain: cfg.chest_bounce_gain,
             pigtail_sway_gain: cfg.pigtail_sway_gain,
             hz: if hz > 0.0 { hz } else { 120.0 },
+            suppressed: SpringMask::NONE,
         }
     }
 
@@ -275,6 +362,9 @@ impl Physics {
     /// Velocity kick of `strength` (channel units per second), scaled by the
     /// channel's gain.
     pub fn impulse(&mut self, c: Channel, strength: f32) {
+        if self.suppressed.contains(c) {
+            return;
+        }
         let g = self.gain(c);
         self.spring_mut(c).impulse(strength * g);
     }
@@ -301,20 +391,45 @@ impl Physics {
     pub fn step(&mut self, dt: f32) {
         let hz = self.hz;
         for c in Channel::ALL {
-            self.spring_mut(c).advance(dt, hz);
+            if self.suppressed.contains(c) {
+                Self::hold(self.spring_mut(c));
+            } else {
+                self.spring_mut(c).advance(dt, hz);
+            }
+        }
+    }
+
+    /// Parks a suppressed spring on its target with no velocity.
+    fn hold(s: &mut Spring) {
+        s.position = s.target;
+        s.velocity = 0.0;
+    }
+
+    /// Switches channels off (e.g. a baked-jiggle clip is drawn) or back on.
+    /// Suppressed channels are parked on their target with zero velocity,
+    /// ignore impulses and read as rest in [`Physics::transform`], so the
+    /// engine adds no motion on top of the baked frames. Channels leaving
+    /// the mask resume from that parked state (no pop, no stored energy).
+    pub fn set_suppressed(&mut self, mask: SpringMask) {
+        self.suppressed = mask;
+        for c in mask.channels() {
+            Self::hold(self.spring_mut(c));
         }
     }
 
     /// Current transform. Root x/y, angle, chest and pigtail are reported as
     /// offsets from rest; scale is absolute.
     pub fn transform(&self) -> Transform {
+        let rest = Transform::IDENTITY;
+        let m = self.suppressed;
+        let pick = |c: Channel, live: f32, rest: f32| if m.contains(c) { rest } else { live };
         Transform {
-            x: self.root_x.position,
-            y: self.root_y.position,
-            angle: self.angle.position,
-            scale: self.scale.position,
-            chest_offset: self.chest.position,
-            pigtail_offset: self.pigtail.position,
+            x: pick(Channel::RootX, self.root_x.position, rest.x),
+            y: pick(Channel::RootY, self.root_y.position, rest.y),
+            angle: pick(Channel::Angle, self.angle.position, rest.angle),
+            scale: pick(Channel::Scale, self.scale.position, rest.scale),
+            chest_offset: pick(Channel::Chest, self.chest.position, rest.chest_offset),
+            pigtail_offset: pick(Channel::Pigtail, self.pigtail.position, rest.pigtail_offset),
         }
     }
 
@@ -503,5 +618,45 @@ mod tests {
             let w: W = toml::from_str(&format!("c = \"{n}\"")).unwrap();
             assert_eq!(w.c, Channel::Pigtail);
         }
+    }
+
+    #[test]
+    fn engine_springs_directive_parses_to_chest_pigtail_hip() {
+        let groups = SpringMask::parse_directive("disable chest/pigtails/hip for this clip");
+        assert_eq!(groups, ["chest", "pigtails", "hip"]);
+        let m = SpringMask::from_groups(&groups).unwrap();
+        assert_eq!(
+            m.channels().collect::<Vec<_>>(),
+            [Channel::RootX, Channel::Chest, Channel::Pigtail]
+        );
+        assert!(SpringMask::parse_directive("keep everything").is_empty());
+        assert_eq!(
+            SpringMask::parse_directive("Disable chest, pigtails and hip"),
+            ["chest", "pigtails", "hip"]
+        );
+        assert_eq!(SpringMask::from_groups(&["elbow"]), Err("elbow".into()));
+    }
+
+    #[test]
+    fn suppressed_channels_hold_ignore_kicks_and_resume() {
+        let mut p = Physics::default();
+        p.impulse(Channel::Chest, 80.0);
+        p.impulse(Channel::RootY, 80.0);
+        p.step(0.05);
+        assert!(p.chest.position.abs() > 0.1);
+        p.set_suppressed(SpringMask::of(&[Channel::Chest, Channel::Pigtail]));
+        // Parked at once, kicks dropped, transform reads rest.
+        assert_eq!((p.chest.position, p.chest.velocity), (0.0, 0.0));
+        p.impulse(Channel::Chest, 80.0);
+        p.impulse(Channel::Pigtail, 80.0);
+        p.step(0.1);
+        let t = p.transform();
+        assert_eq!((t.chest_offset, t.pigtail_offset), (0.0, 0.0));
+        assert!(t.y.abs() > 0.01, "unmasked root_y keeps moving");
+        // Restored: kicks work again, starting from rest.
+        p.set_suppressed(SpringMask::NONE);
+        p.impulse(Channel::Chest, 80.0);
+        p.step(0.05);
+        assert!(p.transform().chest_offset.abs() > 0.1);
     }
 }

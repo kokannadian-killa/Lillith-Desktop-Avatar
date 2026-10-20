@@ -39,12 +39,25 @@
 //!   Blend clips describe `scale` as text ("interpolated ..."); that becomes a
 //!   `scale:interpolated` tag.
 //!
+//! Baked-jiggle batch (2026-10, 197 clips):
+//! - `jiggle_baked`, `jiggle_of` (on the `<name>_jiggle` variant) and
+//!   `jiggle_variant` (on the engine-clean clip) are carried as fields;
+//! - `engine_springs` (free text, e.g. "disable chest/pigtails/hip for this
+//!   clip", or a list of group names) becomes `disable_springs = [...]`; text
+//!   that names no spring group is an error;
+//! - `allure: true` / `idle_variant: true` become `allure` / `idle_variant`
+//!   tags, a `retime` record a `retimed` tag (its holds are already in
+//!   `frame_durations_ms`);
+//! - a jiggle variant's feet anchor is taken from its clean clip (same frames
+//!   warped in place), with a warning when the JSON disagrees.
+//!
 //! With `--check`, the written manifest is re-loaded through
 //! `Manifest::load` + `load_page` and every frame rect is bounds-checked.
 
 use anyhow::{bail, ensure, Context, Result};
 use clap::Parser;
 use lillith_anim::atlas::{load_page, Blend, Clip, FrameRect, LoopMode, Manifest};
+use lillith_core::spring::{Channel, SpringMask};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -260,6 +273,16 @@ fn convert(
             anim.frame_count
         );
     }
+    for (key, tag) in [("allure", "allure"), ("idle_variant", "idle_variant")] {
+        let on: Option<bool> = typed_field(&anim.name, &anim.extra, side, key)?;
+        if on == Some(true) && !tags.iter().any(|t| t == tag) {
+            tags.push(tag.into());
+        }
+    }
+    if anim.extra.contains_key("retime") || side.is_some_and(|m| m.contains_key("retime")) {
+        tags.push("retimed".into());
+    }
+    let disable_springs = engine_springs_of(anim, side)?;
     let blend = blend_of(anim, side)?;
     if blend.is_some() {
         tags.push("blend".into());
@@ -298,10 +321,88 @@ fn convert(
         base_clip: typed_field(&anim.name, &anim.extra, side, "base_clip")?,
         base_frames: typed_field(&anim.name, &anim.extra, side, "base_frames")?,
         rule_events: typed_field(&anim.name, &anim.extra, side, "rule_events")?.unwrap_or_default(),
+        jiggle_baked: typed_field(&anim.name, &anim.extra, side, "jiggle_baked")?.unwrap_or(false),
+        jiggle_of: typed_field(&anim.name, &anim.extra, side, "jiggle_of")?,
+        jiggle_variant: typed_field(&anim.name, &anim.extra, side, "jiggle_variant")?,
+        disable_springs,
         frame_points,
         blend,
         frames,
     })
+}
+
+/// `engine_springs` -> spring group names to disable. Accepts the image
+/// pipeline's free text ("disable chest/pigtails/hip for this clip") or a
+/// list of group names.
+fn engine_springs_of(anim: &JsonAnim, side: Option<&Map<String, Value>>) -> Result<Vec<String>> {
+    let name = &anim.name;
+    let groups = match anim
+        .extra
+        .get("engine_springs")
+        .or_else(|| side.and_then(|m| m.get("engine_springs")))
+    {
+        None | Some(Value::Null) => return Ok(Vec::new()),
+        Some(Value::String(text)) => {
+            let g = SpringMask::parse_directive(text);
+            ensure!(
+                !g.is_empty(),
+                "{name}: engine_springs {text:?} names no spring group to disable"
+            );
+            g
+        }
+        Some(v) => serde_json::from_value::<Vec<String>>(v.clone())
+            .with_context(|| format!("{name}: engine_springs has an unexpected shape: {v}"))?,
+    };
+    SpringMask::from_groups(&groups)
+        .map_err(|g| anyhow::anyhow!("{name}: engine_springs: unknown spring group `{g}`"))?;
+    // Canonical names, in a stable order.
+    let mut out: Vec<String> = Vec::new();
+    for g in groups {
+        let canon = match SpringMask::group(&g) {
+            Some(Channel::RootX) => "hip".to_string(),
+            Some(c) => c.name().to_string(),
+            None => g,
+        };
+        if !out.contains(&canon) {
+            out.push(canon);
+        }
+    }
+    Ok(out)
+}
+
+/// (variant name, the clean clip's per-frame anchors, its baseline).
+type AnchorFix = (String, Vec<(i32, i32)>, Option<i32>);
+
+/// Jiggle variants are the clean clip's frames warped in place: they must
+/// share its feet anchors, or swapping the two would jump. Copies the clean
+/// clip's anchors (and baseline) onto the variant and reports any fix.
+fn align_jiggle_anchors(m: &mut Manifest) -> Vec<String> {
+    let mut notes = Vec::new();
+    let fixes: Vec<AnchorFix> = m
+        .clips
+        .iter()
+        .filter_map(|(name, c)| {
+            let base = m.clips.get(c.jiggle_of.as_ref()?)?;
+            let want: Vec<(i32, i32)> = base.frames.iter().map(|f| f.anchor).collect();
+            let have: Vec<(i32, i32)> = c.frames.iter().map(|f| f.anchor).collect();
+            (want.len() == have.len() && (want != have || base.baseline_y != c.baseline_y))
+                .then(|| (name.clone(), want, base.baseline_y))
+        })
+        .collect();
+    for (name, want, baseline) in fixes {
+        let c = m.clips.get_mut(&name).expect("listed above");
+        notes.push(format!(
+            "warning: {name}: feet anchor {:?} differs from {} {:?}; using the clean clip's",
+            c.frames[0].anchor,
+            c.jiggle_of.as_deref().unwrap_or("?"),
+            want[0]
+        ));
+        for (f, a) in c.frames.iter_mut().zip(want) {
+            f.anchor = a;
+        }
+        c.baseline_y = baseline;
+    }
+    notes
 }
 
 /// Blend-helper metadata when the entry or its JSON has `blend: true`.
@@ -365,6 +466,9 @@ fn build(json: &JsonManifest, in_dir: &Path, out_dir: &Path, tags: &[String]) ->
         if m.clips.insert(anim.name.clone(), clip).is_some() {
             bail!("duplicate animation name {}", anim.name);
         }
+    }
+    for note in align_jiggle_anchors(&mut m) {
+        eprintln!("{note}");
     }
     Ok(m)
 }
@@ -471,9 +575,30 @@ fn check(path: &Path) -> Result<()> {
         .values()
         .filter(|c| !c.frame_points.is_empty())
         .count();
+    let count = |f: &dyn Fn(&Clip) -> bool| m.clips.values().filter(|c| f(c)).count();
+    let baked = count(&|c| c.jiggle_baked);
+    let clean = m.clips.len() - baked;
+    let paired = count(&|c| c.jiggle_variant.is_some());
+    let masked = count(&|c| !c.spring_mask().is_empty());
+    let allure = count(&|c| c.has_tag("allure"));
+    let allure_clean = count(&|c| c.has_tag("allure") && !c.jiggle_baked);
+    let idle_var = count(&|c| c.has_tag("idle_variant"));
+    let idle_var_clean = count(&|c| c.has_tag("idle_variant") && !c.jiggle_baked);
+    let timed = count(&|c| c.frame_durations_ms.is_some());
+    let events_clean = count(&|c| c.event.is_some() && !c.jiggle_baked);
+    let blends_clean = count(&|c| c.is_blend() && !c.jiggle_baked);
     println!(
         "{} clip(s) loaded and in bounds ({events} event, {blends} blend, {with_fp} with frame_points)",
         m.clips.len()
+    );
+    println!(
+        "  {clean} engine-clean ({paired} with a jiggle_variant, {events_clean} event, {blends_clean} blend, \
+         {allure_clean} allure, {idle_var_clean} idle_variant) + {baked} baked _jiggle \
+         ({masked} with disable_springs)"
+    );
+    println!(
+        "  tags: {allure} allure, {idle_var} idle_variant (incl. jiggle variants); \
+         {timed} with per-frame durations"
     );
     Ok(())
 }
@@ -739,5 +864,69 @@ mod tests {
             &[]
         )
         .is_err());
+    }
+
+    #[test]
+    fn carries_jiggle_pairs_engine_springs_and_tags() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [
+              { "name": "idle_flirt_hip_lean", "sheet": "c.png", "frame_count": 2, "fps": 6,
+                "loop": false, "frame_durations_ms": [167, 600], "allure": true,
+                "idle_variant": true, "retime": { "fps": 6 },
+                "jiggle_variant": "idle_flirt_hip_lean_jiggle",
+                "anchor": [200, 392], "baseline_y": 392, "body_anchor_x": 169 },
+              { "name": "idle_flirt_hip_lean_jiggle", "sheet": "j.png", "frame_count": 2, "fps": 6,
+                "loop": false, "frame_durations_ms": [167, 600], "allure": true,
+                "idle_variant": true, "retime": { "fps": 6 }, "jiggle_baked": true, "jiggle_of": "idle_flirt_hip_lean",
+                "engine_springs": "disable chest/pigtails/hip for this clip",
+                "anchor": [200, 392], "baseline_y": 392, "body_anchor_x": 231 } ] }"#,
+        )
+        .unwrap();
+        let m = build(&json, Path::new("."), Path::new("."), &[]).unwrap();
+        let (c, j) = (
+            &m.clips["idle_flirt_hip_lean"],
+            &m.clips["idle_flirt_hip_lean_jiggle"],
+        );
+        assert_eq!(
+            c.jiggle_variant.as_deref(),
+            Some("idle_flirt_hip_lean_jiggle")
+        );
+        assert!(!c.jiggle_baked && c.disable_springs.is_empty());
+        assert!(j.jiggle_baked);
+        assert_eq!(j.jiggle_of.as_deref(), Some("idle_flirt_hip_lean"));
+        assert_eq!(j.disable_springs, ["chest", "pigtails", "hip"]);
+        assert!(j.spring_mask().contains(Channel::Chest));
+        for clip in [c, j] {
+            for t in ["allure", "idle_variant", "retimed"] {
+                assert!(clip.has_tag(t), "{t}");
+            }
+            assert_eq!(clip.frame_durations_ms.as_deref(), Some(&[167, 600][..]));
+        }
+        // Anchor mismatch on the variant is fixed from the clean clip.
+        assert_eq!(j.frames[1].anchor, (169, 392));
+        let back = Manifest::from_toml_str(&toml::to_string(&m).unwrap()).unwrap();
+        assert_eq!(back.clips, m.clips);
+    }
+
+    #[test]
+    fn engine_springs_must_name_known_groups() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [ { "name": "x", "sheet": "x.png", "frame_count": 1, "fps": 6 } ] }"#,
+        )
+        .unwrap();
+        for bad in [
+            r#"{ "engine_springs": "keep them all" }"#,
+            r#"{ "engine_springs": ["chest", "elbow"] }"#,
+            r#"{ "engine_springs": 3 }"#,
+        ] {
+            let side: Value = serde_json::from_str(bad).unwrap();
+            assert!(
+                convert(&json.animations[0], side.as_object(), "x.png".into(), &[]).is_err(),
+                "{bad}"
+            );
+        }
+        let ok: Value = serde_json::from_str(r#"{ "engine_springs": ["pig", "hips"] }"#).unwrap();
+        let c = convert(&json.animations[0], ok.as_object(), "x.png".into(), &[]).unwrap();
+        assert_eq!(c.disable_springs, ["pigtails", "hip"]);
     }
 }

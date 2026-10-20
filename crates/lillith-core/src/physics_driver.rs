@@ -136,6 +136,7 @@ fn physics_from(cfg: &PhysicsConfig) -> Physics {
         chest_bounce_gain: cfg.gains.chest_bounce,
         pigtail_sway_gain: cfg.gains.pigtail_sway,
         hz: cfg.physics_hz,
+        suppressed: Default::default(),
     }
 }
 

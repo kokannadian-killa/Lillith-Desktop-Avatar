@@ -11,6 +11,7 @@ publish.workspace = true
 
 [dependencies]
 lillith-anim.workspace = true
+lillith-core.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true

@@ -2024,6 +2024,7 @@ dependencies = [
  "anyhow",
  "clap",
  "lillith-anim",
+ "lillith-core",
  "serde",
  "serde_json",
  "toml",
