@@ -167,6 +167,9 @@ pub struct Config {
     pub render_hz: f32,
     pub sprite_fps: f32,
     pub pose_cycle_s: f32,
+    /// Draw baked-jiggle `<clip>_jiggle` variants instead of the engine-clean
+    /// clips (engine chest/pigtail/hip springs off while one is drawn).
+    pub baked_jiggle: bool,
     pub muted: bool,
     pub voice_enabled: bool,
     pub llm_enabled: bool,
@@ -192,6 +195,7 @@ impl Default for Config {
             render_hz: 30.0,
             sprite_fps: 12.0,
             pose_cycle_s: 16.0,
+            baked_jiggle: false,
             muted: false,
             voice_enabled: true,
             llm_enabled: true,

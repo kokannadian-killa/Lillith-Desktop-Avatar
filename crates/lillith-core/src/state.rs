@@ -150,20 +150,80 @@ pub enum Phase {
     Asleep,
 }
 
-/// Idle variants for the pose cycle, per mood.
+/// Idle variants for the pose cycle, per mood. Clips missing from the
+/// loaded set are skipped, so older sets keep their original cycle.
+///
+/// The jiggle/flirty batch (2026-10) adds the ten `idle_flirt_*` mannerisms
+/// (interleaved into Playful, a few in Sleepy/Alert) and the `allure` poses
+/// (Happy: sweet ones; Mischievous: teasing ones). All are tasteful,
+/// non-explicit poses. `strut_left` / `strut_right` are locomotion-like and
+/// stay out of the cycle.
 fn cycle_variants(mood: Mood) -> &'static [&'static str] {
     match mood {
-        Mood::Playful | Mood::Happy => &[
+        Mood::Playful => &[
             "hip_sway",
+            "idle_flirt_hip_lean",
             "tail_wag",
+            "idle_flirt_pigtail_twirl",
             "lean_forward",
+            "idle_flirt_hands_behind_sway",
             "shoulder_roll",
+            "idle_flirt_glove_adjust",
             "nod",
+            "idle_flirt_tail_curl",
             "wave",
+            "idle_flirt_foot_tap",
+            "idle_flirt_shy_giggle",
+            "idle_flirt_look_away",
+            "idle_flirt_lip_bite",
+            "idle_flirt_stretch",
         ],
-        Mood::Mischievous => &["tail_wag", "knife_tap", "hip_sway", "dance"],
-        Mood::Alert => &["lean_forward", "think", "shoulder_roll"],
-        Mood::Sleepy => &["shoulder_roll", "lean_forward", "hip_sway"],
+        Mood::Happy => &[
+            "hip_sway",
+            "heart_hands",
+            "tail_wag",
+            "blow_kiss",
+            "lean_forward",
+            "peace_sign_pose",
+            "shoulder_roll",
+            "twirl",
+            "nod",
+            "bounce_giggle",
+            "wave",
+            "victory_jump",
+            "sway_dance",
+            "hair_twirl",
+            "tiptoe_bounce",
+            "hands_behind_head_pose",
+            "idle_flirt_shy_giggle",
+        ],
+        Mood::Mischievous => &[
+            "tail_wag",
+            "hip_pop_wink",
+            "knife_tap",
+            "finger_wag_tease",
+            "hip_sway",
+            "cheeky_tongue_wink",
+            "dance",
+            "tail_tease",
+            "lean_tease",
+            "over_shoulder_look",
+            "shoulder_shimmy",
+            "hair_flip",
+        ],
+        Mood::Alert => &[
+            "lean_forward",
+            "think",
+            "shoulder_roll",
+            "idle_flirt_look_away",
+        ],
+        Mood::Sleepy => &[
+            "shoulder_roll",
+            "idle_flirt_stretch",
+            "lean_forward",
+            "stretch_arch",
+            "hip_sway",
+        ],
     }
 }
 
@@ -174,9 +234,12 @@ const PRANK_LINES: &[&str] = &[
     "Bored. Entertain me.",
     "I could poke something, you know.",
 ];
-/// Clips that are bases/helpers, never a random reaction.
+/// Clips that are bases/helpers, never a random reaction. Baked-jiggle
+/// `<clip>_jiggle` variants are drawn by the animator in place of `<clip>`
+/// (config `baked_jiggle`), never picked by name.
 fn is_base_clip(c: &str) -> bool {
     matches!(c, "idle" | "sleep" | "drag_held" | "blink_wink")
+        || c.ends_with("_jiggle")
         || c.starts_with("walk")
         || c.starts_with("run")
         || c.starts_with("blend_")
@@ -1165,6 +1228,65 @@ mod tests {
         assert_eq!(b.phase(), Phase::Idle);
         assert!(a.contains(&Action::Stand));
         assert_eq!(b.x(), 333.0);
+    }
+
+    #[test]
+    fn flirty_batch_clips_are_reachable_from_the_pose_cycle() {
+        let moods = [
+            Mood::Playful,
+            Mood::Happy,
+            Mood::Mischievous,
+            Mood::Alert,
+            Mood::Sleepy,
+        ];
+        let all: BTreeSet<&str> = moods
+            .iter()
+            .flat_map(|&m| cycle_variants(m).iter().copied())
+            .collect();
+        let mannerisms = [
+            "hip_lean",
+            "pigtail_twirl",
+            "hands_behind_sway",
+            "stretch",
+            "glove_adjust",
+            "tail_curl",
+            "lip_bite",
+            "shy_giggle",
+            "foot_tap",
+            "look_away",
+        ];
+        for m in mannerisms {
+            let name = format!("idle_flirt_{m}");
+            assert!(
+                cycle_variants(Mood::Playful).contains(&name.as_str()),
+                "{name}"
+            );
+        }
+        for pose in [
+            "hip_pop_wink",
+            "shoulder_shimmy",
+            "hair_flip",
+            "blow_kiss",
+            "tiptoe_bounce",
+            "lean_tease",
+            "twirl",
+            "stretch_arch",
+            "peace_sign_pose",
+            "heart_hands",
+            "tail_tease",
+            "over_shoulder_look",
+            "hands_behind_head_pose",
+            "sway_dance",
+            "finger_wag_tease",
+            "bounce_giggle",
+            "hair_twirl",
+            "cheeky_tongue_wink",
+            "victory_jump",
+        ] {
+            assert!(all.contains(pose), "{pose}");
+        }
+        assert!(all.iter().all(|c| !c.ends_with("_jiggle")));
+        assert!(is_base_clip("knife_tap_jiggle") && !is_base_clip("idle_flirt_lip_bite"));
     }
 
     #[test]

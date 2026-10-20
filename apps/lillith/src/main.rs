@@ -46,6 +46,12 @@ struct Cli {
     /// notifications/files/KWin bridge); overrides `[monitor] enabled`.
     #[arg(long)]
     no_monitor: bool,
+    /// Draw the baked-jiggle `<clip>_jiggle` variants (when the animation set
+    /// has them) instead of the engine-clean clips; the engine's chest /
+    /// pigtail / hip springs switch off while one is drawn. Overrides config
+    /// `baked_jiggle`.
+    #[arg(long)]
+    baked_jiggle: bool,
     /// manifest.toml of the animation set (default: $LILLITH_MANIFEST,
     /// ./assets/generated/manifest.toml, ~/.local/share/lillith/generated/manifest.toml).
     #[arg(long)]
@@ -285,6 +291,7 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
             seed,
             // Tuned jiggle physics from assets/physics.toml (PhysicsDriver).
             physics_driver: true,
+            prefer_jiggle_variants: cli.baked_jiggle || cfg.baked_jiggle,
             ..Default::default()
         },
         position: if cli.reset_position {
