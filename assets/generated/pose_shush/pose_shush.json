@@ -1,0 +1,250 @@
+{
+  "name": "pose_shush",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "pose_shush_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/pose_shush/pose_shush_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 47,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8,
+    628.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 640,
+    "ref_hue_median": 271.0,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      0.7,
+      1.0,
+      0.9,
+      -0.0,
+      0.3,
+      0.3,
+      1.6,
+      2.1,
+      1.7,
+      0.2,
+      1.5,
+      0.4,
+      0.1,
+      0.5,
+      0.9,
+      2.0,
+      0.9,
+      1.7,
+      0.2,
+      1.0,
+      0.2,
+      0.2,
+      -1.0
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      147,
+      275,
+      23,
+      392
+    ],
+    [
+      147,
+      271,
+      23,
+      392
+    ],
+    [
+      147,
+      268,
+      25,
+      392
+    ],
+    [
+      147,
+      267,
+      25,
+      392
+    ],
+    [
+      147,
+      270,
+      24,
+      392
+    ],
+    [
+      148,
+      277,
+      24,
+      392
+    ],
+    [
+      148,
+      285,
+      24,
+      392
+    ],
+    [
+      148,
+      297,
+      26,
+      392
+    ],
+    [
+      148,
+      302,
+      24,
+      392
+    ],
+    [
+      147,
+      294,
+      22,
+      392
+    ],
+    [
+      147,
+      281,
+      24,
+      392
+    ],
+    [
+      147,
+      268,
+      26,
+      392
+    ],
+    [
+      147,
+      268,
+      25,
+      392
+    ],
+    [
+      148,
+      273,
+      24,
+      392
+    ],
+    [
+      148,
+      282,
+      23,
+      392
+    ],
+    [
+      148,
+      292,
+      26,
+      392
+    ],
+    [
+      148,
+      302,
+      25,
+      392
+    ],
+    [
+      147,
+      300,
+      23,
+      392
+    ],
+    [
+      147,
+      290,
+      24,
+      392
+    ],
+    [
+      147,
+      276,
+      25,
+      392
+    ],
+    [
+      147,
+      267,
+      26,
+      392
+    ],
+    [
+      147,
+      267,
+      25,
+      392
+    ],
+    [
+      147,
+      270,
+      24,
+      392
+    ],
+    [
+      147,
+      273,
+      24,
+      392
+    ]
+  ]
+}

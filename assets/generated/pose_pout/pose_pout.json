@@ -1,0 +1,250 @@
+{
+  "name": "pose_pout",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "pose_pout_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/pose_pout/pose_pout_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 47,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2,
+    631.2
+  ],
+  "horn_fix": {
+    "ref_horn_px": 627,
+    "ref_hue_median": 271.3,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      -0.4,
+      0.3,
+      -0.5,
+      0.4,
+      -0.1,
+      -1.5,
+      -1.6,
+      -0.3,
+      0.6,
+      1.1,
+      0.2,
+      2.1,
+      1.1,
+      0.7,
+      0.4,
+      0.3,
+      -0.6,
+      -0.7,
+      0.0,
+      -0.3,
+      -0.7,
+      -0.4,
+      0.0
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      137,
+      268,
+      22,
+      392
+    ],
+    [
+      137,
+      268,
+      22,
+      392
+    ],
+    [
+      137,
+      268,
+      22,
+      392
+    ],
+    [
+      137,
+      268,
+      22,
+      392
+    ],
+    [
+      137,
+      268,
+      22,
+      392
+    ],
+    [
+      136,
+      268,
+      22,
+      392
+    ],
+    [
+      135,
+      267,
+      24,
+      392
+    ],
+    [
+      133,
+      265,
+      30,
+      392
+    ],
+    [
+      132,
+      264,
+      33,
+      392
+    ],
+    [
+      131,
+      264,
+      34,
+      392
+    ],
+    [
+      131,
+      263,
+      33,
+      392
+    ],
+    [
+      130,
+      263,
+      29,
+      392
+    ],
+    [
+      129,
+      268,
+      24,
+      392
+    ],
+    [
+      130,
+      273,
+      22,
+      392
+    ],
+    [
+      133,
+      274,
+      22,
+      392
+    ],
+    [
+      136,
+      273,
+      22,
+      392
+    ],
+    [
+      138,
+      271,
+      22,
+      392
+    ],
+    [
+      139,
+      267,
+      22,
+      392
+    ],
+    [
+      139,
+      266,
+      22,
+      392
+    ],
+    [
+      139,
+      266,
+      22,
+      392
+    ],
+    [
+      138,
+      267,
+      22,
+      392
+    ],
+    [
+      137,
+      267,
+      22,
+      392
+    ],
+    [
+      137,
+      267,
+      22,
+      392
+    ],
+    [
+      137,
+      268,
+      22,
+      392
+    ]
+  ]
+}

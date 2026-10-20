@@ -1,0 +1,250 @@
+{
+  "name": "pose_wait_palm",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "pose_wait_palm_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/pose_wait_palm/pose_wait_palm_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 47,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8,
+    625.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 650,
+    "ref_hue_median": 276.6,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      -0.1,
+      -0.7,
+      -0.8,
+      -1.0,
+      1.7,
+      3.1,
+      3.7,
+      1.6,
+      1.9,
+      0.3,
+      2.2,
+      1.7,
+      2.0,
+      0.6,
+      1.3,
+      -0.6,
+      1.5,
+      2.3,
+      3.0,
+      3.3,
+      1.1,
+      1.3,
+      0.7
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      127,
+      274,
+      20,
+      392
+    ],
+    [
+      120,
+      275,
+      20,
+      392
+    ],
+    [
+      128,
+      276,
+      20,
+      392
+    ],
+    [
+      132,
+      277,
+      21,
+      392
+    ],
+    [
+      121,
+      277,
+      27,
+      392
+    ],
+    [
+      127,
+      274,
+      35,
+      392
+    ],
+    [
+      126,
+      272,
+      40,
+      392
+    ],
+    [
+      127,
+      273,
+      38,
+      392
+    ],
+    [
+      119,
+      276,
+      29,
+      392
+    ],
+    [
+      128,
+      278,
+      23,
+      392
+    ],
+    [
+      133,
+      277,
+      19,
+      392
+    ],
+    [
+      123,
+      275,
+      19,
+      392
+    ],
+    [
+      126,
+      274,
+      19,
+      392
+    ],
+    [
+      133,
+      274,
+      19,
+      392
+    ],
+    [
+      123,
+      275,
+      20,
+      392
+    ],
+    [
+      119,
+      276,
+      20,
+      392
+    ],
+    [
+      132,
+      277,
+      25,
+      392
+    ],
+    [
+      129,
+      275,
+      33,
+      392
+    ],
+    [
+      123,
+      272,
+      40,
+      392
+    ],
+    [
+      126,
+      272,
+      40,
+      392
+    ],
+    [
+      128,
+      274,
+      33,
+      392
+    ],
+    [
+      123,
+      277,
+      26,
+      392
+    ],
+    [
+      125,
+      277,
+      21,
+      392
+    ],
+    [
+      133,
+      276,
+      19,
+      392
+    ]
+  ]
+}

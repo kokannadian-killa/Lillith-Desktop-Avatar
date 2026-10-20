@@ -70,6 +70,11 @@ and not committed. Examples: a deep bow, or a turn that shows her back.
   tags. The app's pose cycle picks these clips by name, so `idle_flirt_*` are not `variant_of:idle`.
   The 84 v1 `*_jiggle` clips are not rebuilt: each is a code-jiggled copy of a base clip, and v2 bakes
   secondary motion into every clip.
+- The seven own-pose event bases (`pose_clutch_head`, `pose_hacking`, `pose_pout`, `pose_present`,
+  `pose_shush`, `pose_vsign`, `pose_wait_palm`) are also built as standalone clips in `assets/generated/`
+  (whole 49-frame take, f1-47 step 2, 24 frames @12 fps, scale 0.53, fixed centre, loop), adding 7 clips (136 in
+  total after batch 13). Their entries were appended to the committed `manifest.json` rather than regenerating it, because
+  the committed file carries walk root-motion / gait fields that `make_manifest_v2.py` does not emit.
 - The runtime looks for `$LILLITH_MANIFEST`, then `./assets/generated/manifest.toml` (relative to the
   working directory), then `$XDG_DATA_HOME/lillith/generated/manifest.toml`.
 

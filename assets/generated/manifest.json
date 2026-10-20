@@ -3061,6 +3061,195 @@
    ]
   },
   {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.53,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "pose_clutch_head",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "pose_clutch_head/",
+   "sheet": "pose_clutch_head/pose_clutch_head_sheet.png",
+   "manifest": "pose_clutch_head/pose_clutch_head.json",
+   "preview": "pose_clutch_head/pose_clutch_head_preview.gif",
+   "frames": "pose_clutch_head/frames/",
+   "tags": [
+    "baked_motion"
+   ]
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.53,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "pose_hacking",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "pose_hacking/",
+   "sheet": "pose_hacking/pose_hacking_sheet.png",
+   "manifest": "pose_hacking/pose_hacking.json",
+   "preview": "pose_hacking/pose_hacking_preview.gif",
+   "frames": "pose_hacking/frames/",
+   "tags": [
+    "baked_motion"
+   ]
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.53,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "pose_pout",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "pose_pout/",
+   "sheet": "pose_pout/pose_pout_sheet.png",
+   "manifest": "pose_pout/pose_pout.json",
+   "preview": "pose_pout/pose_pout_preview.gif",
+   "frames": "pose_pout/frames/",
+   "tags": [
+    "baked_motion"
+   ]
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.53,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "pose_present",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "pose_present/",
+   "sheet": "pose_present/pose_present_sheet.png",
+   "manifest": "pose_present/pose_present.json",
+   "preview": "pose_present/pose_present_preview.gif",
+   "frames": "pose_present/frames/",
+   "tags": [
+    "baked_motion"
+   ]
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.53,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "pose_shush",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "pose_shush/",
+   "sheet": "pose_shush/pose_shush_sheet.png",
+   "manifest": "pose_shush/pose_shush.json",
+   "preview": "pose_shush/pose_shush_preview.gif",
+   "frames": "pose_shush/frames/",
+   "tags": [
+    "baked_motion"
+   ]
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.53,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "pose_vsign",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "pose_vsign/",
+   "sheet": "pose_vsign/pose_vsign_sheet.png",
+   "manifest": "pose_vsign/pose_vsign.json",
+   "preview": "pose_vsign/pose_vsign_preview.gif",
+   "frames": "pose_vsign/frames/",
+   "tags": [
+    "baked_motion"
+   ]
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.53,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "pose_wait_palm",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "pose_wait_palm/",
+   "sheet": "pose_wait_palm/pose_wait_palm_sheet.png",
+   "manifest": "pose_wait_palm/pose_wait_palm.json",
+   "preview": "pose_wait_palm/pose_wait_palm_preview.gif",
+   "frames": "pose_wait_palm/frames/",
+   "tags": [
+    "baked_motion"
+   ]
+  },
+  {
    "frame_count": 10,
    "frame_width": 400,
    "frame_height": 400,
