@@ -49,6 +49,136 @@ pub struct PhysicsConfig {
     pub events: BTreeMap<String, EventCfg>,
     #[serde(default)]
     pub attachments: toml::Table,
+    /// Momentum bleed at view-changing clip swaps (walk <-> idle), physics-lab
+    /// motion-review fix 3. Absent = no-op (keep everything).
+    #[serde(default)]
+    pub clip_boundary: ClipBoundary,
+    /// Engine gait (physics-lab v3-v5, SPEC 16-18): phase, hip bob, arm /
+    /// forearm / torso-twist springs, per-step jiggle, timed view turns with
+    /// hard cuts, walking tail sway. Absent = off: walking behaves exactly as
+    /// before and every gait output reads rest.
+    #[serde(default)]
+    pub gait: Option<Gait>,
+}
+
+/// `[gait]`: angles in DEGREES, + arm = swung forward (toward facing),
+/// + twist = right shoulder forward. Missing keys take the physics-lab v5
+/// values ([`Gait::default`]).
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Gait {
+    /// Stance fraction per leg (two legs 0.5 apart).
+    pub duty: f32,
+    /// Stride weight 0 -> 1 over this after the turn-in, 1 -> 0 after a stop.
+    pub start_ramp_s: f32,
+    pub stop_ramp_s: f32,
+    /// Hip bob (px, +y down): lowest (+down) at each heel strike, highest
+    /// (-up) at mid-stance.
+    pub hip_bob_down_px: f32,
+    pub hip_bob_up_px: f32,
+    /// Upper-arm swing amplitude (deg); arm = -amp * same-side leg forwardness.
+    pub arm_amplitude_deg: f32,
+    pub arm_spring: SpringCfg,
+    /// Forearm: absolute-angle spring chasing upper_arm * forearm_follow plus
+    /// forearm_flex_deg of elbow bend at the forward swing.
+    pub forearm_spring: SpringCfg,
+    pub forearm_follow: f32,
+    pub forearm_flex_deg: f32,
+    /// Shoulder counter-rotation amplitude (deg).
+    pub torso_twist_deg: f32,
+    pub twist_spring: SpringCfg,
+    /// Hip-bob acceleration coupled into chest / tail_y velocity.
+    pub bob_inertia_chest: f32,
+    pub bob_inertia_tail_y: f32,
+    /// Per-heel-strike kicks besides `[walk].walk_footfall`: tail x
+    /// (alternating), tail y, torso twist (alternating). x stride weight.
+    pub step_tail_x: f32,
+    pub step_tail_y: f32,
+    pub step_twist: f32,
+    /// Elbow joint stop (deg, forearm relative to upper arm).
+    pub elbow_min_deg: f32,
+    /// View cuts on turn_progress: front below lo, 3/4 between, side at/above hi.
+    pub turn_cut_lo: f32,
+    pub turn_cut_hi: f32,
+    /// Gait-locked tail sway target at the tip (px), one swing per cycle.
+    pub tail_sway_px: f32,
+    /// Sway phase offset (cycles) vs the right heel strike.
+    pub tail_sway_phase: f32,
+    /// Idle figure-8 multiplier at full stride.
+    pub tail_figure8_walk: f32,
+    /// Turn front -> side over turn_in_s on walk start (the stride waits);
+    /// side -> front over turn_out_s after the stride has ramped out. Both 0 =
+    /// the old instant swap.
+    pub turn_in_s: f32,
+    pub turn_out_s: f32,
+    /// Settle kicks at each view cut.
+    pub turn_chest: f32,
+    pub turn_pigtails: f32,
+}
+
+impl Default for Gait {
+    /// physics-lab `physics.toml [gait]` as of v5 (2026-10-20).
+    fn default() -> Self {
+        let sc = |stiffness, damping, max_velocity| SpringCfg {
+            stiffness,
+            damping,
+            max_velocity,
+            max_offset: None,
+        };
+        Self {
+            duty: 0.6,
+            start_ramp_s: 0.45,
+            stop_ramp_s: 0.45,
+            hip_bob_down_px: 0.7,
+            hip_bob_up_px: 3.9,
+            arm_amplitude_deg: 18.0,
+            arm_spring: sc(150.0, 17.0, 400.0),
+            forearm_spring: sc(70.0, 9.5, 500.0),
+            forearm_follow: 1.0,
+            forearm_flex_deg: 10.0,
+            torso_twist_deg: 1.5,
+            twist_spring: sc(80.0, 13.0, 60.0),
+            bob_inertia_chest: 0.6,
+            bob_inertia_tail_y: 0.6,
+            step_tail_x: 35.0,
+            step_tail_y: 25.0,
+            step_twist: 12.0,
+            elbow_min_deg: 0.0,
+            turn_cut_lo: 0.25,
+            turn_cut_hi: 0.75,
+            tail_sway_px: 7.0,
+            tail_sway_phase: 0.0,
+            tail_figure8_walk: 0.3,
+            turn_in_s: 0.36,
+            turn_out_s: 0.36,
+            turn_chest: 2.5,
+            turn_pigtails: 3.0,
+        }
+    }
+}
+
+/// `[clip_boundary]`: what a pose-family swap does to the spring state.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ClipBoundary {
+    /// Multiply every spring.rs channel velocity by this (0 = full reset).
+    pub velocity_keep: f32,
+    /// offset from target *= offset_keep.
+    pub offset_keep: f32,
+    /// Apply automatically when locomotion starts/stops (or at each turn cut
+    /// when `[gait]` turns are on).
+    pub on_locomotion_change: bool,
+}
+
+impl Default for ClipBoundary {
+    /// No-op: keep all momentum, never automatic.
+    fn default() -> Self {
+        Self {
+            velocity_keep: 1.0,
+            offset_keep: 1.0,
+            on_locomotion_change: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -58,7 +188,7 @@ pub struct Units {
     pub deg_scale_motion: f32,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 pub struct SpringCfg {
     pub stiffness: f32,
     pub damping: f32,
@@ -522,6 +652,24 @@ impl PhysicsConfig {
         let r = &self.breathing;
         if ((r.inhale + r.hold + r.exhale + r.settle) - 1.0).abs() > 1e-3 {
             errs.push("breathing ratios must sum to 1".into());
+        }
+        if let Some(g) = &self.gait {
+            if !(g.duty > 0.0 && g.duty < 1.0) {
+                errs.push(format!("[gait] duty must be in (0, 1) (got {})", g.duty));
+            }
+            if !(0.0 <= g.turn_cut_lo && g.turn_cut_lo <= g.turn_cut_hi && g.turn_cut_hi <= 1.0) {
+                errs.push("[gait] needs 0 <= turn_cut_lo <= turn_cut_hi <= 1".into());
+            }
+            for (n, v) in [
+                ("start_ramp_s", g.start_ramp_s),
+                ("stop_ramp_s", g.stop_ramp_s),
+                ("turn_in_s", g.turn_in_s),
+                ("turn_out_s", g.turn_out_s),
+            ] {
+                if !(v.is_finite() && v >= 0.0) {
+                    errs.push(format!("[gait] {n} must be >= 0 (got {v})"));
+                }
+            }
         }
         if !(self.physics_hz.is_finite() && self.physics_hz > 0.0) {
             errs.push(format!("physics_hz must be > 0 (got {})", self.physics_hz));

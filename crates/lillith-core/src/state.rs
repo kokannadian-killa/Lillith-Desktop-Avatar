@@ -382,6 +382,15 @@ impl Brain {
         self.muted = muted;
     }
 
+    /// Feels `mood` at full strength (right-click menu, debug). It fades
+    /// back to the baseline like any other feeling (`mood_tau_s`). Returns
+    /// [`Action::MoodChanged`] if the mood changed.
+    pub fn set_mood(&mut self, mood: Mood) -> Vec<Action> {
+        self.feel(mood, 1.0);
+        self.refresh_baseline();
+        self.take()
+    }
+
     // ── Inputs ───────────────────────────────────────────────────────────
 
     /// Handles one overlay input; returns the actions to apply.
