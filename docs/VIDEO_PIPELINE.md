@@ -28,7 +28,8 @@ and not committed. Examples: a deep bow, or a turn that shows her back.
    - `build_events_v3.py`: `event_*` clips. It puts the original code-drawn icons on the v2 body and
      tracks the fingertip or head crown frame by frame.
    - `build_transition.py`: video blends, registered in scale and offset to both end clips.
-     `build_blends.py` is the optical-flow fallback; only `blend_sleep_to_wake` still uses it.
+     All 12 blends now use transition videos. `build_blends.py` is the optical-flow fallback and no
+     blend uses it any more.
    - `beam_overlay.py`: redraws the beam that the keyer removes.
    - `allure_fx_v2.py`: hearts and sparkles that track the hand or head, used on `blow_kiss`,
      `heart_hands`, `peace_sign_pose` and `hip_pop_wink`.
@@ -57,6 +58,18 @@ and not committed. Examples: a deep bow, or a turn that shows her back.
 - The v1 stop-motion set is not in git. It is preserved on the build box at
   `/workspace/lillith/assets/generated_v1_backup/` (about 657 MB). The v2 set covers all 95 v1 clip
   names, adds `idle_a` and `idle_b`, and keeps `idle` as an alias of `idle_a`.
+- Batch 12 (115 clips in total) adds video versions of the 18 clean clips that were only in the v1
+  `manifest.json`:
+  - the ten `idle_flirt_*` mannerisms, each a whole take from the idle still back to the idle still;
+  - `hair_twirl` (a loop cut of the pigtail_twirl take), `sway_dance`, `cheeky_tongue_wink`,
+    `victory_jump` and `over_shoulder_look`;
+  - three aliases of near-duplicates (`alias_of`, same sheet): `finger_wag_tease` → `lean_tease`,
+    `hands_behind_head_pose` → `idle_flirt_stretch`, `bounce_giggle` → `idle_flirt_shy_giggle`.
+
+  `make_manifest_v2.py` carries the v1 `allure` / `idle_variant` flags, which import-manifest turns into
+  tags. The app's pose cycle picks these clips by name, so `idle_flirt_*` are not `variant_of:idle`.
+  The 84 v1 `*_jiggle` clips are not rebuilt: each is a code-jiggled copy of a base clip, and v2 bakes
+  secondary motion into every clip.
 - The runtime looks for `$LILLITH_MANIFEST`, then `./assets/generated/manifest.toml` (relative to the
   working directory), then `$XDG_DATA_HOME/lillith/generated/manifest.toml`.
 
