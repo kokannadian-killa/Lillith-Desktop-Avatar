@@ -2451,6 +2451,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "lillith-setup"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml_edit 0.22.27",
+]
+
+[[package]]
 name = "lillith-tray"
 version = "0.0.1"
 dependencies = [
