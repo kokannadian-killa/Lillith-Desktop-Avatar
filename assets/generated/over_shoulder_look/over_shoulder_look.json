@@ -1,0 +1,277 @@
+{
+  "name": "over_shoulder_look",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "over_shoulder_look_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 6.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/over_shoulder_look/over_shoulder_look_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 93,
+    "step": 4,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 626,
+    "ref_hue_median": 276.3,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      -0.0,
+      0.6,
+      1.1,
+      2.0,
+      5.8,
+      2.3,
+      2.6,
+      0.1,
+      4.4,
+      5.4,
+      4.5,
+      1.7,
+      1.6,
+      1.9,
+      4.4,
+      2.8,
+      2.7,
+      2.3,
+      2.7,
+      1.8,
+      0.4,
+      0.1,
+      -0.3
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Once: hand on hip, head-only glance over her shoulder, sly smile back; body stays facing the camera (no back view); timings from old.",
+  "frame_durations_ms": [
+    99,
+    99,
+    200,
+    200,
+    99,
+    99,
+    444,
+    99,
+    99,
+    99,
+    99,
+    200,
+    1003,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    346
+  ],
+  "durations_note": "Derived from old over_shoulder_look frame_durations_ms: profile resampled to 24 frames and scaled to the real video time (3833 ms), final hold 346 ms kept.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      139,
+      277,
+      21,
+      392
+    ],
+    [
+      139,
+      278,
+      21,
+      392
+    ],
+    [
+      135,
+      279,
+      21,
+      392
+    ],
+    [
+      136,
+      278,
+      22,
+      392
+    ],
+    [
+      146,
+      276,
+      19,
+      392
+    ],
+    [
+      154,
+      286,
+      22,
+      392
+    ],
+    [
+      152,
+      302,
+      19,
+      392
+    ],
+    [
+      143,
+      312,
+      23,
+      392
+    ],
+    [
+      143,
+      282,
+      23,
+      392
+    ],
+    [
+      149,
+      279,
+      20,
+      392
+    ],
+    [
+      154,
+      290,
+      23,
+      392
+    ],
+    [
+      151,
+      306,
+      20,
+      392
+    ],
+    [
+      147,
+      312,
+      21,
+      392
+    ],
+    [
+      147,
+      300,
+      22,
+      392
+    ],
+    [
+      148,
+      291,
+      21,
+      392
+    ],
+    [
+      149,
+      291,
+      19,
+      392
+    ],
+    [
+      149,
+      294,
+      20,
+      392
+    ],
+    [
+      148,
+      295,
+      21,
+      392
+    ],
+    [
+      148,
+      295,
+      21,
+      392
+    ],
+    [
+      148,
+      295,
+      21,
+      392
+    ],
+    [
+      145,
+      293,
+      22,
+      392
+    ],
+    [
+      138,
+      288,
+      22,
+      392
+    ],
+    [
+      137,
+      281,
+      21,
+      392
+    ],
+    [
+      139,
+      278,
+      21,
+      392
+    ]
+  ]
+}

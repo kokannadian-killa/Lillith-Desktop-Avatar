@@ -570,10 +570,10 @@ anchor = [200, 392]
 
 [clips.blend_sleep_to_wake]
 page = "blend_sleep_to_wake/blend_sleep_to_wake_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
-scale = 0.54
+scale = 0.537
 tags = ["canonical", "facing:right side (seated)", "baked_motion", "blend"]
 
 [clips.blend_sleep_to_wake.blend]
@@ -598,6 +598,20 @@ anchor = [200, 392]
 
 [[clips.blend_sleep_to_wake.frames]]
 x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.blend_sleep_to_wake.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.blend_sleep_to_wake.frames]]
+x = 1600
 y = 0
 w = 400
 h = 400
@@ -1164,7 +1178,7 @@ mode = "once"
 frame_durations_ms = [69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 182, 182, 182, 69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 320]
 baseline_y = 392
 scale = 0.54
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [clips.blow_kiss.points]
 kiss_origin = [184, 83]
@@ -1334,6 +1348,520 @@ h = 400
 anchor = [200, 392]
 
 [[clips.blow_kiss.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.bounce_giggle]
+page = "idle_flirt_shy_giggle/idle_flirt_shy_giggle_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
+
+[[clips.bounce_giggle.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.bounce_giggle.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.cheeky_tongue_wink]
+page = "cheeky_tongue_wink/cheeky_tongue_wink_sheet.png"
+fps = 6.0
+mode = "once"
+frame_durations_ms = [94, 94, 94, 94, 94, 94, 94, 94, 94, 188, 188, 188, 188, 188, 828, 188, 188, 188, 188, 188, 94, 94, 94, 1210]
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.cheeky_tongue_wink.frames]]
 x = 9200
 y = 0
 w = 400
@@ -5861,6 +6389,183 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.finger_wag_tease]
+page = "lean_tease/lean_tease_sheet.png"
+fps = 12.0
+mode = "once"
+frame_durations_ms = [67, 67, 67, 67, 67, 67, 179, 179, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 141, 141, 420]
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:3/4 front", "baked_motion", "allure"]
+
+[[clips.finger_wag_tease.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.finger_wag_tease.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.hair_flip]
 page = "hair_flip/hair_flip_sheet.png"
 fps = 12.0
@@ -5868,7 +6573,7 @@ mode = "once"
 frame_durations_ms = [73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 153, 153, 153, 73, 73, 73, 73, 73, 73, 73, 480]
 baseline_y = 392
 scale = 0.54
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [[clips.hair_flip.frames]]
 x = 0
@@ -6038,6 +6743,449 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.hair_twirl]
+page = "hair_twirl/hair_twirl_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
+
+[[clips.hair_twirl.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hair_twirl.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.hands_behind_head_pose]
+page = "idle_flirt_stretch/idle_flirt_stretch_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.hands_behind_head_pose.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.heart_hands]
 page = "heart_hands/heart_hands_sheet.png"
 fps = 12.0
@@ -6045,7 +7193,7 @@ mode = "once"
 frame_durations_ms = [73, 73, 73, 73, 73, 73, 73, 153, 153, 153, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 450]
 baseline_y = 392
 scale = 0.54
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [clips.heart_hands.points]
 heart_origin = [197, 116]
@@ -6228,7 +7376,7 @@ mode = "once"
 frame_durations_ms = [63, 63, 63, 63, 63, 63, 63, 186, 186, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 169, 169, 63, 63, 143]
 baseline_y = 392
 scale = 0.54
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [clips.hip_pop_wink.points]
 sparkle_point = [245, 52]
@@ -7857,6 +9005,3460 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.idle_flirt_foot_tap]
+page = "idle_flirt_foot_tap/idle_flirt_foot_tap_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_flirt_glove_adjust]
+page = "idle_flirt_glove_adjust/idle_flirt_glove_adjust_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_glove_adjust.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_flirt_hands_behind_sway]
+page = "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_flirt_hip_lean]
+page = "idle_flirt_hip_lean/idle_flirt_hip_lean_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hip_lean.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_flirt_lip_bite]
+page = "idle_flirt_lip_bite/idle_flirt_lip_bite_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_lip_bite.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_flirt_look_away]
+page = "idle_flirt_look_away/idle_flirt_look_away_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_look_away.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_flirt_pigtail_twirl]
+page = "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 18800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 19200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 19600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 20000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 20400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 20800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 21200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 21600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 22000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 22400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 22800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_pigtail_twirl.frames]]
+x = 23200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_flirt_shy_giggle]
+page = "idle_flirt_shy_giggle/idle_flirt_shy_giggle_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_shy_giggle.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_flirt_stretch]
+page = "idle_flirt_stretch/idle_flirt_stretch_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_stretch.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.idle_flirt_tail_curl]
+page = "idle_flirt_tail_curl/idle_flirt_tail_curl_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_tail_curl.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.knife_tap]
 page = "knife_tap/knife_tap_sheet.png"
 fps = 12.0
@@ -8139,7 +12741,7 @@ mode = "once"
 frame_durations_ms = [67, 67, 67, 67, 67, 67, 179, 179, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 141, 141, 420]
 baseline_y = 392
 scale = 0.54
-tags = ["canonical", "facing:3/4 front", "baked_motion"]
+tags = ["canonical", "facing:3/4 front", "baked_motion", "allure"]
 
 [[clips.lean_tease.frames]]
 x = 0
@@ -8485,6 +13087,183 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.over_shoulder_look]
+page = "over_shoulder_look/over_shoulder_look_sheet.png"
+fps = 6.0
+mode = "once"
+frame_durations_ms = [99, 99, 200, 200, 99, 99, 444, 99, 99, 99, 99, 200, 1003, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 346]
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
+
+[[clips.over_shoulder_look.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.over_shoulder_look.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.peace_sign_pose]
 page = "peace_sign_pose/peace_sign_pose_sheet.png"
 fps = 12.0
@@ -8492,7 +13271,7 @@ mode = "once"
 frame_durations_ms = [73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 194, 194, 73, 73, 73, 73, 73, 420]
 baseline_y = 392
 scale = 0.54
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [clips.peace_sign_pose.points]
 vsign_point = [149, 62]
@@ -9155,7 +13934,7 @@ fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [[clips.shoulder_shimmy.frames]]
 x = 0
@@ -10040,7 +14819,7 @@ mode = "once"
 frame_durations_ms = [64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 169, 169, 169, 133, 133, 64, 64, 64, 64, 64, 64, 64, 64, 143]
 baseline_y = 392
 scale = 0.54
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [[clips.stretch_arch.frames]]
 x = 0
@@ -10216,7 +14995,7 @@ fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.537
-tags = ["canonical", "facing:left", "baked_motion"]
+tags = ["canonical", "facing:left", "baked_motion", "allure"]
 
 [[clips.strut_left.frames]]
 x = 0
@@ -10287,7 +15066,7 @@ fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.537
-tags = ["canonical", "facing:right", "baked_motion"]
+tags = ["canonical", "facing:right", "baked_motion", "allure"]
 
 [[clips.strut_right.frames]]
 x = 0
@@ -10347,6 +15126,427 @@ anchor = [200, 392]
 
 [[clips.strut_right.frames]]
 x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.sway_dance]
+page = "sway_dance/sway_dance_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
+
+[[clips.sway_dance.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 18800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 19200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 19600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 20000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 20400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 20800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 21200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 21600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 22000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 22400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 22800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 23200
 y = 0
 w = 400
 h = 400
@@ -10486,7 +15686,7 @@ fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.528
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [[clips.tail_tease.frames]]
 x = 0
@@ -10832,7 +16032,7 @@ fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.531
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [[clips.tiptoe_bounce.frames]]
 x = 0
@@ -10904,7 +16104,7 @@ mode = "once"
 frame_durations_ms = [79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 184, 520]
 baseline_y = 392
 scale = 0.54
-tags = ["canonical", "facing:front", "baked_motion"]
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
 
 [[clips.twirl.frames]]
 x = 0
@@ -11068,6 +16268,183 @@ h = 400
 anchor = [200, 392]
 
 [[clips.twirl.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[clips.victory_jump]
+page = "victory_jump/victory_jump_sheet.png"
+fps = 6.0
+mode = "once"
+frame_durations_ms = [167, 167, 167, 167, 167, 167, 167, 167, 167, 250, 167, 167, 167, 167, 167, 167, 167, 167, 167, 167, 167, 167, 167, 400]
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
+
+[[clips.victory_jump.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.victory_jump.frames]]
 x = 9200
 y = 0
 w = 400

@@ -1,0 +1,170 @@
+{
+  "name": "hair_twirl",
+  "placeholder": false,
+  "frame_count": 14,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "hair_twirl_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 57,
+    "last": 83,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 609,
+    "ref_hue_median": 274.0,
+    "mean_hue_shift_deg_per_frame": [
+      3.5,
+      3.5,
+      2.4,
+      1.2,
+      1.9,
+      2.1,
+      2.2,
+      4.4,
+      0.8,
+      -0.4,
+      1.0,
+      3.0,
+      3.5,
+      3.6
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Loop cut (f57-f84, 1.17 s) of the idle_flirt_pigtail_twirl take: hand on hip, twirling a pigtail. Merged with idle_flirt_pigtail_twirl (same motion in v1).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      143,
+      284,
+      20,
+      392
+    ],
+    [
+      144,
+      290,
+      20,
+      392
+    ],
+    [
+      142,
+      294,
+      20,
+      392
+    ],
+    [
+      135,
+      296,
+      22,
+      392
+    ],
+    [
+      130,
+      294,
+      20,
+      392
+    ],
+    [
+      119,
+      289,
+      20,
+      392
+    ],
+    [
+      124,
+      283,
+      20,
+      392
+    ],
+    [
+      125,
+      276,
+      20,
+      392
+    ],
+    [
+      129,
+      270,
+      21,
+      392
+    ],
+    [
+      131,
+      268,
+      23,
+      392
+    ],
+    [
+      132,
+      268,
+      21,
+      392
+    ],
+    [
+      140,
+      272,
+      20,
+      392
+    ],
+    [
+      145,
+      276,
+      20,
+      392
+    ],
+    [
+      145,
+      279,
+      20,
+      392
+    ]
+  ]
+}

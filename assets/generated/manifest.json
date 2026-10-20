@@ -10,7 +10,7 @@
   ]
  },
  "jiggle_note": "All clips are tagged baked_motion: the engine must damp chest/pigtail springs and breathing for them (AnimatorConfig::baked_motion_gain in lillith-anim).",
- "notes": "Canonical set (committed 2026-10-20). idle = alias of idle_a; idle_a/idle_b are variant_of:idle for random cycling.",
+ "notes": "Canonical set (committed 2026-10-20). idle = alias of idle_a; idle_a/idle_b are variant_of:idle for random cycling; idle_flirt_* carry idle_variant (pose-cycle mannerisms, not idle loops); finger_wag_tease, hands_behind_head_pose and bounce_giggle are aliases of near-duplicate clips.",
  "animations": [
   {
    "frame_count": 25,
@@ -291,17 +291,17 @@
    "to_frame": 0
   },
   {
-   "frame_count": 3,
+   "frame_count": 5,
    "frame_width": 400,
    "frame_height": 400,
-   "fps": 12,
+   "fps": 8.0,
    "loop": false,
    "baseline_y": 392,
    "anchor": [
     200,
     392
    ],
-   "scale": 0.54,
+   "scale": 0.537,
    "body_anchor_x": 200,
    "facing": "right side (seated)",
    "canvas_compliant": true,
@@ -528,7 +528,91 @@
    "frames": "blow_kiss/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "bounce_giggle",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_shy_giggle/",
+   "sheet": "idle_flirt_shy_giggle/idle_flirt_shy_giggle_sheet.png",
+   "manifest": "idle_flirt_shy_giggle/idle_flirt_shy_giggle.json",
+   "preview": "idle_flirt_shy_giggle/idle_flirt_shy_giggle_preview.gif",
+   "frames": "idle_flirt_shy_giggle/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "alias_of": "idle_flirt_shy_giggle"
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 6.0,
+   "loop": false,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "frame_durations_ms": [
+    94,
+    94,
+    94,
+    94,
+    94,
+    94,
+    94,
+    94,
+    94,
+    188,
+    188,
+    188,
+    188,
+    188,
+    828,
+    188,
+    188,
+    188,
+    188,
+    188,
+    94,
+    94,
+    94,
+    1210
+   ],
+   "canvas_compliant": true,
+   "name": "cheeky_tongue_wink",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "cheeky_tongue_wink/",
+   "sheet": "cheeky_tongue_wink/cheeky_tongue_wink_sheet.png",
+   "manifest": "cheeky_tongue_wink/cheeky_tongue_wink.json",
+   "preview": "cheeky_tongue_wink/cheeky_tongue_wink_preview.gif",
+   "frames": "cheeky_tongue_wink/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true
   },
   {
    "frame_count": 48,
@@ -1924,6 +2008,61 @@
    ],
    "scale": 0.54,
    "body_anchor_x": 200,
+   "facing": "3/4 front",
+   "frame_durations_ms": [
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    179,
+    179,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    67,
+    141,
+    141,
+    420
+   ],
+   "canvas_compliant": true,
+   "name": "finger_wag_tease",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "lean_tease/",
+   "sheet": "lean_tease/lean_tease_sheet.png",
+   "manifest": "lean_tease/lean_tease.json",
+   "preview": "lean_tease/lean_tease_preview.gif",
+   "frames": "lean_tease/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "alias_of": "lean_tease"
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": false,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
    "facing": "front",
    "frame_durations_ms": [
     73,
@@ -1962,7 +2101,65 @@
    "frames": "hair_flip/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
+  },
+  {
+   "frame_count": 14,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "hair_twirl",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "hair_twirl/",
+   "sheet": "hair_twirl/hair_twirl_sheet.png",
+   "manifest": "hair_twirl/hair_twirl.json",
+   "preview": "hair_twirl/hair_twirl_preview.gif",
+   "frames": "hair_twirl/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "hands_behind_head_pose",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_stretch/",
+   "sheet": "idle_flirt_stretch/idle_flirt_stretch_sheet.png",
+   "manifest": "idle_flirt_stretch/idle_flirt_stretch.json",
+   "preview": "idle_flirt_stretch/idle_flirt_stretch_preview.gif",
+   "frames": "idle_flirt_stretch/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "alias_of": "idle_flirt_stretch"
   },
   {
    "frame_count": 24,
@@ -2015,7 +2212,8 @@
    "frames": "heart_hands/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
   },
   {
    "frame_count": 24,
@@ -2068,7 +2266,8 @@
    "frames": "hip_pop_wink/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
   },
   {
    "frame_count": 23,
@@ -2112,7 +2311,7 @@
    "body_anchor_x": 200,
    "facing": "front",
    "canvas_compliant": true,
-   "name": "idle_a",
+   "name": "idle",
    "placeholder": false,
    "source": "grok-imagine-video",
    "dir": "idle_a/",
@@ -2121,9 +2320,9 @@
    "preview": "idle_a/idle_a_preview.gif",
    "frames": "idle_a/frames/",
    "tags": [
-    "baked_motion",
-    "variant_of:idle"
-   ]
+    "baked_motion"
+   ],
+   "alias_of": "idle_a"
   },
   {
    "frame_count": 72,
@@ -2140,7 +2339,7 @@
    "body_anchor_x": 200,
    "facing": "front",
    "canvas_compliant": true,
-   "name": "idle",
+   "name": "idle_a",
    "placeholder": false,
    "source": "grok-imagine-video",
    "dir": "idle_a/",
@@ -2149,9 +2348,9 @@
    "preview": "idle_a/idle_a_preview.gif",
    "frames": "idle_a/frames/",
    "tags": [
-    "baked_motion"
-   ],
-   "alias_of": "idle_a"
+    "baked_motion",
+    "variant_of:idle"
+   ]
   },
   {
    "frame_count": 36,
@@ -2180,6 +2379,296 @@
     "baked_motion",
     "variant_of:idle"
    ]
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_foot_tap",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_foot_tap/",
+   "sheet": "idle_flirt_foot_tap/idle_flirt_foot_tap_sheet.png",
+   "manifest": "idle_flirt_foot_tap/idle_flirt_foot_tap.json",
+   "preview": "idle_flirt_foot_tap/idle_flirt_foot_tap_preview.gif",
+   "frames": "idle_flirt_foot_tap/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_glove_adjust",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_glove_adjust/",
+   "sheet": "idle_flirt_glove_adjust/idle_flirt_glove_adjust_sheet.png",
+   "manifest": "idle_flirt_glove_adjust/idle_flirt_glove_adjust.json",
+   "preview": "idle_flirt_glove_adjust/idle_flirt_glove_adjust_preview.gif",
+   "frames": "idle_flirt_glove_adjust/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_hands_behind_sway",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_hands_behind_sway/",
+   "sheet": "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway_sheet.png",
+   "manifest": "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway.json",
+   "preview": "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway_preview.gif",
+   "frames": "idle_flirt_hands_behind_sway/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_hip_lean",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_hip_lean/",
+   "sheet": "idle_flirt_hip_lean/idle_flirt_hip_lean_sheet.png",
+   "manifest": "idle_flirt_hip_lean/idle_flirt_hip_lean.json",
+   "preview": "idle_flirt_hip_lean/idle_flirt_hip_lean_preview.gif",
+   "frames": "idle_flirt_hip_lean/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_lip_bite",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_lip_bite/",
+   "sheet": "idle_flirt_lip_bite/idle_flirt_lip_bite_sheet.png",
+   "manifest": "idle_flirt_lip_bite/idle_flirt_lip_bite.json",
+   "preview": "idle_flirt_lip_bite/idle_flirt_lip_bite_preview.gif",
+   "frames": "idle_flirt_lip_bite/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_look_away",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_look_away/",
+   "sheet": "idle_flirt_look_away/idle_flirt_look_away_sheet.png",
+   "manifest": "idle_flirt_look_away/idle_flirt_look_away.json",
+   "preview": "idle_flirt_look_away/idle_flirt_look_away_preview.gif",
+   "frames": "idle_flirt_look_away/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 59,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_pigtail_twirl",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_pigtail_twirl/",
+   "sheet": "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl_sheet.png",
+   "manifest": "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl.json",
+   "preview": "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl_preview.gif",
+   "frames": "idle_flirt_pigtail_twirl/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_shy_giggle",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_shy_giggle/",
+   "sheet": "idle_flirt_shy_giggle/idle_flirt_shy_giggle_sheet.png",
+   "manifest": "idle_flirt_shy_giggle/idle_flirt_shy_giggle.json",
+   "preview": "idle_flirt_shy_giggle/idle_flirt_shy_giggle_preview.gif",
+   "frames": "idle_flirt_shy_giggle/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_stretch",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_stretch/",
+   "sheet": "idle_flirt_stretch/idle_flirt_stretch_sheet.png",
+   "manifest": "idle_flirt_stretch/idle_flirt_stretch.json",
+   "preview": "idle_flirt_stretch/idle_flirt_stretch_preview.gif",
+   "frames": "idle_flirt_stretch/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
+  },
+  {
+   "frame_count": 47,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "idle_flirt_tail_curl",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_flirt_tail_curl/",
+   "sheet": "idle_flirt_tail_curl/idle_flirt_tail_curl_sheet.png",
+   "manifest": "idle_flirt_tail_curl/idle_flirt_tail_curl.json",
+   "preview": "idle_flirt_tail_curl/idle_flirt_tail_curl_preview.gif",
+   "frames": "idle_flirt_tail_curl/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "idle_variant": true
   },
   {
    "frame_count": 14,
@@ -2286,7 +2775,8 @@
    "frames": "lean_tease/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
   },
   {
    "frame_count": 24,
@@ -2314,6 +2804,60 @@
    "tags": [
     "baked_motion"
    ]
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 6.0,
+   "loop": false,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "frame_durations_ms": [
+    99,
+    99,
+    200,
+    200,
+    99,
+    99,
+    444,
+    99,
+    99,
+    99,
+    99,
+    200,
+    1003,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    99,
+    346
+   ],
+   "canvas_compliant": true,
+   "name": "over_shoulder_look",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "over_shoulder_look/",
+   "sheet": "over_shoulder_look/over_shoulder_look_sheet.png",
+   "manifest": "over_shoulder_look/over_shoulder_look.json",
+   "preview": "over_shoulder_look/over_shoulder_look_preview.gif",
+   "frames": "over_shoulder_look/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true
   },
   {
    "frame_count": 24,
@@ -2366,7 +2910,8 @@
    "frames": "peace_sign_pose/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
   },
   {
    "frame_count": 10,
@@ -2528,7 +3073,8 @@
    "frames": "shoulder_shimmy/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
   },
   {
    "frame_count": 36,
@@ -2716,7 +3262,8 @@
    "frames": "stretch_arch/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
   },
   {
    "frame_count": 9,
@@ -2743,7 +3290,8 @@
    "frames": "strut_left/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
   },
   {
    "frame_count": 9,
@@ -2770,7 +3318,36 @@
    "frames": "strut_right/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
+  },
+  {
+   "frame_count": 59,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "sway_dance",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "sway_dance/",
+   "sheet": "sway_dance/sway_dance_sheet.png",
+   "manifest": "sway_dance/sway_dance.json",
+   "preview": "sway_dance/sway_dance_preview.gif",
+   "frames": "sway_dance/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true
   },
   {
    "frame_count": 17,
@@ -2843,7 +3420,8 @@
    "frames": "tail_tease/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
   },
   {
    "frame_count": 11,
@@ -2924,7 +3502,8 @@
    "frames": "tiptoe_bounce/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
   },
   {
    "frame_count": 24,
@@ -2977,7 +3556,62 @@
    "frames": "twirl/frames/",
    "tags": [
     "baked_motion"
-   ]
+   ],
+   "allure": true
+  },
+  {
+   "frame_count": 24,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 6.0,
+   "loop": false,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "frame_durations_ms": [
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    250,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    167,
+    400
+   ],
+   "canvas_compliant": true,
+   "name": "victory_jump",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "victory_jump/",
+   "sheet": "victory_jump/victory_jump_sheet.png",
+   "manifest": "victory_jump/victory_jump.json",
+   "preview": "victory_jump/victory_jump_preview.gif",
+   "frames": "victory_jump/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true
   },
   {
    "frame_count": 21,
