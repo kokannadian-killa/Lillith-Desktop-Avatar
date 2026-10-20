@@ -52,7 +52,8 @@ fn every_generated_clip_plays_and_renders() {
         !a.blink_frames().is_empty(),
         "blink_wink gives blink frames"
     );
-    // Baked-walk clips (video walk/strut/run takes + their idle blends)
+    // Baked-walk clips (video walk/strut/run takes + their idle blends,
+    // plus the batch-13 walk variants)
     // suppress the engine gait; nothing else does.
     let mut baked: Vec<&str> = m
         .clips
@@ -74,6 +75,12 @@ fn every_generated_clip_plays_and_renders() {
             "strut_right",
             "walk_left",
             "walk_right",
+            "walk_sassy_left",
+            "walk_sassy_right",
+            "walk_saunter_left",
+            "walk_saunter_right",
+            "walk_skip_left",
+            "walk_skip_right",
         ]
     );
     for n in &baked {

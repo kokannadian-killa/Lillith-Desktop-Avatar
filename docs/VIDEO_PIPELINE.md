@@ -73,6 +73,22 @@ and not committed. Examples: a deep bow, or a turn that shows her back.
 - The runtime looks for `$LILLITH_MANIFEST`, then `./assets/generated/manifest.toml` (relative to the
   working directory), then `$XDG_DATA_HOME/lillith/generated/manifest.toml`.
 
+## Variants (batch 13)
+
+- `make_manifest_v2.py` has a `VARIANT_OF` map that tags alternative takes with `variant_of:<base>`:
+  - `walk_{sassy,skip,saunter}_{right,left}` -> `walk_right` / `walk_left`;
+  - `sit_{bored_chin,cross_legged_bob,heel_kick,stretch_yawn}` -> `sit_swing`;
+  - `idle_{bored_sigh,nail_check,tail_fidget,yawn_stretch}` -> `idle` (these also carry `idle_variant`).
+- Each take starts and ends on the base clip's source still. Placement matches the base:
+  - walks: scale 0.54, body_trend centring, per-frame snap;
+  - sits: scale 0.5, fixed, aligned to sit_swing, same seat_y / seat_x_range;
+  - idles: the idle_a still.
+- The walk variants carry `engine_springs` (gait disabled) like the base walks. They have no `root_motion` or `contact_frames` yet.
+- Engine support: only `variant_of:<idle base>` clips are cycled (Animator, `IdleConfig::variant_hold_s`, 30 s by default).
+  There is no walk or sit variant picker yet, so those tags are inert until one is added.
+- The idle gesture variants are ~4 s loops. With the 30 s hold, one gesture repeats several times before the next pick.
+  A shorter per-variant hold, or playing them as one-shots, would suit them better.
+
 ## Known caveats
 
 - `twirl` shows a brief back view mid-spin, which is natural for the move.
