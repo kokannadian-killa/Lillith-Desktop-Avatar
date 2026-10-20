@@ -314,7 +314,7 @@ tags = ["canonical", "facing:front -> left", "baked_motion", "blend"]
 from = "idle"
 to = "walk_left"
 from_frame = 0
-to_frame = 0
+to_frame = 12
 
 [[clips.blend_idle_to_walk_left.frames]]
 x = 0
@@ -370,7 +370,7 @@ tags = ["canonical", "facing:front -> right", "baked_motion", "blend"]
 from = "idle"
 to = "walk_right"
 from_frame = 0
-to_frame = 0
+to_frame = 5
 
 [[clips.blend_idle_to_walk_right.frames]]
 x = 0
@@ -684,7 +684,7 @@ tags = ["canonical", "facing:left -> front", "baked_motion", "blend"]
 [clips.blend_walk_left_to_idle.blend]
 from = "walk_left"
 to = "idle"
-from_frame = 0
+from_frame = 10
 to_frame = 0
 
 [[clips.blend_walk_left_to_idle.frames]]
@@ -740,7 +740,7 @@ tags = ["canonical", "facing:right -> front", "baked_motion", "blend"]
 [clips.blend_walk_right_to_idle.blend]
 from = "walk_right"
 to = "idle"
-from_frame = 0
+from_frame = 9
 to_frame = 0
 
 [[clips.blend_walk_right_to_idle.frames]]
@@ -16614,6 +16614,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:left", "baked_motion"]
+root_motion = [-20.0, -21.0, -21.0, -18.0, -22.0, -21.0, -22.0, -21.0, -22.0, -10.0, -18.0, -22.0, -21.0, -23.0]
+contact_frames = [3, 9]
 
 [[clips.walk_left.frames]]
 x = 0
@@ -16720,6 +16722,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:right", "baked_motion"]
+root_motion = [20.0, 21.0, 21.0, 18.0, 22.0, 21.0, 22.0, 21.0, 22.0, 10.0, 18.0, 22.0, 21.0, 23.0]
+contact_frames = [3, 9]
 
 [[clips.walk_right.frames]]
 x = 0

@@ -152,7 +152,16 @@ impl Controller {
         let busy = anim.overlay_clip().is_some() || anim.queued() > 0;
         let actions = self.brain.tick(dt, busy);
         self.apply(actions);
-        Ok(self.stage.tick(dt)?)
+        let changed = self.stage.tick(dt)?;
+        // Walks with root motion move the window by exactly what the drawn
+        // frames stepped, so the planted foot stays put on the desktop.
+        let dx = self.stage.take_root_motion_px();
+        let actions = self.brain.root_motion(dx);
+        self.apply(actions);
+        let anim = self.stage.animator();
+        self.brain
+            .set_root_motion(anim.base_has_root_motion() || anim.stopping());
+        Ok(changed)
     }
 
     /// Applies brain actions to the animator / window.

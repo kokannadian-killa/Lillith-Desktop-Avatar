@@ -16,6 +16,12 @@
 //! points = { beam_origin = [306, 78] }  # optional named points
 //! # optional seat metadata (sit_swing): seat_y = 230, seat_x_range = [136, 279],
 //! # feet_lowest_y = 364
+//! # optional locomotion metadata (in-place walk/run cycles), one entry per
+//! # frame: how far the ground moves under the planted foot when frame i
+//! # gives way to frame i+1, in cell px along +x (negative for left-facing
+//! # art), so the window can move exactly as far as the feet do:
+//! # root_motion = [20.0, 21.0, ...]
+//! # contact_frames = [3, 9]   # frames where a foot lands (footfall bounce)
 //! # optional event reaction metadata: event = "cpu_busy",
 //! # base_clip = "facepalm", base_frames = [0, 1, ...] (one per frame)
 //! # rule_events = ["window.opened.folder"]  # every rule event it serves
@@ -124,6 +130,17 @@ pub struct Clip {
     /// `baseline_y`, e.g. legs dangling below a seat).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feet_lowest_y: Option<i32>,
+    /// Optional root motion of an in-place (treadmill) locomotion cycle, one
+    /// entry per frame: cell px the character advances along +x when frame
+    /// `i` gives way to frame `i + 1` (the last entry wraps to frame 0).
+    /// Measured from the planted foot, so moving the window by this much
+    /// keeps the feet still on the desktop. Negative for left-facing art.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_motion: Option<Vec<f32>>,
+    /// Optional frames on which a foot lands (heel strike) in a locomotion
+    /// cycle; footfall bounces fire there instead of at fixed cycle phases.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contact_frames: Option<Vec<usize>>,
     /// Optional system event this clip reacts to (e.g. `cpu_busy`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<String>,
@@ -175,6 +192,8 @@ impl Default for Clip {
             seat_y: None,
             seat_x_range: None,
             feet_lowest_y: None,
+            root_motion: None,
+            contact_frames: None,
             event: None,
             base_clip: None,
             base_frames: None,
@@ -225,6 +244,14 @@ impl Clip {
             .get(name)
             .and_then(|v| v.get(frame).copied())
             .or_else(|| self.point(name))
+    }
+
+    /// Average ground speed of a root-motion cycle in cell px/s (signed,
+    /// +x = right), or `None` without `root_motion`.
+    pub fn root_speed_px_s(&self) -> Option<f32> {
+        let rm = self.root_motion.as_ref()?;
+        let total: f32 = self.frame_durations_s().iter().sum();
+        (total > 0.0).then(|| rm.iter().sum::<f32>() / total)
     }
 
     /// `true` for blend-helper (transition) clips.
@@ -299,6 +326,26 @@ impl Clip {
                 return Err(bad(format!(
                     "frame_points.{pname} has {} entries but clip has {} frames",
                     v.len(),
+                    self.frames.len()
+                )));
+            }
+        }
+        if let Some(rm) = &self.root_motion {
+            if rm.len() != self.frames.len() {
+                return Err(bad(format!(
+                    "root_motion has {} entries but clip has {} frames",
+                    rm.len(),
+                    self.frames.len()
+                )));
+            }
+            if rm.iter().any(|v| !v.is_finite()) {
+                return Err(bad("root_motion must be finite".into()));
+            }
+        }
+        if let Some(cf) = &self.contact_frames {
+            if let Some(f) = cf.iter().find(|&&f| f >= self.frames.len()) {
+                return Err(bad(format!(
+                    "contact_frames: frame {f} out of range ({} frames)",
                     self.frames.len()
                 )));
             }
@@ -601,6 +648,8 @@ mod tests {
                 seat_y: Some(230),
                 seat_x_range: Some((136, 279)),
                 feet_lowest_y: Some(364),
+                root_motion: None,
+                contact_frames: None,
                 event: Some("cpu_busy".into()),
                 base_clip: Some("a".into()),
                 base_frames: Some(vec![0]),

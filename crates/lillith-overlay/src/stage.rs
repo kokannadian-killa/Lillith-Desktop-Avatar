@@ -158,6 +158,13 @@ impl Stage {
         self.render_time
     }
 
+    /// Ground the drawn walk frames covered since the last call, in screen
+    /// px (animator root motion × overlay scale); see
+    /// [`Animator::take_root_motion`].
+    pub fn take_root_motion_px(&mut self) -> f32 {
+        self.anim.take_root_motion() * self.scale
+    }
+
     /// Current layer (for logs).
     pub fn layer(&self) -> Layer {
         self.anim.current().layer

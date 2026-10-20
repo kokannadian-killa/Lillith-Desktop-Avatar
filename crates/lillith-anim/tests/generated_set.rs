@@ -53,7 +53,15 @@ fn every_generated_clip_plays_and_renders() {
         "blink_wink gives blink frames"
     );
     a.walk(Dir::Left, false).unwrap();
+    // Starting from idle plays the turn blend first, then hands over to the
+    // walk on the frame the blend leads into.
+    assert_eq!(a.base(), "walk_left");
+    assert_eq!(a.current().clip_name, "blend_idle_to_walk_left");
+    for _ in 0..60 {
+        a.tick(1.0 / 60.0);
+    }
     assert_eq!(a.current().clip_name, "walk_left");
+    assert!(a.take_root_motion() < 0.0, "walking left moves left");
     a.walk(Dir::Right, true).unwrap();
     assert_eq!(a.current().clip_name, "run_right");
     a.stand();

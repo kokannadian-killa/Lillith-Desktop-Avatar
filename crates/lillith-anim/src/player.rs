@@ -62,6 +62,23 @@ impl ClipPlayer {
         self.elapsed = 0.0;
     }
 
+    /// Jumps to the start of `frame` (clamped to the clip).
+    pub fn seek(&mut self, frame: usize) {
+        let f = frame.min(self.frame_count - 1);
+        self.elapsed = match &self.frame_ends {
+            None => f as f32 / self.fps,
+            Some(ends) => {
+                if f == 0 {
+                    0.0
+                } else {
+                    ends[f - 1]
+                }
+            }
+        };
+        // Land safely inside the frame despite float rounding.
+        self.elapsed += 1e-4;
+    }
+
     pub fn advance(&mut self, dt: f32) {
         self.elapsed += dt;
     }
@@ -126,6 +143,22 @@ mod tests {
     }
 
     const WAKE_MS: [u32; 10] = [450, 350, 160, 260, 450, 140, 220, 450, 200, 600];
+
+    #[test]
+    fn seek_lands_on_the_frame() {
+        let mut p = ClipPlayer::new(14, 12.0, LoopMode::Loop);
+        for f in [0, 5, 13] {
+            p.seek(f);
+            assert_eq!(p.frame(), f);
+        }
+        p.seek(99);
+        assert_eq!(p.frame(), 13);
+        let mut q = ClipPlayer::with_durations_ms(&[100, 300, 50], 6.0, LoopMode::Once);
+        q.seek(2);
+        assert_eq!(q.frame(), 2);
+        q.seek(1);
+        assert_eq!(q.frame(), 1);
+    }
 
     #[test]
     fn per_frame_durations_once() {
