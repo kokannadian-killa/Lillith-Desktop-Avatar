@@ -1,0 +1,10 @@
+[package]
+name = "lillith-settings-gui"
+description = "Lillith's settings / options pop-up window (egui) with the first-run LLM setup wizard."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true

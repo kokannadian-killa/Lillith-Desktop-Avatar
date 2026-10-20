@@ -2451,6 +2451,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "lillith-settings-gui"
+version = "0.0.1"
+
+[[package]]
 name = "lillith-setup"
 version = "0.0.1"
 dependencies = [
@@ -2458,6 +2462,13 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "toml_edit 0.22.27",
+]
+
+[[package]]
+name = "lillith-theme"
+version = "0.0.1"
+dependencies = [
+ "egui",
 ]
 
 [[package]]
