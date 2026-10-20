@@ -166,7 +166,7 @@ Stop her with `Q` / `Esc` (click her first so she has keyboard focus) or
 | `--backend wayland\|x11` | Force a backend. Default: Wayland when `WAYLAND_DISPLAY` is set. Forcing `wayland` turns a missing layer-shell into an error instead of a fallback. |
 | `--manifest <PATH>` | Animation set `manifest.toml` (see [§3](#3-point-her-at-an-animation-set)) |
 | `--config <PATH>` | Config file (default `~/.config/lillith/config.toml`) |
-| `--scale <F>` | Size multiplier on the 400 px cell (default `0.75` → 300 px) |
+| `--scale <F>` | Size multiplier on the 400 px cell (default `0.55` → 220 px) |
 | `--opacity <0..1>` | Whole-sprite opacity |
 | `--fps <HZ>` | Redraw cap (default 30) |
 | `--mode wander\|stay\|follow` | Movement mode (default `wander`; `follow` currently behaves like `stay` — real Follow needs the M5 KWin bridge) |
@@ -218,12 +218,11 @@ rewritten when you drag her (other keys are kept).
 
 ```toml
 # Top-level keys (must come before any [table])
-mode = "wander"        # wander | stay | follow
-scale = 1.0            # 1.0 here means "use the 0.75 default"; set e.g. 0.6 to override
+mode = "stay"          # stay | wander | follow  (G toggles wander while she has focus)
+scale = 1.0            # 1.0 here means "use the 0.55 default" (220 px); set e.g. 0.7 to override
 opacity = 1.0
 render_hz = 30.0
 physics_hz = 120.0
-pose_cycle_s = 16.0
 baked_jiggle = false   # true: use the baked _jiggle clip variants when present
 muted = false
 
@@ -235,12 +234,21 @@ margin_bottom = 48
 [behavior]             # M3 behaviour timings
 sleepy_after_s = 300.0
 asleep_after_s = 900.0
+pose_cycle_s = 45.0          # automatic pose change while idle
 left_repeat_s = 4.0          # second left click within this → wave
-wander_every_s = [20.0, 45.0]
+wander_every_s = [60.0, 120.0]  # pause between walks in wander mode
 wander_speed_px_s = 60.0
 wander_min_step_px = 120.0
 event_wake_priority = 80     # events at/above this priority wake her
 mood_tau_s = 45.0
+
+[behavior.idle]              # idle life: she mostly stands and breathes
+breath_period_s = [3.5, 4.5]
+blink_every_s = [4.0, 6.0]
+transition_every_s = [25.0, 40.0]  # hip sway / lean / shoulder roll (old: [8, 12])
+transition_len_s = [1.2, 2.0]
+reaction_every_s = [45.0, 90.0]    # unprompted gestures (old: [12, 26])
+variant_hold_s = 30.0              # keep one idle take at least this long (0 = every loop)
 
 [behavior.gestures]
 double_click_s = 0.35
@@ -274,8 +282,14 @@ says which backend was chosen. Use `--backend x11` to force the fallback.
 *Keep above* for window class `lillith` (System Settings → Window Management →
 Window Rules). KWin rules don't apply to layer-shell surfaces.
 
-**No transparency on X11.** You need a running compositor (KWin's compositing,
-picom, …).
+**A black box around her.** Her window is transparent only while a
+compositor blends it. On Wayland (layer-shell) KWin always does. On X11 the
+startup log has a `transparency:` line: `alpha=Composited` means a 32-bit ARGB
+visual and a running compositing manager (soft edges); `alpha=Shaped` means
+compositing is off or suspended (KWin X11: Alt+Shift+F12, or System Settings →
+Display & Monitor → Compositor), so she is clipped to her silhouette with the
+X Shape extension instead — no box, but hard edges. She switches modes live
+within ~2 s when compositing is toggled. Include that log line in bug reports.
 
 **Build fails with `xkbcommon` / `wayland-client` / `Package … was not found`.**
 Install `libxkbcommon` and `wayland` (Arch) or `libxkbcommon-dev` and

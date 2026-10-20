@@ -61,8 +61,9 @@ Python/Tk prototypes). Everything runs locally.
   baked `_jiggle` variants that switch the engine's chest/pigtail/hip springs
   off while drawn — `--baked-jiggle`). Per-frame timing, feet anchors and
   attachment points, played by a priority reaction queue on top of idle life
-  (breathing, blinking every 4–6 s, idle transitions, random idle reactions,
-  a mood-based pose cycle every 16 s). *Art storage: see [Assets](#assets).*
+  (breathing, blinking every 4–6 s, a calm idle by default: transitions every
+  25–40 s, gestures every 45–90 s, a mood-based pose cycle every 45 s, all
+  tunable in `[behavior]`). *Art storage: see [Assets](#assets).*
 - ✅ **Walk / run** with left/right clips or mirrored fallback.
 - 🗓️ Speech-bubble rendering (lines are chosen and logged today), SFX playback,
   particles, HiDPI buffer scale.
