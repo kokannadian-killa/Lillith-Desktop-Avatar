@@ -12,14 +12,22 @@
 //! [`PhysicsDriver::transform`] and [`PhysicsDriver::overlay`].
 //! Everything is data-driven from `assets/physics.toml`
 //! ([`PhysicsConfig`]) and deterministic for a given seed.
+//!
+//! Engine gait (physics-lab v3-v5, optional): with a `[gait]` table in
+//! physics.toml, walking also drives a gait phase, hip bob, arm / forearm /
+//! torso-twist springs, two alternating jiggle kicks per cycle, a timed view
+//! turn with hard cuts (front / 3/4 / side) and a gait-locked tail sway. Read
+//! them from [`Overlay::gait`] / [`PhysicsDriver::gait`] ([`GaitPose`]).
+//! Without `[gait]` all of it is off and walking behaves exactly as before.
 
 use crate::config::Springs as UserSprings;
 use crate::mood::Mood;
 use crate::physics_config::{
-    mood_key, ImpulseCfg, MoodMul, PhysicsConfig, SpringCfg, TransitionStep,
+    mood_key, Gait, ImpulseCfg, MoodMul, PhysicsConfig, SpringCfg, TransitionStep,
 };
 use crate::rng::Rng;
 use crate::spring::{Channel, Physics, Spring, SpringParams, Transform};
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 /// Locomotion state the driver needs (from lillith-core state machine).
@@ -88,7 +96,82 @@ pub struct Overlay {
     pub sparks_burst: u32,
     /// Tattoo particles emitted since the previous [`PhysicsDriver::tick`].
     pub particles_burst: u32,
+    /// Engine gait outputs (physics-lab v3-v5). All rest/0 unless
+    /// physics.toml has a `[gait]` table and she is (or just was) walking.
+    pub gait: GaitPose,
 }
+
+/// Gait outputs for the renderer (DRIVER_DESIGN Addenda v3-v5, SPEC 16-18).
+/// Angles in DEGREES; + arm = toward facing. All 0 / rest when not walking.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct GaitPose {
+    /// 0..1: 0 = RIGHT heel strike, 0.5 = LEFT heel strike (== right_leg_phase).
+    pub gait_phase: f32,
+    pub left_leg_phase: f32,
+    pub right_leg_phase: f32,
+    /// Ankle forwardness -1 (back) .. +1 (forward), already x `gait_amp`.
+    pub left_leg_fwd: f32,
+    pub right_leg_fwd: f32,
+    /// Stride weight 0..1 (ramps in after the turn-in, out after a stop).
+    pub gait_amp: f32,
+    /// Pelvis + upper body vertical offset px (+ down); feet stay planted.
+    /// Draw this instead of a root_y footfall bob.
+    pub hip_bob_px: f32,
+    /// Upper arm about the shoulder (spring-driven).
+    pub left_arm_deg: f32,
+    pub right_arm_deg: f32,
+    /// Forearm RELATIVE to the upper arm (>= `[gait].elbow_min_deg`).
+    pub left_forearm_deg: f32,
+    pub right_forearm_deg: f32,
+    /// + = right shoulder forward (spring-driven).
+    pub torso_twist_deg: f32,
+    /// Heel strike during the last tick: 0 none, 1 left, 2 right.
+    pub heel_strike: u8,
+    /// View turn, smoothstepped: 0 = front idle view, 1 = side walk view.
+    pub turn_progress: f32,
+    /// +1 turning toward the side view, -1 back to front, 0 steady.
+    pub turn_dir: i8,
+    /// Drawing to show (HARD cuts, never crossfade): 0 front idle,
+    /// 1 three-quarter, 2 side walk. == [`turn_view_of`]`(turn_progress)`.
+    pub turn_view: u8,
+    /// Gait-locked tail sway target (px, + = toward facing); already
+    /// included in `tail_tip_x` through the tail spring.
+    pub tail_sway_px: f32,
+}
+
+/// Which drawing a turn shows at `progress`: 0 front, 1 three-quarter,
+/// 2 side (hard cuts at `[gait]` turn_cut_lo / turn_cut_hi).
+pub fn turn_view_of(progress: f32, g: &Gait) -> u8 {
+    if progress < g.turn_cut_lo {
+        0
+    } else if progress < g.turn_cut_hi {
+        1
+    } else {
+        2
+    }
+}
+
+/// Normalised forwardness of one leg at gait phase `u` (stance: linear
+/// +1 -> -1; swing: eased -1 -> +1).
+pub fn leg_fwd(u: f32, duty: f32) -> f32 {
+    let u = u.rem_euclid(1.0);
+    if u < duty {
+        1.0 - 2.0 * u / duty
+    } else {
+        -1.0 + 2.0 * smooth((u - duty) / (1.0 - duty))
+    }
+}
+
+/// Hip bob (px, +down) at gait phase `u` for amp 1, and its d2/du2.
+fn hip_bob(u: f32, down: f32, up: f32) -> (f32, f32) {
+    let w = 4.0 * std::f32::consts::PI;
+    let a = 0.5 * (down + up);
+    // +down at u = 0, 0.5 (heel strikes); -up at u = 0.25, 0.75 (mid-stance)
+    (down - a * (1.0 - (w * u).cos()), -a * w * w * (w * u).cos())
+}
+
+/// Most recent heel strikes kept for [`PhysicsDriver::heel_strikes`].
+const STRIKES_KEPT: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Target {
@@ -195,6 +278,19 @@ pub struct PhysicsDriver {
     facing: f32,
     walk_phase: f32,
     foot: u32,
+    // gait (only active with a [gait] table)
+    gait_cycle: f32,
+    gait_lin: f32,
+    arm_l: Spring,
+    arm_r: Spring,
+    fore_l: Spring,
+    fore_r: Spring,
+    twist: Spring,
+    heel_strike: u8,
+    turn_lin: f32,
+    turn_dir: i8,
+    gait_vx: f32,
+    strikes: VecDeque<(f32, u32)>,
     // transitions (additive offsets per channel; scale offset from 1.0)
     trans: [f32; 6],
     active: Option<ActiveTransition>,
@@ -295,6 +391,12 @@ impl PhysicsDriver {
         let tail_x = spring_from(&cfg.tail.tip_spring, 0.0);
         let tail_y = spring_from(&cfg.tail.tip_spring, 0.0);
         let horn = spring_from(&cfg.horn.tilt_spring, 0.0);
+        let g = cfg.gait.unwrap_or_default();
+        let arm = || spring_from(&g.arm_spring, 0.0);
+        let fore = || spring_from(&g.forearm_spring, 0.0);
+        let (arm_l, arm_r, fore_l, fore_r) = (arm(), arm(), fore(), fore());
+        let twist = spring_from(&g.twist_spring, 0.0);
+        let gait_cycle = cfg.walk.demo_cycle_s;
         let mut d = Self {
             physics,
             rng,
@@ -312,6 +414,18 @@ impl PhysicsDriver {
             facing: 1.0,
             walk_phase: 0.0,
             foot: 0,
+            gait_cycle,
+            gait_lin: 0.0,
+            arm_l,
+            arm_r,
+            fore_l,
+            fore_r,
+            twist,
+            heel_strike: 0,
+            turn_lin: 0.0,
+            turn_dir: 0,
+            gait_vx: 0.0,
+            strikes: VecDeque::new(),
             trans: [0.0; 6],
             active: None,
             auto_idle: false,
@@ -451,13 +565,26 @@ impl PhysicsDriver {
     pub fn set_motion(&mut self, m: Motion) {
         let was = self.motion.locomotion();
         let now = m.locomotion();
+        // With timed turns the boundary fires at each view cut instead (substep).
+        let turning = self
+            .cfg
+            .gait
+            .is_some_and(|g| g.turn_in_s > 0.0 || g.turn_out_s > 0.0);
+        if self.cfg.clip_boundary.on_locomotion_change && was.is_some() != now.is_some() && !turning
+        {
+            self.on_clip_boundary(); // a pose/view swap is NOT an impulse source
+        }
         match (was, now) {
             (None, Some((vx, _, _))) => {
                 self.facing = if vx < 0.0 { -1.0 } else { 1.0 };
                 let a = self.cfg.walk.start_tip_angle * self.facing;
                 self.schedule(Target::Ch(Channel::Angle), a, 0.0);
-                self.walk_phase = 0.0;
-                self.foot = 0;
+                // With [gait], a walk restarted while the stride is still
+                // ramping out keeps its phase (no foot jump).
+                if self.cfg.gait.is_none() || self.gait_lin <= 0.0 {
+                    self.walk_phase = 0.0;
+                    self.foot = 0;
+                }
                 self.active = None; // walking cancels idle transitions
                 self.trans = [0.0; 6];
             }
@@ -483,6 +610,78 @@ impl PhysicsDriver {
             self.apply_recipe(r, k); // soft landing (proposal: 0.8x)
         }
         self.motion = m;
+    }
+
+    /// Clip/pose boundary (e.g. side walk -> front idle): bleeds spring
+    /// velocity and pulls offsets toward their targets by `[clip_boundary]`,
+    /// so the swap settles as a small motion instead of replaying the old
+    /// clip's momentum. Kicks scheduled after it still fire. Automatic on
+    /// locomotion changes / turn cuts when `on_locomotion_change` is set; the
+    /// animator may also call it on other pose-family swaps.
+    pub fn on_clip_boundary(&mut self) {
+        let cb = self.cfg.clip_boundary;
+        for c in CH {
+            let s = self.physics.spring_mut(c);
+            s.velocity *= cb.velocity_keep;
+            s.position = s.target + (s.position - s.target) * cb.offset_keep;
+        }
+    }
+
+    /// `true` if physics.toml has a `[gait]` table (engine gait on).
+    pub fn gait_enabled(&self) -> bool {
+        self.cfg.gait.is_some()
+    }
+
+    /// Stride weight 0..1 (smoothstep of the linear ramp; 0 without `[gait]`).
+    pub fn gait_amp(&self) -> f32 {
+        smooth(self.gait_lin)
+    }
+
+    /// The most recent heel strikes as `(driver time, foot)`, foot 0 = left,
+    /// 1 = right (bounded; analysis / footstep SFX).
+    pub fn heel_strikes(&self) -> impl Iterator<Item = (f32, u32)> + '_ {
+        self.strikes.iter().copied()
+    }
+
+    /// Gait outputs for this frame (also in [`Overlay::gait`]).
+    pub fn gait(&self) -> GaitPose {
+        let Some(g) = self.cfg.gait.as_ref() else {
+            // No [gait]: instant view swap by Motion, nothing else moves.
+            let p = if self.motion.locomotion().is_some() {
+                1.0
+            } else {
+                0.0
+            };
+            return GaitPose {
+                turn_progress: p,
+                turn_view: if p > 0.0 { 2 } else { 0 },
+                ..GaitPose::default()
+            };
+        };
+        let amp = self.gait_amp();
+        let u = self.walk_phase.rem_euclid(1.0);
+        let ul = (u + 0.5).rem_euclid(1.0);
+        let (bob, _) = hip_bob(u, g.hip_bob_down_px, g.hip_bob_up_px);
+        let turn = smooth(self.turn_lin);
+        GaitPose {
+            gait_phase: u,
+            left_leg_phase: ul,
+            right_leg_phase: u,
+            left_leg_fwd: amp * leg_fwd(ul, g.duty),
+            right_leg_fwd: amp * leg_fwd(u, g.duty),
+            gait_amp: amp,
+            hip_bob_px: amp * bob,
+            left_arm_deg: self.arm_l.position,
+            right_arm_deg: self.arm_r.position,
+            left_forearm_deg: self.fore_l.position - self.arm_l.position,
+            right_forearm_deg: self.fore_r.position - self.arm_r.position,
+            torso_twist_deg: self.twist.position,
+            heel_strike: self.heel_strike,
+            turn_progress: turn,
+            turn_dir: self.turn_dir,
+            turn_view: turn_view_of(turn, g),
+            tail_sway_px: self.tail_x.target,
+        }
     }
 
     /// A clip (reaction, gesture, idle transition, locomotion) just started.
@@ -559,19 +758,47 @@ impl PhysicsDriver {
         } else {
             1.0
         };
-        self.schedule(Target::Ch(Channel::RootY), f.root_y, 0.0);
-        self.schedule(Target::Ch(Channel::Chest), f.chest, 0.0);
+        let Some(g) = self.cfg.gait else {
+            self.schedule(Target::Ch(Channel::RootY), f.root_y, 0.0);
+            self.schedule(Target::Ch(Channel::Chest), f.chest, 0.0);
+            self.schedule(
+                Target::Ch(Channel::Pigtail),
+                f.pigtails * alt * self.facing,
+                self.cfg.pigtails.lag_s,
+            );
+            return;
+        };
+        // Gait: every step's jiggle scales with the stride weight (no kick
+        // before the legs move), plus tail droop / alternating flick and an
+        // alternating torso counter-twist (right strike -> right shoulder back).
+        let k = self.gait_amp();
+        if f.root_y != 0.0 {
+            self.schedule(Target::Ch(Channel::RootY), f.root_y * k, 0.0);
+        }
+        self.schedule(Target::Ch(Channel::Chest), f.chest * k, 0.0);
         self.schedule(
             Target::Ch(Channel::Pigtail),
-            f.pigtails * alt * self.facing,
+            f.pigtails * alt * self.facing * k,
             self.cfg.pigtails.lag_s,
         );
+        self.schedule(Target::TailY, g.step_tail_y * k, 0.03);
+        self.schedule(Target::TailX, g.step_tail_x * alt * self.facing * k, 0.03);
+        let right = if foot % 2 == 1 { 1.0 } else { -1.0 };
+        if !self.mute_impulses {
+            self.twist.impulse(-g.step_twist * right * k);
+        }
+        self.heel_strike = if foot % 2 == 1 { 2 } else { 1 };
+        if self.strikes.len() >= STRIKES_KEPT {
+            self.strikes.pop_front();
+        }
+        self.strikes.push_back((self.time, foot % 2));
     }
 
     /// Advance by `dt` seconds (any size; processed in fixed 1/hz sub-steps
     /// so delayed kicks land on the right sub-step).
     pub fn tick(&mut self, dt: f32) {
         self.fired.clear();
+        self.heel_strike = 0;
         let h = 1.0 / self.physics.hz;
         let mut remaining = dt;
         while remaining > 1e-7 {
@@ -596,7 +823,12 @@ impl PhysicsDriver {
         let pulse = c.heartbeat.pulse_amplitude
             * (g(x) + c.heartbeat.dub_ratio * g(x - c.heartbeat.dub_delay_s));
         let w = std::f32::consts::TAU * self.tail_phase;
-        let tail_amp = m.tail_amplitude * (1.0 + c.mischief.tail_amplitude_boost * self.mischief);
+        // The idle figure-8 gives way to the gait-locked sway while walking.
+        let f8 = c
+            .gait
+            .map_or(1.0, |g| 1.0 - self.gait_amp() * (1.0 - g.tail_figure8_walk));
+        let tail_amp =
+            m.tail_amplitude * (1.0 + c.mischief.tail_amplitude_boost * self.mischief) * f8;
         Overlay {
             t: self.time,
             breath: b,
@@ -639,6 +871,7 @@ impl PhysicsDriver {
             mischief: self.mischief,
             sparks_burst: self.sparks_last,
             particles_burst: self.particles_last,
+            gait: self.gait(),
         }
     }
 
@@ -891,6 +1124,8 @@ impl PhysicsDriver {
         let pg = &self.cfg.pigtails;
         let vx = match self.motion {
             Motion::Dragged { vx } => vx,
+            // With [gait] the hair's walking trail eases in/out with the stride.
+            _ if self.cfg.gait.is_some() => self.gait_vx * self.gait_amp(),
             m => m.locomotion().map(|l| l.0).unwrap_or(0.0),
         };
         let drag_angle = match self.motion {
@@ -957,6 +1192,111 @@ impl PhysicsDriver {
             }
         }
         self.active = Some(a);
+    }
+
+    /// One sub-step of the engine gait (physics-lab v3-v5): view turn with
+    /// hard cuts, stride ramp, phase + heel strikes, arm/forearm/twist and
+    /// tail-sway targets, hip-bob inertia. Runs before `apply_targets`.
+    fn step_gait(&mut self, c: &PhysicsConfig, g: Gait, h: f32) {
+        let loco = self.motion.locomotion();
+        // View turn: walking -> turn to the side first; stopped -> only once
+        // the stride has ramped out.
+        let before_turn = self.turn_lin;
+        if loco.is_some() {
+            self.turn_lin = if g.turn_in_s > 0.0 {
+                (self.turn_lin + h / g.turn_in_s).min(1.0)
+            } else {
+                1.0
+            };
+        } else if self.gait_lin <= 0.0 {
+            self.turn_lin = if g.turn_out_s > 0.0 {
+                (self.turn_lin - h / g.turn_out_s).max(0.0)
+            } else {
+                0.0
+            };
+        }
+        self.turn_dir = if self.turn_lin > before_turn {
+            1
+        } else if self.turn_lin < before_turn {
+            -1
+        } else {
+            0
+        };
+        let view = turn_view_of(smooth(self.turn_lin), &g);
+        if view != turn_view_of(smooth(before_turn), &g) {
+            // HARD CUT between drawings: bleed momentum, then one small settle
+            // kick so the swap reads as a weight shift.
+            if c.clip_boundary.on_locomotion_change {
+                self.on_clip_boundary();
+            }
+            let dir = if self.turn_lin > before_turn {
+                -1.0
+            } else {
+                1.0
+            };
+            self.schedule(Target::Ch(Channel::Chest), g.turn_chest, 0.0);
+            self.schedule(
+                Target::Ch(Channel::Pigtail),
+                g.turn_pigtails * dir * self.facing,
+                c.pigtails.lag_s,
+            );
+        }
+        let turned = self.turn_lin >= 1.0;
+        if let Some((vx, cycle, _)) = loco {
+            self.gait_cycle = cycle.max(0.05);
+            self.gait_vx = vx;
+            if turned {
+                self.gait_lin = (self.gait_lin + h / g.start_ramp_s.max(1e-3)).min(1.0);
+            }
+        } else {
+            self.gait_lin = (self.gait_lin - h / g.stop_ramp_s.max(1e-3)).max(0.0);
+        }
+        // Phase 0 = RIGHT heel strike, 0.5 = LEFT; keeps running while the
+        // stride ramps out after a stop.
+        if (loco.is_some() && turned) || self.gait_lin > 0.0 {
+            let n = c.walk.footfalls_per_cycle.max(1) as f32;
+            let first = loco.is_some() && self.walk_phase == 0.0 && self.foot == 0;
+            let before = (self.walk_phase * n).floor();
+            self.walk_phase += h / self.gait_cycle;
+            if loco.is_some() && ((self.walk_phase * n).floor() > before || first) {
+                // integer phase = RIGHT heel strike (foot 1), half = LEFT (foot 0)
+                let idx = (self.walk_phase * n).floor() as i64;
+                let foot = if idx.rem_euclid(2) == 0 { 1 } else { 0 };
+                self.foot += 1;
+                self.on_footfall(foot);
+            }
+        }
+        let amp = self.gait_amp();
+        let u = self.walk_phase.rem_euclid(1.0);
+        let fr = amp * leg_fwd(u, g.duty);
+        let fl = amp * leg_fwd(u + 0.5, g.duty);
+        // arms counter-swing the SAME-side leg (right leg forward -> right arm back)
+        self.arm_r.target = -g.arm_amplitude_deg * fr;
+        self.arm_l.target = -g.arm_amplitude_deg * fl;
+        // relaxed elbow: bend grows from 0 at the back swing to
+        // forearm_flex_deg at the front (half at neutral), no kink at 0
+        let flex = |a: f32| {
+            amp * g.forearm_flex_deg
+                * (0.5 + 0.5 * a / g.arm_amplitude_deg.max(1e-3)).clamp(0.0, 1.0)
+        };
+        self.fore_r.target = self.arm_r.position * g.forearm_follow + flex(self.arm_r.position);
+        self.fore_l.target = self.arm_l.position * g.forearm_follow + flex(self.arm_l.position);
+        self.twist.target = -g.torso_twist_deg * fr;
+        // tail: gait-locked side-to-side sway, one swing per cycle, chased by
+        // the tail spring so it trails the hips; heel-strike flicks on top
+        self.tail_x.target = amp
+            * g.tail_sway_px
+            * self.facing
+            * (std::f32::consts::TAU * (u + g.tail_sway_phase)).sin();
+        // hip-bob inertia: the body accelerates, the soft parts lag
+        let (_, d2) = hip_bob(u, g.hip_bob_down_px, g.hip_bob_up_px);
+        let acc = amp * d2 / (self.gait_cycle * self.gait_cycle); // px/s^2, +down
+        if !self.mute_impulses && amp > 0.0 {
+            if !self.physics.suppressed.contains(Channel::Chest) {
+                self.physics.chest.velocity -= g.bob_inertia_chest * acc * h * self.mood_to.gain;
+            }
+            self.tail_y.velocity -= g.bob_inertia_tail_y * acc * h;
+        }
     }
 
     fn substep(&mut self, h: f32) {
@@ -1062,8 +1402,10 @@ impl PhysicsDriver {
         }
         self.step_transition(h);
 
-        // locomotion footfalls (cycle-derived)
-        if let Some((_, cycle, _)) = self.motion.locomotion() {
+        if let Some(g) = c.gait {
+            self.step_gait(&c, g, h);
+        } else if let Some((_, cycle, _)) = self.motion.locomotion() {
+            // locomotion footfalls (cycle-derived)
             let n = c.walk.footfalls_per_cycle.max(1) as f32;
             let before = (self.walk_phase * n).floor();
             self.walk_phase += h / cycle.max(0.05);
@@ -1112,6 +1454,24 @@ impl PhysicsDriver {
         self.tail_y.advance(h, hz);
         self.horn.target = self.physics.angle.position * c.horn.tilt_follow;
         self.horn.advance(h, hz);
+        if let Some(g) = c.gait {
+            self.arm_l.advance(h, hz);
+            self.arm_r.advance(h, hz);
+            self.fore_l.advance(h, hz);
+            self.fore_r.advance(h, hz);
+            // elbow joint stop: the forearm may lag but never hyperextend
+            let stop = g.elbow_min_deg;
+            for (fore, arm) in [
+                (&mut self.fore_l, &self.arm_l),
+                (&mut self.fore_r, &self.arm_r),
+            ] {
+                if fore.position - arm.position < stop {
+                    fore.position = arm.position + stop;
+                    fore.velocity = fore.velocity.max(arm.velocity);
+                }
+            }
+            self.twist.advance(h, hz);
+        }
 
         // overlay timers
         let w_speed = m.tail_speed / c.tail.figure8_period_default_s;
