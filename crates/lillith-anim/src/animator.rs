@@ -99,7 +99,8 @@ pub struct AnimatorConfig {
 pub const BAKED_MOTION_TAG: &str = "baked_motion";
 /// Clip tag prefix: `variant_of:<clip>` marks an alternative take of `<clip>`.
 /// While `<clip>` is the idle base, the animator draws one of its variants
-/// and picks a new one at random at every loop end.
+/// and picks a new one at random at a loop end once the current take has
+/// played for [`IdleConfig::variant_hold_s`].
 pub const VARIANT_OF_TAG: &str = "variant_of:";
 
 impl Default for AnimatorConfig {
@@ -300,6 +301,8 @@ pub struct Animator {
     idle_variants: Vec<String>,
     /// Index into `idle_variants` currently drawn for the idle base.
     idle_pick: usize,
+    /// Seconds the current idle take has been drawn.
+    variant_age: f32,
     /// xorshift state for the variant pick (seeded from `cfg.seed`).
     variant_rng: u64,
     /// Springs switched off for the clip drawn now (its `disable_springs`).
@@ -387,6 +390,7 @@ impl Animator {
             last_key: None,
             idle_variants,
             idle_pick: 0,
+            variant_age: 0.0,
             variant_rng: cfg.seed | 1,
             spring_mask: SpringMask::NONE,
             manifest,
@@ -508,6 +512,12 @@ impl Animator {
         self.idle_pick = (self.idle_pick + step) % n;
         let clip = &self.manifest.clips[&self.idle_variants[self.idle_pick]];
         self.base_player = ClipPlayer::for_clip(clip);
+        self.variant_age = 0.0;
+    }
+
+    /// `true` once the current idle take has been on long enough to switch.
+    fn variant_due(&self) -> bool {
+        self.variant_age >= self.cfg.idle.variant_hold_s
     }
 
     /// Spring transform for a frame of `clip`: secondary channels (chest,
@@ -598,7 +608,13 @@ impl Animator {
         if self.base != name || self.base_flip != flip {
             self.base_player = ClipPlayer::for_clip(clip);
             if name == self.idle_base && !self.idle_variants.is_empty() {
-                self.next_idle_variant();
+                if self.variant_due() {
+                    self.next_idle_variant();
+                } else {
+                    // Back to idle: resume the same take.
+                    let clip = &self.manifest.clips[&self.idle_variants[self.idle_pick]];
+                    self.base_player = ClipPlayer::for_clip(clip);
+                }
             }
             self.base = name.to_string();
             self.base_flip = flip;
@@ -844,9 +860,13 @@ impl Animator {
 
         let before = self.base_player.frame();
         self.base_player.advance(dt);
-        // Idle variants: a new random take at every loop end of the idle base.
-        if self.base == self.idle_base && self.base_player.frame() < before {
-            self.next_idle_variant();
+        // Idle variants: a new random take at a loop end of the idle base,
+        // once the current one has been held long enough.
+        if self.base == self.idle_base {
+            self.variant_age += dt;
+            if self.base_player.frame() < before && self.variant_due() {
+                self.next_idle_variant();
+            }
         }
         if let Some(bl) = &mut self.blink {
             bl.elapsed += dt;
@@ -1128,7 +1148,12 @@ mod tests {
 
     #[test]
     fn idle_life_drives_blink_and_transitions() {
-        let mut a = Animator::new(manifest(), AnimatorConfig::default()).unwrap();
+        // Scheduler mechanics with the old busy timings (40 s window).
+        let cfg = AnimatorConfig {
+            idle: lillith_core::idle::IdleConfig::lively(),
+            ..AnimatorConfig::default()
+        };
+        let mut a = Animator::new(manifest(), cfg).unwrap();
         assert_eq!(a.blink_frames(), [1, 2, 3]);
         let mut saw = (false, false, false);
         for _ in 0..(40 * 60) {
@@ -1291,7 +1316,9 @@ mod tests {
 
     #[test]
     fn idle_variants_cycle_at_loop_end() {
-        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+        let mut cfg = quiet();
+        cfg.idle.variant_hold_s = 0.0;
+        let mut a = Animator::new(variant_manifest(), cfg).unwrap();
         assert_eq!(a.base(), "idle");
         let mut seen = std::collections::BTreeSet::new();
         let mut last = a.current().clip_name.to_string();
@@ -1315,6 +1342,25 @@ mod tests {
         assert_eq!(a.current().clip_name, "wave");
         a.stand();
         assert!(a.current().clip_name.starts_with("idle_"));
+    }
+
+    #[test]
+    fn idle_variants_are_held_by_default() {
+        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+        assert_eq!(a.cfg.idle.variant_hold_s, 30.0);
+        let mut last = a.current().clip_name.to_string();
+        let mut switches = Vec::new();
+        for i in 0..(70 * 60) {
+            a.tick(1.0 / 60.0);
+            let c = a.current().clip_name.to_string();
+            if c != last {
+                switches.push(i as f32 / 60.0);
+                last = c;
+            }
+        }
+        // 0.4 s loops, 30 s hold: two switches in 70 s, not ~175.
+        assert_eq!(switches.len(), 2, "{switches:?}");
+        assert!(switches[0] >= 29.9 && switches[0] <= 30.5, "{switches:?}");
     }
 
     #[test]

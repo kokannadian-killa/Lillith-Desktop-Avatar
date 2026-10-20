@@ -50,7 +50,8 @@ pub struct BehaviorConfig {
     pub sleepy_after_s: f32,
     /// No interaction for this long → asleep (`idle.asleep`).
     pub asleep_after_s: f32,
-    /// Automatic pose cycle (README-SP `cycle_interval`, 16 s).
+    /// Automatic pose cycle while idle (s). Calm default 45 s (README-SP's
+    /// `cycle_interval` was 16 s).
     pub pose_cycle_s: f32,
     /// A left click this soon after the knife waves instead.
     pub left_repeat_s: f32,
@@ -61,6 +62,9 @@ pub struct BehaviorConfig {
     pub wander_min_step_px: f32,
     /// Events at or above this priority wake her up.
     pub event_wake_priority: u8,
+    /// Idle life: breathing, blinks, idle transitions/gestures, idle-take
+    /// switching (`[behavior.idle]`).
+    pub idle: crate::idle::IdleConfig,
 }
 
 impl Default for BehaviorConfig {
@@ -71,12 +75,13 @@ impl Default for BehaviorConfig {
             mood_tau_s: 45.0,
             sleepy_after_s: 300.0,
             asleep_after_s: 900.0,
-            pose_cycle_s: 16.0,
+            pose_cycle_s: 45.0,
             left_repeat_s: 4.0,
-            wander_every_s: (20.0, 45.0),
+            wander_every_s: (60.0, 120.0),
             wander_speed_px_s: 60.0,
             wander_min_step_px: 120.0,
             event_wake_priority: 80,
+            idle: crate::idle::IdleConfig::default(),
         }
     }
 }
@@ -1039,10 +1044,11 @@ mod tests {
             r.threshold("secret_sequence_window_s"),
             Some(d.gestures.secret_window_s as f64)
         );
-        assert_eq!(
-            d.pose_cycle_s,
-            crate::config::Config::default().pose_cycle_s
-        );
+        assert_eq!(crate::config::Config::default().pose_cycle_s, None);
+        // Calm defaults: long pose cycle, slow wander, she stays put.
+        assert_eq!(d.pose_cycle_s, 45.0);
+        assert_eq!(d.wander_every_s, (60.0, 120.0));
+        assert_eq!(crate::config::Config::default().mode, MoveMode::Stay);
     }
 
     #[test]
@@ -1293,6 +1299,7 @@ mod tests {
     fn pose_cycle_every_16s_when_idle() {
         let mut b = brain_with(
             BehaviorConfig {
+                pose_cycle_s: 16.0,
                 sleepy_after_s: 1e6,
                 asleep_after_s: 2e6,
                 mischief: MischiefConfig {
@@ -1337,6 +1344,7 @@ mod tests {
                 sleepy_after_s: 1e6,
                 asleep_after_s: 2e6,
                 pose_cycle_s: 1e6,
+                wander_every_s: (20.0, 45.0),
                 mischief: MischiefConfig {
                     boredom_s: 0.0,
                     ..MischiefConfig::default()

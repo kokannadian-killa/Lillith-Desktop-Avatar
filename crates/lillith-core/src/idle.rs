@@ -4,10 +4,12 @@
 //!
 //! - **breathing**: a [`Breath`] wave, period re-picked each cycle in 3.5–4.5 s;
 //! - **blink** every 4–6 s;
-//! - **idle transition** every 8–12 s, lasting 1.2–2 s, picked from the
-//!   transition clips that actually exist (hip_sway, lean_forward,
-//!   shoulder_roll, …);
-//! - **random idle reaction** every 12–26 s.
+//! - **idle transition** every 25–40 s (calm default; was 8–12 s), lasting
+//!   1.2–2 s, picked from the transition clips that actually exist
+//!   (hip_sway, lean_forward, shoulder_roll, …);
+//! - **random idle reaction** every 45–90 s (was 12–26 s).
+//!
+//! All of it is configurable in `[behavior.idle]` of config.toml.
 //!
 //! While the avatar is busy (a reaction is playing, she is walking or being
 //! dragged) transitions and idle reactions are held back; they fire as soon
@@ -21,15 +23,21 @@ use serde::{Deserialize, Serialize};
 /// Inclusive `[min, max]` seconds.
 pub type Range = (f32, f32);
 
-/// Idle timing (README-SP defaults).
+/// Idle timing (`[behavior.idle]`). Defaults are calm: she mostly stands
+/// and breathes, with an occasional sway or gesture.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct IdleConfig {
     pub breath_period_s: Range,
     pub blink_every_s: Range,
+    /// Pause between idle transitions (hip sway, lean, shoulder roll).
     pub transition_every_s: Range,
     pub transition_len_s: Range,
+    /// Pause between unprompted idle gestures (tail wag, think, nod, …).
     pub reaction_every_s: Range,
+    /// Minimum time on one idle take (`variant_of:idle` clips) before the
+    /// animator may switch to another at a loop end. 0 = every loop.
+    pub variant_hold_s: f32,
 }
 
 impl Default for IdleConfig {
@@ -37,9 +45,24 @@ impl Default for IdleConfig {
         Self {
             breath_period_s: (3.5, 4.5),
             blink_every_s: (4.0, 6.0),
-            transition_every_s: (8.0, 12.0),
+            transition_every_s: (25.0, 40.0),
             transition_len_s: (1.2, 2.0),
+            reaction_every_s: (45.0, 90.0),
+            variant_hold_s: 30.0,
+        }
+    }
+}
+
+impl IdleConfig {
+    /// The pre-0.x busy timings (transition every 8–12 s, gesture every
+    /// 12–26 s, new idle take every loop). Used by tests of the scheduler
+    /// mechanics; set them in `[behavior.idle]` to get the old feel back.
+    pub fn lively() -> Self {
+        Self {
+            transition_every_s: (8.0, 12.0),
             reaction_every_s: (12.0, 26.0),
+            variant_hold_s: 0.0,
+            ..Self::default()
         }
     }
 }
@@ -227,7 +250,7 @@ mod tests {
     use super::*;
 
     fn life(seed: u64) -> IdleLife {
-        IdleLife::with_available(IdleConfig::default(), seed, |_| true)
+        IdleLife::with_available(IdleConfig::lively(), seed, |_| true)
     }
 
     /// Runs `secs` at 30 Hz, returning (time, cue) pairs.
@@ -263,7 +286,7 @@ mod tests {
     #[test]
     fn transitions_use_available_clips_and_timing() {
         let mut l = IdleLife::new(
-            IdleConfig::default(),
+            IdleConfig::lively(),
             3,
             vec!["hip_sway".into(), "lean_forward".into()],
             vec![],
@@ -340,6 +363,35 @@ mod tests {
         }
         // 60 s / 3.5–4.5 s per cycle.
         assert!((13..=18).contains(&crossings), "{crossings} cycles");
+    }
+
+    #[test]
+    fn calm_defaults_mostly_stand_and_breathe() {
+        let d = IdleConfig::default();
+        assert_eq!(d.transition_every_s, (25.0, 40.0));
+        assert_eq!(d.reaction_every_s, (45.0, 90.0));
+        assert_eq!(d.variant_hold_s, 30.0);
+        // Breathing and blinks keep their subtle rhythm.
+        assert_eq!(d.breath_period_s, (3.5, 4.5));
+        assert_eq!(d.blink_every_s, (4.0, 6.0));
+        for seed in 1..10 {
+            let mut l = IdleLife::with_available(d.clone(), seed, |_| true);
+            let cues = run(&mut l, 180.0);
+            let moves = cues
+                .iter()
+                .filter(|(_, c)| !matches!(c, IdleCue::Blink))
+                .count();
+            let blinks = cues.len() - moves;
+            assert!(blinks >= 29, "seed {seed}: {blinks} blinks");
+            // 3 min: ≤ 180/25 transitions + ≤ 180/45 gestures, ≥ 1 of something.
+            assert!((1..=11).contains(&moves), "seed {seed}: {moves} moves");
+            let first = cues
+                .iter()
+                .find(|(_, c)| !matches!(c, IdleCue::Blink))
+                .map(|(t, _)| *t)
+                .unwrap();
+            assert!(first >= 24.9, "seed {seed}: first move at {first}");
+        }
     }
 
     #[test]

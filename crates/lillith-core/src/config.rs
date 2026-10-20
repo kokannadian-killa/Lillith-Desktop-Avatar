@@ -46,9 +46,10 @@ impl Default for Springs {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MoveMode {
-    #[default]
     Wander,
     Follow,
+    /// Default: she stays where you put her (G toggles wandering).
+    #[default]
     Stay,
 }
 
@@ -166,7 +167,10 @@ pub struct Config {
     pub physics_hz: f32,
     pub render_hz: f32,
     pub sprite_fps: f32,
-    pub pose_cycle_s: f32,
+    /// Legacy top-level override of `[behavior] pose_cycle_s` (unset = use
+    /// `[behavior]`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pose_cycle_s: Option<f32>,
     /// Draw baked-jiggle `<clip>_jiggle` variants instead of the engine-clean
     /// clips (engine chest/pigtail/hip springs off while one is drawn).
     pub baked_jiggle: bool,
@@ -194,7 +198,7 @@ impl Default for Config {
             physics_hz: 120.0,
             render_hz: 30.0,
             sprite_fps: 12.0,
-            pose_cycle_s: 16.0,
+            pose_cycle_s: None,
             baked_jiggle: false,
             muted: false,
             voice_enabled: true,

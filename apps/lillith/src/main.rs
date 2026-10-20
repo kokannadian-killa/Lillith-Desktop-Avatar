@@ -269,7 +269,9 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
             cfg.scale
         });
     let mut behavior = cfg.behavior.clone();
-    behavior.pose_cycle_s = cfg.pose_cycle_s;
+    if let Some(s) = cfg.pose_cycle_s {
+        behavior.pose_cycle_s = s;
+    }
     if let Some(s) = cli.sleepy_after {
         behavior.sleepy_after_s = s;
     }
@@ -288,6 +290,7 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         animator: lillith_anim::animator::AnimatorConfig {
             springs: cfg.springs.clone(),
             physics_hz: cfg.physics_hz,
+            idle: behavior.idle.clone(),
             seed,
             // Tuned jiggle physics from assets/physics.toml (PhysicsDriver).
             physics_driver: true,
