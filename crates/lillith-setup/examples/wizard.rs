@@ -9,6 +9,7 @@
 //! cargo run -p lillith-setup --example wizard -- launch-cmd [--config FILE]
 //! cargo run -p lillith-setup --example wizard -- check-modelfile FILE
 //! cargo run -p lillith-setup --example wizard -- ollama-create [--config FILE] [--modelfile FILE]
+//! cargo run -p lillith-setup --example wizard -- check [--config FILE] [--server-url U] [PROMPT]
 //! ```
 //! Without `--gguf`, the top-ranked scanned model is used. Local-only: the
 //! only network traffic is loopback health checks.
@@ -171,7 +172,7 @@ fn config_path(a: &Args) -> Result<PathBuf, String> {
 fn run(a: Args) -> Result<(), String> {
     match a.cmd.as_str() {
         "help" => {
-            println!("{}", include_str!("wizard.rs").lines().skip(2).take(10).map(|l| l.trim_start_matches("//!")).collect::<Vec<_>>().join("\n"));
+            println!("{}", include_str!("wizard.rs").lines().skip(2).take(11).map(|l| l.trim_start_matches("//!")).collect::<Vec<_>>().join("\n"));
         }
         "detect" => {
             let r = detect(&detect_opts(&a));
@@ -255,6 +256,21 @@ fn run(a: Args) -> Result<(), String> {
                 .or_else(|| (!c.modelfile_path.is_empty()).then(|| PathBuf::from(&c.modelfile_path)))
                 .or_else(paths::default_modelfile_path).ok_or("no Modelfile")?;
             println!("{}", launch::ollama_create(&bin, &c.ollama_model, Path::new(&mf), &c).map_err(|e| e.to_string())?);
+        }
+        "check" => {
+            let mut c = config_path(&a).ok().and_then(|p| config::load(&p).ok()).unwrap_or_default();
+            if let Some(b) = &a.backend { c.backend = Backend::parse(b).ok_or(format!("bad --backend {b}"))?; }
+            if let Some(u) = &a.server_url { c.server_url = u.clone(); }
+            if let Some(h) = &a.ollama_host { c.ollama_host = h.clone(); }
+            for e in validate_all(&c) { println!("  field {}: {}", e.key, e.message); }
+            let h = check::ping_server(&c).map_err(|e| e.to_string())?;
+            println!("ping: ready={} status={:?} model={:?} ctx={:?} version={:?}", h.ready, h.status, h.model, h.ctx, h.version);
+            if h.ready {
+                let prompt = a.positional.first().map(String::as_str).unwrap_or("Say hi to Ko in one short sentence.");
+                let t = std::time::Instant::now();
+                let reply = check::test_chat(&c, prompt).map_err(|e| e.to_string())?;
+                println!("chat ({:.1}s): {reply}", t.elapsed().as_secs_f32());
+            }
         }
         other => return Err(format!("unknown command `{other}` (try --help)")),
     }

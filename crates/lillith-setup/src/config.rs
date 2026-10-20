@@ -395,4 +395,18 @@ max_tokens = 320
         assert_eq!(load(&p).unwrap(), c);
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    #[test]
+    fn floats_are_written_rounded() {
+        for (t, want) in [(0.8f32, "temperature = 0.8\n"), (0.7, "temperature = 0.7\n"), (0.65, "temperature = 0.65\n"), (1.0, "temperature = 1.0\n"), (0.123456, "temperature = 0.123\n")] {
+            let mut doc = DocumentMut::new();
+            LlmConfig { temperature: t, ..Default::default() }.write_to_document(&mut doc).unwrap();
+            let out = doc.to_string();
+            assert!(out.contains(want), "{t}: {out}");
+            assert!(!out.contains("0000"), "{t}: {out}");
+        }
+        let mut doc = DocumentMut::new();
+        LlmConfig { temperature: 0.8, ..Default::default() }.sync_chat_tables(&mut doc).unwrap();
+        assert!(doc.to_string().contains("temperature = 0.8\n"));
+    }
 }

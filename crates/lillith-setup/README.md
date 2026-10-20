@@ -60,3 +60,15 @@ Extra scan dirs: `--dir DIR` (repeatable) or `[llm] scan_paths`.
 `temperature`, `system_prompt` if set) and `[chat.server]` (`binary`, `model_path`,
 `ctx_size`, `threads`, `extra_args = ["--chat-template", …]`) from
 `feat/chat-bubble-llama` at the same choice. Other keys are kept.
+
+## GUI helpers (additive, for the settings panel)
+
+- `detect::spawn(DetectOptions) -> DetectHandle` (`poll() -> Option<&RuntimeReport>`, `try_recv()`, `is_done()`, `wait()`); `Send`.
+- `scan::scan_with_progress(&ScanOptions, &CancelToken, FnMut(ScanProgress)) -> ScanReport`;
+  `scan::spawn_scan(ScanOptions) -> ScanHandle` (`progress()`, `try_recv()`, `cancel()`). `scan()` is unchanged.
+- `check` (alias `test`): `ping_server(&LlmConfig) -> Result<ServerHealth, CheckError>`,
+  `test_chat(&LlmConfig, prompt) -> Result<String, CheckError>`, `test_chat_with(.., &ChatTestOptions)`.
+  llama-server `/health` + `/props` + `/v1/chat/completions`; Ollama `/api/version` + `/api/tags` + `/api/show` + `/api/chat` (stream=false). Loopback only.
+- `validate::field(key, value, &ValidateCtx) -> Result<(), FieldError{key, message}>`, `validate_all(&LlmConfig)`, `validate_all_with(.., &ValidateCtx)`.
+- `http::post_json` (loopback-only, request body capped at 256 KB).
+- Example: `wizard check [--config F] [--server-url U] [PROMPT]`.

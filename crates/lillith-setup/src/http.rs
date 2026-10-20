@@ -30,18 +30,56 @@ pub struct Response {
     pub body: String,
 }
 
+/// Largest request body [`post_json`] will send.
+pub const MAX_REQUEST_BODY: usize = 256 * 1024;
+
 /// `GET {base}{path}` on loopback with `timeout` for connect and each read.
 pub fn get(base: &LocalUrl, path: &str, timeout: Duration) -> Result<Response, HttpError> {
+    request(base, "GET", path, None, timeout, timeout)
+}
+
+/// `POST {base}{path}` with a JSON body, on loopback only. `connect_timeout`
+/// bounds the connect/write; `read_timeout` bounds each read (a CPU model can
+/// take a while before the first byte). The body is capped at
+/// [`MAX_REQUEST_BODY`], the response at 4 MB.
+pub fn post_json(
+    base: &LocalUrl,
+    path: &str,
+    body: &str,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, HttpError> {
+    if body.len() > MAX_REQUEST_BODY {
+        return Err(HttpError::Bad(format!("request body {} bytes > {MAX_REQUEST_BODY}", body.len())));
+    }
+    request(base, "POST", path, Some(body), connect_timeout, read_timeout)
+}
+
+fn request(
+    base: &LocalUrl,
+    method: &str,
+    path: &str,
+    body: Option<&str>,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+) -> Result<Response, HttpError> {
     let addr = base.socket_addr();
-    let mut s = TcpStream::connect_timeout(&addr, timeout)
+    let mut s = TcpStream::connect_timeout(&addr, connect_timeout)
         .map_err(|e| HttpError::Connect(addr.to_string(), e))?;
-    s.set_read_timeout(Some(timeout))?;
-    s.set_write_timeout(Some(timeout))?;
+    s.set_read_timeout(Some(read_timeout))?;
+    s.set_write_timeout(Some(connect_timeout))?;
     let full_path = format!("{}{}", base.base_path, path);
-    let req = format!(
-        "GET {full_path} HTTP/1.0\r\nHost: {}:{}\r\nUser-Agent: lillith-setup\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
+    let mut req = format!(
+        "{method} {full_path} HTTP/1.0\r\nHost: {}:{}\r\nUser-Agent: lillith-setup\r\nAccept: application/json\r\nConnection: close\r\n",
         base.host, base.port
     );
+    if let Some(b) = body {
+        req.push_str(&format!("Content-Type: application/json\r\nContent-Length: {}\r\n", b.len()));
+    }
+    req.push_str("\r\n");
+    if let Some(b) = body {
+        req.push_str(b);
+    }
     s.write_all(req.as_bytes())?;
     let mut raw = Vec::new();
     s.take(MAX_BODY).read_to_end(&mut raw)?;
@@ -100,13 +138,14 @@ pub(crate) mod tests {
         std::thread::spawn(move || {
             for stream in l.incoming() {
                 let Ok(mut s) = stream else { continue };
-                let mut buf = [0u8; 2048];
-                let n = s.read(&mut buf).unwrap_or(0);
-                let req = String::from_utf8_lossy(&buf[..n]);
+                let req = read_request(&mut s);
+                let method = req.split_whitespace().next().unwrap_or("GET").to_string();
                 let path = req.split_whitespace().nth(1).unwrap_or("/").to_string();
+                let keyed = format!("{method} {path}");
                 let (status, body) = responses
                     .iter()
-                    .find(|(p, _, _)| *p == path)
+                    .find(|(p, _, _)| *p == keyed)
+                    .or_else(|| responses.iter().find(|(p, _, _)| *p == path))
                     .map(|(_, s, b)| (*s, *b))
                     .unwrap_or((404, "{\"error\":\"not found\"}"));
                 let _ = write!(
@@ -117,6 +156,43 @@ pub(crate) mod tests {
             }
         });
         port
+    }
+
+    /// Reads one request (headers + Content-Length body).
+    fn read_request(s: &mut TcpStream) -> String {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 4096];
+        loop {
+            let n = s.read(&mut chunk).unwrap_or(0);
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+            if let Some(h) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                let head = String::from_utf8_lossy(&buf[..h]).to_ascii_lowercase();
+                let len = head
+                    .lines()
+                    .find_map(|l| l.strip_prefix("content-length:"))
+                    .and_then(|v| v.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                if buf.len() >= h + 4 + len {
+                    break;
+                }
+            }
+        }
+        String::from_utf8_lossy(&buf).into_owned()
+    }
+
+    #[test]
+    fn post_json_against_fake_server() {
+        let port = fake_server(vec![("POST /echo", 200, "{\"ok\":true}"), ("GET /echo", 405, "{}")]);
+        let u = LocalUrl::parse(&format!("127.0.0.1:{port}"), 1).unwrap();
+        let t = Duration::from_secs(2);
+        let r = post_json(&u, "/echo", "{\"a\":1}", t, t).unwrap();
+        assert_eq!((r.status, r.body.as_str()), (200, "{\"ok\":true}"));
+        assert_eq!(get(&u, "/echo", t).unwrap().status, 405);
+        let big = "x".repeat(MAX_REQUEST_BODY + 1);
+        assert!(matches!(post_json(&u, "/echo", &big, t, t), Err(HttpError::Bad(_))));
     }
 
     #[test]

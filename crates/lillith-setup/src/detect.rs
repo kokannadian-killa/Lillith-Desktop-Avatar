@@ -299,6 +299,68 @@ pub fn parse_ollama_tags(body: &str) -> Vec<OllamaModel> {
         .unwrap_or_default()
 }
 
+/// A detection running on a background thread (for a GUI: call
+/// [`DetectHandle::poll`] each frame). `Send`, so it can live in app state
+/// that moves between threads.
+#[derive(Debug)]
+pub struct DetectHandle {
+    rx: std::sync::mpsc::Receiver<RuntimeReport>,
+    result: Option<RuntimeReport>,
+    taken: bool,
+}
+
+impl DetectHandle {
+    /// Takes the report once it is ready (`Some` exactly once).
+    pub fn try_recv(&mut self) -> Option<RuntimeReport> {
+        if let Some(r) = self.result.take() {
+            self.taken = true;
+            return Some(r);
+        }
+        if self.taken {
+            return None;
+        }
+        match self.rx.try_recv() {
+            Ok(r) => {
+                self.taken = true;
+                Some(r)
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// The report if ready, kept in the handle (repeatable, for per-frame UI).
+    pub fn poll(&mut self) -> Option<&RuntimeReport> {
+        if self.result.is_none() && !self.taken {
+            if let Ok(r) = self.rx.try_recv() {
+                self.result = Some(r);
+            }
+        }
+        self.result.as_ref()
+    }
+
+    /// True once the report has arrived (or was taken).
+    pub fn is_done(&mut self) -> bool {
+        self.taken || self.poll().is_some()
+    }
+
+    /// Blocks until the report is ready (`None` if the worker died).
+    pub fn wait(mut self) -> Option<RuntimeReport> {
+        self.result.take().or_else(|| if self.taken { None } else { self.rx.recv().ok() })
+    }
+}
+
+/// Runs [`detect`] on a new thread and returns at once.
+pub fn spawn(opts: DetectOptions) -> DetectHandle {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("lillith-detect".into())
+        .spawn(move || {
+            let _ = tx.send(detect(&opts));
+        })
+        .expect("spawn detect thread");
+    DetectHandle { rx, result: None, taken: false }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,5 +426,31 @@ mod tests {
         assert_eq!(found, Some(bin));
         assert_eq!(ver.as_deref(), Some("version: 9999 (test)"));
         assert!(find_binary("definitely-not-a-binary-xyz", &dirs).is_none());
+    }
+
+    #[test]
+    fn spawn_is_send_and_polls() {
+        fn assert_send<T: Send>() {}
+        assert_send::<DetectHandle>();
+        assert_send::<RuntimeReport>();
+        let port = fake_server(vec![("/health", 200, r#"{"status":"ok"}"#)]);
+        let opts = DetectOptions {
+            llama_server_url: format!("http://127.0.0.1:{port}"),
+            ollama_host: "http://127.0.0.1:9".into(),
+            timeout: Duration::from_millis(500),
+            probe_versions: false,
+            ..Default::default()
+        };
+        let mut h = spawn(opts);
+        let start = Instant::now();
+        while h.poll().is_none() {
+            assert!(start.elapsed() < Duration::from_secs(10), "detect never finished");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(h.poll().unwrap().llama_server_api.reachable);
+        assert!(h.is_done());
+        let r = h.try_recv().unwrap();
+        assert_eq!(r.llama_server_api.health.as_deref(), Some("ok"));
+        assert!(h.try_recv().is_none());
     }
 }

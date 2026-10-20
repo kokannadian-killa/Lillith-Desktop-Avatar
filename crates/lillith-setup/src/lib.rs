@@ -37,6 +37,7 @@
 //! std::fs::write(paths::default_modelfile_path().unwrap(), mf.render()).unwrap();
 //! ```
 
+pub mod check;
 pub mod config;
 pub mod detect;
 pub mod gguf;
@@ -47,11 +48,17 @@ pub mod modelfile;
 pub mod paths;
 pub mod scan;
 pub mod template;
+pub mod validate;
 pub mod wizard;
 
+/// Alias of [`check`] (`lillith_setup::test::ping_server`, `test::test_chat`).
+pub use self::check as test;
+
 pub use config::{Backend, LlmConfig};
-pub use detect::{detect, DetectOptions, RuntimeReport};
+pub use check::{ping_server, test_chat, ServerHealth};
+pub use detect::{detect, DetectHandle, DetectOptions, RuntimeReport};
 pub use local::{LocalUrl, LocalUrlError};
 pub use modelfile::{lily_modelfile, LilyParams, Modelfile};
-pub use scan::{recommend, scan, ModelInfo, Recommendation, ScanOptions, ScanReport};
+pub use scan::{recommend, scan, scan_with_progress, CancelToken, ModelInfo, Recommendation, ScanOptions, ScanProgress, ScanReport};
+pub use validate::{validate_all, FieldError};
 pub use template::ChatTemplate;

@@ -219,20 +219,138 @@ pub struct ScanReport {
 
 /// Scans `opts.dirs`. Never fails as a whole; problems go into `warnings`.
 pub fn scan(opts: &ScanOptions) -> ScanReport {
+    scan_with_progress(opts, &CancelToken::new(), |_| {})
+}
+
+/// Cooperative cancel flag for [`scan_with_progress`] / [`spawn_scan`].
+/// Cheap to clone; all clones share the flag.
+#[derive(Debug, Clone, Default)]
+pub struct CancelToken(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl CancelToken {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn cancel(&self) {
+        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Relaxed)
+    }
+    /// The shared flag, for code that already uses an `Arc<AtomicBool>`.
+    pub fn flag(&self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+        self.0.clone()
+    }
+}
+
+impl From<std::sync::Arc<std::sync::atomic::AtomicBool>> for CancelToken {
+    fn from(f: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
+        Self(f)
+    }
+}
+
+/// Progress of a running scan.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ScanProgress {
+    /// Directory being read right now.
+    pub dir: PathBuf,
+    /// Directory entries looked at so far (all dirs).
+    pub files_seen: usize,
+    /// Models found so far.
+    pub models_found: usize,
+}
+
+/// [`scan`] with a progress callback (called on entering each directory and
+/// for each model found) and a cancel flag. When cancelled it stops soon and
+/// returns what it found so far (check `cancel.is_cancelled()`).
+pub fn scan_with_progress(opts: &ScanOptions, cancel: &CancelToken, mut progress: impl FnMut(ScanProgress)) -> ScanReport {
     let mut seen = HashSet::new();
     let mut report = ScanReport { models: Vec::new(), dirs: Vec::new(), warnings: Vec::new() };
+    let mut st = WalkState { cancel, progress: &mut progress, files_seen: 0 };
     for dir in &opts.dirs {
+        if cancel.is_cancelled() {
+            break;
+        }
         let exists = dir.is_dir();
         let before = report.models.len();
         if exists {
-            walk(dir, 0, opts, &mut seen, &mut report);
+            walk(dir, 0, opts, &mut seen, &mut report, &mut st);
         }
         report.dirs.push(DirStatus { path: dir.clone(), exists, models_found: report.models.len() - before });
     }
     report
 }
 
-fn walk(dir: &Path, depth: usize, opts: &ScanOptions, seen: &mut HashSet<PathBuf>, r: &mut ScanReport) {
+struct WalkState<'a> {
+    cancel: &'a CancelToken,
+    progress: &'a mut dyn FnMut(ScanProgress),
+    files_seen: usize,
+}
+
+/// A scan running on a background thread: poll progress and the result
+/// each frame. `Send`.
+#[derive(Debug)]
+pub struct ScanHandle {
+    progress_rx: std::sync::mpsc::Receiver<ScanProgress>,
+    done_rx: std::sync::mpsc::Receiver<ScanReport>,
+    last: Option<ScanProgress>,
+    cancel: CancelToken,
+}
+
+impl ScanHandle {
+    /// Latest progress (drains the queue; keeps the last value).
+    pub fn progress(&mut self) -> Option<&ScanProgress> {
+        while let Ok(p) = self.progress_rx.try_recv() {
+            self.last = Some(p);
+        }
+        self.last.as_ref()
+    }
+    /// The finished report (`Some` once).
+    pub fn try_recv(&mut self) -> Option<ScanReport> {
+        self.done_rx.try_recv().ok()
+    }
+    pub fn cancel(&self) {
+        self.cancel.cancel();
+    }
+    pub fn cancel_token(&self) -> CancelToken {
+        self.cancel.clone()
+    }
+    /// Blocks until done.
+    pub fn wait(self) -> Option<ScanReport> {
+        self.done_rx.recv().ok()
+    }
+}
+
+/// Runs [`scan_with_progress`] on a new thread.
+pub fn spawn_scan(opts: ScanOptions) -> ScanHandle {
+    let (ptx, progress_rx) = std::sync::mpsc::channel();
+    let (dtx, done_rx) = std::sync::mpsc::channel();
+    let cancel = CancelToken::new();
+    let c2 = cancel.clone();
+    std::thread::Builder::new()
+        .name("lillith-scan".into())
+        .spawn(move || {
+            let r = scan_with_progress(&opts, &c2, |p| {
+                let _ = ptx.send(p);
+            });
+            let _ = dtx.send(r);
+        })
+        .expect("spawn scan thread");
+    ScanHandle { progress_rx, done_rx, last: None, cancel }
+}
+
+fn walk(
+    dir: &Path,
+    depth: usize,
+    opts: &ScanOptions,
+    seen: &mut HashSet<PathBuf>,
+    r: &mut ScanReport,
+    st: &mut WalkState<'_>,
+) {
+    if st.cancel.is_cancelled() {
+        return;
+    }
+    (st.progress)(ScanProgress { dir: dir.to_path_buf(), files_seen: st.files_seen, models_found: r.models.len() });
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(e) => {
@@ -244,12 +362,16 @@ fn walk(dir: &Path, depth: usize, opts: &ScanOptions, seen: &mut HashSet<PathBuf
     let mut entries: Vec<_> = entries.flatten().collect();
     entries.sort_by_key(|e| e.file_name());
     for e in entries {
+        if st.cancel.is_cancelled() {
+            return;
+        }
+        st.files_seen += 1;
         let p = e.path();
         let Ok(meta) = std::fs::metadata(&p) else { continue }; // follows symlinks (HF snapshots)
         if meta.is_dir() {
             let hidden = e.file_name().to_string_lossy().starts_with('.');
             if depth < opts.max_depth && !hidden && !e.file_type().is_ok_and(|t| t.is_symlink()) {
-                walk(&p, depth + 1, opts, seen, r);
+                walk(&p, depth + 1, opts, seen, r, st);
             }
             continue;
         }
@@ -273,7 +395,10 @@ fn walk(dir: &Path, depth: usize, opts: &ScanOptions, seen: &mut HashSet<PathBuf
             continue;
         }
         match ModelInfo::from_path(&p, source) {
-            Ok(m) => r.models.push(m),
+            Ok(m) => {
+                r.models.push(m);
+                (st.progress)(ScanProgress { dir: dir.to_path_buf(), files_seen: st.files_seen, models_found: r.models.len() });
+            }
             Err(err) => r.warnings.push(format!("{}: {err}", p.display())),
         }
     }
@@ -505,5 +630,72 @@ mod tests {
         assert_eq!(f.chat_template, ChatTemplate::ChatMl);
         assert!(r.models.iter().any(|m| m.source == ModelSource::OllamaBlob));
         assert!(!r.dirs[1].exists);
+    }
+
+    fn tree_with_models(tag: &str, n: usize) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("lillith-setup-{tag}-{}", std::process::id()));
+        let mut g = build_gguf(&[("general.architecture", TestVal::Str("qwen2"))]);
+        g.resize(2048, 0);
+        for i in 0..n {
+            let d = root.join(format!("d{i}"));
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join(format!("m{i}-q4_k_m.gguf")), &g).unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn progress_is_reported() {
+        let root = tree_with_models("progress", 3);
+        let opts = ScanOptions { dirs: vec![root.clone()], max_depth: 3, include_ollama_blobs: false, min_size_bytes: 1 };
+        let mut events = Vec::new();
+        let r = scan_with_progress(&opts, &CancelToken::new(), |p| events.push(p));
+        std::fs::remove_dir_all(&root).ok();
+        assert_eq!(r.models.len(), 3);
+        assert_eq!(events.first().unwrap().dir, root);
+        assert_eq!(events.last().unwrap().models_found, 3);
+        assert!(events.last().unwrap().files_seen >= 6);
+        assert!(events.windows(2).all(|w| w[0].files_seen <= w[1].files_seen));
+    }
+
+    #[test]
+    fn cancel_stops_the_scan() {
+        let root = tree_with_models("cancel", 4);
+        let opts = ScanOptions { dirs: vec![root.clone(), root.clone()], max_depth: 3, include_ollama_blobs: false, min_size_bytes: 1 };
+        let cancel = CancelToken::new();
+        let c = cancel.clone();
+        let r = scan_with_progress(&opts, &cancel, |p| {
+            if p.models_found >= 1 {
+                c.cancel();
+            }
+        });
+        // Pre-cancelled: nothing at all.
+        let r2 = scan_with_progress(&opts, &cancel, |_| {});
+        std::fs::remove_dir_all(&root).ok();
+        assert!(cancel.is_cancelled());
+        assert_eq!(r.models.len(), 1);
+        assert!(r2.models.is_empty());
+    }
+
+    #[test]
+    fn spawn_scan_runs_in_background() {
+        fn assert_send<T: Send>() {}
+        assert_send::<ScanHandle>();
+        assert_send::<CancelToken>();
+        let root = tree_with_models("spawn", 2);
+        let opts = ScanOptions { dirs: vec![root.clone()], max_depth: 3, include_ollama_blobs: false, min_size_bytes: 1 };
+        let mut h = spawn_scan(opts);
+        let start = std::time::Instant::now();
+        let r = loop {
+            h.progress();
+            if let Some(r) = h.try_recv() {
+                break r;
+            }
+            assert!(start.elapsed() < std::time::Duration::from_secs(10));
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        };
+        std::fs::remove_dir_all(&root).ok();
+        assert_eq!(r.models.len(), 2);
+        assert_eq!(h.progress().map(|p| p.models_found), Some(2));
     }
 }
