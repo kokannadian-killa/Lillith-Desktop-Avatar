@@ -1,0 +1,263 @@
+{
+  "name": "event_timer_fired",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_timer_fired_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.533,
+  "body_anchor_x": 200,
+  "facing": "front (points screen-left)",
+  "event": "timer.fired",
+  "rule_events": [
+    "timer.fired"
+  ],
+  "event_slug": "timer_fired",
+  "base_clip": "point",
+  "base_frames": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "source_files": [
+    "../../source/video/point/point_v3_b.mp4"
+  ],
+  "effects": [
+    "points at a ringing alarm clock (shakes with ice-cyan ring arcs, then stops with a sparkle)"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    67,
+    64
+  ],
+  "clock_origin": [
+    67,
+    64
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        67,
+        64
+      ],
+      [
+        67,
+        62
+      ],
+      [
+        67,
+        59
+      ],
+      [
+        66,
+        59
+      ],
+      [
+        65,
+        63
+      ],
+      [
+        64,
+        67
+      ],
+      [
+        64,
+        66
+      ],
+      [
+        64,
+        62
+      ],
+      [
+        65,
+        60
+      ],
+      [
+        66,
+        61
+      ]
+    ],
+    "clock_origin": [
+      [
+        67,
+        64
+      ],
+      [
+        67,
+        62
+      ],
+      [
+        67,
+        59
+      ],
+      [
+        66,
+        59
+      ],
+      [
+        65,
+        63
+      ],
+      [
+        64,
+        67
+      ],
+      [
+        64,
+        66
+      ],
+      [
+        64,
+        62
+      ],
+      [
+        65,
+        60
+      ],
+      [
+        66,
+        61
+      ]
+    ]
+  },
+  "icon_tracking": "finger",
+  "icon_offset_per_frame": [
+    [
+      3.0,
+      8.4
+    ],
+    [
+      3.0,
+      6.0
+    ],
+    [
+      2.8,
+      3.0
+    ],
+    [
+      2.0,
+      2.9
+    ],
+    [
+      1.0,
+      6.8
+    ],
+    [
+      0.2,
+      10.6
+    ],
+    [
+      0.0,
+      9.8
+    ],
+    [
+      0.2,
+      5.5
+    ],
+    [
+      1.2,
+      3.5
+    ],
+    [
+      2.5,
+      4.6
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/point (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (finger tracking): points at a ringing alarm clock (shakes with ice-cyan ring arcs, then stops with a sparkle).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      35,
+      269,
+      30,
+      392
+    ],
+    [
+      35,
+      271,
+      28,
+      392
+    ],
+    [
+      32,
+      277,
+      24,
+      392
+    ],
+    [
+      36,
+      286,
+      22,
+      392
+    ],
+    [
+      31,
+      289,
+      25,
+      392
+    ],
+    [
+      32,
+      289,
+      30,
+      392
+    ],
+    [
+      33,
+      287,
+      28,
+      392
+    ],
+    [
+      45,
+      281,
+      23,
+      392
+    ],
+    [
+      46,
+      277,
+      22,
+      392
+    ],
+    [
+      47,
+      270,
+      27,
+      392
+    ]
+  ]
+}

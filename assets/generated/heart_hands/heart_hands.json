@@ -1,0 +1,426 @@
+{
+  "name": "heart_hands",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "heart_hands_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/heart_hands/heart_hands_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 47,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 628,
+    "ref_hue_median": 277.9,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      0.3,
+      0.2,
+      0.8,
+      2.3,
+      2.2,
+      1.1,
+      -2.5,
+      -1.6,
+      0.3,
+      3.2,
+      2.8,
+      2.1,
+      0.9,
+      0.8,
+      0.6,
+      0.7,
+      1.4,
+      1.4,
+      1.5,
+      0.4,
+      0.6,
+      0.4,
+      0.4
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "frame_durations_ms": [
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    153,
+    153,
+    153,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    450
+  ],
+  "durations_note": "Derived from old heart_hands frame_durations_ms: profile resampled to 24 frames and scaled to the real video time (1917 ms), final hold 450 ms kept.",
+  "frame_points": {
+    "heart_origin": [
+      [
+        204,
+        123
+      ],
+      [
+        204,
+        123
+      ],
+      [
+        204,
+        125
+      ],
+      [
+        204,
+        128
+      ],
+      [
+        204,
+        131
+      ],
+      [
+        202,
+        126
+      ],
+      [
+        200,
+        116
+      ],
+      [
+        198,
+        112
+      ],
+      [
+        197,
+        113
+      ],
+      [
+        197,
+        116
+      ],
+      [
+        198,
+        117
+      ],
+      [
+        197,
+        116
+      ],
+      [
+        197,
+        116
+      ],
+      [
+        196,
+        116
+      ],
+      [
+        196,
+        116
+      ],
+      [
+        196,
+        116
+      ],
+      [
+        196,
+        116
+      ],
+      [
+        196,
+        116
+      ],
+      [
+        196,
+        115
+      ],
+      [
+        196,
+        115
+      ],
+      [
+        196,
+        115
+      ],
+      [
+        199,
+        117
+      ],
+      [
+        202,
+        120
+      ],
+      [
+        204,
+        122
+      ]
+    ]
+  },
+  "heart_origin": [
+    197,
+    116
+  ],
+  "effects_overlay": {
+    "painter": "generated/_tools/build_allure.py shapes (heart / Pen.sparkle), redrawn by _tools/allure_fx_v2.py",
+    "frames": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "tracking": "head crown + hand template match",
+    "match_scores": [
+      "crown",
+      "crown",
+      "crown",
+      "crown",
+      "crown",
+      "crown",
+      "crown",
+      "crown",
+      "crown",
+      0.88,
+      0.79,
+      0.85,
+      0.93,
+      0.94,
+      0.89,
+      0.88,
+      0.87,
+      0.88,
+      0.86,
+      0.8,
+      0.57,
+      "crown",
+      "crown",
+      "crown"
+    ]
+  },
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      140,
+      277,
+      23,
+      392
+    ],
+    [
+      139,
+      277,
+      23,
+      392
+    ],
+    [
+      139,
+      277,
+      23,
+      392
+    ],
+    [
+      127,
+      277,
+      27,
+      392
+    ],
+    [
+      102,
+      298,
+      32,
+      392
+    ],
+    [
+      94,
+      309,
+      28,
+      392
+    ],
+    [
+      137,
+      290,
+      15,
+      392
+    ],
+    [
+      137,
+      293,
+      13,
+      392
+    ],
+    [
+      132,
+      288,
+      13,
+      392
+    ],
+    [
+      128,
+      273,
+      14,
+      392
+    ],
+    [
+      130,
+      265,
+      13,
+      392
+    ],
+    [
+      138,
+      265,
+      12,
+      392
+    ],
+    [
+      139,
+      265,
+      12,
+      392
+    ],
+    [
+      141,
+      265,
+      12,
+      392
+    ],
+    [
+      139,
+      269,
+      12,
+      392
+    ],
+    [
+      140,
+      271,
+      13,
+      392
+    ],
+    [
+      141,
+      273,
+      13,
+      392
+    ],
+    [
+      140,
+      273,
+      13,
+      392
+    ],
+    [
+      140,
+      275,
+      13,
+      392
+    ],
+    [
+      140,
+      279,
+      12,
+      392
+    ],
+    [
+      140,
+      276,
+      12,
+      392
+    ],
+    [
+      142,
+      280,
+      15,
+      392
+    ],
+    [
+      115,
+      288,
+      19,
+      392
+    ],
+    [
+      129,
+      284,
+      23,
+      392
+    ]
+  ]
+}

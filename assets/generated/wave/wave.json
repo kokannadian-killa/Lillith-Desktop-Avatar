@@ -1,0 +1,154 @@
+{
+  "name": "wave",
+  "placeholder": false,
+  "frame_count": 12,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "wave_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/wave/wave_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 19,
+    "last": 41,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    627.0,
+    627.0,
+    627.0,
+    627.0,
+    627.0,
+    627.0,
+    627.0,
+    627.0,
+    627.0,
+    627.0,
+    627.0,
+    627.0
+  ],
+  "horn_fix": {
+    "ref_horn_px": 640,
+    "ref_hue_median": 266.3,
+    "mean_hue_shift_deg_per_frame": [
+      3.2,
+      4.5,
+      1.6,
+      0.6,
+      3.7,
+      3.0,
+      3.9,
+      2.5,
+      0.5,
+      -0.1,
+      2.7,
+      4.4
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Bouncy wave, 0.96 s loop cut (f19-f41).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      131,
+      286,
+      27,
+      392
+    ],
+    [
+      142,
+      284,
+      25,
+      392
+    ],
+    [
+      138,
+      282,
+      22,
+      392
+    ],
+    [
+      123,
+      277,
+      22,
+      392
+    ],
+    [
+      116,
+      275,
+      22,
+      392
+    ],
+    [
+      118,
+      275,
+      26,
+      392
+    ],
+    [
+      127,
+      279,
+      27,
+      392
+    ],
+    [
+      138,
+      285,
+      24,
+      392
+    ],
+    [
+      137,
+      288,
+      23,
+      392
+    ],
+    [
+      124,
+      288,
+      20,
+      392
+    ],
+    [
+      120,
+      287,
+      22,
+      392
+    ],
+    [
+      125,
+      286,
+      27,
+      392
+    ]
+  ]
+}

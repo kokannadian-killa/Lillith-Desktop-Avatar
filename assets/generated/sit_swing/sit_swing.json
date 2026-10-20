@@ -1,0 +1,160 @@
+{
+  "name": "sit_swing",
+  "placeholder": false,
+  "frame_count": 12,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "sit_swing_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.5,
+  "body_anchor_x": 200,
+  "facing": "right (side profile, seated on an edge)",
+  "source_files": [
+    "../../source/video/sit_swing/sit_swing_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 26,
+    "last": 48,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    592.2,
+    592.2,
+    592.2,
+    592.2,
+    592.2,
+    592.2,
+    592.2,
+    592.2,
+    592.2,
+    592.2,
+    592.2,
+    592.2
+  ],
+  "horn_fix": {
+    "ref_horn_px": 535,
+    "ref_hue_median": 263.1,
+    "mean_hue_shift_deg_per_frame": [
+      0.8,
+      1.1,
+      1.5,
+      -0.1,
+      -0.4,
+      -0.8,
+      -0.3,
+      3.7,
+      2.2,
+      2.2,
+      1.0,
+      0.2
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Leg-kick swing on an invisible ledge, 1.0 s loop cut (f26-f48). Placed so video frame 1 (= source still) matches old sit_swing frame 0, so seat_y/seat_x_range carry over; feet_lowest_y recomputed.",
+  "seat_y": 230,
+  "seat_x_range": [
+    136,
+    279
+  ],
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      118,
+      347,
+      17,
+      366
+    ],
+    [
+      113,
+      313,
+      17,
+      359
+    ],
+    [
+      108,
+      293,
+      16,
+      360
+    ],
+    [
+      91,
+      329,
+      17,
+      365
+    ],
+    [
+      61,
+      362,
+      17,
+      367
+    ],
+    [
+      51,
+      379,
+      18,
+      363
+    ],
+    [
+      62,
+      373,
+      18,
+      347
+    ],
+    [
+      80,
+      373,
+      18,
+      317
+    ],
+    [
+      107,
+      384,
+      18,
+      329
+    ],
+    [
+      112,
+      384,
+      17,
+      336
+    ],
+    [
+      114,
+      387,
+      17,
+      339
+    ],
+    [
+      118,
+      379,
+      17,
+      362
+    ]
+  ],
+  "feet_lowest_y": 366
+}

@@ -1,0 +1,242 @@
+{
+  "name": "lean_forward",
+  "placeholder": false,
+  "frame_count": 23,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "lean_forward_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/lean_forward/lean_forward_v3_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 45,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 628,
+    "ref_hue_median": 277.6,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      0.7,
+      0.1,
+      1.5,
+      1.2,
+      1.2,
+      4.8,
+      0.3,
+      2.7,
+      -2.0,
+      -2.4,
+      -2.9,
+      -2.4,
+      -1.7,
+      -2.6,
+      -1.4,
+      1.8,
+      1.3,
+      7.9,
+      3.1,
+      3.7,
+      2.5,
+      1.0
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      139,
+      278,
+      22,
+      392
+    ],
+    [
+      139,
+      278,
+      22,
+      392
+    ],
+    [
+      139,
+      277,
+      22,
+      392
+    ],
+    [
+      138,
+      277,
+      22,
+      392
+    ],
+    [
+      136,
+      276,
+      22,
+      392
+    ],
+    [
+      134,
+      273,
+      22,
+      392
+    ],
+    [
+      132,
+      270,
+      25,
+      392
+    ],
+    [
+      131,
+      279,
+      30,
+      392
+    ],
+    [
+      130,
+      288,
+      36,
+      392
+    ],
+    [
+      129,
+      293,
+      41,
+      392
+    ],
+    [
+      129,
+      296,
+      45,
+      392
+    ],
+    [
+      128,
+      298,
+      47,
+      392
+    ],
+    [
+      128,
+      298,
+      47,
+      392
+    ],
+    [
+      128,
+      298,
+      48,
+      392
+    ],
+    [
+      128,
+      298,
+      47,
+      392
+    ],
+    [
+      128,
+      297,
+      45,
+      392
+    ],
+    [
+      128,
+      292,
+      40,
+      392
+    ],
+    [
+      128,
+      285,
+      34,
+      392
+    ],
+    [
+      128,
+      281,
+      28,
+      392
+    ],
+    [
+      129,
+      275,
+      24,
+      392
+    ],
+    [
+      131,
+      273,
+      22,
+      392
+    ],
+    [
+      133,
+      274,
+      22,
+      392
+    ],
+    [
+      135,
+      276,
+      22,
+      392
+    ]
+  ]
+}

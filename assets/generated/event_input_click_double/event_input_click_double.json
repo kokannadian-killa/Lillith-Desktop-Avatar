@@ -1,0 +1,263 @@
+{
+  "name": "event_input_click_double",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_input_click_double_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.535,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "input.click.double",
+  "rule_events": [
+    "input.click.double"
+  ],
+  "event_slug": "input_click_double",
+  "base_clip": "tada_celebrate",
+  "base_frames": [
+    0,
+    1,
+    2,
+    4,
+    5,
+    6,
+    7,
+    9,
+    10,
+    11
+  ],
+  "source_files": [
+    "../../source/video/tada_celebrate/tada_celebrate_v3_a.mp4"
+  ],
+  "effects": [
+    "ta-da pop timed to two quick click ripples (rose, ice) on a cursor, then a rose \"x2\""
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    301,
+    109
+  ],
+  "click_point": [
+    301,
+    109
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        301,
+        109
+      ],
+      [
+        301,
+        118
+      ],
+      [
+        302,
+        126
+      ],
+      [
+        302,
+        119
+      ],
+      [
+        302,
+        105
+      ],
+      [
+        302,
+        100
+      ],
+      [
+        300,
+        105
+      ],
+      [
+        296,
+        114
+      ],
+      [
+        297,
+        114
+      ],
+      [
+        301,
+        110
+      ]
+    ],
+    "click_point": [
+      [
+        301,
+        109
+      ],
+      [
+        301,
+        118
+      ],
+      [
+        302,
+        126
+      ],
+      [
+        302,
+        119
+      ],
+      [
+        302,
+        105
+      ],
+      [
+        302,
+        100
+      ],
+      [
+        300,
+        105
+      ],
+      [
+        296,
+        114
+      ],
+      [
+        297,
+        114
+      ],
+      [
+        301,
+        110
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      1.4,
+      0.9
+    ],
+    [
+      1.2,
+      10.2
+    ],
+    [
+      1.8,
+      18.3
+    ],
+    [
+      2.4,
+      10.7
+    ],
+    [
+      2.5,
+      -2.5
+    ],
+    [
+      2.4,
+      -7.8
+    ],
+    [
+      -0.2,
+      -3.3
+    ],
+    [
+      -4.4,
+      5.5
+    ],
+    [
+      -3.3,
+      6.5
+    ],
+    [
+      0.7,
+      2.4
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/tada_celebrate (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): ta-da pop timed to two quick click ripples (rose, ice) on a cursor, then a rose \"x2\".",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      140,
+      318,
+      21,
+      387
+    ],
+    [
+      139,
+      319,
+      31,
+      387
+    ],
+    [
+      140,
+      318,
+      57,
+      387
+    ],
+    [
+      138,
+      321,
+      29,
+      387
+    ],
+    [
+      129,
+      327,
+      16,
+      358
+    ],
+    [
+      136,
+      340,
+      16,
+      336
+    ],
+    [
+      128,
+      343,
+      16,
+      376
+    ],
+    [
+      79,
+      337,
+      36,
+      391
+    ],
+    [
+      80,
+      338,
+      24,
+      391
+    ],
+    [
+      84,
+      342,
+      19,
+      391
+    ]
+  ]
+}

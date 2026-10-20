@@ -1,0 +1,263 @@
+{
+  "name": "event_window_opened_media",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_window_opened_media_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "window.opened.media",
+  "rule_events": [
+    "window.opened.media"
+  ],
+  "event_slug": "window_opened_media",
+  "base_clip": "dance",
+  "base_frames": [
+    17,
+    19,
+    22,
+    25,
+    28,
+    30,
+    17,
+    19,
+    22,
+    25
+  ],
+  "source_files": [
+    "../../source/video/dance/dance_v3_a.mp4"
+  ],
+  "effects": [
+    "mirrored dance beat (raised arm away from the player, looped twice) as a media player pops in: play triangle turns into bouncing equaliser bars, progress bar fills, music notes float up"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    308,
+    86
+  ],
+  "window_origin": [
+    274,
+    62
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        308,
+        86
+      ],
+      [
+        309,
+        86
+      ],
+      [
+        307,
+        85
+      ],
+      [
+        304,
+        87
+      ],
+      [
+        303,
+        89
+      ],
+      [
+        304,
+        89
+      ],
+      [
+        307,
+        87
+      ],
+      [
+        309,
+        86
+      ],
+      [
+        307,
+        85
+      ],
+      [
+        304,
+        87
+      ]
+    ],
+    "window_origin": [
+      [
+        274,
+        62
+      ],
+      [
+        275,
+        63
+      ],
+      [
+        273,
+        62
+      ],
+      [
+        270,
+        64
+      ],
+      [
+        269,
+        66
+      ],
+      [
+        270,
+        66
+      ],
+      [
+        273,
+        64
+      ],
+      [
+        275,
+        63
+      ],
+      [
+        273,
+        62
+      ],
+      [
+        270,
+        64
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      10.3,
+      -1.5
+    ],
+    [
+      11.3,
+      -1.2
+    ],
+    [
+      8.7,
+      -1.6
+    ],
+    [
+      5.6,
+      -0.3
+    ],
+    [
+      5.0,
+      1.8
+    ],
+    [
+      6.3,
+      2.1
+    ],
+    [
+      9.5,
+      0.4
+    ],
+    [
+      11.3,
+      -1.2
+    ],
+    [
+      8.7,
+      -1.6
+    ],
+    [
+      5.5,
+      0.1
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/dance (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): mirrored dance beat (raised arm away from the player, looped twice) as a media player pops in: play triangle turns into bouncing equaliser bars, progress bar fills, music notes float up.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      107,
+      312,
+      17,
+      392
+    ],
+    [
+      140,
+      314,
+      23,
+      387
+    ],
+    [
+      142,
+      351,
+      17,
+      392
+    ],
+    [
+      137,
+      342,
+      25,
+      392
+    ],
+    [
+      145,
+      344,
+      19,
+      392
+    ],
+    [
+      146,
+      346,
+      25,
+      386
+    ],
+    [
+      107,
+      347,
+      17,
+      392
+    ],
+    [
+      140,
+      346,
+      23,
+      387
+    ],
+    [
+      142,
+      342,
+      17,
+      392
+    ],
+    [
+      137,
+      337,
+      25,
+      392
+    ]
+  ]
+}

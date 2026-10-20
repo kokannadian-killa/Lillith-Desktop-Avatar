@@ -1,0 +1,250 @@
+{
+  "name": "sleep",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "sleep_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 6.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.29,
+  "body_anchor_x": 200,
+  "facing": "right (side profile)",
+  "source_files": [
+    "../../source/video/sleep/sleep_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 93,
+    "step": 4,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0,
+    607.0
+  ],
+  "horn_fix": {
+    "ref_horn_px": 244,
+    "ref_hue_median": 265.2,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      -1.6,
+      0.1,
+      2.5,
+      1.8,
+      5.5,
+      6.1,
+      5.6,
+      2.5,
+      -1.1,
+      0.2,
+      -1.5,
+      -4.3,
+      -6.2,
+      -6.4,
+      -7.9,
+      -7.6,
+      -7.8,
+      -7.5,
+      -7.7,
+      -7.7,
+      -4.9,
+      -3.6,
+      -0.9
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Seated knee-hug doze, slow breathing; whole 4 s video = seamless loop (24f @6fps). No baked Zzz (old set drew them in code).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      114,
+      295,
+      201,
+      392
+    ],
+    [
+      113,
+      295,
+      201,
+      392
+    ],
+    [
+      113,
+      295,
+      200,
+      392
+    ],
+    [
+      112,
+      295,
+      198,
+      392
+    ],
+    [
+      113,
+      295,
+      198,
+      392
+    ],
+    [
+      114,
+      295,
+      198,
+      392
+    ],
+    [
+      116,
+      295,
+      198,
+      392
+    ],
+    [
+      117,
+      295,
+      198,
+      392
+    ],
+    [
+      117,
+      295,
+      198,
+      392
+    ],
+    [
+      117,
+      295,
+      198,
+      392
+    ],
+    [
+      116,
+      295,
+      200,
+      392
+    ],
+    [
+      115,
+      295,
+      203,
+      392
+    ],
+    [
+      114,
+      295,
+      206,
+      392
+    ],
+    [
+      114,
+      295,
+      208,
+      392
+    ],
+    [
+      114,
+      295,
+      210,
+      392
+    ],
+    [
+      115,
+      295,
+      210,
+      392
+    ],
+    [
+      115,
+      295,
+      210,
+      392
+    ],
+    [
+      115,
+      295,
+      210,
+      392
+    ],
+    [
+      115,
+      295,
+      210,
+      392
+    ],
+    [
+      115,
+      295,
+      210,
+      392
+    ],
+    [
+      115,
+      295,
+      210,
+      392
+    ],
+    [
+      115,
+      295,
+      208,
+      392
+    ],
+    [
+      114,
+      295,
+      205,
+      392
+    ],
+    [
+      114,
+      295,
+      203,
+      392
+    ]
+  ]
+}

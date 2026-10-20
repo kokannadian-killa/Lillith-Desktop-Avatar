@@ -1,0 +1,217 @@
+{
+  "name": "event_archiving",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_archiving_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.531,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "archive.created",
+  "rule_events": [
+    "archive.created"
+  ],
+  "event_slug": "archiving",
+  "base_clip": "spell_orb_cast",
+  "base_frames": [
+    20,
+    20,
+    21,
+    21,
+    22,
+    22,
+    21,
+    21,
+    22,
+    22
+  ],
+  "source_files": [
+    "../../source/video/spell_orb_cast/spell_orb_cast_v3_a.mp4"
+  ],
+  "effects": [
+    "cupped-hands pose + files dropping into a magenta box, lid shuts, zip line, sparkle"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    292,
+    95
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        292,
+        95
+      ],
+      [
+        292,
+        95
+      ],
+      [
+        292,
+        95
+      ],
+      [
+        292,
+        95
+      ],
+      [
+        292,
+        95
+      ],
+      [
+        292,
+        96
+      ],
+      [
+        292,
+        96
+      ],
+      [
+        292,
+        96
+      ],
+      [
+        292,
+        96
+      ],
+      [
+        292,
+        96
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      0.3,
+      31.2
+    ],
+    [
+      0.4,
+      31.1
+    ],
+    [
+      0.4,
+      30.9
+    ],
+    [
+      0.4,
+      31.1
+    ],
+    [
+      0.3,
+      31.4
+    ],
+    [
+      0.3,
+      31.6
+    ],
+    [
+      0.3,
+      31.8
+    ],
+    [
+      0.3,
+      31.8
+    ],
+    [
+      0.3,
+      31.8
+    ],
+    [
+      0.3,
+      31.8
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/spell_orb_cast (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): cupped-hands pose + files dropping into a magenta box, lid shuts, zip line, sparkle.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      86,
+      270,
+      24,
+      391
+    ],
+    [
+      86,
+      270,
+      24,
+      391
+    ],
+    [
+      137,
+      271,
+      24,
+      392
+    ],
+    [
+      137,
+      271,
+      24,
+      392
+    ],
+    [
+      137,
+      271,
+      23,
+      392
+    ],
+    [
+      137,
+      271,
+      23,
+      392
+    ],
+    [
+      137,
+      271,
+      24,
+      392
+    ],
+    [
+      137,
+      271,
+      24,
+      392
+    ],
+    [
+      137,
+      271,
+      23,
+      392
+    ],
+    [
+      137,
+      271,
+      23,
+      392
+    ]
+  ]
+}

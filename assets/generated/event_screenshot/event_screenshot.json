@@ -1,0 +1,217 @@
+{
+  "name": "event_screenshot",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_screenshot_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "screenshot.taken",
+  "rule_events": [
+    "screenshot.taken"
+  ],
+  "event_slug": "screenshot",
+  "base_clip": "lean_forward",
+  "base_frames": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    14,
+    16,
+    18
+  ],
+  "source_files": [
+    "../../source/video/lean_forward/lean_forward_v3_b.mp4"
+  ],
+  "effects": [
+    "leans in toward the camera; ice-cyan crop corners close around her, white flash, photo thumbnail pops in"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    292,
+    64
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ],
+      [
+        292,
+        64
+      ]
+    ]
+  },
+  "icon_tracking": "none",
+  "icon_offset_per_frame": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/lean_forward (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (no tracking): leans in toward the camera; ice-cyan crop corners close around her, white flash, photo thumbnail pops in.",
+  "canvas_compliant": false,
+  "bbox_per_frame": [
+    [
+      91,
+      308,
+      0,
+      395
+    ],
+    [
+      97,
+      302,
+      0,
+      395
+    ],
+    [
+      110,
+      289,
+      5,
+      395
+    ],
+    [
+      116,
+      283,
+      10,
+      395
+    ],
+    [
+      66,
+      333,
+      10,
+      395
+    ],
+    [
+      116,
+      296,
+      10,
+      395
+    ],
+    [
+      116,
+      298,
+      10,
+      395
+    ],
+    [
+      116,
+      319,
+      10,
+      395
+    ],
+    [
+      128,
+      328,
+      41,
+      392
+    ],
+    [
+      128,
+      326,
+      28,
+      392
+    ]
+  ]
+}

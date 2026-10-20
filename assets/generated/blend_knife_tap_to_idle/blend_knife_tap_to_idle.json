@@ -1,0 +1,103 @@
+{
+  "name": "blend_knife_tap_to_idle",
+  "placeholder": false,
+  "frame_count": 6,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "blend_knife_tap_to_idle_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.538,
+  "body_anchor_x": 200,
+  "from_clip": "knife_tap",
+  "to_clip": "idle_a",
+  "source_frames": {
+    "knife_tap": 13,
+    "idle_a": 0
+  },
+  "facing": "3/4 front -> front",
+  "source_files": [
+    "../../source/video/blend_knife_tap_to_idle/blend_knife_tap_to_idle_v3_a.mp4"
+  ],
+  "source_video_frames": [
+    8,
+    15,
+    22,
+    28,
+    35,
+    42
+  ],
+  "horn_fix": {
+    "ref_horn_px": 574,
+    "ref_hue_median": 270.2,
+    "mean_hue_shift_deg_per_frame": [
+      1.2,
+      -2.0,
+      -4.8,
+      -3.2,
+      -3.7,
+      -5.5
+    ]
+  },
+  "blend_method": "real transition video (Grok Imagine I2V, first frame = clip A boundary frame, last = clip B boundary frame); placement registered to both clips, scale/offset interpolated; interior frames only",
+  "scale_from_to": [
+    0.535,
+    0.54
+  ],
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "pigtails",
+    "tail"
+  ],
+  "notes": "Transition helper knife_tap -> idle: 6 frames from a dedicated transition video between knife_tap[13] and idle_a[0]. idle endpoints use idle_a frame 0 (= idle_b frame 0 = idle still).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      101,
+      327,
+      23,
+      392
+    ],
+    [
+      111,
+      300,
+      22,
+      392
+    ],
+    [
+      135,
+      276,
+      29,
+      392
+    ],
+    [
+      145,
+      323,
+      41,
+      392
+    ],
+    [
+      142,
+      273,
+      38,
+      392
+    ],
+    [
+      133,
+      290,
+      19,
+      392
+    ]
+  ]
+}

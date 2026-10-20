@@ -1,0 +1,263 @@
+{
+  "name": "event_window_opened_folder",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_window_opened_folder_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "window.opened.folder",
+  "rule_events": [
+    "window.opened.folder"
+  ],
+  "event_slug": "window_opened_folder",
+  "base_clip": "lean_forward",
+  "base_frames": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    12,
+    12,
+    14
+  ],
+  "source_files": [
+    "../../source/video/lean_forward/lean_forward_v3_b.mp4"
+  ],
+  "effects": [
+    "leans in, peeking, as a magenta folder pops open and papers rise out; two tiny eyes peek back from inside"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    304,
+    113
+  ],
+  "folder_origin": [
+    304,
+    119
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        304,
+        113
+      ],
+      [
+        306,
+        113
+      ],
+      [
+        311,
+        114
+      ],
+      [
+        319,
+        117
+      ],
+      [
+        325,
+        121
+      ],
+      [
+        328,
+        125
+      ],
+      [
+        330,
+        127
+      ],
+      [
+        330,
+        128
+      ],
+      [
+        330,
+        128
+      ],
+      [
+        330,
+        128
+      ]
+    ],
+    "folder_origin": [
+      [
+        304,
+        119
+      ],
+      [
+        306,
+        119
+      ],
+      [
+        311,
+        120
+      ],
+      [
+        319,
+        123
+      ],
+      [
+        325,
+        127
+      ],
+      [
+        328,
+        131
+      ],
+      [
+        330,
+        133
+      ],
+      [
+        330,
+        134
+      ],
+      [
+        330,
+        134
+      ],
+      [
+        330,
+        134
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      4.3,
+      0.6
+    ],
+    [
+      6.0,
+      0.9
+    ],
+    [
+      11.5,
+      2.2
+    ],
+    [
+      19.0,
+      5.1
+    ],
+    [
+      24.6,
+      9.2
+    ],
+    [
+      28.2,
+      13.0
+    ],
+    [
+      30.0,
+      15.1
+    ],
+    [
+      30.3,
+      15.6
+    ],
+    [
+      30.2,
+      15.6
+    ],
+    [
+      30.1,
+      15.6
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/lean_forward (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): leans in, peeking, as a magenta folder pops open and papers rise out; two tiny eyes peek back from inside.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      140,
+      277,
+      23,
+      392
+    ],
+    [
+      139,
+      324,
+      23,
+      392
+    ],
+    [
+      136,
+      347,
+      22,
+      392
+    ],
+    [
+      132,
+      350,
+      25,
+      392
+    ],
+    [
+      130,
+      356,
+      36,
+      392
+    ],
+    [
+      129,
+      359,
+      45,
+      392
+    ],
+    [
+      129,
+      361,
+      48,
+      392
+    ],
+    [
+      129,
+      361,
+      48,
+      392
+    ],
+    [
+      129,
+      366,
+      48,
+      392
+    ],
+    [
+      129,
+      366,
+      48,
+      392
+    ]
+  ]
+}

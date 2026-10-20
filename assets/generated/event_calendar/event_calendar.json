@@ -1,0 +1,217 @@
+{
+  "name": "event_calendar",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_calendar_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.528,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "calendar.reminder",
+  "rule_events": [
+    "calendar.reminder"
+  ],
+  "event_slug": "calendar",
+  "base_clip": "think",
+  "base_frames": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "source_files": [
+    "../../source/video/think/think_v3_a.mp4"
+  ],
+  "effects": [
+    "thinking pose + calendar page flips and a day gets circled in rose"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    300,
+    65
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        300,
+        65
+      ],
+      [
+        296,
+        65
+      ],
+      [
+        293,
+        66
+      ],
+      [
+        293,
+        66
+      ],
+      [
+        295,
+        65
+      ],
+      [
+        299,
+        65
+      ],
+      [
+        299,
+        65
+      ],
+      [
+        296,
+        65
+      ],
+      [
+        294,
+        66
+      ],
+      [
+        294,
+        65
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      8.2,
+      1.3
+    ],
+    [
+      4.2,
+      1.1
+    ],
+    [
+      0.8,
+      1.8
+    ],
+    [
+      0.7,
+      1.9
+    ],
+    [
+      3.1,
+      1.2
+    ],
+    [
+      6.6,
+      0.9
+    ],
+    [
+      7.2,
+      0.8
+    ],
+    [
+      4.3,
+      1.2
+    ],
+    [
+      2.2,
+      1.8
+    ],
+    [
+      2.2,
+      1.2
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/think (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): thinking pose + calendar page flips and a day gets circled in rose.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      155,
+      324,
+      23,
+      392
+    ],
+    [
+      157,
+      320,
+      20,
+      392
+    ],
+    [
+      153,
+      316,
+      22,
+      392
+    ],
+    [
+      153,
+      316,
+      20,
+      392
+    ],
+    [
+      143,
+      319,
+      22,
+      392
+    ],
+    [
+      151,
+      322,
+      24,
+      392
+    ],
+    [
+      154,
+      323,
+      21,
+      392
+    ],
+    [
+      153,
+      320,
+      21,
+      392
+    ],
+    [
+      151,
+      318,
+      22,
+      392
+    ],
+    [
+      152,
+      318,
+      20,
+      392
+    ]
+  ]
+}

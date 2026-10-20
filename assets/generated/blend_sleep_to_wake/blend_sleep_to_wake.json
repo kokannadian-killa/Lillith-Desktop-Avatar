@@ -1,0 +1,53 @@
+{
+  "name": "blend_sleep_to_wake",
+  "placeholder": false,
+  "frame_count": 3,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "blend_sleep_to_wake_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "from_clip": "sleep",
+  "to_clip": "wake",
+  "source_frames": {
+    "sleep": -1,
+    "wake": 0
+  },
+  "facing": "right side (seated)",
+  "blend_method": "dense optical flow pose interpolation, crossfade-free (t<0.5 warped A, t>=0.5 warped B), lowest row interpolated",
+  "notes": "Transition helper sleep -> wake: 3 in-between frames between the v2 boundary frames (sleep[-1] -> wake[0]). idle endpoints use idle_a frame 0 = idle_b frame 0 = idle still, so it connects both idle variants.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      114,
+      296,
+      202,
+      391
+    ],
+    [
+      114,
+      296,
+      201,
+      391
+    ],
+    [
+      114,
+      296,
+      200,
+      391
+    ]
+  ]
+}

@@ -1,0 +1,154 @@
+{
+  "name": "facepalm",
+  "placeholder": false,
+  "frame_count": 12,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "facepalm_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.528,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/facepalm/facepalm_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 22,
+    "last": 44,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    626.5,
+    626.5,
+    626.5,
+    626.5,
+    626.5,
+    626.5,
+    626.5,
+    626.5,
+    626.5,
+    626.5,
+    626.5,
+    626.5
+  ],
+  "horn_fix": {
+    "ref_horn_px": 586,
+    "ref_hue_median": 273.6,
+    "mean_hue_shift_deg_per_frame": [
+      0.8,
+      0.9,
+      0.6,
+      -0.0,
+      -0.1,
+      2.4,
+      2.7,
+      -1.0,
+      -2.9,
+      -1.1,
+      0.5,
+      1.1
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Comedic facepalm + head shake, 1.0 s loop cut (f22-f44).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      145,
+      259,
+      22,
+      392
+    ],
+    [
+      145,
+      260,
+      22,
+      392
+    ],
+    [
+      145,
+      260,
+      22,
+      392
+    ],
+    [
+      144,
+      260,
+      22,
+      392
+    ],
+    [
+      143,
+      260,
+      23,
+      392
+    ],
+    [
+      140,
+      266,
+      29,
+      392
+    ],
+    [
+      138,
+      276,
+      34,
+      392
+    ],
+    [
+      134,
+      283,
+      33,
+      392
+    ],
+    [
+      120,
+      288,
+      28,
+      392
+    ],
+    [
+      121,
+      281,
+      23,
+      392
+    ],
+    [
+      137,
+      268,
+      22,
+      392
+    ],
+    [
+      145,
+      259,
+      22,
+      392
+    ]
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "name": "event_cloud_sync",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_cloud_sync_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "cloud.sync",
+  "rule_events": [
+    "cloud.sync"
+  ],
+  "event_slug": "cloud_sync",
+  "base_clip": "hip_sway",
+  "base_frames": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    14,
+    16,
+    18
+  ],
+  "source_files": [
+    "../../source/video/hip_sway/hip_sway_v3_a.mp4"
+  ],
+  "effects": [
+    "hip sway + cloud with rotating ice/rose sync arrows"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    296,
+    65
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        296,
+        65
+      ],
+      [
+        295,
+        66
+      ],
+      [
+        295,
+        67
+      ],
+      [
+        295,
+        68
+      ],
+      [
+        295,
+        70
+      ],
+      [
+        296,
+        69
+      ],
+      [
+        298,
+        68
+      ],
+      [
+        299,
+        68
+      ],
+      [
+        300,
+        68
+      ],
+      [
+        299,
+        67
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      3.9,
+      0.9
+    ],
+    [
+      3.1,
+      1.9
+    ],
+    [
+      2.6,
+      3.1
+    ],
+    [
+      2.5,
+      4.3
+    ],
+    [
+      2.9,
+      5.5
+    ],
+    [
+      4.1,
+      5.1
+    ],
+    [
+      5.8,
+      4.0
+    ],
+    [
+      7.3,
+      4.3
+    ],
+    [
+      7.6,
+      4.2
+    ],
+    [
+      7.3,
+      3.0
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/hip_sway (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): hip sway + cloud with rotating ice/rose sync arrows.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      140,
+      325,
+      23,
+      392
+    ],
+    [
+      138,
+      324,
+      23,
+      392
+    ],
+    [
+      141,
+      324,
+      25,
+      392
+    ],
+    [
+      151,
+      324,
+      26,
+      392
+    ],
+    [
+      150,
+      324,
+      32,
+      392
+    ],
+    [
+      154,
+      332,
+      29,
+      392
+    ],
+    [
+      141,
+      327,
+      26,
+      392
+    ],
+    [
+      126,
+      329,
+      27,
+      392
+    ],
+    [
+      88,
+      333,
+      28,
+      392
+    ],
+    [
+      108,
+      333,
+      23,
+      392
+    ]
+  ]
+}

@@ -1,0 +1,277 @@
+{
+  "name": "stretch_arch",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "stretch_arch_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/stretch_arch/stretch_arch_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 47,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 627,
+    "ref_hue_median": 277.1,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      0.0,
+      0.6,
+      0.2,
+      1.5,
+      0.4,
+      -0.2,
+      -20.4,
+      -22.5,
+      -18.7,
+      -17.0,
+      -16.1,
+      -14.4,
+      -16.5,
+      -17.7,
+      -17.3,
+      -17.7,
+      -18.0,
+      -19.4,
+      -12.5,
+      -0.5,
+      -0.1,
+      1.0,
+      1.2
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "frame_durations_ms": [
+    64,
+    64,
+    64,
+    64,
+    64,
+    64,
+    64,
+    64,
+    64,
+    64,
+    169,
+    169,
+    169,
+    133,
+    133,
+    64,
+    64,
+    64,
+    64,
+    64,
+    64,
+    64,
+    64,
+    143
+  ],
+  "durations_note": "Derived from old stretch_arch frame_durations_ms: profile resampled to 24 frames and scaled to the real video time (1917 ms), final hold 143 ms kept.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      139,
+      277,
+      22,
+      392
+    ],
+    [
+      135,
+      278,
+      22,
+      392
+    ],
+    [
+      119,
+      283,
+      24,
+      392
+    ],
+    [
+      94,
+      310,
+      25,
+      392
+    ],
+    [
+      71,
+      329,
+      23,
+      392
+    ],
+    [
+      62,
+      339,
+      19,
+      392
+    ],
+    [
+      69,
+      333,
+      19,
+      392
+    ],
+    [
+      86,
+      316,
+      20,
+      392
+    ],
+    [
+      104,
+      298,
+      21,
+      392
+    ],
+    [
+      115,
+      286,
+      16,
+      392
+    ],
+    [
+      120,
+      287,
+      13,
+      392
+    ],
+    [
+      123,
+      279,
+      12,
+      392
+    ],
+    [
+      124,
+      277,
+      12,
+      392
+    ],
+    [
+      123,
+      278,
+      13,
+      392
+    ],
+    [
+      122,
+      279,
+      13,
+      392
+    ],
+    [
+      121,
+      280,
+      14,
+      392
+    ],
+    [
+      119,
+      283,
+      14,
+      392
+    ],
+    [
+      112,
+      289,
+      15,
+      392
+    ],
+    [
+      97,
+      301,
+      20,
+      392
+    ],
+    [
+      76,
+      322,
+      17,
+      392
+    ],
+    [
+      62,
+      338,
+      17,
+      392
+    ],
+    [
+      71,
+      336,
+      22,
+      392
+    ],
+    [
+      98,
+      311,
+      24,
+      392
+    ],
+    [
+      126,
+      281,
+      23,
+      392
+    ]
+  ]
+}

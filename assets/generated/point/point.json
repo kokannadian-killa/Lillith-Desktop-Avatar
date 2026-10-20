@@ -1,0 +1,138 @@
+{
+  "name": "point",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "point_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.533,
+  "body_anchor_x": 200,
+  "facing": "front (points screen-left)",
+  "source_files": [
+    "../../source/video/point/point_v3_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 7,
+    "last": 25,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    639.8,
+    639.8,
+    639.8,
+    639.8,
+    639.8,
+    639.8,
+    639.8,
+    639.8,
+    639.8,
+    639.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 640,
+    "ref_hue_median": 285.2,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      1.6,
+      1.3,
+      0.0,
+      2.4,
+      3.2,
+      2.6,
+      0.9,
+      1.0,
+      1.2
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Redo (variant b, explicit prompt): arm stays extended pointing screen-left the whole loop, body bounces. 0.83 s loop cut (f7-f25).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      57,
+      269,
+      30,
+      392
+    ],
+    [
+      56,
+      271,
+      28,
+      392
+    ],
+    [
+      56,
+      277,
+      24,
+      392
+    ],
+    [
+      55,
+      286,
+      22,
+      392
+    ],
+    [
+      55,
+      289,
+      25,
+      392
+    ],
+    [
+      55,
+      290,
+      30,
+      392
+    ],
+    [
+      55,
+      288,
+      28,
+      392
+    ],
+    [
+      56,
+      281,
+      23,
+      392
+    ],
+    [
+      56,
+      277,
+      22,
+      392
+    ],
+    [
+      57,
+      270,
+      27,
+      392
+    ]
+  ]
+}

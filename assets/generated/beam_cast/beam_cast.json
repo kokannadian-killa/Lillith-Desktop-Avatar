@@ -1,0 +1,409 @@
+{
+  "name": "beam_cast",
+  "placeholder": false,
+  "frame_count": 25,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "beam_cast_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 8.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.533,
+  "body_anchor_x": 200,
+  "facing": "right (side profile)",
+  "source_files": [
+    "../../source/video/beam_cast/beam_cast_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 73,
+    "step": 3,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1,
+    598.1
+  ],
+  "horn_fix": {
+    "ref_horn_px": 547,
+    "ref_hue_median": 269.8,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      -0.0,
+      0.5,
+      -1.2,
+      2.0,
+      0.2,
+      -4.6,
+      -2.8,
+      -3.0,
+      -3.0,
+      -3.2,
+      -2.2,
+      -2.9,
+      -2.2,
+      -1.1,
+      -0.2,
+      -0.1,
+      1.4,
+      0.8,
+      1.9,
+      1.2,
+      1.0,
+      0.9,
+      1.1,
+      1.2
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "One-shot side-profile beam blast; the beam is baked into the video and is clipped at the canvas right edge. beam_origin recomputed (hand tip).",
+  "frame_durations_ms": [
+    151,
+    151,
+    151,
+    151,
+    151,
+    151,
+    151,
+    83,
+    83,
+    110,
+    110,
+    110,
+    110,
+    110,
+    110,
+    110,
+    110,
+    110,
+    110,
+    124,
+    124,
+    138,
+    138,
+    151,
+    350
+  ],
+  "durations_note": "Derived from old beam_cast frame_durations_ms: profile resampled to 25 frames and scaled to the real video time (3000 ms), final hold 350 ms kept.",
+  "beam_origin": [
+    312,
+    103
+  ],
+  "frame_points": {
+    "beam_origin": [
+      [
+        321,
+        93
+      ],
+      [
+        320,
+        86
+      ],
+      [
+        302,
+        123
+      ],
+      [
+        299,
+        140
+      ],
+      [
+        294,
+        151
+      ],
+      [
+        308,
+        140
+      ],
+      [
+        308,
+        131
+      ],
+      [
+        302,
+        120
+      ],
+      [
+        310,
+        117
+      ],
+      [
+        300,
+        114
+      ],
+      [
+        312,
+        79
+      ],
+      [
+        313,
+        79
+      ],
+      [
+        312,
+        80
+      ],
+      [
+        313,
+        80
+      ],
+      [
+        324,
+        93
+      ],
+      [
+        332,
+        115
+      ],
+      [
+        323,
+        124
+      ],
+      [
+        319,
+        99
+      ],
+      [
+        321,
+        97
+      ],
+      [
+        322,
+        96
+      ],
+      [
+        322,
+        94
+      ],
+      [
+        321,
+        94
+      ],
+      [
+        321,
+        94
+      ],
+      [
+        321,
+        93
+      ],
+      [
+        321,
+        93
+      ]
+    ]
+  },
+  "beam_frames": [
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "effects": [
+    "beam (code-drawn, old fx.beam palette) on the frames where the video fires; the video's own beam is removed by keying"
+  ],
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      105,
+      321,
+      21,
+      392
+    ],
+    [
+      105,
+      321,
+      22,
+      392
+    ],
+    [
+      103,
+      320,
+      27,
+      392
+    ],
+    [
+      103,
+      320,
+      38,
+      392
+    ],
+    [
+      108,
+      320,
+      48,
+      392
+    ],
+    [
+      114,
+      320,
+      43,
+      392
+    ],
+    [
+      112,
+      395,
+      29,
+      392
+    ],
+    [
+      105,
+      395,
+      26,
+      392
+    ],
+    [
+      97,
+      395,
+      28,
+      392
+    ],
+    [
+      96,
+      395,
+      28,
+      392
+    ],
+    [
+      98,
+      395,
+      28,
+      392
+    ],
+    [
+      99,
+      395,
+      28,
+      392
+    ],
+    [
+      100,
+      395,
+      28,
+      392
+    ],
+    [
+      100,
+      395,
+      28,
+      392
+    ],
+    [
+      99,
+      395,
+      28,
+      392
+    ],
+    [
+      97,
+      395,
+      27,
+      392
+    ],
+    [
+      97,
+      323,
+      25,
+      392
+    ],
+    [
+      99,
+      320,
+      23,
+      392
+    ],
+    [
+      101,
+      322,
+      22,
+      392
+    ],
+    [
+      102,
+      322,
+      21,
+      392
+    ],
+    [
+      104,
+      322,
+      21,
+      392
+    ],
+    [
+      105,
+      322,
+      21,
+      392
+    ],
+    [
+      105,
+      322,
+      21,
+      392
+    ],
+    [
+      105,
+      321,
+      21,
+      392
+    ],
+    [
+      105,
+      321,
+      21,
+      392
+    ]
+  ]
+}

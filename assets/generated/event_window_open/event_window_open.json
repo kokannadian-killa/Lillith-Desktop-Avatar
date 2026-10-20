@@ -1,0 +1,247 @@
+{
+  "name": "event_window_open",
+  "placeholder": false,
+  "frame_count": 12,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "event_window_open_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 10,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video + code icons",
+  "scale": 0.535,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "event": "window.opened.app",
+  "rule_events": [
+    "window.opened.app"
+  ],
+  "event_slug": "window_open",
+  "base_clip": "tada_celebrate",
+  "base_frames": [
+    0,
+    1,
+    2,
+    4,
+    5,
+    6,
+    7,
+    9,
+    10,
+    11,
+    12,
+    14
+  ],
+  "source_files": [
+    "../../source/video/tada_celebrate/tada_celebrate_v3_a.mp4"
+  ],
+  "effects": [
+    "ta-da pose + a window grows open beside her with sparkles"
+  ],
+  "palette": [
+    "#e23d8a",
+    "#c026d3",
+    "#5fd0e6"
+  ],
+  "icon_origin": [
+    293,
+    65
+  ],
+  "frame_points": {
+    "icon_origin": [
+      [
+        293,
+        65
+      ],
+      [
+        293,
+        74
+      ],
+      [
+        294,
+        82
+      ],
+      [
+        294,
+        75
+      ],
+      [
+        294,
+        61
+      ],
+      [
+        294,
+        56
+      ],
+      [
+        292,
+        61
+      ],
+      [
+        288,
+        70
+      ],
+      [
+        289,
+        70
+      ],
+      [
+        293,
+        66
+      ],
+      [
+        294,
+        64
+      ],
+      [
+        294,
+        64
+      ]
+    ]
+  },
+  "icon_tracking": "head",
+  "icon_offset_per_frame": [
+    [
+      1.4,
+      0.9
+    ],
+    [
+      1.2,
+      10.2
+    ],
+    [
+      1.8,
+      18.3
+    ],
+    [
+      2.4,
+      10.7
+    ],
+    [
+      2.5,
+      -2.5
+    ],
+    [
+      2.4,
+      -7.8
+    ],
+    [
+      -0.2,
+      -3.3
+    ],
+    [
+      -4.4,
+      5.5
+    ],
+    [
+      -3.3,
+      6.5
+    ],
+    [
+      0.8,
+      2.1
+    ],
+    [
+      2.4,
+      0.1
+    ],
+    [
+      2.5,
+      -0.4
+    ]
+  ],
+  "generator": "generated_v2 base clip (Grok Imagine video) + original code-drawn icons (old painters, unchanged) + per-frame body tracking (_tools/build_events_v3.py)",
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "System-event reaction (plays once). Body frames from generated_v2/tada_celebrate (video-based, baked bounce); icon/effect drawn in code as the old set and shifted per frame to follow the body (head tracking): ta-da pose + a window grows open beside her with sparkles.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      140,
+      277,
+      21,
+      387
+    ],
+    [
+      139,
+      281,
+      31,
+      387
+    ],
+    [
+      140,
+      285,
+      57,
+      387
+    ],
+    [
+      138,
+      307,
+      29,
+      387
+    ],
+    [
+      129,
+      317,
+      16,
+      358
+    ],
+    [
+      136,
+      327,
+      16,
+      336
+    ],
+    [
+      128,
+      334,
+      16,
+      376
+    ],
+    [
+      79,
+      330,
+      36,
+      391
+    ],
+    [
+      80,
+      331,
+      24,
+      391
+    ],
+    [
+      84,
+      335,
+      19,
+      391
+    ],
+    [
+      87,
+      337,
+      19,
+      391
+    ],
+    [
+      87,
+      337,
+      20,
+      391
+    ]
+  ]
+}

@@ -1,0 +1,171 @@
+{
+  "name": "walk_left",
+  "placeholder": false,
+  "frame_count": 14,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "walk_left_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "left",
+  "source_files": [
+    "../../source/video/walk_right/walk_right_v3_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 9,
+    "last": 35,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "body_trend",
+  "baseline_snap": "per_frame",
+  "body_point_src_x": [
+    629.2,
+    630.4,
+    626.6,
+    625.5,
+    634.1,
+    636.5,
+    631.5,
+    633.4,
+    620.0,
+    623.0,
+    623.0,
+    626.8,
+    623.2,
+    631.2
+  ],
+  "horn_fix": {
+    "ref_horn_px": 532,
+    "ref_hue_median": 274.3,
+    "mean_hue_shift_deg_per_frame": [
+      -2.9,
+      -2.5,
+      -2.0,
+      -1.4,
+      -0.7,
+      -1.7,
+      -1.9,
+      -2.2,
+      -1.7,
+      0.3,
+      1.2,
+      1.8,
+      0.5,
+      -0.0
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Horizontal mirror of walk_right (x' = 399 - x). Tattoo/ribbon asymmetry is mirrored. In-place (treadmill) walk from Grok Imagine video, 1.17 s cycle = 2 steps, same timing as old walk (14f @12fps). Body point recentred with linear-trend removal.",
+  "mirrored_from": "walk_right",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      142,
+      293,
+      21,
+      392
+    ],
+    [
+      137,
+      294,
+      22,
+      392
+    ],
+    [
+      96,
+      292,
+      22,
+      392
+    ],
+    [
+      90,
+      287,
+      24,
+      392
+    ],
+    [
+      109,
+      299,
+      25,
+      392
+    ],
+    [
+      132,
+      286,
+      22,
+      392
+    ],
+    [
+      153,
+      282,
+      23,
+      392
+    ],
+    [
+      145,
+      276,
+      24,
+      392
+    ],
+    [
+      132,
+      290,
+      24,
+      392
+    ],
+    [
+      95,
+      289,
+      25,
+      392
+    ],
+    [
+      92,
+      286,
+      24,
+      392
+    ],
+    [
+      109,
+      292,
+      23,
+      392
+    ],
+    [
+      132,
+      281,
+      20,
+      392
+    ],
+    [
+      153,
+      285,
+      20,
+      392
+    ]
+  ]
+}

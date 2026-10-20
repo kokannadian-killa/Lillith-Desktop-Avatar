@@ -1,0 +1,242 @@
+{
+  "name": "tail_tease",
+  "placeholder": false,
+  "frame_count": 23,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "tail_tease_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.528,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/tail_tease/tail_tease_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 45,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5,
+    609.5
+  ],
+  "horn_fix": {
+    "ref_horn_px": 521,
+    "ref_hue_median": 267.6,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      -0.6,
+      1.0,
+      0.3,
+      0.1,
+      1.1,
+      -0.5,
+      0.4,
+      -0.6,
+      -0.6,
+      -0.6,
+      0.2,
+      -0.6,
+      0.8,
+      -0.2,
+      0.3,
+      0.4,
+      0.5,
+      -0.9,
+      -1.3,
+      0.1,
+      -0.5,
+      -0.1
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      151,
+      279,
+      22,
+      392
+    ],
+    [
+      151,
+      288,
+      22,
+      392
+    ],
+    [
+      145,
+      279,
+      23,
+      392
+    ],
+    [
+      120,
+      279,
+      24,
+      392
+    ],
+    [
+      103,
+      279,
+      25,
+      392
+    ],
+    [
+      95,
+      279,
+      24,
+      392
+    ],
+    [
+      106,
+      280,
+      22,
+      392
+    ],
+    [
+      151,
+      280,
+      22,
+      392
+    ],
+    [
+      151,
+      292,
+      22,
+      392
+    ],
+    [
+      151,
+      316,
+      23,
+      392
+    ],
+    [
+      151,
+      320,
+      23,
+      392
+    ],
+    [
+      151,
+      309,
+      23,
+      392
+    ],
+    [
+      151,
+      280,
+      22,
+      392
+    ],
+    [
+      136,
+      280,
+      22,
+      392
+    ],
+    [
+      107,
+      279,
+      23,
+      392
+    ],
+    [
+      94,
+      279,
+      24,
+      392
+    ],
+    [
+      101,
+      279,
+      24,
+      392
+    ],
+    [
+      140,
+      279,
+      24,
+      392
+    ],
+    [
+      151,
+      283,
+      23,
+      392
+    ],
+    [
+      151,
+      310,
+      22,
+      392
+    ],
+    [
+      151,
+      324,
+      22,
+      392
+    ],
+    [
+      151,
+      323,
+      22,
+      392
+    ],
+    [
+      151,
+      308,
+      22,
+      392
+    ]
+  ]
+}

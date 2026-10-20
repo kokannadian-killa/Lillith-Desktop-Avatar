@@ -1,0 +1,131 @@
+{
+  "name": "strut_left",
+  "placeholder": false,
+  "frame_count": 9,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "strut_left_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.537,
+  "body_anchor_x": 200,
+  "facing": "left",
+  "source_files": [
+    "../../source/video/strut_right/strut_right_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 26,
+    "last": 42,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "body_trend",
+  "baseline_snap": "per_frame",
+  "body_point_src_x": [
+    623.1,
+    626.1,
+    616.8,
+    613.1,
+    618.9,
+    619.1,
+    625.4,
+    628.2,
+    625.0
+  ],
+  "horn_fix": {
+    "ref_horn_px": 484,
+    "ref_hue_median": 274.0,
+    "mean_hue_shift_deg_per_frame": [
+      -3.4,
+      -4.3,
+      -3.3,
+      -1.6,
+      -1.2,
+      -1.1,
+      1.0,
+      -2.4,
+      -3.8
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Horizontal mirror of strut_right (x' = 399 - x). Tattoo/ribbon asymmetry is mirrored. ",
+  "mirrored_from": "strut_right",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      144,
+      272,
+      18,
+      392
+    ],
+    [
+      138,
+      289,
+      18,
+      392
+    ],
+    [
+      103,
+      293,
+      19,
+      392
+    ],
+    [
+      83,
+      296,
+      19,
+      392
+    ],
+    [
+      84,
+      296,
+      20,
+      392
+    ],
+    [
+      100,
+      293,
+      19,
+      392
+    ],
+    [
+      120,
+      290,
+      17,
+      392
+    ],
+    [
+      138,
+      288,
+      17,
+      392
+    ],
+    [
+      148,
+      272,
+      17,
+      392
+    ]
+  ]
+}

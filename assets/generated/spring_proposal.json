@@ -1,0 +1,517 @@
+{
+  "schema": "lillith.spring_proposal/1",
+  "author": "image-gen bot (assets/generated)",
+  "date": "2026-10-19",
+  "status": "proposal; defaults unchanged (README-SP / repo config.rs Springs / physics-lab/physics.toml)",
+  "compatible_with": [
+    "repo crates/lillith-core/src/spring.rs (Channel: root_x, root_y, angle, scale, chest, pigtail)",
+    "physics-lab/physics.toml (authoritative tuning; channel 'pigtails' == spring.rs Pigtail)"
+  ],
+  "physics_hz": 120.0,
+  "integrator": "semi-implicit Euler, fixed 120 Hz sub-steps, velocity + offset clamps",
+  "channels": {
+    "root_x": {
+      "stiffness": 48.0,
+      "damping": 10.0,
+      "max_velocity": 400.0,
+      "max_offset": 40.0,
+      "gain": "jiggle",
+      "units": "px"
+    },
+    "root_y": {
+      "stiffness": 48.0,
+      "damping": 10.0,
+      "max_velocity": 400.0,
+      "max_offset": 40.0,
+      "gain": "jiggle",
+      "units": "px"
+    },
+    "angle": {
+      "stiffness": 42.0,
+      "damping": 9.0,
+      "max_velocity": 4.0,
+      "max_offset": 0.35,
+      "gain": "jiggle",
+      "units": "rad about the feet anchor [200,392]"
+    },
+    "scale": {
+      "stiffness": 55.0,
+      "damping": 11.0,
+      "max_velocity": 2.0,
+      "max_offset": 0.2,
+      "gain": "jiggle",
+      "units": "multiplier offset (rest 1.0)"
+    },
+    "chest": {
+      "stiffness": 65.0,
+      "damping": 9.5,
+      "max_velocity": 120.0,
+      "max_offset": 12.0,
+      "gain": "chest_bounce",
+      "units": "px",
+      "attach": "chest_point"
+    },
+    "pigtails": {
+      "stiffness": 32.0,
+      "damping": 6.5,
+      "max_velocity": 160.0,
+      "max_offset": 20.0,
+      "gain": "pigtail_sway",
+      "units": "px",
+      "attach": [
+        "pigtail_left_point",
+        "pigtail_right_point"
+      ],
+      "spring_rs_name": "pigtail"
+    }
+  },
+  "gains": {
+    "jiggle": 0.6,
+    "chest_bounce": 1.0,
+    "pigtail_sway": 0.9
+  },
+  "damping_ratio_info": {
+    "note": "zeta = c / (2*sqrt(k)) with unit mass",
+    "root": 0.72,
+    "angle": 0.69,
+    "scale": 0.74,
+    "chest": 0.59,
+    "pigtails": 0.57
+  },
+  "tasteful_changes": {
+    "_label": "OPTIONAL, all labelled TASTEFUL_CHANGE; none applied to the defaults above. Purpose: keep motion elegant and subtle on a clothed, modest companion.",
+    "chest_visual_cap": {
+      "label": "TASTEFUL_CHANGE",
+      "proposal": "renderer caps the VISIBLE chest effect at about 1.5% vertical squash/stretch (about 3 px on a 400 px sprite) even when the spring offset reaches its 12 px clamp",
+      "why": "the chest channel is applied to the whole sprite until layered art exists; a 12 px offset would read as the whole body bouncing. Spring numbers stay 65/9.5."
+    },
+    "chest_from_pigtails": {
+      "label": "TASTEFUL_CHANGE",
+      "proposal": "keep physics.toml chest.sympathetic_from_pigtails at 0.15 or lower; do not raise chest_bounce above 1.0",
+      "why": "secondary echo only; chest motion should follow the body, never lead it"
+    },
+    "pigtail_lag": {
+      "label": "TASTEFUL_CHANGE",
+      "proposal": "keep a 0.05 s hair lag (physics.toml pigtails.lag_s) and alternate the kick sign per footfall",
+      "why": "reads as hair weight rather than wobble"
+    },
+    "drag_hold": {
+      "label": "TASTEFUL_CHANGE",
+      "proposal": "while drag_held plays, set the angle target from cursor velocity (clamped to 0.12 rad) and let pigtails/tail trail; on drop, use physics.toml impulse_recipes.drag at 0.8x",
+      "why": "dangling sway with a soft landing instead of a big rebound"
+    }
+  },
+  "attachments": {
+    "_note": "Canvas px on the shared 400x400 canvas (x right, y down, baseline 392, anchor [200,392]); 'normalised' = px/400 from the frame's top-left (physics.toml [attachments] convention). Clip-level value = median over frames; per-frame values are in each clip JSON under frame_points[name][frame] (the importer ignores that key; clip-level *_point fields become Clip.points). pigtail_left/right = screen-left/right. Left clips are mirrors (x' = 399 - x, labels swapped).",
+    "channel_map": {
+      "chest_point": "chest",
+      "pigtail_left_point": "pigtails (sign -1 for side-to-side sway)",
+      "pigtail_right_point": "pigtails (sign +1)",
+      "hip_point": "root_x / angle pivot for hip sway (no dedicated hip spring)",
+      "tail_tip_point": "tail overlay (physics.toml [tail], tail_tip_x/tail_tip_y)"
+    },
+    "clips": {
+      "idle": {
+        "json": "idle/idle.json",
+        "frames": 10,
+        "per_frame": "frame_points",
+        "chest_point": [
+          196,
+          136
+        ],
+        "pigtail_left_point": [
+          156,
+          75
+        ],
+        "pigtail_right_point": [
+          229,
+          74
+        ],
+        "hip_point": [
+          193,
+          192
+        ],
+        "tail_tip_point": [
+          260,
+          250
+        ],
+        "normalised": {
+          "chest_point": [
+            0.49,
+            0.34
+          ],
+          "pigtail_left_point": [
+            0.39,
+            0.1875
+          ],
+          "pigtail_right_point": [
+            0.5725,
+            0.185
+          ],
+          "hip_point": [
+            0.4825,
+            0.48
+          ],
+          "tail_tip_point": [
+            0.65,
+            0.625
+          ]
+        }
+      },
+      "walk_right": {
+        "json": "walk_right/walk_right.json",
+        "frames": 14,
+        "per_frame": "frame_points",
+        "chest_point": [
+          237,
+          130
+        ],
+        "pigtail_left_point": [
+          184,
+          69
+        ],
+        "pigtail_right_point": [
+          187,
+          67
+        ],
+        "hip_point": [
+          213,
+          196
+        ],
+        "tail_tip_point": [
+          143,
+          195
+        ],
+        "normalised": {
+          "chest_point": [
+            0.5925,
+            0.325
+          ],
+          "pigtail_left_point": [
+            0.46,
+            0.1725
+          ],
+          "pigtail_right_point": [
+            0.4675,
+            0.1675
+          ],
+          "hip_point": [
+            0.5325,
+            0.49
+          ],
+          "tail_tip_point": [
+            0.3575,
+            0.4875
+          ]
+        }
+      },
+      "walk_left": {
+        "json": "walk_left/walk_left.json",
+        "frames": 14,
+        "per_frame": "frame_points",
+        "chest_point": [
+          161,
+          130
+        ],
+        "pigtail_left_point": [
+          211,
+          67
+        ],
+        "pigtail_right_point": [
+          214,
+          69
+        ],
+        "hip_point": [
+          186,
+          196
+        ],
+        "tail_tip_point": [
+          256,
+          195
+        ],
+        "normalised": {
+          "chest_point": [
+            0.4025,
+            0.325
+          ],
+          "pigtail_left_point": [
+            0.5275,
+            0.1675
+          ],
+          "pigtail_right_point": [
+            0.535,
+            0.1725
+          ],
+          "hip_point": [
+            0.465,
+            0.49
+          ],
+          "tail_tip_point": [
+            0.64,
+            0.4875
+          ]
+        }
+      },
+      "run_right": {
+        "json": "run_right/run_right.json",
+        "frames": 10,
+        "per_frame": "frame_points",
+        "chest_point": [
+          258,
+          157
+        ],
+        "pigtail_left_point": [
+          200,
+          73
+        ],
+        "pigtail_right_point": [
+          203,
+          71
+        ],
+        "hip_point": [
+          195,
+          197
+        ],
+        "tail_tip_point": [
+          40,
+          216
+        ],
+        "normalised": {
+          "chest_point": [
+            0.645,
+            0.3925
+          ],
+          "pigtail_left_point": [
+            0.5,
+            0.1825
+          ],
+          "pigtail_right_point": [
+            0.5075,
+            0.1775
+          ],
+          "hip_point": [
+            0.4875,
+            0.4925
+          ],
+          "tail_tip_point": [
+            0.1,
+            0.54
+          ]
+        }
+      },
+      "run_left": {
+        "json": "run_left/run_left.json",
+        "frames": 10,
+        "per_frame": "frame_points",
+        "chest_point": [
+          141,
+          157
+        ],
+        "pigtail_left_point": [
+          196,
+          71
+        ],
+        "pigtail_right_point": [
+          199,
+          73
+        ],
+        "hip_point": [
+          204,
+          197
+        ],
+        "tail_tip_point": [
+          359,
+          216
+        ],
+        "normalised": {
+          "chest_point": [
+            0.3525,
+            0.3925
+          ],
+          "pigtail_left_point": [
+            0.49,
+            0.1775
+          ],
+          "pigtail_right_point": [
+            0.4975,
+            0.1825
+          ],
+          "hip_point": [
+            0.51,
+            0.4925
+          ],
+          "tail_tip_point": [
+            0.8975,
+            0.54
+          ]
+        }
+      },
+      "wave": {
+        "json": "wave/wave.json",
+        "frames": 10,
+        "per_frame": "frame_points",
+        "chest_point": [
+          197,
+          136
+        ],
+        "pigtail_left_point": [
+          165,
+          92
+        ],
+        "pigtail_right_point": [
+          230,
+          89
+        ],
+        "hip_point": [
+          199,
+          193
+        ],
+        "tail_tip_point": [
+          265,
+          159
+        ],
+        "normalised": {
+          "chest_point": [
+            0.4925,
+            0.34
+          ],
+          "pigtail_left_point": [
+            0.4125,
+            0.23
+          ],
+          "pigtail_right_point": [
+            0.575,
+            0.2225
+          ],
+          "hip_point": [
+            0.4975,
+            0.4825
+          ],
+          "tail_tip_point": [
+            0.6625,
+            0.3975
+          ]
+        }
+      },
+      "knife_tap": {
+        "json": "knife_tap/knife_tap.json",
+        "frames": 10,
+        "per_frame": "frame_points",
+        "chest_point": [
+          194,
+          136
+        ],
+        "pigtail_left_point": [
+          156,
+          83
+        ],
+        "pigtail_right_point": [
+          220,
+          86
+        ],
+        "hip_point": [
+          193,
+          195
+        ],
+        "tail_tip_point": [
+          115,
+          185
+        ],
+        "normalised": {
+          "chest_point": [
+            0.485,
+            0.34
+          ],
+          "pigtail_left_point": [
+            0.39,
+            0.2075
+          ],
+          "pigtail_right_point": [
+            0.55,
+            0.215
+          ],
+          "hip_point": [
+            0.4825,
+            0.4875
+          ],
+          "tail_tip_point": [
+            0.2875,
+            0.4625
+          ]
+        }
+      }
+    }
+  },
+  "drivers": {
+    "_note": "Summary only; numbers live in physics-lab/physics.toml",
+    "idle": "breath oscillator (3.5-4.5 s) -> chest 1.2 px and scale 0.006; pigtail micro-sway 1.5 px / 2.8 s; tail figure-8 overlay",
+    "walk": "2 footfalls per cycle: root_y 10, chest 22, pigtails 18 (sign alternates); angle kick 0.25 on start, chest 20 on stop",
+    "run": "footfalls root_y 30, chest 45, pigtails 35",
+    "drag": "impulse_recipes.drag on pick-up and drop; pigtails/tail trail cursor velocity",
+    "events": "physics.toml clip_recipes / events tables"
+  },
+  "baked_motion_audit": {
+    "removed": {
+      "idle": "v6: breathing lift, 2% chest widen, pigtail bounce, hip sway, shoulder tilt removed (old: idle/_v5_baked_jiggle/)",
+      "wave": "v3: breathing lift and pigtail sway removed (old: wave/_v2_baked_jiggle/)",
+      "knife_tap": "v3: breathing lift removed (old: knife_tap/_v2_baked_jiggle/)"
+    },
+    "kept_tail_only": "idle, wave, knife_tap keep a small tail-curl sway (about 3 px), because no engine channel moves tail pixels yet; drop it once the tail overlay/cutout exists",
+    "walk_run": "no baked bounce (feet-driven poses only)",
+    "choreography_clips": "hip_sway, lean_forward, shoulder_roll, tail_wag, dance and nod bake their own motion on purpose; physics.toml also models hip_sway/lean_forward/shoulder_roll as idle_transitions spring sequences, so the engine should use ONE of the two for each (suggest: the spring sequence on the idle clip, or the clip with that clip's recipe = none)"
+  },
+  "mood_presets": {
+    "flirty": {
+      "label": "TASTEFUL_CHANGE",
+      "summary": "Playful/flirty mood for the allure clips: slightly lower chest and pigtail damping so the settle has one more soft rebound; stiffness, gains and clamps unchanged. Still subtle and companion-appropriate.",
+      "springs": {
+        "chest": {
+          "stiffness": 65.0,
+          "damping": 8.5,
+          "was_damping": 9.5,
+          "zeta": 0.53,
+          "was_zeta": 0.59
+        },
+        "pigtails": {
+          "stiffness": 32.0,
+          "damping": 5.8,
+          "was_damping": 6.5,
+          "zeta": 0.51,
+          "was_zeta": 0.57
+        },
+        "root_x": "unchanged 48/10",
+        "root_y": "unchanged 48/10",
+        "angle": "unchanged 42/9",
+        "scale": "unchanged 55/11"
+      },
+      "gains": {
+        "jiggle": 0.6,
+        "chest_bounce": 1.0,
+        "pigtail_sway": 0.95,
+        "note": "pigtail_sway +0.05 only; chest_bounce stays 1.0"
+      },
+      "limits": {
+        "chest_visual_cap": "keep the ~1.5% visible squash cap from tasteful_changes.chest_visual_cap",
+        "max_offsets": "unchanged (chest 12, pigtail 20)"
+      },
+      "applies_to": [
+        "strut_right",
+        "strut_left",
+        "hip_pop_wink",
+        "shoulder_shimmy",
+        "hair_flip",
+        "blow_kiss",
+        "tiptoe_bounce",
+        "lean_tease",
+        "twirl",
+        "stretch_arch",
+        "peace_sign_pose",
+        "heart_hands",
+        "tail_tease"
+      ],
+      "enter": "blend over ~0.4 s when an allure clip starts or the Playful/Mischievous mood is active; return to defaults over ~1 s after",
+      "impulses": "each allure clip JSON has impulse_frames [{frame, channel (chest/pigtails/root_y/angle/hip), strength 0-1, optional sign}]; hip = root_x + angle about hip_point. Suggested full-strength impulses at 1.0: chest 45, pigtails 70, root_y 30, angle 1.0, hip (root_x 50 + angle 0.6), i.e. physics.toml run/stab scale",
+      "relation_to_physics_toml": "physics.toml [moods.Playful] already lowers chest zeta to ~0.50; this preset is slightly gentler (0.53) and is meant to be merged there by the physics bot"
+    }
+  }
+}
