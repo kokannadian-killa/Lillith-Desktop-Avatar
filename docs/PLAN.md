@@ -229,6 +229,7 @@ Repo baseline: the repo has nothing to port from. Every target module below is n
 | M7 | Memory + LLM chat | rusqlite memory passes parity tests against the Python module (same facts from the same sentences). Chat bar (Y/Enter or portal shortcut) streams from Ollama or llama-server into the bubble with the context summary. README-SP commands work. Thinking/done poses play. Offline personality lines appear when no LLM is running. Only read-only system tools in v1, with an approval dialog before anything else |
 | M8 | Voice | Replies are spoken (Piper, else espeak-ng). Push-to-talk records 5 s → whisper → chat. Both can be toggled and fail gracefully |
 | M9 | Proactive life & polish | Proactive comments with cooldown, warmth/greeting styles, work-session nudges, SFX, particles, optional "What do you see?" (portal + moondream), and the remaining events (print, archive, calendar, firewall) |
+| M10 | Extras & integrations | Every §5.1 M10 item ships as its own cargo feature + config switch, off by default where marked opt-in, and fails gracefully when its service is missing |
 
 **M1 status (2026-10-19, UTC-6): X11/XWayland path verified on the build box; Wayland layer-shell path implemented and compiling, needs an on-machine smoke test on Plasma 6.**
 - Done: `lillith-overlay::stage` (M2 `Animator` + atlas pages → reusable canvas at manifest cell × scale, re-renders only when clip/frame/flip or the quantised spring transform changes; mask rescanned only when the body moves ≥ 1 px); `input_region::mask_rects` (alpha ≥ 40 → row runs snapped to a 2 px grid, identical rows merged into rectangles); `drag` (click vs drag threshold, surface-local deltas for Wayland, root deltas for X11, `(left, bottom)` placement, keep-64-px-on-screen clamp); `lillith-core::config::{OverlayPos, save_overlay}` (`[overlay]` table, other keys kept); `wayland` backend (sctk 0.19: `Layer::Overlay`, anchor `BOTTOM|LEFT`, exclusive zone −1, keyboard `OnDemand`, namespace `lillith`, ARGB8888 shm slot pool, `wl_surface.set_input_region` per mask change, margins updated while dragging, themed grab cursor, calloop timer); `x11` backend (winit 0.30 forced to X11 + softbuffer; ARGB visual, undecorated, `AlwaysOnTop`, utility type, skip taskbar/pager, sticky; click-through via the X Shape **input** shape; drag via `QueryPointer` + `set_outer_position`); automatic fallback to X11 when `WAYLAND_DISPLAY` is missing or the compositor lacks layer-shell; `lillith` with no subcommand runs the overlay (`--backend`, `--manifest`, `--config`, `--scale`, `--opacity`, `--fps`, `--reset-position`, `--no-save`, `--exit-after`). Click on her = `wave`; right-click on her = quit (until the M6 tray).
@@ -256,6 +257,48 @@ Repo baseline: the repo has nothing to port from. Every target module below is n
 - Reachability: the 10 `idle_flirt_*` mannerisms are in the Playful pose cycle (stretch also Sleepy, look_away also Alert), sweet allure poses in Happy, teasing ones in Mischievous; `idle_flirt_*` start with the gentle `low` recipe. Not wired: `strut_left`/`strut_right` (walk alternates), the art's `impulse_frames` per-frame kick hints, and a dedicated Flirty mood (`mood_presets.flirty` in spring_proposal.json has no engine mood yet).
 
 M0–M3 give the first demoable build: README-SP behaviour without AI. M4–M5 complete the system state/action monitor. M7–M8 complete the companion.
+
+### 5.1 Integration roadmap (Ko's 30 ideas, added 2026-10-20, UTC-6)
+
+Each idea is assigned to a milestone. ✅ = already built, ▶ = in progress.
+
+| # | Idea | Milestone | How (Rust / Plasma 6 Wayland) |
+|---|---|---|---|
+| 1 | Local LLM brain | M7 | Ollama or `llama-server` over HTTP (offline, no API key). The chat bubble branch `feat/chat-bubble-llama` already talks to llama-server |
+| 2 | Whisper speech-to-text | M8 | whisper.cpp (`whisper-rs`), push-to-talk, mic only while the key is held |
+| 3 | Piper voice | M8 ▶ | `lillith-voice`: Piper subprocess, espeak-ng/spd-say fallback, mute toggle |
+| 4 | Long-term semantic memory | M7 | rusqlite + local embeddings (sqlite-vec or a small in-process index) instead of ChromaDB/FAISS |
+| 5 | Webcam emotion reading | M10 (opt-in) | Off by default; camera only after explicit enable, processed locally, nothing stored |
+| 6 | System monitor → poses | M4 ✅ | `lillith-sense` procfs/sysfs; add GPU (`/sys/class/drm`), temps (`hwmon`), disk usage |
+| 7 | File watcher | M4 ✅ | inotify on Downloads/Trash/Screenshots; extend to Drag-and-Drop / Cloud Sync poses |
+| 8 | Focused-app awareness | M5 | KWin script bridge (xdotool doesn't work on Wayland): terminal → Hacking, editor → Code Inspect |
+| 9 | Notification reactions | M4 ✅ | D-Bus `Notify` monitor (app + summary only); M7 shows them in the chat bubble |
+| 10 | Battery / charging | M4 ✅ | sysfs power_supply; add a charging-started celebration |
+| 11 | Network / VPN / Wi-Fi / hotspot | M4 ✅ (partial) | net + VPN done; Wi-Fi SSID and hotspot via NetworkManager D-Bus |
+| 12 | System log reactions | M9 | journald reader (feature `journal`): errors → Glitch/System Error, success → Loading Complete |
+| 13 | Music / playerctl | M9 | MPRIS over D-Bus: Volume Control pose, bob speed to the track |
+| 14 | Spotify now-playing + genre mood | M9 | Read through MPRIS (no API key needed); genre → mood mapping |
+| 15 | Pomodoro timer | M9 | Built-in work/break timer: Task Scheduler pose while working, Alert on breaks |
+| 16 | Calendar reminders | M9 | Local `.ics` files + calendar notifications → Calendar Event Reminder pose |
+| 17 | RSS / GitHub releases / feeds | M10 | Polled feeds, headlines in the bubble with matching reactions |
+| 18 | Weather | M10 | wttr.in: glow color and drift by weather (rain = sad drift, storm = glitch) |
+| 19 | SSH session detection | M10 | Detect your own active SSH sessions (`/proc`, `loginctl`) → SSH Tunneling pose (display only) |
+| 20 | Git hook reactions | M10 | Optional local git hooks that ping her: commit / push / failed build poses |
+| 21 | Docker / Podman | M10 | Container start/stop via the socket API → Sandbox / Virtual Machine poses |
+| 24 | Reminders / scheduler | M9 | She schedules reminders herself (internal timer + systemd user timers), Task Scheduler pose |
+| 25 | Generate new sprites/skins | M10 | Asset tool, not a runtime feature: new outfits/seasonal skins go through the art pipeline + `import-manifest`, locked style only, no NSFW |
+| 26 | Global hotkeys | M6 | KDE global shortcuts via the XDG GlobalShortcuts portal (pynput can't do this on Wayland) |
+| 27 | Personality modes | M7 | JSON/TOML personality modules: Hacker, Assistant, Sweet, Playful, Feral (all SFW) |
+| 28 | Game detection | M5/M9 | KWin bridge + Steam/Heroic process names → Excited pose, playtime counter, optional hide-in-fullscreen |
+| 29 | Discord status | M10 | Discord Rich Presence over the local IPC socket: "currently: Hacking" |
+| 30 | Screen reading (OCR) | M10 (opt-in) | Off by default; only on explicit request through the screenshot portal (KDE asks permission each time), tesseract locally |
+
+**New milestone M10: Extras & integrations.** Acceptance: each M10 integration is a separate cargo feature + `[integrations.<name>]` config switch, off by default unless noted, failing gracefully when its service is missing. Opt-in ones (webcam, OCR) never run without an explicit user action.
+
+**Not building (excluded, consistent with the existing exclusion list):**
+- #22 nmap / network scanning: security-tool territory, same as the excluded port-scan / audit tools.
+- #23 clipboard monitoring that reacts to passwords: reading secrets from the clipboard is out. A plain "copied a URL / code" reaction could come later, but only if you ask for it, it never stores contents, and it ignores password managers.
+- "Uncensored / no filter" LLM mode: excluded with the NSFW / moderation-bypass modes. The local LLM in #1 is fine without it.
 
 ## 6. Open questions
 
