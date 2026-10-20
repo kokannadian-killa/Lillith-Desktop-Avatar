@@ -688,6 +688,19 @@ impl PhysicsDriver {
         }
     }
 
+    /// The `root_y` a footfall recipe may kick right now: 0 while the drawn
+    /// clip bakes its own gait ([`Self::set_gait_suppressed`], whether or not
+    /// `[gait]` is enabled) or while the engine gait is driving (its hip bob
+    /// supplies the vertical step); `recipe_root_y` otherwise (gait off on an
+    /// engine-clean clip: unchanged behaviour).
+    pub fn footfall_root_y(&self, recipe_root_y: f32) -> f32 {
+        if self.gait_suppressed || self.live_gait().is_some() {
+            0.0
+        } else {
+            recipe_root_y
+        }
+    }
+
     /// `true` while the drawn clip suppresses the engine gait.
     pub fn gait_suppressed(&self) -> bool {
         self.gait_suppressed
@@ -855,8 +868,16 @@ impl PhysicsDriver {
         } else {
             1.0
         };
+        // The footfall's root_y bob is dropped when something else already
+        // supplies the vertical step: the drawn clip bakes its own walk
+        // (`disable_springs = ["gait"]`, the video already bobs) or the engine
+        // gait is driving (its hip_bob_px is the bob). Otherwise a run clip's
+        // root_y kick would double it. See `Self::footfall_root_y`.
+        let root_y = self.footfall_root_y(f.root_y);
         let Some(g) = self.live_gait() else {
-            self.schedule(Target::Ch(Channel::RootY), f.root_y, 0.0);
+            if root_y != 0.0 {
+                self.schedule(Target::Ch(Channel::RootY), root_y, 0.0);
+            }
             self.schedule(Target::Ch(Channel::Chest), f.chest, 0.0);
             self.schedule(
                 Target::Ch(Channel::Pigtail),
@@ -869,9 +890,7 @@ impl PhysicsDriver {
         // before the legs move), plus tail droop / alternating flick and an
         // alternating torso counter-twist (right strike -> right shoulder back).
         let k = self.gait_amp();
-        if f.root_y != 0.0 {
-            self.schedule(Target::Ch(Channel::RootY), f.root_y * k, 0.0);
-        }
+        debug_assert_eq!(root_y, 0.0, "live gait owns the vertical step");
         self.schedule(Target::Ch(Channel::Chest), f.chest * k, 0.0);
         self.schedule(
             Target::Ch(Channel::Pigtail),

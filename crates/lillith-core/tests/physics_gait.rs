@@ -734,3 +734,83 @@ fn gait_on_with_frame_footfalls_does_not_double_the_steps() {
     d.on_footfall(1);
     assert_eq!(d.heel_strikes().count(), 1);
 }
+
+// ---------------------------------------------------------------- run footfall root_y guard
+
+fn bundled_run(cfg: &PhysicsConfig) -> Motion {
+    // The canonical run_right: 10 frames @ 12 fps.
+    Motion::Running {
+        vx: 2.0 * cfg.walk.demo_speed_px_s,
+        cycle_s: 10.0 / 12.0,
+    }
+}
+
+/// Max |root y| over `secs` of running, impulses only (breathing etc. muted
+/// out by diffing against a muted twin).
+fn run_root_y(mut d: PhysicsDriver, secs: f32, frame_footfalls: bool) -> f32 {
+    let mut quiet = PhysicsDriver::from_config(d.config().clone(), 3);
+    quiet.auto_idle = false;
+    quiet.mute_impulses = true;
+    quiet.set_gait_enabled(d.gait_enabled());
+    quiet.set_gait_suppressed(d.gait_suppressed());
+    let m = bundled_run(d.config());
+    d.set_motion(m);
+    quiet.set_motion(m);
+    let mut y = 0f32;
+    for i in 0..(secs * HZ) as usize {
+        if frame_footfalls && i % 50 == 0 {
+            d.on_footfall((i / 50) as u32);
+        }
+        tick(&mut d);
+        tick(&mut quiet);
+        y = y.max((d.transform().y - quiet.transform().y).abs());
+    }
+    y
+}
+
+#[test]
+fn baked_run_clip_gets_no_run_footfall_root_y() {
+    let off = PhysicsConfig::bundled();
+    assert!(off.walk.run_footfall.root_y > 0.0, "the recipe still has a run bob");
+    for cfg in [off, bundled_gait_on()] {
+        for frames in [false, true] {
+            let mut d = driver(&cfg, false);
+            d.set_gait_suppressed(true); // run_right: disable_springs = ["gait"]
+            assert_eq!(d.footfall_root_y(30.0), 0.0);
+            let y = run_root_y(d, 2.0, frames);
+            assert!(y < 1e-3, "baked run root_y {y} (gait {:?}, frames {frames})", cfg.gait.map(|g| g.enabled));
+        }
+    }
+}
+
+#[test]
+fn non_baked_run_clip_with_gait_on_gets_no_root_y_kick() {
+    let on = bundled_gait_on();
+    for frames in [false, true] {
+        let mut d = driver(&on, false);
+        if frames {
+            d.set_frame_footfalls(true);
+        }
+        assert!(d.gait_active());
+        assert_eq!(d.footfall_root_y(30.0), 0.0);
+        let y = run_root_y(d, 2.0, frames);
+        assert!(y < 1e-3, "gait run root_y {y} (frames {frames})");
+    }
+    // ...the vertical step comes from the gait hip bob instead.
+    let mut d = driver(&on, false);
+    d.set_motion(bundled_run(&on));
+    let (_, _, bob, _, _) = walk_for(&mut d, 2.0);
+    assert!(bob > 2.0, "hip bob {bob}");
+}
+
+#[test]
+fn non_baked_run_clip_with_gait_off_keeps_the_run_bob() {
+    let cfg = PhysicsConfig::bundled();
+    let d = driver(&cfg, false);
+    assert!(!d.gait_active() && !d.gait_suppressed());
+    assert_eq!(d.footfall_root_y(30.0), 30.0);
+    for frames in [false, true] {
+        let y = run_root_y(driver(&cfg, false), 2.0, frames);
+        assert!(y > 0.5, "run footfall root_y bob {y} (frames {frames})");
+    }
+}
