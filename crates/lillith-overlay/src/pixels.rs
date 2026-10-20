@@ -38,6 +38,28 @@ pub fn rgba_to_argb_u32(src: &[u8], dst: &mut [u32], opacity: u8) {
     }
 }
 
+/// Alpha at or above which a pixel is kept by the X11 *bounding* shape when
+/// no compositing manager blends per-pixel alpha (hard-edged fallback).
+pub const SHAPE_ALPHA: u8 = 128;
+
+/// Writes premultiplied RGBA `src` into `dst` as fully opaque `0xFFRRGGBB`
+/// words with the colour un-premultiplied, for a window that is clipped by
+/// an X Shape bounding mask instead of being alpha-blended (no compositor,
+/// or no 32-bit visual). Pixels below `threshold` are outside the shape and
+/// written as `0`. Without un-premultiplying, the anti-aliased edge would
+/// show as a dark fringe.
+pub fn rgba_to_opaque_u32(src: &[u8], dst: &mut [u32], threshold: u8) {
+    for (s, d) in src.chunks_exact(4).zip(dst.iter_mut()) {
+        let a = s[3];
+        *d = if a < threshold.max(1) {
+            0
+        } else {
+            let un = |c: u8| ((c as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8;
+            u32::from_be_bytes([0xFF, un(s[0]), un(s[1]), un(s[2])])
+        };
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,5 +79,17 @@ mod tests {
         assert_eq!((w[0] >> 16) & 0xFF, 5);
         assert_eq!(opacity_byte(2.0), 255);
         assert_eq!(opacity_byte(0.0), 0);
+    }
+
+    #[test]
+    fn opaque_fallback_unpremultiplies_and_drops_faint_pixels() {
+        // Half-alpha premultiplied (100, 50, 0) is straight (200, 100, 0).
+        let src = [100u8, 50, 0, 128, 9, 9, 9, 20, 0, 0, 0, 0];
+        let mut w = [1u32; 3];
+        rgba_to_opaque_u32(&src, &mut w, SHAPE_ALPHA);
+        assert_eq!(w[0] >> 24, 0xFF);
+        assert!(((w[0] >> 16) & 0xFF).abs_diff(199) <= 1);
+        assert_eq!(w[1], 0, "below threshold");
+        assert_eq!(w[2], 0, "fully transparent");
     }
 }

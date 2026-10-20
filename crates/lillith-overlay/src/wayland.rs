@@ -111,6 +111,9 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
     layer.set_keyboard_interactivity(KeyboardInteractivity::OnDemand);
     layer.set_size(w, h);
     layer.set_margin(0, 0, ctl.placement.bottom, ctl.placement.left);
+    // Never declare any part of the surface opaque: the compositor must
+    // blend every pixel with its alpha (transparent background).
+    layer.wl_surface().set_opaque_region(None);
     // Empty input region until the first frame: never block clicks.
     if let Ok(r) = Region::new(&compositor) {
         layer.wl_surface().set_input_region(Some(r.wl_region()));
@@ -162,6 +165,12 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
         left = app.ctl.placement.left,
         bottom = app.ctl.placement.bottom,
         "wayland layer-shell overlay (Overlay layer, anchor bottom|left)"
+    );
+    tracing::info!(
+        backend = "wayland",
+        format = "argb8888",
+        alpha = true,
+        "transparency: premultiplied ARGB8888 wl_shm buffers cleared to 0x00000000, no opaque region (the compositor blends per-pixel alpha)"
     );
     event_loop
         .run(None, &mut app, |_| {})
@@ -335,6 +344,12 @@ impl LayerShellHandler for App {
         // We asked for a fixed size and keep it whatever the compositor says.
         if !self.configured {
             self.configured = true;
+            let argb = self.shm.formats().contains(&wl_shm::Format::Argb8888);
+            if argb {
+                tracing::debug!(formats = ?self.shm.formats(), "wl_shm formats");
+            } else {
+                tracing::warn!(formats = ?self.shm.formats(), "compositor did not advertise wl_shm ARGB8888; transparency may fail");
+            }
             self.pixels_dirty = true;
             self.mask_dirty = true;
             if let Err(e) = self.ctl.stage.render() {

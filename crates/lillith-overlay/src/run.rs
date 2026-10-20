@@ -324,6 +324,14 @@ impl Controller {
 /// Runs the overlay until she is closed. With an auto-detected Wayland
 /// backend, a compositor without layer-shell falls back to X11/XWayland.
 pub fn run(backend: Backend, opts: OverlayOptions) -> Result<(), OverlayError> {
+    tracing::info!(
+        ?backend,
+        forced = opts.forced,
+        session = std::env::var("XDG_SESSION_TYPE").unwrap_or_default(),
+        wayland_display = std::env::var("WAYLAND_DISPLAY").unwrap_or_default(),
+        display = std::env::var("DISPLAY").unwrap_or_default(),
+        "overlay backend selected"
+    );
     match backend {
         Backend::Wayland => match run_wayland(&opts) {
             Err(OverlayError::WaylandUnavailable(why)) if !opts.forced => {

@@ -10,12 +10,22 @@
 //! - Drag: global pointer position from `QueryPointer`, window moved with
 //!   `set_outer_position`; position saved as `(left, bottom)` relative to
 //!   the monitor so it matches the Wayland margins.
-//! - Softbuffer presents premultiplied `0xAARRGGBB`; a compositing manager
-//!   (KWin, picom…) is needed for real transparency, otherwise the
-//!   background shows black.
+//! - Transparency has two modes, picked at startup and re-checked every
+//!   [`CM_RECHECK`]:
+//!   - **composited** (32-bit ARGB visual *and* a compositing manager owns
+//!     `_NET_WM_CM_S<n>`, e.g. KWin or picom): softbuffer presents
+//!     premultiplied `0xAARRGGBB`, transparent pixels are `0x00000000` and
+//!     the compositor blends the soft edges;
+//!   - **shaped** (no compositor running / compositing suspended, or no ARGB
+//!     visual): the X server ignores the alpha byte and would paint every
+//!     transparent pixel black, i.e. the "black box" around her. The X Shape
+//!     **bounding** shape is then set to her silhouette (alpha ≥
+//!     [`SHAPE_ALPHA`]) so nothing outside her is drawn at all, and the
+//!     pixels are presented opaque and un-premultiplied (hard edge, no box).
 
 use crate::drag::{Placement, Release};
-use crate::pixels::rgba_to_argb_u32;
+use crate::input_region::mask_rects;
+use crate::pixels::{rgba_to_argb_u32, rgba_to_opaque_u32, SHAPE_ALPHA};
 use crate::run::{period, Controller, OverlayError, OverlayOptions, KEEP_ON_SCREEN};
 use lillith_core::interaction::Button;
 use lillith_core::state::Key;
@@ -38,12 +48,38 @@ use x11rb::rust_connection::RustConnection;
 pub use softbuffer;
 pub use winit;
 
+/// How often the compositing-manager selection is re-checked (KWin can
+/// suspend/resume compositing at runtime, e.g. Alt+Shift+F12).
+pub const CM_RECHECK: Duration = Duration::from_secs(2);
+
+/// How the window gets a transparent background (see the module docs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlphaMode {
+    /// ARGB visual + compositing manager: true per-pixel alpha.
+    Composited,
+    /// Bounding-shape silhouette: no compositor or no ARGB visual.
+    Shaped,
+}
+
+impl AlphaMode {
+    /// The mode for a window of `depth` bits with/without a compositor.
+    pub fn pick(depth: u8, compositor: bool) -> Self {
+        if depth == 32 && compositor {
+            Self::Composited
+        } else {
+            Self::Shaped
+        }
+    }
+}
+
 /// Our own X connection for Shape/QueryPointer/EWMH on winit's window.
 struct Xc {
     conn: RustConnection,
     root: u32,
     win: u32,
     shape: bool,
+    /// `_NET_WM_CM_S<screen>`: owned while a compositing manager runs.
+    cm_atom: Option<u32>,
 }
 
 impl Xc {
@@ -59,12 +95,79 @@ impl Xc {
         if !shape {
             tracing::warn!("X server has no SHAPE extension: no click-through");
         }
+        let cm_atom = conn
+            .intern_atom(false, format!("_NET_WM_CM_S{screen}").as_bytes())
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .map(|r| r.atom);
         Ok(Self {
             conn,
             root,
             win,
             shape,
+            cm_atom,
         })
+    }
+
+    /// `true` while a compositing manager (KWin, picom…) is running.
+    fn compositor(&self) -> bool {
+        let Some(atom) = self.cm_atom else {
+            return false;
+        };
+        self.conn
+            .get_selection_owner(atom)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .is_some_and(|r| r.owner != x11rb::NONE)
+    }
+
+    /// Bit depth and visual of the window winit created (32 = ARGB).
+    fn depth_visual(&self) -> (u8, u32) {
+        let depth = self
+            .conn
+            .get_geometry(self.win)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .map_or(0, |g| g.depth);
+        let visual = self
+            .conn
+            .get_window_attributes(self.win)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .map_or(0, |a| a.visual);
+        (depth, visual)
+    }
+
+    /// Bounding shape = these rectangles (`None` = the whole window).
+    fn set_bounding(&self, rects: Option<&[crate::input_region::Rect]>) {
+        if !self.shape {
+            return;
+        }
+        match rects {
+            None => {
+                let _ = self.conn.shape_mask(
+                    shape::SO::SET,
+                    shape::SK::BOUNDING,
+                    self.win,
+                    0,
+                    0,
+                    x11rb::NONE,
+                );
+            }
+            Some(rects) => {
+                let rs = to_x_rects(rects);
+                let _ = self.conn.shape_rectangles(
+                    shape::SO::SET,
+                    shape::SK::BOUNDING,
+                    xproto::ClipOrdering::UNSORTED,
+                    self.win,
+                    0,
+                    0,
+                    &rs,
+                );
+            }
+        }
+        let _ = self.conn.flush();
     }
 
     /// Input shape = these rectangles (empty = fully click-through).
@@ -72,15 +175,7 @@ impl Xc {
         if !self.shape {
             return;
         }
-        let rs: Vec<Rectangle> = rects
-            .iter()
-            .map(|r| Rectangle {
-                x: r.x as i16,
-                y: r.y as i16,
-                width: r.w as u16,
-                height: r.h as u16,
-            })
-            .collect();
+        let rs = to_x_rects(rects);
         let _ = self.conn.shape_rectangles(
             shape::SO::SET,
             shape::SK::INPUT,
@@ -142,12 +237,28 @@ impl Xc {
     }
 }
 
+fn to_x_rects(rects: &[crate::input_region::Rect]) -> Vec<Rectangle> {
+    rects
+        .iter()
+        .map(|r| Rectangle {
+            x: r.x as i16,
+            y: r.y as i16,
+            width: r.w as u16,
+            height: r.h as u16,
+        })
+        .collect()
+}
+
 struct Live {
     window: Rc<Window>,
     surface: softbuffer::Surface<Rc<Window>, Rc<Window>>,
     xc: Xc,
     /// Monitor rect (x, y, w, h) her placement is relative to.
     monitor: (i32, i32, u32, u32),
+    /// Window depth (32 = ARGB visual obtained).
+    depth: u8,
+    alpha: AlphaMode,
+    next_cm_check: Instant,
 }
 
 struct App {
@@ -253,6 +364,13 @@ impl App {
             .resize(NonZeroU32::new(w).unwrap(), NonZeroU32::new(h).unwrap())
             .map_err(|e| OverlayError::X11(format!("softbuffer resize: {e}")))?;
         window.set_cursor(CursorIcon::Grab);
+        let (depth, visual) = xc.depth_visual();
+        let compositor = xc.compositor();
+        let alpha = AlphaMode::pick(depth, compositor);
+        if alpha == AlphaMode::Shaped {
+            // Nothing drawn until the first frame's silhouette is known.
+            xc.set_bounding(Some(&[]));
+        }
         tracing::info!(
             size = ?(w, h),
             left = p.left,
@@ -261,12 +379,41 @@ impl App {
             xid,
             "x11 overlay window (always-on-top, input-shape click-through)"
         );
+        log_alpha(depth, visual, compositor, alpha, xc.shape);
         Ok(Live {
             window,
             surface,
             xc,
             monitor,
+            depth,
+            alpha,
+            next_cm_check: Instant::now() + CM_RECHECK,
         })
+    }
+
+    /// Re-checks the compositor and switches between composited / shaped.
+    fn check_compositor(&mut self, now: Instant) {
+        let Some(live) = self.live.as_mut() else {
+            return;
+        };
+        if now < live.next_cm_check {
+            return;
+        }
+        live.next_cm_check = now + CM_RECHECK;
+        let compositor = live.xc.compositor();
+        let alpha = AlphaMode::pick(live.depth, compositor);
+        if alpha != live.alpha {
+            live.alpha = alpha;
+            if alpha == AlphaMode::Composited {
+                live.xc.set_bounding(None);
+            }
+            tracing::info!(
+                compositor,
+                ?alpha,
+                "x11 compositing changed; transparency mode switched"
+            );
+            self.pixels_dirty = true;
+        }
     }
 
     fn draw(&mut self) {
@@ -274,9 +421,29 @@ impl App {
             return;
         };
         if self.pixels_dirty {
+            let canvas = self.ctl.stage.canvas();
+            if live.alpha == AlphaMode::Shaped {
+                // Clip the window to her silhouette before the pixels land,
+                // so no transparent (= black without a compositor) pixel shows.
+                let rects = mask_rects(
+                    canvas.data(),
+                    canvas.width(),
+                    canvas.height(),
+                    SHAPE_ALPHA,
+                    1,
+                );
+                live.xc.set_bounding(Some(&rects));
+            }
             match live.surface.buffer_mut() {
                 Ok(mut buf) => {
-                    rgba_to_argb_u32(self.ctl.stage.canvas().data(), &mut buf, self.ctl.opacity);
+                    match live.alpha {
+                        AlphaMode::Composited => {
+                            rgba_to_argb_u32(canvas.data(), &mut buf, self.ctl.opacity)
+                        }
+                        AlphaMode::Shaped => {
+                            rgba_to_opaque_u32(canvas.data(), &mut buf, SHAPE_ALPHA)
+                        }
+                    }
                     if let Err(e) = buf.present() {
                         tracing::warn!("present: {e}");
                     }
@@ -431,6 +598,7 @@ impl ApplicationHandler for App {
             return;
         }
         let now = Instant::now();
+        self.check_compositor(now);
         if let Some(limit) = self.exit_after {
             if now - self.started >= limit {
                 el.exit();
@@ -462,5 +630,51 @@ impl ApplicationHandler for App {
             }
         }
         el.set_control_flow(ControlFlow::WaitUntil(self.next));
+    }
+}
+
+/// One startup line saying which transparency path runs (for bug reports).
+fn log_alpha(depth: u8, visual: u32, compositor: bool, alpha: AlphaMode, shape: bool) {
+    let argb = depth == 32;
+    match alpha {
+        AlphaMode::Composited => tracing::info!(
+            backend = "x11",
+            argb_visual = argb,
+            depth,
+            visual = format_args!("{visual:#x}"),
+            compositor,
+            ?alpha,
+            "transparency: 32-bit ARGB visual + compositing manager (per-pixel alpha)"
+        ),
+        AlphaMode::Shaped => tracing::warn!(
+            backend = "x11",
+            argb_visual = argb,
+            depth,
+            visual = format_args!("{visual:#x}"),
+            compositor,
+            ?alpha,
+            shape_ext = shape,
+            "transparency: {} -> clipping the window to her silhouette with the X Shape \
+             bounding mask (hard edges). Enable compositing (KWin: Alt+Shift+F12, or \
+             System Settings > Display > Compositor) or use the Wayland backend for soft edges",
+            if argb {
+                "no compositing manager running"
+            } else {
+                "no 32-bit ARGB visual"
+            }
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alpha_mode_needs_argb_and_a_compositor() {
+        assert_eq!(AlphaMode::pick(32, true), AlphaMode::Composited);
+        assert_eq!(AlphaMode::pick(32, false), AlphaMode::Shaped);
+        assert_eq!(AlphaMode::pick(24, true), AlphaMode::Shaped);
+        assert_eq!(AlphaMode::pick(24, false), AlphaMode::Shaped);
     }
 }
