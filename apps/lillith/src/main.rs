@@ -59,7 +59,7 @@ struct Cli {
     /// Config file (default: ~/.config/lillith/config.toml).
     #[arg(long)]
     config: Option<PathBuf>,
-    /// Overlay size multiplier on the 400 px cell (default: config `scale`, else 0.75).
+    /// Overlay size multiplier on the 400 px cell (default: config `scale`, else 0.55 ≈ 220 px).
     #[arg(long)]
     scale: Option<f32>,
     /// Whole-sprite opacity 0..1 (default: config `opacity`).
@@ -212,9 +212,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Default overlay scale when config.toml leaves `scale` at 1.0: a 300 px
+/// Default overlay scale when config.toml leaves `scale` at 1.0: a 220 px
 /// tall window from the 400 px cells.
-const DEFAULT_OVERLAY_SCALE: f32 = 0.75;
+const DEFAULT_OVERLAY_SCALE: f32 = 0.55;
 
 /// Loads `--config` / `~/.config/lillith/config.toml` (defaults on error).
 fn load_config(cli: &Cli) -> (Config, Option<PathBuf>) {
