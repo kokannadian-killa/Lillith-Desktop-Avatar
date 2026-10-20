@@ -11,8 +11,14 @@
 //!   underneath.
 //! - calloop drives a `render_hz` timer; frames are only re-uploaded when
 //!   the stage says something changed.
+//! - Right-click menu: an `xdg_popup` parented to her layer surface
+//!   (`zwlr_layer_surface_v1.get_popup`) at the pointer, showing
+//!   [`crate::menu_popup`], with an explicit popup grab, so the compositor
+//!   closes it on a click anywhere else (`popup_done`) and gives it the
+//!   keyboard (Esc / arrows / Enter).
 
 use crate::drag::{Placement, Release};
+use crate::menu_popup::MenuKey;
 use crate::pixels::rgba_to_argb8888_le;
 use crate::run::{period, Controller, OverlayError, OverlayOptions, KEEP_ON_SCREEN};
 use lillith_core::interaction::Button;
@@ -20,7 +26,7 @@ use lillith_core::state::Key;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState, Region},
     delegate_compositor, delegate_keyboard, delegate_layer, delegate_output, delegate_pointer,
-    delegate_registry, delegate_seat, delegate_shm,
+    delegate_registry, delegate_seat, delegate_shm, delegate_xdg_popup, delegate_xdg_shell,
     output::{OutputHandler, OutputState},
     reexports::{
         calloop::{
@@ -28,6 +34,7 @@ use smithay_client_toolkit::{
             EventLoop, LoopSignal,
         },
         calloop_wayland_source::WaylandSource,
+        protocols::xdg::shell::client::xdg_positioner,
     },
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
@@ -43,6 +50,10 @@ use smithay_client_toolkit::{
         wlr_layer::{
             Anchor, KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface,
             LayerSurfaceConfigure,
+        },
+        xdg::{
+            popup::{Popup, PopupConfigure, PopupHandler},
+            XdgPositioner, XdgShell,
         },
         WaylandSurface,
     },
@@ -61,8 +72,22 @@ pub use wayland_client;
 /// Layer-surface namespace (KWin window rules can match it).
 pub const NAMESPACE: &str = "lillith";
 
+/// The open right-click menu surface.
+struct MenuSurface {
+    popup: Popup,
+    configured: bool,
+}
+
 struct App {
     registry: RegistryState,
+    /// `xdg_wm_base` for the menu popup (`None`: the menu only logs).
+    xdg: Option<XdgShell>,
+    menu: Option<MenuSurface>,
+    seat: Option<wl_seat::WlSeat>,
+    /// Serial + surface-local position of the last button press on her
+    /// (the popup grab needs the serial).
+    last_press: Option<(u32, (f64, f64))>,
+    qh: QueueHandle<App>,
     seat_state: SeatState,
     output_state: OutputState,
     compositor: CompositorState,
@@ -100,6 +125,13 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
     let shm =
         Shm::bind(&globals, &qh).map_err(|e| OverlayError::Wayland(format!("wl_shm: {e}")))?;
 
+    let xdg = match XdgShell::bind(&globals, &qh) {
+        Ok(x) => Some(x),
+        Err(e) => {
+            tracing::warn!("no xdg_wm_base ({e}): right-click menu disabled on Wayland");
+            None
+        }
+    };
     let ctl = Controller::new(opts)?;
     let (w, h) = ctl.stage.size();
 
@@ -140,6 +172,11 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
 
     let mut app = App {
         registry: RegistryState::new(&globals),
+        xdg,
+        menu: None,
+        seat: None,
+        last_press: None,
+        qh: qh.clone(),
         seat_state: SeatState::new(&globals, &qh),
         output_state: OutputState::new(&globals, &qh),
         compositor,
@@ -218,9 +255,119 @@ impl App {
                 self.pending = Some(p);
             }
         }
+        self.apply_resize();
+        self.sync_menu();
         if self.configured && (self.pixels_dirty || self.mask_dirty || self.pending.is_some()) {
             self.draw();
         }
+    }
+
+    /// Resizes the layer surface after a menu Size ▸ pick.
+    fn apply_resize(&mut self) {
+        if !self.ctl.take_resized() {
+            return;
+        }
+        let (w, h) = self.ctl.stage.size();
+        self.layer.set_size(w, h);
+        if let Err(e) = self.ctl.stage.render() {
+            tracing::warn!("render after resize: {e}");
+        }
+        self.pixels_dirty = true;
+        self.mask_dirty = true;
+    }
+
+    /// Shows / hides / redraws the menu popup to match the controller.
+    fn sync_menu(&mut self) {
+        if self.ctl.take_menu_opened() {
+            self.menu = None;
+            match self.open_menu() {
+                Ok(m) => self.menu = Some(m),
+                Err(e) => {
+                    tracing::warn!("menu popup: {e}");
+                    self.ctl.close_menu();
+                }
+            }
+        }
+        if self.ctl.menu().is_none() {
+            if self.menu.take().is_some() {
+                tracing::debug!("menu popup destroyed");
+            }
+            return;
+        }
+        self.draw_menu();
+    }
+
+    fn open_menu(&mut self) -> Result<MenuSurface, String> {
+        let xdg = self.xdg.as_ref().ok_or("no xdg_wm_base")?;
+        let (w, h) = self.ctl.menu().map(|m| m.size()).ok_or("no menu")?;
+        let at = self.last_press.map(|p| p.1).unwrap_or((0.0, 0.0));
+        let pos = XdgPositioner::new(xdg).map_err(|e| e.to_string())?;
+        pos.set_size(w as i32, h as i32);
+        pos.set_anchor_rect(at.0 as i32, at.1 as i32, 1, 1);
+        pos.set_anchor(xdg_positioner::Anchor::BottomRight);
+        pos.set_gravity(xdg_positioner::Gravity::BottomRight);
+        pos.set_constraint_adjustment(
+            xdg_positioner::ConstraintAdjustment::FlipX
+                | xdg_positioner::ConstraintAdjustment::FlipY
+                | xdg_positioner::ConstraintAdjustment::SlideX
+                | xdg_positioner::ConstraintAdjustment::SlideY,
+        );
+        let surface = self.compositor.create_surface(&self.qh);
+        let popup =
+            Popup::from_surface(None, &pos, &self.qh, surface, xdg).map_err(|e| e.to_string())?;
+        self.layer.get_popup(popup.xdg_popup());
+        // Explicit grab: the compositor dismisses it on outside clicks and
+        // gives it keyboard focus.
+        match (&self.seat, self.last_press) {
+            (Some(seat), Some((serial, _))) => popup.xdg_popup().grab(seat, serial),
+            _ => tracing::debug!("menu popup without grab (no press serial)"),
+        }
+        popup.wl_surface().set_opaque_region(None);
+        popup.wl_surface().commit();
+        tracing::info!(at = ?at, size = ?(w, h), "wayland menu popup (xdg_popup on the layer surface)");
+        Ok(MenuSurface {
+            popup,
+            configured: false,
+        })
+    }
+
+    fn draw_menu(&mut self) {
+        let Some(m) = self.menu.as_ref() else {
+            return;
+        };
+        if !m.configured {
+            return;
+        }
+        let surface = m.popup.wl_surface().clone();
+        let region = self.ctl.menu().map(|m| m.region()).unwrap_or_default();
+        let Some(pm) = self.ctl.render_menu() else {
+            return;
+        };
+        let (w, h) = (pm.width(), pm.height());
+        match self
+            .pool
+            .create_buffer(w as i32, h as i32, w as i32 * 4, wl_shm::Format::Argb8888)
+        {
+            Ok((buffer, canvas)) => {
+                rgba_to_argb8888_le(pm.data(), canvas, 255);
+                surface.damage_buffer(0, 0, w as i32, h as i32);
+                if let Err(e) = buffer.attach_to(&surface) {
+                    tracing::warn!("menu attach: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::debug!("menu shm buffer: {e}");
+                self.ctl.invalidate_menu();
+                return;
+            }
+        }
+        if let Ok(r) = Region::new(&self.compositor) {
+            for rc in &region {
+                r.add(rc.x, rc.y, rc.w, rc.h);
+            }
+            surface.set_input_region(Some(r.wl_region()));
+        }
+        surface.commit();
     }
 
     fn output_size(&self) -> Option<(u32, u32)> {
@@ -374,6 +521,7 @@ impl SeatHandler for App {
         seat: wl_seat::WlSeat,
         capability: Capability,
     ) {
+        self.seat = Some(seat.clone());
         if capability == Capability::Pointer && self.pointer.is_none() {
             let cursor_surface = self.compositor.create_surface(qh);
             match self.seat_state.get_pointer_with_theme(
@@ -424,8 +572,37 @@ impl PointerHandler for App {
         events: &[PointerEvent],
     ) {
         for ev in events {
+            let on_menu = self
+                .menu
+                .as_ref()
+                .is_some_and(|m| &ev.surface == m.popup.wl_surface());
+            if on_menu {
+                match ev.kind {
+                    PointerEventKind::Enter { .. } => {
+                        self.set_cursor(CursorIcon::Default);
+                        self.ctl.menu_pointer(Some(ev.position));
+                    }
+                    PointerEventKind::Motion { .. } => {
+                        self.ctl.menu_pointer(Some(ev.position));
+                    }
+                    PointerEventKind::Leave { .. } => {
+                        self.ctl.menu_pointer(None);
+                    }
+                    PointerEventKind::Press { button, .. }
+                        if button == BTN_LEFT || button == BTN_RIGHT =>
+                    {
+                        let hit = self.ctl.menu_click(ev.position);
+                        tracing::debug!(?hit, "menu click");
+                    }
+                    _ => {}
+                }
+                continue;
+            }
             if &ev.surface != self.layer.wl_surface() {
                 continue;
+            }
+            if let PointerEventKind::Press { serial, .. } = ev.kind {
+                self.last_press = Some((serial, ev.position));
             }
             match ev.kind {
                 PointerEventKind::Enter { .. } => {
@@ -471,6 +648,11 @@ impl PointerHandler for App {
                 _ => {}
             }
         }
+        // Open / redraw / close the menu right away (not on the next tick).
+        self.sync_menu();
+        if self.ctl.quit_requested() {
+            self.signal.stop();
+        }
     }
 }
 
@@ -503,6 +685,25 @@ impl KeyboardHandler for App {
         _: u32,
         event: KeyEvent,
     ) {
+        if self.ctl.menu().is_some() {
+            let mk = match event.keysym {
+                Keysym::Escape => Some(MenuKey::Escape),
+                Keysym::Up => Some(MenuKey::Up),
+                Keysym::Down => Some(MenuKey::Down),
+                Keysym::Left => Some(MenuKey::Left),
+                Keysym::Right => Some(MenuKey::Right),
+                Keysym::Return | Keysym::KP_Enter | Keysym::space => Some(MenuKey::Enter),
+                _ => None,
+            };
+            if let Some(k) = mk {
+                let _ = self.ctl.menu_key(k);
+                self.sync_menu();
+                if self.ctl.quit_requested() {
+                    self.signal.stop();
+                }
+                return;
+            }
+        }
         let key = match event.keysym {
             Keysym::Escape => Some(Key::Escape),
             Keysym::Return | Keysym::KP_Enter => Some(Key::Enter),
@@ -541,6 +742,56 @@ impl KeyboardHandler for App {
     }
 }
 
+impl PopupHandler for App {
+    fn configure(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        popup: &Popup,
+        _: PopupConfigure,
+    ) {
+        if let Some(m) = self.menu.as_mut() {
+            if m.popup.wl_surface() == popup.wl_surface() {
+                m.configured = true;
+                self.ctl.invalidate_menu();
+                self.draw_menu();
+            }
+        }
+    }
+
+    fn done(&mut self, _: &Connection, _: &QueueHandle<Self>, popup: &Popup) {
+        // Dismissed by the compositor (click outside the grab).
+        if self
+            .menu
+            .as_ref()
+            .is_some_and(|m| m.popup.wl_surface() == popup.wl_surface())
+        {
+            self.menu = None;
+            self.ctl.close_menu();
+        }
+    }
+}
+
+/// `delegate_xdg_shell!` needs it; we only create popups, never toplevels.
+impl smithay_client_toolkit::shell::xdg::window::WindowHandler for App {
+    fn request_close(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &smithay_client_toolkit::shell::xdg::window::Window,
+    ) {
+    }
+    fn configure(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &smithay_client_toolkit::shell::xdg::window::Window,
+        _: smithay_client_toolkit::shell::xdg::window::WindowConfigure,
+        _: u32,
+    ) {
+    }
+}
+
 impl ShmHandler for App {
     fn shm_state(&mut self) -> &mut Shm {
         &mut self.shm
@@ -555,6 +806,8 @@ delegate_pointer!(App);
 delegate_keyboard!(App);
 delegate_layer!(App);
 delegate_registry!(App);
+delegate_xdg_shell!(App);
+delegate_xdg_popup!(App);
 
 impl ProvidesRegistryState for App {
     fn registry(&mut self) -> &mut RegistryState {
