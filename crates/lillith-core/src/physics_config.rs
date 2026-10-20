@@ -61,9 +61,9 @@ pub struct PhysicsConfig {
     pub gait: Option<Gait>,
 }
 
-/// `[gait]`: angles in DEGREES, + arm = swung forward (toward facing),
-/// + twist = right shoulder forward. Missing keys take the physics-lab v5
-/// values ([`Gait::default`]).
+/// `[gait]`: angles in DEGREES; positive arm = swung forward (toward
+/// facing), positive twist = right shoulder forward. Missing keys take the
+/// physics-lab v5 values ([`Gait::default`]).
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Gait {

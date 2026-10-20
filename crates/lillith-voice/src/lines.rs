@@ -154,10 +154,13 @@ pub const QUIET_EVENTS: &[&str] = &[
     "llm.done",
 ];
 
+/// One table variant: optional mood filter and its candidate lines.
+type MoodLines = (Option<Mood>, &'static [&'static str]);
+
 /// The default [`LineSource`].
 #[derive(Debug, Clone)]
 pub struct DefaultLines {
-    table: BTreeMap<&'static str, Vec<(Option<Mood>, &'static [&'static str])>>,
+    table: BTreeMap<&'static str, Vec<MoodLines>>,
     rng: Rng,
     last: BTreeMap<String, usize>,
 }
