@@ -254,7 +254,7 @@ M0–M3 give the first demoable build: README-SP behaviour without AI. M4–M5 c
 
 ## 6. Open questions
 
-1. **Canonical art style/outfit.** (a) The 1792×1008 sheets and 52 poses: fishnet sleeves, pink/black bikini. (b) The full-body ref and 80 frames: thigh-highs, magenta shorts, cyan tattoos. (c) The alt action sheet: blue bikini, pink-blonde, a different style. Pick one, and decide whether to regenerate the others to match.
+1. ~~**Canonical art style/outfit.** (a) The 1792×1008 sheets and 52 poses: fishnet sleeves, pink/black bikini. (b) The full-body ref and 80 frames: thigh-highs, magenta shorts, cyan tattoos. (c) The alt action sheet: blue bikini, pink-blonde, a different style. Pick one, and decide whether to regenerate the others to match.~~ **Resolved (2026-10-20):** the canonical set is the v2 video-based generated set in `assets/generated/` (Git LFS, 97 clips): Grok Imagine I2V takes of the canonical look with baked bounce and follow-through, and engine springs damped for `baked_motion` clips. The other styles are not regenerated. The old stop-motion v1 set is kept outside the repo. See `docs/VIDEO_PIPELINE.md`.
 2. **Name and branding.** Lillith or Lilith. Use the Demon OS palette (ink #120810, rose #e23d8a, ice #5fd0e6) or the Garuda violet/cyan for the panels?
 3. **Mouse mapping.** Double-click = knife (v01, GH#4) or hacking (README-SP)? Right-click = cleaning or the pose menu (GH#4)?
 4. **LLM backend.** Ollama (README-SP/DK, Modelfile) or `llama-server` (GH#6)? Is the default model `dolphin3.0-llama3.2-3b-q4_k_m.gguf` or `llama3.2:3b`? Is OpenVINO/optimum-intel on the HD 620 worth pursuing (confirmed working in `lillith_os_v2.py`, P2-§2)?
