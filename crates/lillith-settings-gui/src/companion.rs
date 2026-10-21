@@ -35,7 +35,13 @@ pub fn state_from_store(s: &ConfigStore) -> MenuState {
         mood: Mood::default(),
         muted,
         monitor_paused: !s.get_bool(&["monitor", "enabled"]).unwrap_or(true),
-        scale: s.get_f32(&["scale"]).unwrap_or(1.0),
+        // `scale = 1.0` (the default) means the 0.55 default size.
+        scale: lillith_core::config::Config {
+            scale: s.get_f32(&["scale"]).unwrap_or(1.0),
+            ..Default::default()
+        }
+        .overlay_scale(),
+        extras: Default::default(),
     }
 }
 
@@ -113,6 +119,7 @@ mod tests {
             muted: false,
             monitor_paused: false,
             scale: 0.55,
+            extras: Default::default(),
         };
         let menu = build_menu(&st);
         let leaves = menu.leaves();

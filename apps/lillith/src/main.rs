@@ -20,11 +20,12 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use lillith_core::config::{Config, MoveMode, OverlayPos};
+use lillith_core::config::{Config, JiggleMode, MoveMode, OverlayPos};
 use lillith_core::{rules::RuleSet, Event};
 use lillith_overlay::{Backend, OverlayOptions};
 use std::path::PathBuf;
 
+mod chat;
 mod preview;
 
 #[derive(Debug, Parser)]
@@ -119,6 +120,46 @@ enum Cmd {
     /// Headless clip preview: list clips, write contact sheets / frames,
     /// or simulate idle life (M2).
     Preview(preview::PreviewArgs),
+    /// Chat with her in the terminal through the local llama-server
+    /// (`[chat]` in config.toml). One message, or a prompt loop on stdin.
+    Chat {
+        /// Message to send (omit for an interactive loop; `/quit` ends it).
+        message: Option<String>,
+        /// Start llama-server from `[chat.server]` first (and stop it after).
+        #[arg(long)]
+        spawn_server: bool,
+        /// Don't load or save the chat history file.
+        #[arg(long)]
+        no_history: bool,
+        /// Override `[chat] endpoint`, e.g. http://127.0.0.1:8080.
+        #[arg(long)]
+        endpoint: Option<String>,
+    },
+    /// Interim standalone window with the avatar importer + anchor editor
+    /// and the animation / jiggle / chat knobs (`lillith-panel::settings`).
+    /// Her right-click "Settings…" opens `lillith-settings` instead; this
+    /// stays until lillith-settings-gui adopts these pieces.
+    #[command(hide = true)]
+    Settings {
+        /// Open a section: animation | jiggle | chat | window | avatar.
+        #[arg(long)]
+        section: Option<String>,
+        /// Import this image into the avatar anchor editor right away.
+        #[arg(long)]
+        import: Option<PathBuf>,
+    },
+    /// The click-to-chat bubble window (started by the overlay; prints
+    /// chat events as JSON lines on stdout).
+    #[command(hide = true)]
+    ChatBubble {
+        #[arg(long, allow_hyphen_values = true)]
+        x: Option<i32>,
+        #[arg(long, allow_hyphen_values = true)]
+        y: Option<i32>,
+        /// Reply with an in-character "switched off" line (`--no-llm`).
+        #[arg(long)]
+        offline: bool,
+    },
 }
 
 fn parse_backend(s: &str) -> Result<Backend, String> {
@@ -207,14 +248,43 @@ async fn main() -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("panel: {e}"))?;
         }
         Some(Cmd::Preview(args)) => preview::run(args)?,
-        None => run_overlay(&cli, rules.rules.len())?,
+        Some(Cmd::Chat {
+            ref message,
+            spawn_server,
+            no_history,
+            ref endpoint,
+        }) => {
+            let mut cfg = load_config(&cli).0.chat;
+            if let Some(e) = endpoint {
+                cfg.endpoint = e.clone();
+            }
+            chat::cli_chat(cfg, message.clone(), spawn_server, no_history).await?;
+        }
+        Some(Cmd::Settings {
+            ref section,
+            ref import,
+        }) => {
+            let (_, config_path) = load_config(&cli);
+            let config_path = config_path
+                .ok_or_else(|| anyhow::anyhow!("no config path (set --config or $HOME)"))?;
+            lillith_panel::settings::run_settings(lillith_panel::settings::SettingsOptions {
+                avatars: lillith_anim::avatar::AvatarStore::for_config(Some(&config_path)),
+                config_path,
+                section: section.clone(),
+                import: import.clone(),
+                emit: chat::stdout_emit(),
+            })
+            .map_err(|e| anyhow::anyhow!("settings: {e}"))?;
+        }
+        Some(Cmd::ChatBubble { x, y, offline }) => {
+            let cfg = load_config(&cli).0.chat;
+            let pos = x.zip(y);
+            chat::bubble_main(cfg, pos, offline || cli.no_llm)?;
+        }
+        None => run_overlay(&cli, rules.rules.len()).await?,
     }
     Ok(())
 }
-
-/// Default overlay scale when config.toml leaves `scale` at 1.0: a 220 px
-/// tall window from the 400 px cells.
-const DEFAULT_OVERLAY_SCALE: f32 = 0.55;
 
 /// Loads `--config` / `~/.config/lillith/config.toml` (defaults on error).
 fn load_config(cli: &Cli) -> (Config, Option<PathBuf>) {
@@ -229,28 +299,24 @@ fn load_config(cli: &Cli) -> (Config, Option<PathBuf>) {
     (cfg, config_path)
 }
 
-/// Starts the system monitor (unless disabled) and returns the feed the
-/// overlay drains plus the handle that keeps the monitors alive.
+/// Starts the system monitor (unless disabled), sending into `tx`, and
+/// returns the handle that keeps the monitors alive.
 fn start_monitor(
     cli: &Cli,
     cfg: &Config,
-) -> (
-    Option<lillith_overlay::EventFeed>,
-    Option<lillith_sense::MonitorHandle>,
-) {
+    tx: std::sync::mpsc::Sender<Event>,
+) -> Option<lillith_sense::MonitorHandle> {
     if cli.no_monitor || !cfg.monitor.enabled {
         tracing::info!("system monitor off (--no-monitor or [monitor] enabled = false)");
-        return (None, None);
+        return None;
     }
-    let (tx, rx) = std::sync::mpsc::channel::<Event>();
+    let tx = std::sync::Mutex::new(tx);
     let sink: lillith_sense::Sink = std::sync::Arc::new(move |ev| {
-        let _ = tx.send(ev);
+        if let Ok(tx) = tx.lock() {
+            let _ = tx.send(ev);
+        }
     });
-    let handle = lillith_sense::spawn(cfg.monitor.clone(), sink);
-    (
-        Some(std::sync::Arc::new(std::sync::Mutex::new(rx))),
-        Some(handle),
-    )
+    Some(lillith_sense::spawn(cfg.monitor.clone(), sink))
 }
 
 /// Feeds every overlay action batch to the voice (`Say` speaks, `Muted`
@@ -293,7 +359,7 @@ fn start_voice(
     voice
 }
 
-fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
+async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     let backend = Backend::detect_env(cli.backend);
     let (cfg, config_path) = load_config(cli);
     let manifest = preview::resolve(cli.manifest.clone())?;
@@ -301,13 +367,9 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(1);
-    let scale = cli
-        .scale
-        .unwrap_or(if (cfg.scale - 1.0).abs() < f32::EPSILON {
-            DEFAULT_OVERLAY_SCALE
-        } else {
-            cfg.scale
-        });
+    // `scale = 1.0` in config.toml (its default) means "use the 0.55
+    // default" (~220 px tall); --scale and any other config value win.
+    let scale = cli.scale.unwrap_or(cfg.overlay_scale());
     let mut behavior = cfg.behavior.clone();
     if let Some(s) = cfg.pose_cycle_s {
         behavior.pose_cycle_s = s;
@@ -328,13 +390,37 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         opacity: cli.opacity.unwrap_or(cfg.opacity),
         render_hz: cli.fps.unwrap_or(cfg.render_hz),
         animator: lillith_anim::animator::AnimatorConfig {
-            springs: cfg.springs.clone(),
+            springs: if cfg.jiggle() == JiggleMode::Off {
+                lillith_core::config::Springs {
+                    jiggle_gain: 0.0,
+                    chest_bounce_gain: 0.0,
+                    pigtail_sway_gain: 0.0,
+                    ..cfg.springs.clone()
+                }
+            } else {
+                cfg.springs.clone()
+            },
             physics_hz: cfg.physics_hz,
             idle: behavior.idle.clone(),
             seed,
             // Tuned jiggle physics from assets/physics.toml (PhysicsDriver).
             physics_driver: true,
-            prefer_jiggle_variants: cli.baked_jiggle || cfg.baked_jiggle,
+            // [anim]: she isn't in a rush.
+            playback_speed: cfg.anim.playback_speed,
+            talk_speed: cfg.anim.talk_speed,
+            prefer_jiggle_variants: cli.baked_jiggle || cfg.jiggle() == JiggleMode::Baked,
+            smooth_frames: cfg.anim.smooth_frames,
+            crossfade: cfg.anim.crossfade,
+            // [chat] talk_jiggle = false: clean talk clips even in
+            // baked-jiggle mode.
+            no_jiggle_clips: if cfg.chat.talk_jiggle {
+                Vec::new()
+            } else {
+                vec![
+                    lillith_anim::talk::TALK_CLIP.to_string(),
+                    lillith_anim::talk::TALK_CLIP_FLIRTY.to_string(),
+                ]
+            },
             ..Default::default()
         },
         position: if cli.reset_position {
@@ -355,6 +441,13 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         events: None,
         sink: None,
         settings_path: config_path.clone(),
+        chat: None,
+        chat_on_click: cfg.chat.open_on_click,
+        overlay_speech: cfg.chat.enabled && cfg.chat.overlay_speech,
+        always_on_top: cfg.always_on_top,
+        click_through: cfg.click_through,
+        avatars: lillith_anim::avatar::AvatarStore::for_config(config_path.as_deref()),
+        avatar: cfg.avatar.clone(),
     };
     tracing::info!(
         ?backend,
@@ -369,14 +462,42 @@ fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         ?mode,
         "Lillith overlay (M4): click/hover/drag her; keys while focused (G wander/stay, S sleep, Q/Esc quit)"
     );
-    let (feed, _monitor) = start_monitor(cli, &cfg);
+    // One feed for the system monitor and the chat bubble.
+    let (tx, rx) = std::sync::mpsc::channel::<Event>();
+    let monitor = start_monitor(cli, &cfg, tx.clone());
+    let chat_on = cfg.chat.enabled;
+    let launcher = chat_on.then(|| chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm));
+    // Optional self-spawned llama-server (`[chat.server]`), stopped on exit.
+    let server = if chat_on && !cli.no_llm {
+        chat::ServerGuard::start(&cfg.chat).await
+    } else {
+        chat::ServerGuard::default()
+    };
+    if chat_on {
+        tracing::info!(
+            endpoint = %cfg.chat.endpoint,
+            on_click = cfg.chat.open_on_click,
+            offline = cli.no_llm,
+            "chat bubble: click her (or Y/Enter) to talk"
+        );
+    }
     let voice = start_voice(cli, &cfg, config_path.as_deref());
     let opts = OverlayOptions {
-        events: feed,
+        // The chat bubble feeds it too, so there is always a feed.
+        events: Some(std::sync::Arc::new(std::sync::Mutex::new(rx))),
+        chat: launcher.as_ref().map(chat::Launcher::hook),
         // `[voice] mute` also mutes SFX (one flag, like the menu toggle).
         muted: opts.muted || voice.muted(),
         sink: Some(lillith_overlay::SinkHandle::new(VoiceSink(voice))),
         ..opts
     };
-    lillith_overlay::run(backend, opts).map_err(|e| anyhow::anyhow!("overlay: {e}"))
+    drop(tx);
+    // The overlay blocks this thread until she is closed.
+    let r = tokio::task::block_in_place(|| lillith_overlay::run(backend, opts));
+    if let Some(l) = &launcher {
+        l.close();
+    }
+    server.stop();
+    drop(monitor);
+    r.map_err(|e| anyhow::anyhow!("overlay: {e}"))
 }
