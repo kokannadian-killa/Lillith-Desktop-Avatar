@@ -10,7 +10,7 @@ use egui::{
     pos2, vec2, Align2, Color32, CornerRadius, Id, LayerId, Order, Pos2, Rect, ResizeDirection,
     Sense, Stroke, UiBuilder, ViewportCommand,
 };
-use lillith_core::menu::MenuAction;
+use lillith_core::menu::{pick_line, MenuAction, MenuPick};
 use lillith_setup::detect::{self, DetectHandle, DetectOptions};
 use lillith_theme::egui_theme::{self as th, c32};
 use lillith_theme::geom;
@@ -123,17 +123,27 @@ impl SettingsApp {
 
     fn save_all(&mut self) {
         let mut errs = Vec::new();
-        if let Err(e) = self.shared.store.save() {
-            errs.push(e);
+        // Whether anything actually reached config.toml.
+        let mut wrote = false;
+        let staged = self.shared.store.pending() > 0;
+        match self.shared.store.save() {
+            Ok(()) => wrote |= staged,
+            Err(e) => errs.push(e),
         }
         for t in &mut self.tabs.tabs {
             if t.pending() > 0 {
-                if let Err(e) = t.save(&mut self.shared) {
-                    errs.push(format!("{}: {e}", t.title()));
+                match t.save(&mut self.shared) {
+                    Ok(()) => wrote = true,
+                    Err(e) => errs.push(format!("{}: {e}", t.title())),
                 }
             }
         }
         self.shared.store.reload();
+        if wrote {
+            // The overlay reads config.toml at start; this tells it to
+            // re-read it now.
+            self.emit_line(&pick_line(&MenuPick::ReloadConfig));
+        }
         if errs.is_empty() {
             self.shared
                 .toast("sealed ✔ written to config.toml", pal::OK);
@@ -156,15 +166,17 @@ impl SettingsApp {
         if let Some(s) = &mut self.sink {
             s(a);
         }
+        self.emit_line(&action_line(a));
+    }
+
+    /// Prints one wire line on stdout (unless `--quiet`).
+    fn emit_line(&mut self, line: &str) {
         if self.print_actions {
             // Not println!: if the overlay that launched us has quit, the
             // pipe is closed and println! would panic the window.
             use std::io::Write;
             let mut out = std::io::stdout().lock();
-            if writeln!(out, "{}", action_line(a))
-                .and_then(|()| out.flush())
-                .is_err()
-            {
+            if writeln!(out, "{line}").and_then(|()| out.flush()).is_err() {
                 self.print_actions = false;
             }
         }

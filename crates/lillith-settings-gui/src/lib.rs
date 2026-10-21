@@ -63,7 +63,8 @@ pub struct Options {
     pub decorated: bool,
     /// Capture the first settled frame to this PNG, then exit (docs / CI).
     pub screenshot: Option<PathBuf>,
-    /// Print Companion picks on stdout as JSON lines.
+    /// Print Companion picks (and `reload_config` after every successful
+    /// save) on stdout as JSON lines.
     pub print_actions: bool,
 }
 

@@ -12,12 +12,13 @@ USAGE: lillith-settings [CONFIG_PATH] [OPTIONS]
   --step NAME          Chat/Brain wizard step: avatar runtime pick-model persona test-save
   --size WxH           initial window size (default 960x660, min 640x480)
   --decorated          use the window manager's title bar
-  --quiet              don't print Companion picks on stdout
+  --quiet              don't print menu_action lines on stdout
   --screenshot PNG     save the first settled frame to PNG and exit
   -h, --help           this help
 
 Companion picks are saved to config.toml and printed as JSON lines on stdout,
-e.g. {\"menu_action\":\"set_mode\",\"value\":\"wander\"}.";
+e.g. {\"menu_action\":\"set_mode\",\"value\":\"wander\"}; every successful
+save of config.toml prints {\"menu_action\":\"reload_config\"}.";
 
 fn main() {
     let mut opts = Options {

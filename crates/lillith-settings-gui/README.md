@@ -20,7 +20,9 @@ comments kept, floats rounded); `[llm]` goes through
 `lillith_setup::config::save(path, cfg, sync_chat = true)` (temperature rounded
 to 2 places); the Modelfile is written to `[llm] modelfile_path` (default
 `~/.config/lillith/Modelfile.lily`). Companion picks are also printed on
-stdout as JSON lines (`{"menu_action":"set_mode","value":"wander"}`).
+stdout as JSON lines (`{"menu_action":"set_mode","value":"wander"}`), and every
+successful save prints `{"menu_action":"reload_config"}` so the running overlay
+re-reads config.toml live (`--quiet` turns all stdout lines off).
 
 Local-only: only loopback is contacted (detect / ping / test chat via
 `lillith-setup`); llama-server and `ollama create` run only when clicked.
