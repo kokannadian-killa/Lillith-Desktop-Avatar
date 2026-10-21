@@ -23,6 +23,11 @@ use std::sync::Arc;
 /// The settings window's binary (`[[bin]]` of `lillith-settings-gui`).
 pub const SETTINGS_BIN: &str = "lillith-settings";
 
+/// Environment variable the window (and `lillith_anim::atlas::default_manifest_path`)
+/// reads to find the clip manifest; the overlay sets it on the child to the
+/// manifest it loaded so the window's Poses list matches her clips.
+pub const MANIFEST_ENV: &str = "LILLITH_MANIFEST";
+
 /// Most window picks applied per overlay tick.
 pub const MAX_PICKS_PER_TICK: usize = 16;
 
@@ -85,7 +90,12 @@ impl SettingsWindow {
     }
 
     /// Starts `lillith-settings <config>` unless one is already open.
-    pub fn open(&mut self, config: &Path) -> Launch {
+    /// `manifest` is the clip manifest the overlay loaded; when given, the
+    /// child gets it as `$LILLITH_MANIFEST` (made absolute, since the
+    /// window's lookup would otherwise fall back to `./assets/generated`
+    /// or the XDG data dir and may find nothing). `None` leaves the
+    /// child's environment alone.
+    pub fn open(&mut self, config: &Path, manifest: Option<&Path>) -> Launch {
         if self.running() {
             return Launch::AlreadyRunning;
         }
@@ -94,6 +104,10 @@ impl SettingsWindow {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
+        if let Some(m) = manifest {
+            let m = std::path::absolute(m).unwrap_or_else(|_| m.to_path_buf());
+            cmd.env(MANIFEST_ENV, m);
+        }
         {
             // Own process group: a Ctrl-C meant for the overlay's terminal
             // does not close the window, and it outlives the overlay.
@@ -164,6 +178,10 @@ pub(crate) mod tests {
         let release = dir.join("release");
         let mut sh = String::from("#!/bin/sh\n");
         sh.push_str(&format!("echo \"$1\" > '{}'\n", dir.join("arg").display()));
+        sh.push_str(&format!(
+            "printf '%s' \"${{{MANIFEST_ENV}:-<unset>}}\" > '{}'\n",
+            dir.join("manifest_env").display()
+        ));
         for l in lines {
             sh.push_str(&format!("printf '%s\\n' '{l}'\n"));
         }
@@ -203,9 +221,13 @@ pub(crate) mod tests {
         );
         let mut w = SettingsWindow::with_program(&bin);
         let cfg = dir.join("config.toml");
-        assert!(matches!(w.open(&cfg), Launch::Spawned));
+        let manifest = dir.join("gen/manifest.toml");
+        assert!(matches!(w.open(&cfg, Some(&manifest)), Launch::Spawned));
         assert!(w.running());
-        assert!(matches!(w.open(&cfg), Launch::AlreadyRunning));
+        assert!(matches!(
+            w.open(&cfg, Some(&manifest)),
+            Launch::AlreadyRunning
+        ));
         let mut got = Vec::new();
         assert!(wait_for(|| {
             got.extend(w.drain());
@@ -221,9 +243,15 @@ pub(crate) mod tests {
         );
         let arg = std::fs::read_to_string(dir.join("arg")).unwrap();
         assert_eq!(arg.trim(), cfg.display().to_string());
+        let env = std::fs::read_to_string(dir.join("manifest_env")).unwrap();
+        assert_eq!(
+            env,
+            manifest.display().to_string(),
+            "child sees the manifest"
+        );
         std::fs::write(dir.join("release"), "").unwrap();
         assert!(wait_for(|| !w.running()), "exit is noticed");
-        assert!(matches!(w.open(&cfg), Launch::Spawned), "can reopen");
+        assert!(matches!(w.open(&cfg, None), Launch::Spawned), "can reopen");
         assert!(wait_for(|| !w.running()));
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -231,7 +259,7 @@ pub(crate) mod tests {
     #[test]
     fn missing_binary_fails_cleanly() {
         let mut w = SettingsWindow::with_program("/nonexistent/lillith-settings");
-        match w.open(Path::new("/tmp/x.toml")) {
+        match w.open(Path::new("/tmp/x.toml"), None) {
             Launch::Failed(e) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
             other => panic!("{other:?}"),
         }

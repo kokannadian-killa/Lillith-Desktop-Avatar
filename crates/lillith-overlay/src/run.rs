@@ -166,6 +166,9 @@ pub struct Controller {
     settings_path: Option<PathBuf>,
     /// The `lillith-settings` window "Open settings" launches.
     settings: SettingsWindow,
+    /// The manifest the stage was loaded from; handed to the settings
+    /// window as `$LILLITH_MANIFEST` so its Poses list finds the clips.
+    manifest_path: PathBuf,
     chat: Option<ChatHook>,
     chat_on_click: bool,
     click_gate: ClickGate,
@@ -258,6 +261,7 @@ impl Controller {
             fonts: Fonts::preload(),
             settings_path: opts.settings_path.clone(),
             settings: SettingsWindow::default(),
+            manifest_path: opts.manifest.clone(),
             chat: opts.chat.clone(),
             chat_on_click: opts.chat_on_click,
             click_gate: ClickGate::default(),
@@ -779,7 +783,7 @@ impl Controller {
             tracing::warn!("open settings: no config path (no $HOME?)");
             return;
         };
-        match self.settings.open(&path) {
+        match self.settings.open(&path, Some(&self.manifest_path)) {
             Launch::Spawned => tracing::info!(
                 program = %self.settings.program().display(),
                 path = %path.display(),
@@ -1501,6 +1505,15 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             c.brain.muted() && c.brain.mode() == MoveMode::Follow
         }));
         assert_eq!(c.brain.mood(), lillith_core::Mood::Alert);
+        // The window is told where the overlay's own clips live.
+        let env = std::fs::read_to_string(bin_dir.join("manifest_env")).unwrap();
+        assert_eq!(
+            env,
+            std::path::absolute(&c.manifest_path)
+                .unwrap()
+                .display()
+                .to_string()
+        );
         let got = seen.lock().unwrap().clone();
         assert!(got.contains(&Action::MoodChanged(lillith_core::Mood::Alert)));
         assert!(got.contains(&Action::Muted(true)), "voice sees it");
