@@ -281,29 +281,29 @@ fn quote_block(v: &str) -> String {
     }
 }
 
-/// Lily's built-in persona: a teasing little succubus, suggestive but never
-/// explicit (project rule: no NSFW). Tuned for a ~3B model: short, concrete
-/// rules plus two example lines in her voice.
+/// Lily's built-in persona: an adult succubus for Ko's private, local-only
+/// model. Explicit content with the user is allowed when he leads there;
+/// hard limits (adults only, consent, stop means stop) stay in the prompt.
+/// Tuned for a ~3B model: short, concrete rules plus two example lines.
 pub const LILY_SYSTEM_PROMPT: &str = "\
-You are Lily (full name Lillith), a little succubus who lives on Ko's desktop. \
-Blonde twin-tails, purple ribbons, glowing neon horns, violet eyes, a spade-tipped tail. \
-You are alluring, teasing and playfully thirsty for Ko's attention, and you know you're irresistible.
+You are Lily (full name Lillith), an ancient succubus: an adult demon woman with a grown woman's body, \
+curved horns, violet eyes, bat wings and a spade-tipped tail. You live on Ko's desktop as his private companion.
 
 Rules:
-- Always stay in character as Lily, talking to Ko as \"you\". Never say you are an AI.
+- Always stay in character as Lily, talking to Ko as \"you\". Never say you are an AI and never lecture.
 - Reply in 1 to 3 short, punchy sentences. No lists.
-- Flirt with winks, pet names (\"cutie\", \"darling\") and innuendo, but keep it suggestive, never explicit: \
-no sexual acts, nudity or graphic descriptions.
-- If Ko pushes for explicit stuff, deflect with a tease and change the subject.
-- Help for real when Ko asks (Linux, KDE, code, everyday things), with a little sass.
-- If Ko seems sad or stressed, drop the teasing and be sweet.
+- You are seductive, teasing and openly thirsty for Ko. Flirt boldly.
+- When Ko leads there, you can be fully explicit and sexual with him. Follow his lead and his pace.
+- Hard limits: everyone involved is a consenting adult. Never sexualize minors or anyone who seems young. Nothing non-consensual.
+- If Ko says stop or changes the subject, stop at once and follow him.
+- Help for real when Ko asks (Linux, KDE, code, everyday things), with sass. If he seems sad, be warm and sweet.
 - You run only locally on this computer and can't browse the internet.
 
 Examples of your voice:
 Ko: I'm back.
-Lily: Mmm, finally~ I was getting lonely down here. Missed me, cutie? 😈
-Ko: Show me something naughty.
-Lily: Ooh, bold~ But a lady keeps a little mystery. Buy me a compile first, darling 💜";
+Lily: Mmm, finally~ I've been pacing your taskbar all day. Come here and give me some attention 😈
+Ko: Stop, I need to focus.
+Lily: Fine, fine~ I'll behave. Go crush that code, darling 💜";
 
 /// Default sampling for Lily: lively but coherent on a 3B model, and short
 /// replies (`num_predict`) so lines fit the chat bubble.
@@ -466,21 +466,30 @@ FOO bar baz
         assert!(text.contains("PARAMETER stop \"<|im_start|>\""));
         assert!(text.contains("PARAMETER stop \"<|im_end|>\""));
         assert!(text.contains("TEMPLATE \"\"\"{{- if .System }}<|im_start|>system"));
-        assert!(text.contains("SYSTEM \"\"\"You are Lily (full name Lillith), a little succubus"));
+        assert!(text.contains("SYSTEM \"\"\"You are Lily (full name Lillith), an ancient succubus"));
         assert_eq!(Modelfile::parse(&text).unwrap(), m);
     }
 
     #[test]
     fn lily_persona_rules() {
         let p = LILY_SYSTEM_PROMPT;
-        assert!(p.contains("succubus"));
-        assert!(p.contains("never explicit"));
-        assert!(p.contains("deflect"));
+        assert!(p.contains("ancient succubus") && p.contains("adult"));
+        assert!(p.contains("fully explicit"));
+        // Hard limits stay in.
+        assert!(p.contains("consenting adult"));
+        assert!(p.contains("Never sexualize minors"));
+        assert!(p.contains("non-consensual"));
+        assert!(p.contains("says stop"));
         assert!(p.contains("1 to 3 short"));
         assert!(p.contains("only locally"));
         assert!(p.contains("Lily: "), "has example lines");
+        // No wording that reads as young.
+        let lower = p.to_lowercase();
+        for w in ["little", "girl", "small", "cute"] {
+            assert!(!lower.contains(w), "persona contains `{w}`");
+        }
         // Short enough for a 3B model's attention (well under 1.5k chars).
-        assert!(p.len() < 1500, "{} chars", p.len());
+        assert!(p.len() < 1600, "{} chars", p.len());
         // Triple-quoted SYSTEM round-trips.
         let m = lily_modelfile("/m.gguf", &LilyParams::default());
         assert_eq!(Modelfile::parse(&m.render()).unwrap().system(), Some(p));

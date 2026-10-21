@@ -64,10 +64,12 @@ Extra scan dirs: `--dir DIR` (repeatable) or `[llm] scan_paths`.
 ## Lily's persona and sampling
 
 `modelfile::LILY_SYSTEM_PROMPT` (used by `lily_modelfile`, `wizard::modelfile_for` and
-`check::test_chat` when `[llm] system_prompt` is empty): Lily is a teasing little succubus
-on Ko's desktop, alluring and playfully thirsty but **suggestive, never explicit** (project
-rule: no NSFW; she deflects explicit requests in character). Short bullet rules plus two
-example lines, tuned for a ~3B model; replies are 1–3 short sentences.
+`check::test_chat` when `[llm] system_prompt` is empty): Lily is an ancient, adult succubus
+and Ko's private companion on his local-only model: seductive, teasing and thirsty, and
+explicit with the user when he leads there. Hard limits stay in the prompt: consenting
+adults only, never anyone young-seeming, nothing non-consensual, and she stops when told
+to. Short bullet rules plus two example lines, tuned for a ~3B model; replies are 1–3 short
+sentences.
 
 Default Modelfile sampling (`LilyParams::default()`): `temperature 0.85`
 (`LILY_TEMPERATURE`), `top_p 0.9` (`LILY_TOP_P`), `repeat_penalty 1.1`
