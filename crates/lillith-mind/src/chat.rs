@@ -49,6 +49,12 @@ impl ChatSession {
     /// Session for `cfg`. `offline` (= `--no-llm`) answers every message
     /// with [`persona::OFFLINE_LINE`] without touching the network.
     pub fn new(cfg: &ChatConfig, offline: bool) -> Self {
+        if !offline {
+            // Checked here (config read) and again before every request.
+            if let Err(e) = crate::llm::local_base(&cfg.endpoint) {
+                tracing::warn!(endpoint = %cfg.endpoint, "[chat] endpoint refused: {e}");
+            }
+        }
         let client = (!offline).then(|| {
             let mut c = LlmClient::with_timeout(
                 Flavor::OpenAiCompat,
@@ -355,5 +361,26 @@ mod tests {
             "Be brief."
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn non_local_endpoint_is_refused_in_character() {
+        for e in [
+            "http://203.0.113.7:8080",
+            "https://127.0.0.1:8080",
+            "http://localhost.evil.com:8080",
+        ] {
+            let mut s = ChatSession::new(&cfg(e), false);
+            let mut shown = String::new();
+            match s.send("hi", |t| shown.push_str(t)).await {
+                Outcome::Fallback { line, error } => {
+                    assert!(error.contains("non-local"), "{e}: {error}");
+                    assert!(persona::SERVER_ERROR_LINES.contains(&line.as_str()));
+                    assert_eq!(shown, line);
+                }
+                o => panic!("{e}: expected refusal, got {o:?}"),
+            }
+            assert!(s.history().is_empty());
+        }
     }
 }

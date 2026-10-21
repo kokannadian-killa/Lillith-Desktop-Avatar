@@ -19,6 +19,8 @@ pub enum ServerError {
     MissingModel(PathBuf),
     #[error("endpoint {0} is not a local http://host:port URL")]
     BadEndpoint(String),
+    #[error("refusing to start llama-server on a non-local endpoint: {0}")]
+    NotLocal(#[from] lillith_setup::LocalUrlError),
     #[error("spawn: {0}")]
     Spawn(#[from] std::io::Error),
     #[error("llama-server exited early ({0})")]
@@ -85,6 +87,8 @@ impl LlamaServer {
     /// Spawns llama-server for `cfg.server`, listening where `cfg.endpoint`
     /// points. Does not wait for the model to load (see [`Self::wait_ready`]).
     pub fn spawn(cfg: &ChatConfig) -> Result<Self, ServerError> {
+        // Loopback only: never bind the model to a network interface.
+        lillith_setup::local::ensure_local(&cfg.endpoint, 80)?;
         let s = &cfg.server;
         let bin = PathBuf::from(s.binary.trim());
         let model = PathBuf::from(s.model_path.trim());
@@ -255,5 +259,23 @@ mod tests {
             LlamaServer::spawn(&cfg),
             Err(ServerError::MissingBinary(_))
         ));
+    }
+
+    #[test]
+    fn spawn_refuses_non_local_endpoint() {
+        for e in [
+            "http://0.0.0.0:8080",
+            "http://192.168.1.5:8080",
+            "https://127.0.0.1:8080",
+        ] {
+            let cfg = ChatConfig {
+                endpoint: e.into(),
+                ..ChatConfig::default()
+            };
+            assert!(
+                matches!(LlamaServer::spawn(&cfg), Err(ServerError::NotLocal(_))),
+                "{e}"
+            );
+        }
     }
 }

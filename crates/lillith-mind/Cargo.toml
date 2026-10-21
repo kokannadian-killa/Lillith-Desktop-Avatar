@@ -11,6 +11,9 @@ publish.workspace = true
 
 [dependencies]
 lillith-core.workspace = true
+# Shared loopback-only URL validator (LocalUrl): the chat must never talk
+# to anything but this computer.
+lillith-setup.workspace = true
 rusqlite.workspace = true
 regex.workspace = true
 reqwest.workspace = true
