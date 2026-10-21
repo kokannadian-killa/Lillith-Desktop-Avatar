@@ -14,26 +14,51 @@
 //! keys in popup-local px and the [`crate::run::Controller`] applies picks.
 
 use crate::input_region::{mask_rects, Rect};
+use crate::relic::{self, Accent};
 use lillith_core::menu::{build_menu, Check, Menu, MenuAction, MenuItem, MenuState};
-use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Rect as SkRect, Stroke, Transform};
+use lillith_theme::palette as pal;
+use lillith_theme::Rgba;
+use tiny_skia::Pixmap;
 
 /// Popup width in px.
-pub const WIDTH: u32 = 232;
+pub const WIDTH: u32 = 244;
 /// Height of a clickable row.
 pub const ROW_H: u32 = 26;
 /// Height of a separator row.
 pub const SEP_H: u32 = 9;
-/// Padding inside the frame.
-pub const PAD: u32 = 5;
+/// Padding between the panel edge and the rows.
+pub const PAD: u32 = 2;
+/// Black-iron frame band (top and sides).
+pub const FRAME: u32 = 7;
+/// Bottom frame band (carries the carved runes).
+pub const BOTTOM: u32 = 14;
+/// Header plate (sigil + "LILLITH").
+pub const HEADER_H: u32 = 32;
+/// Top of the first row.
+pub const TOP: u32 = FRAME + HEADER_H + PAD;
 /// Label font size (px).
 pub const FONT_PX: f32 = 14.0;
+/// Header title size (px).
+pub const TITLE_PX: f32 = 17.0;
 
-const BG: (u8, u8, u8, u8) = (28, 22, 38, 246);
-const BORDER: (u8, u8, u8, u8) = (176, 108, 255, 255);
-const HOVER: (u8, u8, u8, u8) = (122, 64, 196, 255);
-const TEXT: (u8, u8, u8, u8) = (240, 232, 250, 255);
-const DIM: (u8, u8, u8, u8) = (150, 140, 165, 255);
-const SEP: (u8, u8, u8, u8) = (90, 74, 112, 255);
+/// Which bundled face a label is set in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Face {
+    /// Chakra Petch SemiBold (rows).
+    Label,
+    /// Cinzel Decorative Bold (the relic title).
+    Title,
+}
+
+impl Face {
+    #[cfg_attr(not(feature = "text"), allow(dead_code))]
+    fn px(self) -> f32 {
+        match self {
+            Face::Label => FONT_PX,
+            Face::Title => TITLE_PX,
+        }
+    }
+}
 
 /// One visible row.
 #[derive(Debug, Clone, PartialEq)]
@@ -99,8 +124,9 @@ pub enum MenuHit {
 }
 
 /// Label renderer. With feature `text`, `cosmic-text` over the system fonts
-/// (loaded once on a background thread at startup, so the first right click
-/// does not stall a frame); without it rows are drawn without labels.
+/// plus the bundled relic faces from [`lillith_theme::fonts`] (loaded once
+/// on a background thread at startup, so the first right click does not
+/// stall a frame); without it rows are drawn without labels.
 pub struct Fonts {
     #[cfg(feature = "text")]
     loader: Option<std::thread::JoinHandle<cosmic_text::FontSystem>>,
@@ -114,14 +140,27 @@ impl std::fmt::Debug for Fonts {
     }
 }
 
+#[cfg(feature = "text")]
+fn font_system() -> cosmic_text::FontSystem {
+    let mut fs = cosmic_text::FontSystem::new();
+    let db = fs.db_mut();
+    for bytes in [
+        lillith_theme::fonts::CHAKRA_PETCH_SEMIBOLD,
+        lillith_theme::fonts::CINZEL_DECORATIVE_BOLD,
+    ] {
+        db.load_font_data(bytes.to_vec());
+    }
+    fs
+}
+
 impl Fonts {
-    /// Starts loading the system fonts in the background.
+    /// Starts loading the fonts in the background.
     pub fn preload() -> Self {
         #[cfg(feature = "text")]
         {
             let loader = std::thread::Builder::new()
                 .name("lillith-fonts".into())
-                .spawn(cosmic_text::FontSystem::new)
+                .spawn(font_system)
                 .ok();
             Self {
                 loader,
@@ -141,14 +180,14 @@ impl Fonts {
                 .loader
                 .take()
                 .and_then(|h| h.join().ok())
-                .unwrap_or_else(cosmic_text::FontSystem::new);
+                .unwrap_or_else(font_system);
             self.ready = Some((fs, cosmic_text::SwashCache::new()));
         }
         self.ready.as_mut().expect("fonts loaded")
     }
 
-    /// Draws `text` with its top-left at (x, y), clipped to `max_w`.
-    #[allow(unused_variables)]
+    /// Draws `text` in `face` with its top-left at (x, y), clipped to `max_w`.
+    #[allow(unused_variables, clippy::too_many_arguments)]
     fn draw(
         &mut self,
         pm: &mut Pixmap,
@@ -156,27 +195,32 @@ impl Fonts {
         x: i32,
         y: i32,
         max_w: f32,
-        rgba: (u8, u8, u8, u8),
+        rgba: Rgba,
+        face: Face,
     ) {
         #[cfg(feature = "text")]
         {
-            use cosmic_text::{Attrs, Buffer, Color as TColor, Family, Metrics, Shaping};
+            use cosmic_text::{Attrs, Buffer, Color as TColor, Family, Metrics, Shaping, Weight};
+            let px = face.px();
+            let attrs = match face {
+                Face::Label => Attrs::new()
+                    .family(Family::Name("Chakra Petch"))
+                    .weight(Weight::SEMIBOLD),
+                Face::Title => Attrs::new()
+                    .family(Family::Name("Cinzel Decorative"))
+                    .weight(Weight::BOLD),
+            };
             let (fs, cache) = self.get();
-            let mut buf = Buffer::new(fs, Metrics::new(FONT_PX, FONT_PX * 1.3));
-            buf.set_size(fs, Some(max_w), Some(FONT_PX * 1.6));
-            buf.set_text(
-                fs,
-                text,
-                Attrs::new().family(Family::SansSerif),
-                Shaping::Advanced,
-            );
+            let mut buf = Buffer::new(fs, Metrics::new(px, px * 1.3));
+            buf.set_size(fs, Some(max_w), Some(px * 1.6));
+            buf.set_text(fs, text, attrs, Shaping::Advanced);
             buf.shape_until_scroll(fs, false);
             let (w, h) = (pm.width() as i32, pm.height() as i32);
             let data = pm.data_mut();
             buf.draw(
                 fs,
                 cache,
-                TColor::rgba(rgba.0, rgba.1, rgba.2, rgba.3),
+                TColor::rgba(rgba.r, rgba.g, rgba.b, rgba.a),
                 |gx, gy, _, _, c| {
                     let (px, py) = (x + gx, y + gy);
                     if px < 0 || py < 0 || px >= w || py >= h || gx as f32 > max_w {
@@ -211,13 +255,6 @@ fn blend(data: &mut [u8], i: usize, r: u8, g: u8, b: u8, a: u8) {
     data[i + 3] = ((a32 * 255 + data[i + 3] as u32 * inv + 127) / 255) as u8;
 }
 
-fn paint(c: (u8, u8, u8, u8)) -> Paint<'static> {
-    let mut p = Paint::default();
-    p.set_color(Color::from_rgba8(c.0, c.1, c.2, c.3));
-    p.anti_alias = true;
-    p
-}
-
 /// An open menu: the tree it was built from, the visible rows and the
 /// highlight.
 #[derive(Debug)]
@@ -230,6 +267,10 @@ pub struct MenuPopup {
     size: (u32, u32),
     pixmap: Option<Pixmap>,
     dirty: bool,
+    accent: Accent,
+    /// Static layers (frame, header, rows without hover) per expansion:
+    /// a hover change only copies one and draws the blade + one label.
+    base: Vec<(Option<usize>, Pixmap)>,
 }
 
 impl MenuPopup {
@@ -246,6 +287,8 @@ impl MenuPopup {
             size,
             pixmap: None,
             dirty: true,
+            accent: Accent::LILLITH,
+            base: Vec::new(),
         };
         p.relayout();
         p
@@ -289,12 +332,20 @@ impl MenuPopup {
         self.dirty = true;
     }
 
+    /// Top edge (popup-local px) of row `i`.
+    pub fn row_top(&self, i: usize) -> u32 {
+        TOP + self.rows[..i.min(self.rows.len())]
+            .iter()
+            .map(Row::height)
+            .sum::<u32>()
+    }
+
     /// Row under popup-local (x, y).
     pub fn row_at(&self, x: f64, y: f64) -> Option<usize> {
         if !self.contains(x, y) {
             return None;
         }
-        let mut top = PAD as f64;
+        let mut top = TOP as f64;
         for (i, r) in self.rows.iter().enumerate() {
             let h = r.height() as f64;
             if y >= top && y < top + h {
@@ -410,93 +461,46 @@ impl MenuPopup {
     }
 
     /// Redraws if something changed; returns the pixels when they did.
+    /// The frame and the un-hovered rows come from a cached static layer;
+    /// only the knife highlight and its label are drawn per change.
     pub fn render(&mut self, fonts: &mut Fonts) -> Option<&Pixmap> {
         if !self.dirty && self.pixmap.is_some() {
             return None;
         }
-        let (w, h) = self.size;
-        let mut pm = match self.pixmap.take() {
-            Some(p) => p,
-            None => Pixmap::new(w, h)?,
-        };
-        pm.fill(Color::TRANSPARENT);
-        let ch = self.content_height() as f32;
-        // Frame.
-        if let Some(path) = rounded(0.5, 0.5, w as f32 - 1.0, ch - 1.0, 6.0) {
-            pm.fill_path(
-                &path,
-                &paint(BG),
-                FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
-            let stroke = Stroke {
-                width: 1.0,
-                ..Stroke::default()
-            };
-            pm.stroke_path(&path, &paint(BORDER), &stroke, Transform::identity(), None);
+        let key = self.expanded;
+        if !self.base.iter().any(|(k, _)| *k == key) {
+            let layer = self.paint_base(fonts)?;
+            if self.base.len() >= 8 {
+                self.base.remove(0);
+            }
+            self.base.push((key, layer));
         }
-        let mut top = PAD as f32;
-        for (i, row) in self.rows.iter().enumerate() {
-            let rh = row.height() as f32;
-            if self.hover == Some(i) {
-                if let Some(r) = rounded(3.0, top, w as f32 - 6.0, rh, 4.0) {
-                    pm.fill_path(
-                        &r,
-                        &paint(HOVER),
-                        FillRule::Winding,
-                        Transform::identity(),
-                        None,
-                    );
-                }
-            }
-            match row {
-                Row::Separator => {
-                    if let Some(r) =
-                        SkRect::from_xywh(10.0, top + (SEP_H / 2) as f32, w as f32 - 20.0, 1.0)
-                    {
-                        pm.fill_rect(r, &paint(SEP), Transform::identity(), None);
-                    }
-                }
-                Row::Header { label, open, .. } => {
-                    fonts.draw(&mut pm, label, 14, label_y(top), w as f32 - 50.0, TEXT);
-                    arrow(&mut pm, w as f32 - 18.0, top + rh / 2.0, *open);
-                }
-                Row::Leaf {
-                    label,
-                    check,
-                    enabled,
-                    indent,
-                    ..
-                } => {
-                    let x0 = if *indent { 26.0 } else { 10.0 };
-                    let col = if *enabled { TEXT } else { DIM };
-                    let tx = match check {
-                        Check::None => x0 + 4.0,
-                        Check::Checkbox(on) => {
-                            checkbox(&mut pm, x0, top + rh / 2.0, *on);
-                            x0 + 22.0
-                        }
-                        Check::Radio(on) => {
-                            radio(&mut pm, x0, top + rh / 2.0, *on);
-                            x0 + 22.0
-                        }
-                    };
-                    fonts.draw(
-                        &mut pm,
-                        label,
-                        tx as i32,
-                        label_y(top),
-                        w as f32 - tx - 8.0,
-                        col,
-                    );
-                }
-            }
-            top += rh;
+        let base = &self.base.iter().find(|(k, _)| *k == key)?.1;
+        let mut pm = match self.pixmap.take() {
+            Some(p) if p.width() == base.width() && p.height() == base.height() => p,
+            _ => base.clone(),
+        };
+        pm.data_mut().copy_from_slice(base.data());
+        if let Some(i) = self.hover.filter(|&i| i < self.rows.len()) {
+            let top = self.row_top(i) as f32;
+            draw_row(&mut pm, fonts, &self.rows, i, top, true, &self.accent);
         }
         self.pixmap = Some(pm);
         self.dirty = false;
         self.pixmap.as_ref()
+    }
+
+    /// The static layer for the current expansion.
+    fn paint_base(&self, fonts: &mut Fonts) -> Option<Pixmap> {
+        let (w, h) = self.size;
+        let mut pm = Pixmap::new(w, h)?;
+        paint_chrome(&mut pm, fonts, self.content_height() as f32, &self.accent);
+        let mut top = TOP as f32;
+        for i in 0..self.rows.len() {
+            draw_row(&mut pm, fonts, &self.rows, i, top, false, &self.accent);
+            top += self.rows[i].height() as f32;
+        }
+        Some(pm)
     }
 
     /// The last rendered pixels.
@@ -517,94 +521,156 @@ fn label_y(top: f32) -> i32 {
     (top + (ROW_H as f32 - FONT_PX * 1.3) / 2.0).round() as i32
 }
 
-fn rounded(x: f32, y: f32, w: f32, h: f32, r: f32) -> Option<tiny_skia::Path> {
-    let r = r.min(w / 2.0).min(h / 2.0);
-    let mut pb = PathBuilder::new();
-    pb.move_to(x + r, y);
-    pb.line_to(x + w - r, y);
-    pb.quad_to(x + w, y, x + w, y + r);
-    pb.line_to(x + w, y + h - r);
-    pb.quad_to(x + w, y + h, x + w - r, y + h);
-    pb.line_to(x + r, y + h);
-    pb.quad_to(x, y + h, x, y + h - r);
-    pb.line_to(x, y + r);
-    pb.quad_to(x, y, x + r, y);
-    pb.close();
-    pb.finish()
+/// `true` for the Quit/Close leaf.
+fn is_quit(row: &Row) -> bool {
+    matches!(
+        row,
+        Row::Leaf {
+            action: MenuAction::Quit,
+            ..
+        }
+    )
 }
 
-/// ▸ (closed) / ▾ (open) centred at (cx, cy).
-fn arrow(pm: &mut Pixmap, cx: f32, cy: f32, open: bool) {
-    let mut pb = PathBuilder::new();
-    if open {
-        pb.move_to(cx - 5.0, cy - 3.0);
-        pb.line_to(cx + 5.0, cy - 3.0);
-        pb.line_to(cx, cy + 4.0);
-    } else {
-        pb.move_to(cx - 3.0, cy - 5.0);
-        pb.line_to(cx + 4.0, cy);
-        pb.line_to(cx - 3.0, cy + 5.0);
+/// The iron frame, red terminal panel, blood drips, skulls and the header
+/// (sigil + "LILLITH"), for a frame `ch` px tall.
+fn paint_chrome(pm: &mut Pixmap, fonts: &mut Fonts, ch: f32, accent: &Accent) {
+    let w = pm.width() as f32;
+    let (f, b) = (FRAME as f32, BOTTOM as f32);
+    relic::iron_frame(pm, [0.0, 0.0, w, ch], f, b, 3);
+    let panel = [f, f, w - f, ch - b];
+    relic::terminal_panel(pm, panel);
+    relic::brackets(pm, panel, 6.0, pal::BLOOD_NEON, false, true);
+    // header plate: a darker blood wash fading down, closed by a blade
+    let hb = f + HEADER_H as f32;
+    relic::fill_gradient(
+        pm,
+        &relic::rect_pts([f, f, w - f, hb]),
+        [0.0, f],
+        pal::BLOOD_DEEP.alpha(150),
+        [0.0, hb],
+        pal::BLOOD_DEEP.alpha(20),
+    );
+    relic::serrated_blade(pm, 16.0, w - 14.0, hb - 1.0, false);
+    // blood running over the top edge
+    relic::blood_drips(pm, 5.0, w - 5.0, 0.0, 0x11, 16.0, 15.0);
+    // skull corner ornaments
+    for (x, y, s) in [
+        (13.0, 15.0, 14.0),
+        (w - 13.0, 15.0, 14.0),
+        (12.5, ch - 7.0, 11.0),
+        (w - 12.5, ch - 7.0, 11.0),
+    ] {
+        relic::skull(pm, [x, y], s, pal::BLOOD_NEON);
     }
-    pb.close();
-    if let Some(p) = pb.finish() {
-        pm.fill_path(
-            &p,
-            &paint(TEXT),
-            FillRule::Winding,
-            Transform::identity(),
-            None,
+    // sigil + title
+    let cy = f + HEADER_H as f32 * 0.5;
+    relic::sigil(pm, [38.0, cy + 1.0], 27.0, accent.base, accent.hot);
+    let ty = (cy - TITLE_PX * 0.65).round() as i32;
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        fonts.draw(
+            pm,
+            "LILLITH",
+            58 + dx,
+            ty + dy,
+            140.0,
+            pal::BLOOD_NEON.alpha(90),
+            Face::Title,
         );
     }
+    fonts.draw(pm, "LILLITH", 58, ty, 140.0, pal::TEXT, Face::Title);
+    // three neon runes on the right of the plate
+    let rh = 10.0;
+    let mut x = w - 26.0 - 3.0 * (lillith_theme::geom::rune_width(rh) + 4.0);
+    for idx in [2usize, 15, 21] {
+        relic::neon_rune(pm, idx, [x, cy - rh * 0.5 + 1.0], rh, pal::BLOOD_NEON);
+        x += lillith_theme::geom::rune_width(rh) + 4.0;
+    }
 }
 
-fn checkbox(pm: &mut Pixmap, x: f32, cy: f32, on: bool) {
-    let stroke = Stroke {
-        width: 1.5,
-        ..Stroke::default()
-    };
-    if let Some(r) = rounded(x, cy - 7.0, 14.0, 14.0, 3.0) {
-        if on {
-            pm.fill_path(
-                &r,
-                &paint(BORDER),
-                FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
+/// Draws row `i` (its top at `top`); `hot` = hovered (knife highlight).
+fn draw_row(
+    pm: &mut Pixmap,
+    fonts: &mut Fonts,
+    rows: &[Row],
+    i: usize,
+    top: f32,
+    hot: bool,
+    accent: &Accent,
+) {
+    let w = pm.width() as f32;
+    let row = &rows[i];
+    let rh = row.height() as f32;
+    let cy = top + rh / 2.0;
+    let quit = is_quit(row);
+    if hot && !matches!(row, Row::Separator) {
+        let r = [FRAME as f32 + 2.0, top, w - FRAME as f32 - 4.0, top + rh];
+        if quit {
+            relic::knife_hover(pm, r, pal::BLOOD_DEEP, pal::BLOOD_NEON, pal::BLOOD_SHEEN);
+        } else {
+            relic::knife_hover(pm, r, accent.deep, accent.base, accent.hot);
         }
-        pm.stroke_path(&r, &paint(TEXT), &stroke, Transform::identity(), None);
     }
-    if on {
-        let mut pb = PathBuilder::new();
-        pb.move_to(x + 3.0, cy);
-        pb.line_to(x + 6.0, cy + 3.5);
-        pb.line_to(x + 11.0, cy - 3.5);
-        if let Some(p) = pb.finish() {
-            let s = Stroke {
-                width: 2.0,
-                ..Stroke::default()
+    let text = if hot { Rgba::hex(0xffffff) } else { pal::TEXT };
+    match row {
+        Row::Separator => {
+            // The divider right above Quit is a glowing red blade.
+            let fence = rows.get(i + 1).is_some_and(is_quit);
+            relic::serrated_blade(pm, 16.0, w - 14.0, cy, fence);
+        }
+        Row::Header { label, open, .. } => {
+            fonts.draw(pm, label, 24, label_y(top), w - 60.0, text, Face::Label);
+            relic::arrow(pm, w - 24.0, cy, *open, accent.base, accent.hot);
+        }
+        Row::Leaf {
+            label,
+            check,
+            enabled,
+            indent,
+            ..
+        } => {
+            if *indent && !hot {
+                // carved guide down the open submenu
+                relic::rule(
+                    pm,
+                    [26.5, top],
+                    [26.5, top + rh],
+                    accent.base.alpha(70),
+                    1.0,
+                );
+                relic::rule(pm, [26.5, cy], [31.0, cy], accent.base.alpha(110), 1.0);
+            }
+            let x0 = if *indent { 36.0 } else { 20.0 };
+            let col = if quit {
+                if hot {
+                    text
+                } else {
+                    Rgba::hex(0xff5466)
+                }
+            } else if !*enabled {
+                pal::TEXT_MUTE
+            } else {
+                text
             };
-            pm.stroke_path(&p, &paint(TEXT), &s, Transform::identity(), None);
-        }
-    }
-}
-
-fn radio(pm: &mut Pixmap, x: f32, cy: f32, on: bool) {
-    let stroke = Stroke {
-        width: 1.5,
-        ..Stroke::default()
-    };
-    if let Some(c) = PathBuilder::from_circle(x + 7.0, cy, 6.5) {
-        pm.stroke_path(&c, &paint(TEXT), &stroke, Transform::identity(), None);
-    }
-    if on {
-        if let Some(c) = PathBuilder::from_circle(x + 7.0, cy, 3.5) {
-            pm.fill_path(
-                &c,
-                &paint(BORDER),
-                FillRule::Winding,
-                Transform::identity(),
-                None,
+            let tx = match check {
+                Check::None => x0 + 4.0,
+                Check::Checkbox(on) => {
+                    relic::checkbox(pm, x0, cy, *on, accent.base, accent.hot);
+                    x0 + 22.0
+                }
+                Check::Radio(on) => {
+                    relic::radio(pm, x0, cy, *on, accent.base, accent.hot);
+                    x0 + 22.0
+                }
+            };
+            fonts.draw(
+                pm,
+                label,
+                tx as i32,
+                label_y(top),
+                w - tx - 16.0,
+                col,
+                Face::Label,
             );
         }
     }
@@ -669,7 +735,7 @@ pub fn rows_of(menu: &Menu, expanded: Option<usize>) -> Vec<Row> {
 }
 
 fn content_height(rows: &[Row]) -> u32 {
-    rows.iter().map(Row::height).sum::<u32>() + 2 * PAD
+    TOP + rows.iter().map(Row::height).sum::<u32>() + PAD + BOTTOM
 }
 
 /// Tallest layout over every possible expansion.
@@ -700,7 +766,7 @@ mod tests {
     }
 
     fn row_y(p: &MenuPopup, i: usize) -> f64 {
-        let top: u32 = PAD + p.rows()[..i].iter().map(Row::height).sum::<u32>();
+        let top: u32 = TOP + p.rows()[..i].iter().map(Row::height).sum::<u32>();
         top as f64 + ROW_H as f64 / 2.0
     }
 
@@ -762,7 +828,7 @@ mod tests {
         assert_eq!(p.click(10.0, p.size().1 as f64 + 50.0), MenuHit::Dismiss);
         // Separator does nothing.
         let sep = find(&p, |r| matches!(r, Row::Separator));
-        let top: u32 = PAD + p.rows()[..sep].iter().map(Row::height).sum::<u32>();
+        let top: u32 = TOP + p.rows()[..sep].iter().map(Row::height).sum::<u32>();
         assert_eq!(p.click(20.0, top as f64 + 4.0), MenuHit::None);
     }
 
@@ -827,5 +893,68 @@ mod tests {
         assert!(p.pointer(Some((20.0, row_y(&p, avatar)))));
         assert!(p.render(&mut fonts).is_some());
         assert!(!p.mask(128).is_empty());
+    }
+
+    #[test]
+    fn hit_test_matches_row_geometry() {
+        let mut p = MenuPopup::new(state());
+        let expansions: Vec<Option<usize>> = std::iter::once(None)
+            .chain((0..p.menu.items.len()).map(Some))
+            .collect();
+        for e in expansions {
+            p.expanded = e;
+            p.relayout();
+            let mut top = TOP;
+            for i in 0..p.rows().len() {
+                assert_eq!(p.row_top(i), top);
+                let h = p.rows()[i].height();
+                for x in [0.5, 120.0, WIDTH as f64 - 0.5] {
+                    assert_eq!(p.row_at(x, top as f64), Some(i));
+                    assert_eq!(p.row_at(x, (top + h) as f64 - 0.01), Some(i));
+                }
+                top += h;
+            }
+            // The header plate and the bottom band are on the popup but
+            // hit no row (clicks there do nothing, they don't dismiss).
+            assert_eq!(p.row_at(100.0, (TOP - 1) as f64), None);
+            assert_eq!(p.click(100.0, 3.0), MenuHit::None);
+            assert_eq!(p.row_at(100.0, p.content_height() as f64 - 1.0), None);
+            assert_eq!(p.content_height(), top + PAD + BOTTOM);
+            assert!(p.content_height() <= p.size().1);
+        }
+    }
+
+    #[test]
+    fn hover_redraw_only_touches_the_hovered_row() {
+        let mut fonts = Fonts::preload();
+        let mut p = MenuPopup::new(state());
+        let before = p.render(&mut fonts).expect("first").clone();
+        let quit = p.rows().iter().position(is_quit).expect("quit row");
+        assert!(p.pointer(Some((60.0, row_y(&p, quit)))));
+        let after = p.render(&mut fonts).expect("hover").clone();
+        assert_eq!(p.base.len(), 1, "hover reuses the static layer");
+        let top = p.row_top(quit);
+        let w = before.width();
+        let mut changed = 0;
+        for y in 0..before.height() {
+            let a = &before.data()[(y * w * 4) as usize..((y + 1) * w * 4) as usize];
+            let b = &after.data()[(y * w * 4) as usize..((y + 1) * w * 4) as usize];
+            if a != b {
+                assert!(y >= top && y < top + ROW_H, "row {y} changed");
+                changed += 1;
+            }
+        }
+        assert!(changed > 10);
+        // Leaving restores the static layer exactly.
+        assert!(p.pointer(None));
+        assert_eq!(p.render(&mut fonts).expect("leave").data(), before.data());
+        // Expanding builds (and keeps) a second layer.
+        let mood = find(
+            &p,
+            |r| matches!(r, Row::Header { label, .. } if label == "Mood"),
+        );
+        p.click(20.0, row_y(&p, mood));
+        p.render(&mut fonts);
+        assert_eq!(p.base.len(), 2);
     }
 }

@@ -1949,7 +1949,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         let row_y = |c: &Controller, pred: &dyn Fn(&crate::menu_popup::Row) -> bool| {
             let rows = c.menu().unwrap().rows();
             let i = rows.iter().position(pred).unwrap();
-            let top: u32 = crate::menu_popup::PAD
+            let top: u32 = crate::menu_popup::TOP
                 + rows[..i]
                     .iter()
                     .map(|r| match r {

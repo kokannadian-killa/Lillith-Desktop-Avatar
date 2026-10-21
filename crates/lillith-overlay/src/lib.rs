@@ -31,6 +31,7 @@ pub mod gravity;
 pub mod input_region;
 pub mod menu_popup;
 pub mod pixels;
+pub mod relic;
 pub mod run;
 pub mod settings_window;
 pub mod speech;
