@@ -33,6 +33,7 @@ pub mod settings_window;
 pub mod speech;
 pub mod stage;
 pub mod ui;
+pub mod wl_geom;
 
 #[cfg(feature = "wayland")]
 pub mod wayland;

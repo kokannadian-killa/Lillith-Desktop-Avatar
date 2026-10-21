@@ -541,6 +541,7 @@ impl Controller {
         self.drain_feed();
         self.drain_settings();
         if self.click_gate.poll(self.clock, self.double_click_s) {
+            tracing::info!("single click survived the double-click window: opening chat");
             self.open_chat();
         }
         let anim = self.stage.animator();
@@ -587,6 +588,7 @@ impl Controller {
         };
         // Anchor the chat window to her body, not the speech area above it.
         let pad = self.stage.speech_pad();
+        tracing::info!(x, y, w, h, screen = ?self.screen, "chat bubble requested");
         hook.open(ChatAnchor {
             x,
             y: y + pad as i32,
@@ -663,9 +665,17 @@ impl Controller {
         if !self.stage.hit(hit_at.0, hit_at.1) {
             return false;
         }
+        self.press_trusted(at, local);
+        true
+    }
+
+    /// Left button down where the compositor already decided it is on her
+    /// (Wayland: it only delivers buttons inside the input region, so a
+    /// second hit test against a mask that may be a frame newer or older
+    /// than the committed region can only lose real clicks).
+    pub fn press_trusted(&mut self, at: (f64, f64), local: bool) {
         self.close_menu();
         self.drag.press(at, self.placement, local);
-        true
     }
 
     /// Right/middle button pressed at window-local `hit_at`.
@@ -673,16 +683,27 @@ impl Controller {
         if !self.stage.hit(hit_at.0, hit_at.1) {
             return false;
         }
-        tracing::debug!(?button, "press");
+        self.button_trusted(button);
+        true
+    }
+
+    /// Right/middle button where the compositor already decided it is on
+    /// her (see [`Controller::press_trusted`]).
+    pub fn button_trusted(&mut self, button: Button) {
+        tracing::info!(?button, "button on her");
         let a = self.brain.input(Input::Click(button));
         let menu = a.iter().any(|a| matches!(a, Action::ContextMenu));
         self.apply(a);
         // The brain's rule table may not map right click to the menu: a
         // right click on her always opens it.
-        if button == Button::Right && !menu {
-            self.open_menu();
+        if button == Button::Right {
+            if menu {
+                tracing::info!("right click: ContextMenu fired by the rule table");
+            } else {
+                tracing::info!("right click: ContextMenu (built-in)");
+                self.open_menu();
+            }
         }
-        true
     }
 
     /// Pointer entered/left her silhouette.
@@ -841,7 +862,10 @@ impl Controller {
                 self.persist(p);
             }
             Release::Click => {
-                tracing::debug!("left click");
+                tracing::info!(
+                    chat_on_click = self.chat_on_click && self.chat.is_some(),
+                    "left click on her (click, not drag)"
+                );
                 self.stage.avatar_react(0.9);
                 let a = self.brain.input(Input::Click(Button::Left));
                 self.apply(a);

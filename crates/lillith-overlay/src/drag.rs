@@ -10,7 +10,9 @@
 use lillith_core::config::OverlayPos;
 
 /// Pointer travel (px) before a press becomes a drag instead of a click.
-pub const DRAG_THRESHOLD: f64 = 4.0;
+/// 6 px: a physical touchpad click (finger rolls while the pad clicks)
+/// easily travels 4–5 px, which used to turn every click into a tiny drag.
+pub const DRAG_THRESHOLD: f64 = 6.0;
 
 /// Window placement on one output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -174,6 +176,21 @@ mod tests {
                 bottom: 1016
             }
         );
+    }
+
+    #[test]
+    fn touchpad_jitter_is_still_a_click() {
+        let start = Placement { left: 0, bottom: 0 };
+        let mut d = Drag::default();
+        d.press((100.0, 100.0), start, true);
+        // 5 px of finger roll during a physical touchpad click.
+        assert_eq!(d.motion((104.0, 103.0), start), None);
+        assert!(!d.dragging());
+        assert_eq!(d.release(start), Release::Click);
+        // Right at the threshold it becomes a drag.
+        d.press((100.0, 100.0), start, true);
+        assert!(d.motion((106.0, 100.0), start).is_some());
+        assert!(matches!(d.release(start), Release::Dropped(_)));
     }
 
     #[test]

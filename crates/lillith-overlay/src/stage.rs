@@ -697,6 +697,44 @@ pub(crate) mod tests {
         pm.save_png(path).unwrap();
     }
 
+    /// The real art at the default 0.55 scale (with the speech area, as the
+    /// app runs it): the Wayland buffer is exactly the surface size, its
+    /// border is fully transparent (0x00000000), there is no alpha-0 pixel
+    /// with colour, and the input mask only covers her.
+    #[test]
+    fn bundled_art_buffer_is_transparent_and_surface_sized() {
+        let manifest =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/generated/manifest.toml");
+        let cfg = AnimatorConfig {
+            idle_enabled: false,
+            ..AnimatorConfig::default()
+        };
+        let mut s = Stage::load(&manifest, 0.55, cfg)
+            .unwrap()
+            .with_speech_area()
+            .unwrap();
+        s.render().unwrap();
+        let (w, h) = s.size();
+        assert_eq!((w, h), (s.canvas().width(), s.canvas().height()));
+        let mut buf = vec![0xAAu8; (w * h * 4) as usize];
+        crate::pixels::rgba_to_argb8888_le(s.canvas().data(), &mut buf, 255);
+        let st = crate::wl_geom::alpha_stats(&buf, w, h);
+        assert_eq!(st.corners, [0; 4], "{st:?}");
+        assert_eq!(st.bad_premul, 0, "{st:?}");
+        assert!(st.clear > st.opaque, "mostly transparent: {st:?}");
+        let border_alpha: u32 = (0..w)
+            .flat_map(|x| [(x, 0), (x, h - 1)])
+            .chain((0..h).flat_map(|y| [(0, y), (w - 1, y)]))
+            .map(|(x, y)| buf[((y * w + x) * 4 + 3) as usize] as u32)
+            .sum();
+        assert_eq!(border_alpha, 0, "transparent border");
+        let covered: i64 = s.mask().iter().map(|r| (r.w * r.h) as i64).sum();
+        assert!(
+            covered > 0 && covered < (w * h) as i64 / 2,
+            "mask {covered}"
+        );
+    }
+
     #[test]
     fn renders_mask_and_skips_identical_frames() {
         let (dir, m) = fixture("stage");
