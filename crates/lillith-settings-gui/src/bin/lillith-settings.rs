@@ -9,9 +9,12 @@ USAGE: lillith-settings [CONFIG_PATH] [OPTIONS]
 
   CONFIG_PATH          config.toml to edit (default: ~/.config/lillith/config.toml)
   --tab ID             open a tab: companion motion brain avatar voice about sealed-1..3
-  --step NAME          Chat/Brain wizard step: avatar runtime pick-model persona test-save
+  --step NAME          Chat/Brain wizard step: avatar runtime pick-model persona test-save;
+                       Companion: poses/N opens Poses category N
   --size WxH           initial window size (default 960x660, min 640x480)
   --decorated          use the window manager's title bar
+  --manifest PATH      animation set manifest.toml for Companion ▸ Poses
+                       (default: the overlay's lookup)
   --quiet              don't print menu_action lines on stdout
   --screenshot PNG     save the first settled frame to PNG and exit
   -h, --help           this help
@@ -55,6 +58,7 @@ fn main() {
             }
             "--decorated" => opts.decorated = true,
             "--quiet" => opts.print_actions = false,
+            "--manifest" => opts.manifest = Some(PathBuf::from(val("--manifest"))),
             "--screenshot" => opts.screenshot = Some(PathBuf::from(val("--screenshot"))),
             s if s.starts_with('-') => die(&format!("unknown option {s}\n\n{HELP}")),
             path => opts.config_path = Some(PathBuf::from(path)),

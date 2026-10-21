@@ -21,6 +21,7 @@ file-dialog = ["dep:rfd"]
 
 [dependencies]
 lillith-core.workspace = true
+lillith-anim.workspace = true
 lillith-setup.workspace = true
 lillith-theme = { workspace = true, features = ["egui"] }
 eframe.workspace = true

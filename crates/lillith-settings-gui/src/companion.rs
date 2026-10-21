@@ -15,8 +15,10 @@
 //!   ([`action_line`]) for a host that wants them live.
 
 use crate::store::ConfigStore;
+use lillith_anim::atlas::Manifest;
+use lillith_anim::avatar::AvatarStore;
 use lillith_core::config::{MoveMode, OverlayPos};
-use lillith_core::menu::{MenuAction, MenuState};
+use lillith_core::menu::{MenuAction, MenuExtras, MenuState, PoseGroup};
 use lillith_core::mood::Mood;
 
 /// Menu state as stored in config.toml (mood isn't persisted by the core:
@@ -58,6 +60,14 @@ pub fn apply(state: &mut MenuState, a: MenuAction) {
         // persists it itself.
         MenuAction::SetSize(z) => state.scale = z.scale(),
         MenuAction::ScaleStep(n) => state.scale = stepped(state.scale, n),
+        MenuAction::Avatar(0) => state.extras.avatar = None,
+        MenuAction::Avatar(n) => {
+            if let Some((id, _)) = state.extras.avatars.get(n as usize - 1) {
+                state.extras.avatar = Some(id.clone());
+            }
+        }
+        MenuAction::PosePage(p) => state.extras.page = Some(p),
+        MenuAction::MenuBack => state.extras.page = None,
         _ => {}
     }
 }
@@ -118,9 +128,86 @@ pub fn persist(store: &mut ConfigStore, state: &MenuState, a: MenuAction) -> Per
     }
 }
 
-// The wire format lives in the core so the overlay (which must not pull
-// in egui) parses exactly what this window prints.
-pub use lillith_core::menu::{action_line, mode_key, parse_action_line};
+// The wire format lives in the core (`lillith_core::menu::wire`) so the
+// overlay (which must not pull in egui) parses exactly what this window
+// prints.
+pub use lillith_core::menu::{
+    action_line, action_line_in, mode_key, parse_action_line, parse_pick, pick_line, wire, MenuPick,
+};
+
+/// Poses ▸ categories from the animation set, exactly as the overlay builds
+/// them (`lillith_anim::catalog::grouped` + `label`).
+pub fn poses_of(m: &Manifest) -> Vec<PoseGroup> {
+    lillith_anim::catalog::grouped(m)
+        .into_iter()
+        .map(|(label, clips)| PoseGroup {
+            label: label.to_string(),
+            clips: clips
+                .into_iter()
+                .map(|c| {
+                    let l = lillith_anim::catalog::label(&c);
+                    (c, l)
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+/// Avatar ▸ recents `(id, name)` and the selection, from the avatar store
+/// (`<config dir>/avatar.json`), as the overlay lists them.
+pub fn avatars_of(store: &AvatarStore) -> (Vec<(String, String)>, Option<String>) {
+    let sel = store.selection();
+    let recent = sel
+        .recent
+        .iter()
+        .filter_map(|id| {
+            let name = store
+                .list()
+                .into_iter()
+                .find(|m| &m.id == id)
+                .map(|m| m.name)?;
+            Some((id.clone(), name))
+        })
+        .collect();
+    (recent, sel.selected)
+}
+
+/// The menu extras this window can know on its own: poses from `manifest`,
+/// avatars from the store next to the config. Chat is offered (the overlay
+/// ignores it when it has no chat).
+pub fn extras_for(poses: Vec<PoseGroup>, avatars: Option<&AvatarStore>) -> MenuExtras {
+    let (avatars, avatar) = avatars.map(avatars_of).unwrap_or_default();
+    MenuExtras {
+        poses,
+        page: None,
+        avatars,
+        avatar,
+        chat: true,
+    }
+}
+
+/// What goes on the wire for a pick: poses and recent avatars **by name**
+/// (the overlay's indices are its own), everything else as the action.
+/// `pick_line(&to_pick(a, x)) == action_line_in(a, x)`.
+pub fn to_pick(a: MenuAction, extras: &MenuExtras) -> MenuPick {
+    match a {
+        MenuAction::Pose(n) => match extras.pose_at(n as usize) {
+            Some(clip) => MenuPick::Pose(clip.to_string()),
+            None => MenuPick::Action(a),
+        },
+        MenuAction::Avatar(n) if n > 0 => match extras.avatars.get(n as usize - 1) {
+            Some((id, _)) => MenuPick::Avatar(Some(id.clone())),
+            None => MenuPick::Action(a),
+        },
+        _ => MenuPick::Action(a),
+    }
+}
+
+/// Menu-navigation picks this window handles itself (it shows every Poses
+/// page inline instead of re-opening a popup): never sent.
+pub fn is_local(a: MenuAction) -> bool {
+    matches!(a, MenuAction::PosePage(_) | MenuAction::MenuBack)
+}
 
 #[cfg(test)]
 mod tests {
@@ -146,6 +233,132 @@ mod tests {
                 assert_eq!(parse_action_line(&l), Some(*action), "{l}");
             }
         }
+    }
+
+    fn rich_extras() -> MenuExtras {
+        MenuExtras {
+            poses: vec![
+                PoseGroup {
+                    label: "Flirty / Allure".into(),
+                    clips: (0..16)
+                        .map(|i| (format!("tease_{i}"), format!("Tease {i}")))
+                        .collect(),
+                },
+                PoseGroup {
+                    label: "Gestures".into(),
+                    clips: vec![("wave".into(), "Wave".into())],
+                },
+            ],
+            page: None,
+            avatars: vec![("mug".into(), "Mug".into())],
+            avatar: None,
+            chat: true,
+        }
+    }
+
+    #[test]
+    fn folded_in_items_go_out_as_core_wire_lines() {
+        use lillith_core::menu::MenuPage;
+        let x = rich_extras();
+        let mut st = MenuState {
+            mode: MoveMode::Stay,
+            mood: Mood::Playful,
+            muted: false,
+            monitor_paused: false,
+            scale: 0.55,
+            extras: x.clone(),
+        };
+        // Main menu and a Poses page: every leaf → the core's line.
+        for page in [None, Some(MenuPage { group: 0, page: 1 })] {
+            st.extras.page = page;
+            for (_, it) in build_menu(&st).leaves() {
+                if let MenuItem::Leaf { action, .. } = it {
+                    let line = pick_line(&to_pick(*action, &x));
+                    assert_eq!(line, action_line_in(*action, &x));
+                    assert!(parse_pick(&line).is_some(), "{line}");
+                }
+            }
+        }
+        let line = |a| pick_line(&to_pick(a, &x));
+        let named = |n: &str, v: Option<&str>| match v {
+            Some(v) => format!(r#"{{"menu_action":"{n}","value":"{v}"}}"#),
+            None => format!(r#"{{"menu_action":"{n}"}}"#),
+        };
+        assert_eq!(line(MenuAction::ShowOff), named(wire::SHOW_OFF, None));
+        assert_eq!(line(MenuAction::Chat), named(wire::CHAT, None));
+        assert_eq!(line(MenuAction::Minimize), named(wire::MINIMIZE, None));
+        assert_eq!(line(MenuAction::Pose(16)), named(wire::POSE, Some("wave")));
+        assert_eq!(
+            line(MenuAction::Avatar(1)),
+            named(wire::AVATAR, Some("mug"))
+        );
+        assert_eq!(
+            line(MenuAction::Avatar(0)),
+            named(wire::AVATAR, Some(wire::LILLITH))
+        );
+        assert_eq!(
+            line(MenuAction::ScaleStep(-1)),
+            named(wire::SCALE_STEP, Some("-1"))
+        );
+        assert_eq!(
+            pick_line(&MenuPick::ReloadConfig),
+            named(wire::RELOAD_CONFIG, None)
+        );
+        // Unknown indices fall back to the index lines.
+        assert_eq!(
+            line(MenuAction::Pose(99)),
+            named(wire::POSE_INDEX, Some("99"))
+        );
+        // Paging is handled here, never sent.
+        let p = MenuPage { group: 0, page: 1 };
+        assert!(is_local(MenuAction::PosePage(p)) && is_local(MenuAction::MenuBack));
+        assert!(!is_local(MenuAction::ShowOff));
+        let mut st2 = st.clone();
+        st2.extras.page = None;
+        apply(&mut st2, MenuAction::PosePage(p));
+        assert_eq!(st2.extras.page, Some(p));
+        apply(&mut st2, MenuAction::MenuBack);
+        assert_eq!(st2.extras.page, None);
+        apply(&mut st2, MenuAction::Avatar(1));
+        assert_eq!(st2.extras.avatar.as_deref(), Some("mug"));
+    }
+
+    #[test]
+    fn poses_and_avatars_come_from_the_same_sources_as_the_overlay() {
+        let clip = |n: &str| {
+            format!(
+                "[clips.{n}]\npage = \"{n}.png\"\nfps = 8.0\n[[clips.{n}.frames]]\nx = 0\ny = 0\nw = 400\nh = 400\nanchor = [200, 392]\n"
+            )
+        };
+        let text: String = ["idle", "blow_kiss", "wave"].map(clip).concat();
+        let m = Manifest::from_toml_str(&text).expect("manifest");
+        let g = poses_of(&m);
+        let all: Vec<&str> = g
+            .iter()
+            .flat_map(|g| g.clips.iter().map(|c| c.0.as_str()))
+            .collect();
+        assert!(all.contains(&"blow_kiss") && all.contains(&"wave"), "{g:?}");
+        assert_eq!(g, {
+            let mut want = Vec::new();
+            for (label, clips) in lillith_anim::catalog::grouped(&m) {
+                want.push(PoseGroup {
+                    label: label.into(),
+                    clips: clips
+                        .iter()
+                        .map(|c| (c.clone(), lillith_anim::catalog::label(c)))
+                        .collect(),
+                });
+            }
+            want
+        });
+        let dir =
+            std::env::temp_dir().join(format!("lillith-settings-av-x-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let st = AvatarStore::new(&dir);
+        assert_eq!(extras_for(Vec::new(), Some(&st)).avatars, []);
+        let x = extras_for(Vec::new(), None);
+        assert!(x.chat && x.avatar.is_none());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

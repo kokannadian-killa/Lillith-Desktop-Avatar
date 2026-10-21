@@ -73,6 +73,14 @@ pub fn row<R>(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
     .inner
 }
 
+/// Width [`choice`] takes for `label`.
+pub fn choice_width(ui: &Ui, label: &str) -> f32 {
+    let galley =
+        ui.painter()
+            .layout_no_wrap(label.to_string(), th::bold_font(14.0), c32(pal::TEXT));
+    galley.size().x + 42.0
+}
+
 /// Selectable choice with a rune and the knife highlight when selected or
 /// hovered.
 pub fn choice(ui: &mut Ui, label: &str, selected: bool, rune: usize) -> Response {

@@ -2,7 +2,6 @@
 //! claw resize grips, saving, screenshots.
 
 use crate::chrome;
-use crate::companion::action_line;
 use crate::store::ConfigStore;
 use crate::tabs::{Shared, TabRegistry};
 use crate::{ActionSink, Options};
@@ -10,7 +9,7 @@ use egui::{
     pos2, vec2, Align2, Color32, CornerRadius, Id, LayerId, Order, Pos2, Rect, ResizeDirection,
     Sense, Stroke, UiBuilder, ViewportCommand,
 };
-use lillith_core::menu::{pick_line, MenuAction, MenuPick};
+use lillith_core::menu::{pick_line, MenuPick};
 use lillith_setup::detect::{self, DetectHandle, DetectOptions};
 use lillith_theme::egui_theme::{self as th, c32};
 use lillith_theme::geom;
@@ -76,7 +75,11 @@ impl SettingsApp {
             runtime: None,
             detecting: true,
             want_redetect: false,
-            actions_out: Vec::new(),
+            manifest: opts
+                .manifest
+                .clone()
+                .or_else(lillith_anim::atlas::default_manifest_path),
+            picks_out: Vec::new(),
             toasts: Vec::new(),
             time: 0.0,
             goto_tab: None,
@@ -142,7 +145,7 @@ impl SettingsApp {
         if wrote {
             // The overlay reads config.toml at start; this tells it to
             // re-read it now.
-            self.emit_line(&pick_line(&MenuPick::ReloadConfig));
+            self.emit(&MenuPick::ReloadConfig);
         }
         if errs.is_empty() {
             self.shared
@@ -162,11 +165,11 @@ impl SettingsApp {
             .toast("reverted to what's on disk", pal::TEXT_DIM);
     }
 
-    fn emit(&mut self, a: MenuAction) {
+    fn emit(&mut self, p: &MenuPick) {
         if let Some(s) = &mut self.sink {
-            s(a);
+            s(p);
         }
-        self.emit_line(&action_line(a));
+        self.emit_line(&pick_line(p));
     }
 
     /// Prints one wire line on stdout (unless `--quiet`).
@@ -1120,9 +1123,9 @@ impl eframe::App for SettingsApp {
         if std::mem::take(&mut self.shared.want_save) {
             self.save_all();
         }
-        let actions = std::mem::take(&mut self.shared.actions_out);
-        for a in actions {
-            self.emit(a);
+        let picks = std::mem::take(&mut self.shared.picks_out);
+        for p in &picks {
+            self.emit(p);
         }
         self.screenshot(ctx);
         ctx.request_repaint_after(std::time::Duration::from_millis(80));

@@ -2500,6 +2500,7 @@ dependencies = [
  "eframe",
  "egui",
  "image",
+ "lillith-anim",
  "lillith-core",
  "lillith-setup",
  "lillith-theme",

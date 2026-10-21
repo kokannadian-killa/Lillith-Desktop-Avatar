@@ -9,7 +9,7 @@ pub mod knobs;
 pub mod sealed;
 
 use crate::store::ConfigStore;
-use lillith_core::menu::MenuAction;
+use lillith_core::menu::MenuPick;
 use lillith_setup::detect::RuntimeReport;
 use lillith_theme::palette::Rgba;
 use std::path::PathBuf;
@@ -24,8 +24,10 @@ pub struct Shared {
     pub detecting: bool,
     /// Set by a tab to ask the app to re-run detection.
     pub want_redetect: bool,
-    /// Menu picks to hand to the host (in-process sink / stdout).
-    pub actions_out: Vec<MenuAction>,
+    /// The animation set's `manifest.toml` (Poses), if one was found.
+    pub manifest: Option<PathBuf>,
+    /// Picks to hand to the host (in-process sink / stdout wire lines).
+    pub picks_out: Vec<MenuPick>,
     /// Short status messages `(text, colour, until)`.
     pub toasts: Vec<(String, Rgba, f64)>,
     /// Seconds since start (animations).
@@ -86,7 +88,7 @@ impl TabRegistry {
     /// Companion, Motion, Chat / Brain, Avatar, Voice, About, Sealed I–III.
     pub fn with_defaults(shared: &Shared) -> Self {
         let mut r = Self::default();
-        r.register(Box::new(companion::CompanionTab::new(&shared.store)));
+        r.register(Box::new(companion::CompanionTab::new(shared)));
         r.register(Box::new(knobs::KnobTab::motion()));
         r.register(Box::new(brain::BrainTab::new(&shared.config_path)));
         r.register(Box::new(knobs::KnobTab::avatar()));
@@ -120,7 +122,7 @@ impl TabRegistry {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     pub(crate) fn shared() -> Shared {
@@ -132,7 +134,8 @@ mod tests {
             runtime: None,
             detecting: false,
             want_redetect: false,
-            actions_out: Vec::new(),
+            manifest: None,
+            picks_out: Vec::new(),
             toasts: Vec::new(),
             time: 0.0,
             goto_tab: None,

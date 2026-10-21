@@ -35,8 +35,12 @@ pub mod tabs;
 mod task;
 
 pub use app::SettingsApp;
-pub use companion::{action_line, parse_action_line};
-pub use lillith_core::menu::MenuAction;
+// The wire format is lillith-core's (`lillith_core::menu::wire`): the
+// overlay parses exactly what this window prints.
+pub use lillith_core::menu::{
+    action_line, action_line_in, parse_action_line, parse_pick, pick_line, wire, MenuAction,
+    MenuPick,
+};
 pub use tabs::{SettingsTab, Shared, TabRegistry};
 
 use std::path::PathBuf;
@@ -44,8 +48,8 @@ use std::path::PathBuf;
 /// Hook that adds / unseals tabs before the window opens.
 pub type Customize = Box<dyn FnOnce(&mut TabRegistry)>;
 
-/// Receives Companion picks in-process.
-pub type ActionSink = Box<dyn FnMut(MenuAction) + Send>;
+/// Receives picks in-process (the same [`MenuPick`]s that go out on stdout).
+pub type ActionSink = Box<dyn FnMut(&MenuPick) + Send>;
 
 /// Window options.
 #[derive(Debug, Clone, Default)]
@@ -63,6 +67,9 @@ pub struct Options {
     pub decorated: bool,
     /// Capture the first settled frame to this PNG, then exit (docs / CI).
     pub screenshot: Option<PathBuf>,
+    /// `manifest.toml` of the animation set for Companion ▸ Poses (default:
+    /// `lillith_anim::atlas::default_manifest_path`, the overlay's lookup).
+    pub manifest: Option<PathBuf>,
     /// Print Companion picks (and `reload_config` after every successful
     /// save) on stdout as JSON lines.
     pub print_actions: bool,

@@ -24,6 +24,15 @@ stdout as JSON lines (`{"menu_action":"set_mode","value":"wander"}`), and every
 successful save prints `{"menu_action":"reload_config"}` so the running overlay
 re-reads config.toml live (`--quiet` turns all stdout lines off).
 
+Wire: every stdout line comes from `lillith_core::menu::wire` (`action_line`,
+`action_line_in`, `pick_line`), the same table the overlay parses with
+`parse_pick`. Companion is generated from `build_menu` with real menu extras:
+Poses (from the animation set's manifest via `lillith_anim::catalog`, pages
+shown inline, picks sent by clip name as `pose`), Show off, Chat, Minimize,
+Avatar (recents from the avatar store, sent by id as `avatar`; "Custom image"
+jumps to the Avatar tab), Resize (`set_size` small…xxl, `scale_step` ±1; the
+overlay owns size, nothing is written).
+
 Local-only: only loopback is contacted (detect / ping / test chat via
 `lillith-setup`); llama-server and `ollama create` run only when clicked.
 The file dialog (feature `file-dialog`, default) uses rfd's XDG portal
