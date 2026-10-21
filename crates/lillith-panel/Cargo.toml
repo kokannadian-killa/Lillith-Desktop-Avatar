@@ -12,6 +12,7 @@ publish.workspace = true
 [dependencies]
 lillith-core.workspace = true
 lillith-anim.workspace = true
+lillith-theme = { workspace = true, features = ["egui"] }
 eframe.workspace = true
 tracing.workspace = true
 lillith-mind.workspace = true

@@ -17,6 +17,8 @@
 //! * [`fonts`] — bundled OFL fonts as `&'static [u8]` (licenses in `fonts/`).
 //! * `egui_theme` (feature `egui`) — `install(ctx)` for fonts + Visuals,
 //!   and Painter helpers built on [`geom`].
+//! * `bubble` (feature `egui`) — the chat bubble's plum-glass look
+//!   (colours, Visuals, frame), used by `lillith-panel`.
 //!
 //! The character art is locked canon and is never drawn here: the sigil
 //! is an abstract horns + spade-tail emblem.
@@ -25,6 +27,8 @@ pub mod fonts;
 pub mod geom;
 pub mod palette;
 
+#[cfg(feature = "egui")]
+pub mod bubble;
 #[cfg(feature = "egui")]
 pub mod egui_theme;
 

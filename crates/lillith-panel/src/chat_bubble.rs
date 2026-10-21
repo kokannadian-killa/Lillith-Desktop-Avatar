@@ -75,13 +75,11 @@ struct Bubble {
     emit: Emit,
 }
 
-// Palette (canonical Lillith: pink, magenta, violet, cyan neon on black).
-const BG: egui::Color32 = egui::Color32::from_rgba_premultiplied(24, 14, 34, 242);
-const PINK: egui::Color32 = egui::Color32::from_rgb(255, 105, 180);
-const HER_FILL: egui::Color32 = egui::Color32::from_rgb(255, 196, 226);
-const HER_TEXT: egui::Color32 = egui::Color32::from_rgb(58, 16, 52);
-const ME_FILL: egui::Color32 = egui::Color32::from_rgb(124, 77, 255);
-const CYAN: egui::Color32 = egui::Color32::from_rgb(90, 230, 255);
+// Palette (canonical Lillith: pink, magenta, violet, cyan neon on black):
+// lillith-theme's bubble look.
+use lillith_theme::bubble::{
+    BG, CYAN, HER_TEXT, PINK, PINK_SOFT as HER_FILL, PLUM, VIOLET as ME_FILL,
+};
 
 fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Receiver<Ui>) {
     let (req_tx, req_rx) = channel::<Req>();
@@ -403,7 +401,7 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
         Box::new(move |cc| {
             let mut style = (*cc.egui_ctx.style()).clone();
             style.visuals = egui::Visuals::dark();
-            style.visuals.extreme_bg_color = egui::Color32::from_rgb(40, 22, 54);
+            style.visuals.extreme_bg_color = PLUM;
             style.visuals.selection.bg_fill = PINK;
             style.visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(10);
             style.visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(10);

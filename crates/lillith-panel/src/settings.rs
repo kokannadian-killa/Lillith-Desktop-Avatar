@@ -13,11 +13,11 @@
 //! next bubble.
 
 use crate::chat_bubble::Emit;
-use crate::theme::{self, CYAN, PINK, PINK_SOFT};
 use eframe::egui;
 use lillith_anim::avatar::{import_image, AvatarMeta, AvatarStore, ImportOptions, CANVAS};
 use lillith_anim::avatar_edit::{self, Preview};
 use lillith_core::config::{autostart_dir, set_autostart, Config, JiggleMode, Springs};
+use lillith_theme::bubble::{self as theme, CYAN, PINK, PINK_SOFT};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
 use std::time::{Duration, Instant};
@@ -782,6 +782,7 @@ pub fn run_settings(opts: SettingsOptions) -> eframe::Result<()> {
         options,
         Box::new(move |cc| {
             theme::apply(&cc.egui_ctx);
+            cc.egui_ctx.set_fonts(crate::chat_bubble::bubble_fonts());
             Ok(Box::new(Settings::new(opts)))
         }),
     )

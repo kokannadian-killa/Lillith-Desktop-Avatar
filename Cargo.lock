@@ -2467,6 +2467,7 @@ dependencies = [
  "lillith-anim",
  "lillith-core",
  "lillith-mind",
+ "lillith-theme",
  "serde_json",
  "tiny-skia",
  "tokio",
