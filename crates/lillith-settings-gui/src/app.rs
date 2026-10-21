@@ -145,7 +145,8 @@ impl SettingsApp {
         if wrote {
             // The overlay reads config.toml at start; this tells it to
             // re-read it now.
-            self.emit(&MenuPick::ReloadConfig);
+            // Queued after any picks a tab's save() pushed (e.g. `avatar`).
+            self.shared.picks_out.push(MenuPick::ReloadConfig);
         }
         if errs.is_empty() {
             self.shared

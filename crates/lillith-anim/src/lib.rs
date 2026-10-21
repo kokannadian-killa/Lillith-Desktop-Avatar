@@ -18,6 +18,7 @@
 pub mod animator;
 pub mod atlas;
 pub mod avatar;
+pub mod avatar_edit;
 pub mod catalog;
 pub mod gestures;
 pub mod particles;

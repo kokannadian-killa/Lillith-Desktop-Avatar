@@ -33,6 +33,14 @@ Avatar (recents from the avatar store, sent by id as `avatar`; "Custom image"
 jumps to the Avatar tab), Resize (`set_size` small…xxl, `scale_step` ±1; the
 overlay owns size, nothing is written).
 
+Avatar tab: the gallery (Lillith + stored custom avatars), the local importer
+(background removal, fit to the 400×400 stage) and the anchor editor with a
+live animated preview, all on `lillith_anim::avatar` + `lillith_anim::avatar_edit`
+(the same non-UI code `lillith-panel::settings` uses). "Save & use" (or the
+footer Save while an import is open) stores it under `<config dir>/avatars`,
+selects it in `avatar.json` and prints `{"menu_action":"avatar","value":"<id>"}`
+then `{"menu_action":"reload_config"}`.
+
 Local-only: only loopback is contacted (detect / ping / test chat via
 `lillith-setup`); llama-server and `ollama create` run only when clicked.
 The file dialog (feature `file-dialog`, default) uses rfd's XDG portal

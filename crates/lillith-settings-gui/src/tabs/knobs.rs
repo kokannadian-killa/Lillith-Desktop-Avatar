@@ -151,6 +151,14 @@ impl KnobTab {
                     ],
                 },
                 Group {
+                    title: "CUSTOM_AVATAR · MOTION",
+                    tag: "[avatar]",
+                    knobs: vec![
+                        f(&["avatar", "pace"], "Pace", "Breathing / sway / hop speed of a custom image", 0.3, 1.5, 2, "×", |c| c.avatar.pace),
+                        f(&["avatar", "render_hz"], "Redraw rate", "Custom image redraw rate", 30.0, 120.0, 0, "Hz", |c| c.avatar.render_hz),
+                    ],
+                },
+                Group {
                     title: "POSITION",
                     tag: "[overlay]",
                     knobs: vec![

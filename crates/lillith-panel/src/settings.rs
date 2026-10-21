@@ -15,10 +15,8 @@
 use crate::chat_bubble::Emit;
 use crate::theme::{self, CYAN, PINK, PINK_SOFT};
 use eframe::egui;
-use lillith_anim::avatar::{
-    alpha_bbox, draw_avatar, import_image, Avatar, AvatarMeta, AvatarMotion, AvatarStore,
-    ImportOptions, MotionInputs, CANVAS,
-};
+use lillith_anim::avatar::{import_image, AvatarMeta, AvatarStore, ImportOptions, CANVAS};
+use lillith_anim::avatar_edit::{self, Preview};
 use lillith_core::config::{autostart_dir, set_autostart, Config, JiggleMode, Springs};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
@@ -88,27 +86,21 @@ pub struct Editor {
     pub new: bool,
     tex: Option<egui::TextureHandle>,
     dragging: Option<&'static str>,
-    motion: AvatarMotion,
-    avatar: Option<Avatar>,
+    preview: Preview,
     preview_tex: Option<egui::TextureHandle>,
     last: Instant,
 }
 
 impl Editor {
     pub fn new(img: image::RgbaImage, meta: AvatarMeta, new: bool) -> Self {
-        let avatar = lillith_anim::render::pixmap_from_rgba(&img).map(|image| Avatar {
-            meta: meta.clone(),
-            image,
-            path: PathBuf::new(),
-        });
+        let preview = Preview::new(&img, &meta);
         Self {
             img,
             meta,
             new,
             tex: None,
             dragging: None,
-            motion: AvatarMotion::default(),
-            avatar,
+            preview,
             preview_tex: None,
             last: Instant::now(),
         }
@@ -199,20 +191,7 @@ impl Settings {
         };
         match import_image(&path, opts) {
             Ok((img, meta)) => {
-                self.status = format!(
-                    "imported {}: {}{}",
-                    meta.name,
-                    if meta.already_transparent {
-                        "kept its transparency"
-                    } else {
-                        "background removed"
-                    },
-                    if meta.character {
-                        ", looks like a character"
-                    } else {
-                        ", object (jiggle off)"
-                    }
-                );
+                self.status = avatar_edit::import_summary(&meta);
                 self.editor = Some(Editor::new(img, meta, true));
             }
             Err(e) => self.status = format!("import failed: {e}"),
@@ -235,15 +214,7 @@ impl Settings {
         let (Some(st), Some(ed)) = (self.store.clone(), self.editor.as_mut()) else {
             return;
         };
-        let res = if ed.new {
-            st.save(&ed.img, &ed.meta).inspect(|id| {
-                ed.meta.id = id.clone();
-                ed.new = false;
-            })
-        } else {
-            st.save_meta(&ed.meta).map(|_| ed.meta.id.clone())
-        };
-        match res {
+        match avatar_edit::commit(&st, &ed.img, &mut ed.meta, &mut ed.new) {
             Ok(id) => {
                 self.refresh_avatars();
                 self.select_avatar(Some(id));
@@ -464,7 +435,7 @@ impl Settings {
             return Some(t.clone());
         }
         let st = self.store.as_ref()?;
-        let path = st.dir.join("avatars").join(&m.id).join(&m.image);
+        let path = avatar_edit::image_path(st, m);
         let img = image::open(path).ok()?.thumbnail(64, 64).to_rgba8();
         let ci = egui::ColorImage::from_rgba_unmultiplied(
             [img.width() as usize, img.height() as usize],
@@ -635,40 +606,18 @@ impl Settings {
                 [egui::pos2(r.min.x, base_y), egui::pos2(r.max.x, base_y)],
                 egui::Stroke::new(1.0, CYAN),
             );
-            let colors = [
-                egui::Color32::from_rgb(255, 105, 180),
-                egui::Color32::from_rgb(255, 80, 80),
-                egui::Color32::from_rgb(255, 196, 80),
-                egui::Color32::from_rgb(124, 77, 255),
-                egui::Color32::from_rgb(90, 230, 255),
-                egui::Color32::from_rgb(90, 230, 255),
-            ];
+            let colors =
+                avatar_edit::ANCHOR_COLORS.map(|[r, g, b]| egui::Color32::from_rgb(r, g, b));
             let to_screen = |p: (f32, f32)| r.min + egui::vec2(p.0 * k, p.1 * k);
+            let to_canvas = |p: egui::Pos2| ((p.x - r.min.x) / k, (p.y - r.min.y) / k);
             if resp.drag_started() {
                 if let Some(pos) = resp.interact_pointer_pos() {
-                    ed.dragging = ed
-                        .meta
-                        .anchors
-                        .named()
-                        .iter()
-                        .map(|(n, p)| (*n, to_screen(*p).distance(pos)))
-                        .filter(|(_, d)| *d < 14.0)
-                        .min_by(|a, b| a.1.total_cmp(&b.1))
-                        .map(|(n, _)| n);
+                    ed.dragging = avatar_edit::nearest_anchor(&ed.meta, to_canvas(pos), 14.0 / k);
                 }
             }
             if resp.dragged() {
                 if let (Some(n), Some(pos)) = (ed.dragging, resp.interact_pointer_pos()) {
-                    let v = ((pos - r.min) / k).clamp(
-                        egui::vec2(0.0, 0.0),
-                        egui::vec2(CANVAS as f32, CANVAS as f32),
-                    );
-                    if let Some(p) = ed.meta.anchors.get_mut(n) {
-                        *p = (v.x, v.y);
-                    }
-                    if let Some(av) = &mut ed.avatar {
-                        av.meta.anchors = ed.meta.anchors;
-                    }
+                    avatar_edit::move_anchor(&mut ed.meta, n, to_canvas(pos));
                 }
             }
             if resp.drag_stopped() {
@@ -691,34 +640,10 @@ impl Settings {
                 let now = Instant::now();
                 let dt = (now - ed.last).as_secs_f32().min(0.1);
                 ed.last = now;
-                let phase = START.elapsed().as_secs_f32() * std::f32::consts::TAU * 0.45;
-                if let Some(av) = &mut ed.avatar {
-                    av.meta.character = ed.meta.character;
-                    av.meta.jiggle_strength = ed.meta.jiggle_strength;
-                    let pose = ed.motion.tick(
-                        dt,
-                        MotionInputs {
-                            hovered: true,
-                            ..Default::default()
-                        },
-                    );
-                    // A slow synthetic chest/hair sway so the warp is visible.
-                    let t = lillith_core::spring::Transform {
-                        chest_offset: 2.5 * (phase * 2.0).sin(),
-                        pigtail_offset: 4.0 * phase.sin(),
-                        ..lillith_core::spring::Transform::IDENTITY
-                    };
-                    let mut c = tiny_skia::Pixmap::new(200, 200).expect("preview canvas");
-                    draw_avatar(
-                        &mut c,
-                        av,
-                        &pose,
-                        &t,
-                        ed.meta.jiggle_strength,
-                        (100.0, 196.0),
-                        false,
-                        0.5,
-                    );
+                if let Some(c) = ed
+                    .preview
+                    .render(&ed.meta, dt, START.elapsed().as_secs_f32(), 200)
+                {
                     let ci = egui::ColorImage::from_rgba_premultiplied([200, 200], c.data());
                     match &mut ed.preview_tex {
                         Some(t) => t.set(ci, egui::TextureOptions::LINEAR),
@@ -763,15 +688,7 @@ impl Settings {
                     }
                 });
                 if ui.button("Re-guess anchors").clicked() {
-                    let (a, character) = lillith_anim::avatar::estimate_anchors(&ed.img);
-                    ed.meta.anchors = a;
-                    ed.meta.character = character;
-                    if let Some(b) = alpha_bbox(&ed.img) {
-                        ed.meta.bbox = b;
-                    }
-                    if let Some(av) = &mut ed.avatar {
-                        av.meta.anchors = a;
-                    }
+                    avatar_edit::reguess_anchors(&ed.img, &mut ed.meta);
                 }
             });
         });

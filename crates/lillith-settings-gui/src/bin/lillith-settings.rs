@@ -10,7 +10,8 @@ USAGE: lillith-settings [CONFIG_PATH] [OPTIONS]
   CONFIG_PATH          config.toml to edit (default: ~/.config/lillith/config.toml)
   --tab ID             open a tab: companion motion brain avatar voice about sealed-1..3
   --step NAME          Chat/Brain wizard step: avatar runtime pick-model persona test-save;
-                       Companion: poses/N opens Poses category N
+                       Companion: poses/N opens Poses category N;
+                       Avatar: import:PATH imports an image, anchors:ID edits one
   --size WxH           initial window size (default 960x660, min 640x480)
   --decorated          use the window manager's title bar
   --manifest PATH      animation set manifest.toml for Companion ▸ Poses

@@ -3,6 +3,7 @@
 //! ([`TabRegistry::unseal`]) or are pushed with [`TabRegistry::register`].
 
 pub mod about;
+pub mod avatar;
 pub mod brain;
 pub mod companion;
 pub mod knobs;
@@ -91,7 +92,7 @@ impl TabRegistry {
         r.register(Box::new(companion::CompanionTab::new(shared)));
         r.register(Box::new(knobs::KnobTab::motion()));
         r.register(Box::new(brain::BrainTab::new(&shared.config_path)));
-        r.register(Box::new(knobs::KnobTab::avatar()));
+        r.register(Box::new(avatar::AvatarTab::new(&shared.config_path)));
         r.register(Box::new(knobs::KnobTab::voice()));
         r.register(Box::new(about::AboutTab));
         for n in 1..=3 {
