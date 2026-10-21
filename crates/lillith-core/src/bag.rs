@@ -97,11 +97,7 @@ impl ShuffleBag {
             // Swap in the first different entry from the bag (refilling if
             // the rest of the bag is all this entry).
             match self.bag.iter().rposition(|&k| k != i) {
-                Some(p) => {
-                    let other = self.bag[p];
-                    self.bag[p] = i;
-                    i = other;
-                }
+                Some(p) => std::mem::swap(&mut self.bag[p], &mut i),
                 None => {
                     self.refill(rng);
                     if let Some(p) = self.bag.iter().rposition(|&k| k != i) {
