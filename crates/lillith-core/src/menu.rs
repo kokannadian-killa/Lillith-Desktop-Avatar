@@ -158,9 +158,9 @@ pub enum MenuAction {
     Minimize,
     /// Avatar `0` = Lillith, `n` = [`MenuExtras::avatars`]`[n - 1]`.
     Avatar(u8),
-    /// Import a custom image (opens Settings ▸ Avatar).
+    /// Import a custom image (opens the `lillith-settings` window).
     ImportAvatar,
-    /// The Settings window.
+    /// The `lillith-settings` window (xdg-open config.toml fallback).
     OpenSettings,
     ResetPosition,
     About,
