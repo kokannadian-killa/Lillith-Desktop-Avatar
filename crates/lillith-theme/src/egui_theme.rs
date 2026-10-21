@@ -907,6 +907,77 @@ pub fn vignette(p: &Painter, r: Rect, depth: f32) {
     );
 }
 
+/// The hellforge emblem (anvil, flame, rune ring) centred at `c`, `s` px
+/// across: crimson/ember on near-black with a faint neon edge. `flicker`
+/// (0..=1) breathes the flame and the ring glow.
+pub fn hellforge_emblem(p: &Painter, c: Pos2, s: f32, flicker: f32) {
+    let h = geom::hellforge([c.x, c.y], s);
+    let f = flicker.clamp(0.0, 1.0);
+    // Disc: near-black with a blood rim and a faint neon edge.
+    p.circle_filled(c, h.ring_r + s * 0.03, c32(pal::VOID));
+    glow_blob(
+        p,
+        c + egui::vec2(0.0, -s * 0.08),
+        s * 0.42,
+        pal::EMBER,
+        0.55 + 0.35 * f,
+    );
+    let ring: Vec<Pt> = (0..48)
+        .map(|i| {
+            let a = std::f32::consts::TAU * i as f32 / 48.0;
+            [c.x + a.cos() * h.ring_r, c.y + a.sin() * h.ring_r]
+        })
+        .collect();
+    neon_line(
+        p,
+        &ring,
+        pal::BLOOD_NEON,
+        (s * 0.022).max(1.0),
+        s * 0.05 * (0.7 + 0.3 * f),
+        true,
+    );
+    p.circle_stroke(
+        c,
+        h.ring_r - s * 0.14,
+        Stroke::new((s * 0.01).max(0.6), c32(pal::BLOOD_DEEP)),
+    );
+    for (idx, o, rh) in &h.runes {
+        for (a, b) in geom::rune_segments(*idx, *o, *rh) {
+            p.line_segment(
+                [p2(a), p2(b)],
+                Stroke::new(
+                    (s * 0.014).max(0.7),
+                    c32(pal::EMBER.lerp(pal::CRIMSON, 0.5)),
+                ),
+            );
+        }
+    }
+    // Flame: outer ember to hot core.
+    let cols = [pal::CRIMSON, pal::EMBER, pal::EMBER, pal::EMBER_CORE];
+    for (i, poly) in h.flames.iter().enumerate() {
+        let col = cols[i.min(cols.len() - 1)];
+        let a = if i == 0 { 0.85 + 0.15 * f } else { 1.0 };
+        fill_convex(p, poly, c32(col.fade(a)));
+    }
+    // Anvil: black iron with a blood edge and a white-hot struck face.
+    for poly in &h.anvil {
+        fill_convex(p, poly, c32(pal::IRON));
+        let pts: Vec<Pt> = poly.clone();
+        p.add(Shape::closed_line(
+            pts.iter().map(|q| p2(*q)).collect(),
+            Stroke::new((s * 0.012).max(0.6), c32(pal::BLOOD)),
+        ));
+    }
+    neon_line(
+        p,
+        &h.face_edge,
+        pal::EMBER_CORE,
+        (s * 0.018).max(0.8),
+        s * 0.03,
+        false,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

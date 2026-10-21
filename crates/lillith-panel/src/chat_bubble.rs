@@ -1,7 +1,9 @@
 //! The small chat bubble that opens when you click Lillith.
 //!
 //! An undecorated, always-on-top, transparent `eframe` window (300×380)
-//! placed beside her head. It shows the conversation as cute bubbles, has a
+//! placed beside her head, in the DemonOS hellforge look (near-black glass,
+//! crimson frame, ember accents, a vector hellforge emblem in the corner
+//! where a heart emoji used to be). It shows the conversation, has a
 //! one-line input (Enter sends), streams her reply as it arrives, and closes
 //! on `Esc` or as soon as it loses focus (a click anywhere outside it).
 //!
@@ -44,6 +46,10 @@ pub struct BubbleOptions {
     /// History file (`None` = in-memory only).
     pub history: Option<PathBuf>,
     pub emit: Emit,
+    /// Save the first settled frame to this PNG and exit (previews).
+    pub screenshot: Option<PathBuf>,
+    /// Show a canned sample conversation instead of the history (previews).
+    pub demo: bool,
 }
 
 enum Req {
@@ -73,13 +79,40 @@ struct Bubble {
     closing: bool,
     asked_focus: bool,
     emit: Emit,
+    screenshot: Option<PathBuf>,
+    shot_requested: bool,
 }
 
-// Palette (canonical Lillith: pink, magenta, violet, cyan neon on black):
-// lillith-theme's bubble look.
-use lillith_theme::bubble::{
-    BG, CYAN, HER_TEXT, PINK, PINK_SOFT as HER_FILL, PLUM, VIOLET as ME_FILL,
-};
+// lillith-theme's hellforge bubble look (DemonOS palette).
+use lillith_theme::bubble::{self as look, BG, CRIMSON, EMBER, HER_TEXT, ME_TEXT, NEON};
+use lillith_theme::egui_theme as th;
+use lillith_theme::palette as pal;
+
+/// Size of the hellforge emblem in the header (logical px).
+pub const EMBLEM_PX: f32 = 30.0;
+
+/// Draws the header emblem (replaces the old 💜 glyph) and returns its rect.
+pub fn emblem(ui: &mut egui::Ui, flicker: f32) -> egui::Response {
+    let (rect, resp) =
+        ui.allocate_exact_size(egui::vec2(EMBLEM_PX, EMBLEM_PX), egui::Sense::hover());
+    th::hellforge_emblem(ui.painter(), rect.center(), EMBLEM_PX, flicker);
+    resp
+}
+
+/// A canned exchange for previews (`--demo`).
+pub fn demo_lines() -> Vec<(bool, &'static str)> {
+    vec![
+        (
+            false,
+            "Mmh, there you are. Took you long enough to come and play with me~ 😈",
+        ),
+        (true, "missed you 🔥"),
+        (
+            false,
+            "Of course you did. Now come closer and tell me everything ✨",
+        ),
+    ]
+}
 
 fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Receiver<Ui>) {
     let (req_tx, req_rx) = channel::<Req>();
@@ -210,25 +243,12 @@ fn bubble_line(ui: &mut egui::Ui, me: bool, text: &str) {
         egui::Layout::left_to_right(egui::Align::TOP)
     };
     ui.with_layout(layout, |ui| {
-        let (fill, color) = if me {
-            (ME_FILL, egui::Color32::WHITE)
-        } else {
-            (HER_FILL, HER_TEXT)
-        };
-        egui::Frame::new()
-            .fill(fill)
-            .corner_radius(egui::CornerRadius {
-                nw: 12,
-                ne: 12,
-                sw: if me { 12 } else { 3 },
-                se: if me { 3 } else { 12 },
-            })
-            .inner_margin(egui::Margin::symmetric(9, 6))
-            .show(ui, |ui| {
-                ui.set_max_width(max_w);
-                let text = lillith_anim::text::sanitize(text);
-                ui.add(egui::Label::new(egui::RichText::new(text).color(color)).wrap());
-            });
+        let color = if me { ME_TEXT } else { HER_TEXT };
+        look::line_frame(me).show(ui, |ui| {
+            ui.set_max_width(max_w);
+            let text = lillith_anim::text::sanitize(text);
+            ui.add(egui::Label::new(egui::RichText::new(text).color(color)).wrap());
+        });
     });
     ui.add_space(4.0);
 }
@@ -252,40 +272,46 @@ impl eframe::App for Bubble {
         if focused == Some(true) {
             self.had_focus = true;
         }
-        if esc || (self.had_focus && focused == Some(false) && self.opened.elapsed() > FOCUS_GRACE)
-        {
+        let lost = self.had_focus && focused == Some(false) && self.opened.elapsed() > FOCUS_GRACE;
+        if self.screenshot.is_none() && (esc || lost) {
             self.close(ctx);
         }
 
         let frame = egui::Frame::new()
             .fill(BG)
-            .stroke(egui::Stroke::new(2.0, PINK))
-            .corner_radius(egui::CornerRadius::same(18))
+            .stroke(egui::Stroke::new(2.0, CRIMSON))
+            .corner_radius(egui::CornerRadius::same(look::CORNER + 1))
             .inner_margin(egui::Margin::same(10));
+        let t = self.opened.elapsed().as_secs_f32();
+        let flicker = 0.5 + 0.5 * (t * 3.1).sin() * (t * 1.7).cos();
+        if self.streaming.is_some() || self.screenshot.is_none() {
+            ctx.request_repaint_after(Duration::from_millis(80));
+        }
         egui::CentralPanel::default()
             .frame(egui::Frame::new())
             .show(ctx, |ui| {
-                frame.show(ui, |ui| {
+                let outer = frame.show(ui, |ui| {
                     ui.set_min_size(ui.available_size());
                     // Header: drag the bubble by it.
                     let header = ui.horizontal(|ui| {
+                        emblem(ui, flicker);
                         ui.label(
-                            egui::RichText::new("💜 Lillith")
-                                .color(PINK)
+                            egui::RichText::new("LILLITH")
+                                .color(NEON)
                                 .strong()
                                 .size(16.0),
                         );
                         let status = if self.streaming.is_some() {
-                            "typing…"
+                            "forging…"
                         } else {
-                            "online~"
+                            "awake"
                         };
-                        ui.label(egui::RichText::new(status).color(CYAN).small());
+                        ui.label(egui::RichText::new(status).color(EMBER).small());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
                                 .add(
                                     egui::Button::new(
-                                        egui::RichText::new("×").size(16.0).color(PINK),
+                                        egui::RichText::new("×").size(16.0).color(CRIMSON),
                                     )
                                     .frame(false),
                                 )
@@ -304,7 +330,15 @@ impl eframe::App for Bubble {
                     if drag.drag_started() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                     }
-                    ui.add_space(4.0);
+                    // Blade-thin crimson rule with a subtle drip under the header.
+                    let y = header.response.rect.bottom() + 3.0;
+                    let (x0, x1) = (ui.min_rect().left(), ui.max_rect().right());
+                    ui.painter().line_segment(
+                        [egui::pos2(x0, y), egui::pos2(x1, y)],
+                        egui::Stroke::new(1.0, CRIMSON),
+                    );
+                    th::blood_drips(ui.painter(), x0 + 40.0, x1 - 60.0, y, 7, 9.0, 46.0);
+                    ui.add_space(10.0);
                     let input_h = 34.0;
                     egui::ScrollArea::vertical()
                         .max_height(ui.available_height() - input_h)
@@ -328,7 +362,7 @@ impl eframe::App for Bubble {
                         });
                     ui.add_space(4.0);
                     let edit = egui::TextEdit::singleline(&mut self.input)
-                        .hint_text("Say something cute…")
+                        .hint_text("Speak, mortal…")
                         .desired_width(f32::INFINITY)
                         .margin(egui::Margin::symmetric(8, 6));
                     let resp = ui.add_enabled(self.streaming.is_none(), edit);
@@ -339,11 +373,58 @@ impl eframe::App for Bubble {
                         resp.request_focus();
                     }
                 });
+                // Faint neon edge around the whole box.
+                th::neon_rect(
+                    ui.painter(),
+                    outer.response.rect.shrink(1.0),
+                    pal::BLOOD_NEON.alpha(120),
+                    1.0,
+                    3.0,
+                );
             });
+        self.screenshot(ctx);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if self.screenshot.is_some() {
+            return;
+        }
         (self.emit)("chat.closed", None);
+    }
+}
+
+impl Bubble {
+    /// `--screenshot`: after the first frames settle, save one and exit.
+    fn screenshot(&mut self, ctx: &egui::Context) {
+        let Some(path) = self.screenshot.clone() else {
+            return;
+        };
+        if !self.shot_requested && self.opened.elapsed() > Duration::from_millis(1200) {
+            self.shot_requested = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+        }
+        ctx.request_repaint_after(Duration::from_millis(50));
+        let mut img = None;
+        ctx.input(|i| {
+            for e in &i.raw.events {
+                if let egui::Event::Screenshot { image, .. } = e {
+                    img = Some(image.clone());
+                }
+            }
+        });
+        if let Some(img) = img {
+            let [w, h] = img.size;
+            let bytes: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+            match image::RgbaImage::from_raw(w as u32, h as u32, bytes).map(|im| im.save(&path)) {
+                Some(Ok(())) => {
+                    tracing::info!(path = %path.display(), "chat bubble screenshot saved")
+                }
+                Some(Err(e)) => tracing::warn!("screenshot {}: {e}", path.display()),
+                None => tracing::warn!("screenshot: bad image size"),
+            }
+            self.screenshot = None;
+            self.close(ctx);
+        }
     }
 }
 
@@ -399,19 +480,25 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
         "lillith-chat",
         options,
         Box::new(move |cc| {
-            let mut style = (*cc.egui_ctx.style()).clone();
-            style.visuals = egui::Visuals::dark();
-            style.visuals.extreme_bg_color = PLUM;
-            style.visuals.selection.bg_fill = PINK;
-            style.visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(10);
-            style.visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(10);
-            style.visuals.widgets.active.corner_radius = egui::CornerRadius::same(10);
-            cc.egui_ctx.set_style(style);
+            look::apply(&cc.egui_ctx);
             cc.egui_ctx.set_fonts(bubble_fonts());
             let (tx, rx) = spawn_worker(&opts, cc.egui_ctx.clone());
-            (opts.emit)("chat.opened", None);
+            if opts.screenshot.is_none() {
+                (opts.emit)("chat.opened", None);
+            }
+            let lines = if opts.demo {
+                demo_lines()
+                    .into_iter()
+                    .map(|(me, t)| Line {
+                        me,
+                        text: t.to_string(),
+                    })
+                    .collect()
+            } else {
+                history_lines(&opts)
+            };
             Ok(Box::new(Bubble {
-                lines: history_lines(&opts),
+                lines,
                 streaming: None,
                 input: String::new(),
                 tx,
@@ -421,6 +508,8 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
                 closing: false,
                 asked_focus: false,
                 emit: opts.emit.clone(),
+                screenshot: opts.screenshot.clone(),
+                shot_requested: false,
             }))
         }),
     )

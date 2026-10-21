@@ -1,5 +1,6 @@
 //! Her speech bubble drawn on the overlay canvas, above her head: a small
-//! pink rounded box with a tail pointing at her head, up to
+//! near-black, crimson-edged box (DemonOS hellforge look, sharp corners)
+//! with a tail pointing at her head, up to
 //! [`MAX_LINES`] word-wrapped lines showing the newest text.
 //!
 //! The overlay window grows upward by [`SpeechLayout::pad`] for it (her feet
@@ -18,9 +19,12 @@ pub const CHAT_WINDOW_X: f32 = 5.0 / 8.0;
 /// Text size (px) at overlay scale 0.75.
 pub const BASE_FONT_PX: f32 = 13.0;
 
-const FILL: [u8; 3] = [255, 231, 243];
-const STROKE: [u8; 4] = [236, 72, 153, 255];
-const INK: [u8; 4] = [74, 20, 64, 255];
+/// Box fill: near-black (hellforge glass).
+pub const FILL: [u8; 3] = [12, 4, 7];
+/// Outline + tail: blood crimson.
+pub const STROKE: [u8; 4] = [196, 0, 26, 255];
+/// Text: pale blood-white.
+pub const INK: [u8; 4] = [255, 214, 218, 255];
 
 /// What the bubble shows: the revealed text and its opacity (fade-out).
 #[derive(Debug, Clone, PartialEq)]
@@ -108,7 +112,8 @@ pub fn draw_speech(
     let x0 = clampf(head_x - bw / 2.0, 3.0, l.max_right.min(cw - 3.0) - bw);
     let y1 = l.pad as f32 - l.tail_h - 1.0;
     let y0 = y1 - bh;
-    let r = (bh / 2.0).min(10.0 * l.font_px / BASE_FONT_PX);
+    // Sharp corners: a hint of bevel only.
+    let r = (bh / 2.0).min(2.5 * l.font_px / BASE_FONT_PX);
     let rect = rounded_rect(x0, y0, bw, bh, r);
     // Tail: base inside the box, tip at the head.
     let tx = clampf(head_x, x0 + r + 4.0, x0 + bw - r - 4.0);

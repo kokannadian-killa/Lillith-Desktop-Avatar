@@ -814,3 +814,120 @@ mod tests {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// hellforge emblem (chat box badge)
+// ---------------------------------------------------------------------------
+
+/// The hellforge emblem: an anvil under a three-tongued flame inside a
+/// rune ring. Every polygon is convex (fills directly as a convex shape).
+#[derive(Debug, Clone)]
+pub struct Hellforge {
+    pub center: Pt,
+    /// Rune ring radius.
+    pub ring_r: f32,
+    /// Rune cells around the ring: `(index, origin, height)`.
+    pub runes: Vec<(usize, Pt, f32)>,
+    /// Anvil pieces: horn, face, waist, foot (convex each).
+    pub anvil: Vec<Vec<Pt>>,
+    /// Flame tongues, outer (ember) to inner (core).
+    pub flames: Vec<Vec<Pt>>,
+    /// Hot line along the anvil face (the struck edge).
+    pub face_edge: [Pt; 2],
+}
+
+/// Hellforge emblem centred at `c`, `s` = overall diameter.
+pub fn hellforge(c: Pt, s: f32) -> Hellforge {
+    let u = s / 100.0;
+    let at = |x: f32, y: f32| [c[0] + x * u, c[1] + y * u];
+    let anvil = vec![
+        // Horn (pointing left) as a triangle.
+        vec![at(-36.0, 6.0), at(-18.0, 4.0), at(-18.0, 12.0)],
+        // Face (top slab).
+        vec![
+            at(-18.0, 4.0),
+            at(26.0, 4.0),
+            at(26.0, 13.0),
+            at(-18.0, 13.0),
+        ],
+        // Waist (narrowing trapezoid).
+        vec![
+            at(-10.0, 13.0),
+            at(16.0, 13.0),
+            at(10.0, 24.0),
+            at(-5.0, 24.0),
+        ],
+        // Foot (widening trapezoid).
+        vec![
+            at(-5.0, 24.0),
+            at(10.0, 24.0),
+            at(20.0, 32.0),
+            at(-16.0, 32.0),
+        ],
+    ];
+    // Flame tongues: kite shapes rising from the face.
+    let tongue = |x: f32, w: f32, h: f32| {
+        vec![
+            at(x, 3.0),
+            at(x + w * 0.5, -h * 0.35),
+            at(x + w * 0.12, -h),
+            at(x - w * 0.5, -h * 0.4),
+        ]
+    };
+    let flames = vec![
+        tongue(-6.0, 22.0, 34.0),
+        tongue(8.0, 18.0, 28.0),
+        tongue(1.0, 14.0, 40.0),
+        tongue(1.5, 7.0, 26.0),
+    ];
+    let ring_r = 46.0 * u;
+    let rh = 7.5 * u;
+    let n = 12;
+    let runes = (0..n)
+        .map(|i| {
+            let a = std::f32::consts::TAU * i as f32 / n as f32 - std::f32::consts::FRAC_PI_2;
+            let rr = ring_r - 7.0 * u;
+            let o = [
+                c[0] + a.cos() * rr - rune_width(rh) * 0.5,
+                c[1] + a.sin() * rr - rh * 0.5,
+            ];
+            (i * 5 + 3, o, rh)
+        })
+        .collect();
+    Hellforge {
+        center: c,
+        ring_r,
+        runes,
+        anvil,
+        flames,
+        face_edge: [at(-17.0, 4.5), at(25.0, 4.5)],
+    }
+}
+
+#[cfg(test)]
+mod hellforge_tests {
+    use super::*;
+
+    #[test]
+    fn hellforge_parts_are_convex_and_inside_the_ring() {
+        let h = hellforge([50.0, 50.0], 100.0);
+        assert_eq!(h.anvil.len(), 4);
+        assert!(h.flames.len() >= 3);
+        assert_eq!(h.runes.len(), 12);
+        for poly in h.anvil.iter().chain(&h.flames) {
+            assert!(is_convex(poly), "{poly:?}");
+            for p in poly {
+                let d = ((p[0] - 50.0).powi(2) + (p[1] - 50.0).powi(2)).sqrt();
+                assert!(d < h.ring_r - 4.0, "{p:?} outside the ring");
+            }
+        }
+        // Flames rise above the anvil face.
+        let top = h
+            .flames
+            .iter()
+            .flatten()
+            .map(|p| p[1])
+            .fold(f32::MAX, f32::min);
+        assert!(top < h.face_edge[0][1] - 30.0);
+    }
+}

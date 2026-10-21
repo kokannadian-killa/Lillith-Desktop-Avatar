@@ -264,14 +264,22 @@ pub fn stdout_emit() -> Emit {
     })
 }
 
-pub fn bubble_main(cfg: ChatConfig, pos: Option<(i32, i32)>, offline: bool) -> Result<()> {
+pub fn bubble_main(
+    cfg: ChatConfig,
+    pos: Option<(i32, i32)>,
+    offline: bool,
+    screenshot: Option<PathBuf>,
+    demo: bool,
+) -> Result<()> {
     let emit = stdout_emit();
     let opts = BubbleOptions {
         pos,
-        history: history_path(&cfg),
+        history: if demo { None } else { history_path(&cfg) },
         chat: cfg,
         offline,
         emit,
+        screenshot,
+        demo,
     };
     run_chat_bubble(opts).map_err(|e| anyhow::anyhow!("chat bubble: {e}"))
 }

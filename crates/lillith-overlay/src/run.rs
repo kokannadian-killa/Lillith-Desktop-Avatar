@@ -1818,7 +1818,18 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
         let shown = c.talk.speech.as_ref().unwrap().revealed_text().to_string();
         assert!(!shown.is_empty() && shown.len() < 50, "revealed {shown:?}");
         assert!(!c.stage.speech_lines().is_empty());
-        assert!(count_px(&c, [236, 72, 153], 0..pad) > 20, "bubble outline");
+        assert!(
+            count_px(
+                &c,
+                [
+                    crate::speech::STROKE[0],
+                    crate::speech::STROKE[1],
+                    crate::speech::STROKE[2]
+                ],
+                0..pad
+            ) > 20,
+            "bubble outline"
+        );
         assert!(
             !c.stage.hit(40.0, pad as f64 / 2.0),
             "bubble is click-through"
@@ -1840,7 +1851,19 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
         assert!(!c.talk.active());
         assert_eq!(c.stage.animator().base(), "idle");
         assert!(c.stage.animator().current().mouth.is_none());
-        assert_eq!(count_px(&c, [236, 72, 153], 0..pad), 0, "bubble gone");
+        assert_eq!(
+            count_px(
+                &c,
+                [
+                    crate::speech::STROKE[0],
+                    crate::speech::STROKE[1],
+                    crate::speech::STROKE[2]
+                ],
+                0..pad
+            ),
+            0,
+            "bubble gone"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

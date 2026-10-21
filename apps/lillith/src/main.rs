@@ -159,6 +159,12 @@ enum Cmd {
         /// Reply with an in-character "switched off" line (`--no-llm`).
         #[arg(long)]
         offline: bool,
+        /// Save the first settled frame to this PNG and exit (previews).
+        #[arg(long)]
+        screenshot: Option<PathBuf>,
+        /// Show a sample conversation instead of the history (previews).
+        #[arg(long)]
+        demo: bool,
     },
 }
 
@@ -276,10 +282,16 @@ async fn main() -> Result<()> {
             })
             .map_err(|e| anyhow::anyhow!("settings: {e}"))?;
         }
-        Some(Cmd::ChatBubble { x, y, offline }) => {
+        Some(Cmd::ChatBubble {
+            x,
+            y,
+            offline,
+            ref screenshot,
+            demo,
+        }) => {
             let cfg = load_config(&cli).0.chat;
             let pos = x.zip(y);
-            chat::bubble_main(cfg, pos, offline || cli.no_llm)?;
+            chat::bubble_main(cfg, pos, offline || cli.no_llm, screenshot.clone(), demo)?;
         }
         None => run_overlay(&cli, rules.rules.len()).await?,
     }
