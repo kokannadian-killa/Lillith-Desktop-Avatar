@@ -2389,6 +2389,7 @@ dependencies = [
  "lillith-sense",
  "lillith-tray",
  "lillith-voice",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -2399,10 +2400,13 @@ dependencies = [
 name = "lillith-anim"
 version = "0.0.1"
 dependencies = [
+ "ab_glyph",
+ "epaint_default_fonts",
  "glam",
  "image",
  "lillith-core",
  "serde",
+ "serde_json",
  "thiserror 2.0.21",
  "tiny-skia",
  "toml",
@@ -2423,6 +2427,7 @@ dependencies = [
 name = "lillith-mind"
 version = "0.0.1"
 dependencies = [
+ "futures-util",
  "lillith-core",
  "regex",
  "reqwest",
@@ -2440,6 +2445,7 @@ version = "0.0.1"
 dependencies = [
  "ashpd 0.10.3",
  "cosmic-text",
+ "image",
  "lillith-anim",
  "lillith-core",
  "smithay-client-toolkit 0.19.2",
@@ -2457,8 +2463,13 @@ name = "lillith-panel"
 version = "0.0.1"
 dependencies = [
  "eframe",
+ "image",
  "lillith-anim",
  "lillith-core",
+ "lillith-mind",
+ "serde_json",
+ "tiny-skia",
+ "tokio",
  "tracing",
 ]
 
