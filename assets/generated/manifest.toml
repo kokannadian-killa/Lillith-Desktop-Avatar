@@ -20050,6 +20050,266 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.tease_closeup]
+page = "tease_closeup/tease_closeup_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
+
+[[clips.tease_closeup.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tease_closeup.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.think]
 page = "think/think_sheet.png"
 fps = 6.0
