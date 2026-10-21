@@ -286,7 +286,9 @@ impl Default for ChatConfig {
             endpoint: "http://127.0.0.1:8080".into(),
             model: "local".into(),
             system_prompt: String::new(),
-            temperature: 0.8,
+            // Matches lillith_setup::modelfile::LILY_TEMPERATURE (pinned by a
+            // test in lillith-mind, which depends on both crates).
+            temperature: 0.85,
             max_tokens: 320,
             history_turns: 12,
             timeout_s: 120.0,

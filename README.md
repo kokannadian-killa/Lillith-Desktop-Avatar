@@ -2,7 +2,7 @@
 
 # Lillith — Desktop Companion & System Monitor
 
-**An animated anime-style demon girl who lives on your Linux desktop and reacts to what your machine is doing.**
+**An animated anime-style succubus demon woman who lives on your Linux desktop and reacts to what your machine is doing.**
 
 [![CI](https://github.com/kokannadian-killa/Lillith-Desktop-Avatar/actions/workflows/ci.yml/badge.svg)](https://github.com/kokannadian-killa/Lillith-Desktop-Avatar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

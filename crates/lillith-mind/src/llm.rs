@@ -127,7 +127,7 @@ pub struct ChatOptions {
 impl Default for ChatOptions {
     fn default() -> Self {
         Self {
-            temperature: 0.8,
+            temperature: lillith_setup::modelfile::LILY_TEMPERATURE,
             max_tokens: 320,
         }
     }

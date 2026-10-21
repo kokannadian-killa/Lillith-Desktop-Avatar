@@ -67,11 +67,10 @@ impl ChatSession {
             }
             c
         });
-        let system_prompt = if cfg.system_prompt.trim().is_empty() {
-            persona::DEFAULT_SYSTEM_PROMPT.to_string()
-        } else {
-            cfg.system_prompt.clone()
-        };
+        let system_prompt = persona::resolve_system_prompt(
+            &cfg.system_prompt,
+            persona::default_llm_system_prompt().as_deref(),
+        );
         Self {
             client,
             system_prompt,
@@ -84,6 +83,18 @@ impl ChatSession {
             save_path: None,
             salt: std::process::id() as usize,
         }
+    }
+
+    /// Re-resolves the system prompt against the config file at `path`
+    /// (for `--config` users): `[chat] system_prompt` (`chat_override`)
+    /// still wins, then that file's `[llm] system_prompt`, then the built-in
+    /// persona.
+    pub fn with_config_file(mut self, chat_override: &str, path: &Path) -> Self {
+        self.system_prompt = persona::resolve_system_prompt(
+            chat_override,
+            persona::llm_system_prompt(path).as_deref(),
+        );
+        self
     }
 
     /// Loads (if present) and keeps saving the history at `path`.
@@ -288,7 +299,8 @@ mod tests {
         let r1 = reqs.recv().await.unwrap();
         assert!(r1.starts_with("POST /v1/chat/completions"));
         assert!(r1.contains("\"stream\":true"));
-        assert!(r1.contains("You are Lillith"));
+        // Built-in persona = lillith-setup's LILY_SYSTEM_PROMPT (single source).
+        assert!(r1.contains("You are Lily (full name Lillith), an ancient succubus"));
         s.send("again", |_| {}).await;
         s.send("third", |_| {}).await;
         // history_turns = 1: only the last turn goes along.
@@ -359,6 +371,17 @@ mod tests {
         assert_eq!(
             ChatSession::new(&custom, true).request_messages("x")[0].content,
             "Be brief."
+        );
+        // [llm] system_prompt from a --config file applies unless [chat] overrides it.
+        let cfg_file = dir.join("config.toml");
+        std::fs::write(&cfg_file, "[llm]\nsystem_prompt = \"From the wizard.\"\n").unwrap();
+        let s3 = ChatSession::new(&ChatConfig::default(), true).with_config_file("", &cfg_file);
+        assert_eq!(s3.request_messages("x")[0].content, "From the wizard.");
+        let s4 = ChatSession::new(&custom, true).with_config_file(&custom.system_prompt, &cfg_file);
+        assert_eq!(s4.request_messages("x")[0].content, "Be brief.");
+        assert_eq!(
+            ChatSession::new(&ChatConfig::default(), true).request_messages("x")[0].content,
+            persona::DEFAULT_SYSTEM_PROMPT
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
