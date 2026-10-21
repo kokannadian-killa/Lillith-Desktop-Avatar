@@ -270,6 +270,16 @@ reaction_every_s = [15.0, 30.0]    # unprompted gestures: idle_flirt_*, hip_pop_
 variant_hold_s = 12.0              # keep one idle take at least this long (0 = every loop)
 walk_variant_hold_s = 1.0          # plain walk this long before a sultry take (saunter / sassy / strut)
 
+floor_offset_px = 48         # floor (window-bottom margin) without the KWin bridge's work area
+
+[behavior.gravity]           # after a drop she falls, bounces softly and lands
+g_px_s2 = 2600.0             # gravity, px/s² (0 = no falling: she stays where dropped)
+max_fall_speed = 2200.0      # terminal speed, px/s
+bounce = 0.22                # rebound fraction of the impact speed (0 = none, max 0.9)
+perch_enabled = true         # land on window tops (needs the KWin bridge, below)
+sit_every_s = [8.0, 20.0]    # while perched: calm time before she sits on the edge
+sit_for_s = [20.0, 45.0]     # how long a sit lasts (sit_swing + its variants)
+
 [behavior.gestures]
 double_click_s = 0.35
 secret_window_s = 3.0
@@ -285,6 +295,39 @@ boredom_s = 150.0
 Spring tuning lives in a `[springs]` table, and the tuned jiggle physics in
 [`assets/physics.toml`](assets/physics.toml). Event reactions and the key map
 are data, in [`assets/rules.toml`](assets/rules.toml).
+
+### KWin bridge: window events and perching on windows
+
+On Plasma the `kwin/lillith-bridge` KWin script tells her about windows
+(Wayland hides them from normal clients): open/close/minimize reactions,
+and for gravity the stacking order of visible normal windows plus the
+usable screen area. With it, a drop above a window lands her on its top
+edge; she strolls along it, sits on the edge now and then, and falls again
+when the window moves, minimizes or closes. Without it she lands on the
+floor (`[behavior] floor_offset_px`) and logs a hint. Same steps on Wayland
+and X11 sessions; from the repo root (fish):
+
+```fish
+# install, or upgrade an older copy
+kpackagetool6 --type=KWin/Script --install kwin/lillith-bridge
+or kpackagetool6 --type=KWin/Script --upgrade kwin/lillith-bridge
+
+# enable (same as System Settings → Window Management → KWin Scripts →
+# tick "Lillith Bridge" → Apply) and make KWin load it
+kwriteconfig6 --file kwinrc --group Plugins --key lillith-bridgeEnabled true
+qdbus6 org.kde.KWin /KWin reconfigure
+
+# check: prints "true"
+qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded lillith-bridge
+```
+
+After an upgrade, reload it: untick and tick it again in KWin Scripts, or
+set the key to `false`, `reconfigure`, then back to `true`, `reconfigure`.
+With Lillith running (`[monitor] kwin_bridge = true`, the default) her log
+shows `KWin bridge: window stack received`; `dbus-monitor --session
+"interface='org.lillith.Bridge'"` shows the `Stack`/`Area` calls once a
+second. Script errors land in the journal:
+`journalctl --user -b | grep -i lillith-bridge`.
 
 ## 6. Troubleshooting
 

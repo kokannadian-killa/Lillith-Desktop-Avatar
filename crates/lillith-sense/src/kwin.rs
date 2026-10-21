@@ -3,7 +3,10 @@
 //!
 //! `kwin/lillith-bridge` (a KWin 6 script) calls `callDBus` on
 //! [`BUS_NAME`] / [`OBJECT_PATH`] for window added/removed/activated/
-//! minimized/caption/geometry and a 10 Hz cursor position. [`serve`] owns
+//! minimized/caption/geometry and a 10 Hz cursor position, plus `Stack`
+//! (the z-ordered visible normal windows) and `Area` (screen + usable work
+//! area) snapshots for gravity/perching, which land in
+//! [`lillith_core::desktop::shared`]. [`serve`] owns
 //! that name on the session bus, replies to every call, and turns them into
 //! rule events through the pure [`Bridge`] state machine. Nothing is
 //! emitted unless the script is installed and enabled (M5 ships/verifies
@@ -11,6 +14,7 @@
 
 use crate::Sink;
 use futures_util::StreamExt;
+use lillith_core::desktop::{self, Desktop};
 use lillith_core::Event;
 use std::collections::HashSet;
 
@@ -47,6 +51,10 @@ pub enum BridgeCall {
     },
     Geometry,
     Cursor,
+    /// Window stack snapshot (see [`lillith_core::desktop::parse_stack`]).
+    Stack(String),
+    /// Screen + work area (see [`lillith_core::desktop::parse_area`]).
+    Area(String),
 }
 
 impl BridgeCall {
@@ -60,6 +68,8 @@ impl BridgeCall {
             "WindowCaption" => Self::Caption { id, caption },
             "WindowGeometry" => Self::Geometry,
             "Cursor" => Self::Cursor,
+            "Stack" => Self::Stack(id),
+            "Area" => Self::Area(id),
             _ => return None,
         })
     }
@@ -72,6 +82,8 @@ pub struct Bridge {
     private_seen: HashSet<String>,
     /// Currently active window id.
     pub active: Option<String>,
+    /// Window stack + work area for gravity (published by [`serve`]).
+    pub desktop: Desktop,
 }
 
 /// Window title markers of private/incognito browsing.
@@ -139,6 +151,11 @@ impl Bridge {
                 // TODO(M5): focus.long_work timer and Follow/perch targets.
                 self.active = (!id.is_empty()).then_some(id);
             }
+            BridgeCall::Stack(s) => self.desktop.set_windows(desktop::parse_stack(&s)),
+            BridgeCall::Area(s) => match desktop::parse_area(&s) {
+                Some((screen, work)) => self.desktop.set_area(screen, work),
+                None => tracing::debug!(area = %s, "KWin bridge: bad Area"),
+            },
             BridgeCall::Geometry | BridgeCall::Cursor => {}
         }
         out
@@ -184,14 +201,32 @@ pub async fn serve(sink: Sink) -> zbus::Result<()> {
         let hdr = msg.header();
         let member = hdr.member().map(|m| m.to_string()).unwrap_or_default();
         let _ = conn.reply(&hdr, &()).await;
-        let (id, class, caption) = if member == "Cursor" {
-            Default::default()
-        } else {
-            parse_strings(&msg.body())
+        let (id, class, caption) = match member.as_str() {
+            "Cursor" => Default::default(),
+            // Snapshots: one string argument.
+            "Stack" | "Area" => match msg.body().deserialize::<(String,)>() {
+                Ok((s,)) => (s, String::new(), String::new()),
+                Err(_) => continue,
+            },
+            _ => parse_strings(&msg.body()),
         };
+        let snapshot = matches!(member.as_str(), "Stack" | "Area");
         if let Some(call) = BridgeCall::from_parts(&member, id, class, caption) {
             for ev in bridge.handle(call) {
                 sink(ev);
+            }
+        }
+        if snapshot {
+            if !bridge.desktop.has_bridge {
+                continue;
+            }
+            if let Ok(mut d) = desktop::shared().lock() {
+                if d.generation == 0 {
+                    tracing::info!("KWin bridge: window stack received (perching on windows on)");
+                }
+                let g = d.generation.wrapping_add(1);
+                *d = bridge.desktop.clone();
+                d.generation = g;
             }
         }
     }
@@ -302,6 +337,28 @@ mod tests {
         assert!(b.handle(added("9", "lillith", "Lillith")).is_empty());
         assert!(b.handle(added("9", "plasmashell", "")).is_empty());
         assert!(b.handle(BridgeCall::Cursor).is_empty());
+    }
+
+    #[test]
+    fn stack_and_area_fill_the_desktop_model() {
+        let mut b = Bridge::default();
+        assert!(b
+            .handle(BridgeCall::Stack(
+                "7\tdolphin\t0\t300\t800\t500\n8\tlillith\t0\t0\t9\t9".into()
+            ))
+            .is_empty());
+        assert!(b.desktop.has_bridge);
+        assert_eq!(b.desktop.windows.len(), 1, "her own window is dropped");
+        assert_eq!(b.desktop.windows[0].rect.y, 300);
+        b.handle(BridgeCall::Area("0 0 1920 1080 0 0 1920 1032".into()));
+        assert_eq!(b.desktop.work_area.map(|r| r.bottom()), Some(1032));
+        // Garbage keeps the last good area.
+        b.handle(BridgeCall::Area("nope".into()));
+        assert_eq!(b.desktop.work_area.map(|r| r.bottom()), Some(1032));
+        assert_eq!(
+            BridgeCall::from_parts("Stack", "x".into(), "".into(), "".into()),
+            Some(BridgeCall::Stack("x".into()))
+        );
     }
 
     #[test]
