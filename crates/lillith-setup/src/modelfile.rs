@@ -16,17 +16,26 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
     From(String),
-    Parameter { key: String, value: String },
+    Parameter {
+        key: String,
+        value: String,
+    },
     Template(String),
     System(String),
     Adapter(String),
     License(String),
-    Message { role: String, content: String },
+    Message {
+        role: String,
+        content: String,
+    },
     Requires(String),
     /// A `# comment` line (text after `#`, untrimmed).
     Comment(String),
     /// An unrecognised instruction, kept as written.
-    Other { name: String, args: String },
+    Other {
+        name: String,
+        args: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -69,7 +78,10 @@ impl Modelfile {
                 match rest.find(char::is_whitespace) {
                     Some(p) => (Some(&rest[..p]), rest[p..].trim_start()),
                     None => {
-                        return Err(ModelfileError::Syntax { line: lineno, msg: format!("{upper} needs two arguments") })
+                        return Err(ModelfileError::Syntax {
+                            line: lineno,
+                            msg: format!("{upper} needs two arguments"),
+                        })
                     }
                 }
             } else {
@@ -78,14 +90,23 @@ impl Modelfile {
             let value = read_value(rest, &lines, &mut i, lineno)?;
             out.push(match upper.as_str() {
                 "FROM" => Instruction::From(value),
-                "PARAMETER" => Instruction::Parameter { key: first.unwrap().to_ascii_lowercase(), value },
+                "PARAMETER" => Instruction::Parameter {
+                    key: first.unwrap().to_ascii_lowercase(),
+                    value,
+                },
                 "TEMPLATE" => Instruction::Template(value),
                 "SYSTEM" => Instruction::System(value),
                 "ADAPTER" => Instruction::Adapter(value),
                 "LICENSE" => Instruction::License(value),
-                "MESSAGE" => Instruction::Message { role: first.unwrap().to_ascii_lowercase(), content: value },
+                "MESSAGE" => Instruction::Message {
+                    role: first.unwrap().to_ascii_lowercase(),
+                    content: value,
+                },
                 "REQUIRES" => Instruction::Requires(value),
-                _ => Instruction::Other { name: name.to_string(), args: rest.to_string() },
+                _ => Instruction::Other {
+                    name: name.to_string(),
+                    args: rest.to_string(),
+                },
             });
         }
         Ok(Self { instructions: out })
@@ -101,12 +122,16 @@ impl Modelfile {
         for ins in &self.instructions {
             match ins {
                 Instruction::From(v) => writeln!(s, "FROM {}", quote(v)),
-                Instruction::Parameter { key, value } => writeln!(s, "PARAMETER {key} {}", quote(value)),
+                Instruction::Parameter { key, value } => {
+                    writeln!(s, "PARAMETER {key} {}", quote(value))
+                }
                 Instruction::Template(v) => writeln!(s, "TEMPLATE {}", quote_block(v)),
                 Instruction::System(v) => writeln!(s, "SYSTEM {}", quote_block(v)),
                 Instruction::Adapter(v) => writeln!(s, "ADAPTER {}", quote(v)),
                 Instruction::License(v) => writeln!(s, "LICENSE {}", quote_block(v)),
-                Instruction::Message { role, content } => writeln!(s, "MESSAGE {role} {}", quote_block(content)),
+                Instruction::Message { role, content } => {
+                    writeln!(s, "MESSAGE {role} {}", quote_block(content))
+                }
                 Instruction::Requires(v) => writeln!(s, "REQUIRES {}", quote(v)),
                 Instruction::Comment(c) => writeln!(s, "#{c}"),
                 Instruction::Other { name, args } => writeln!(s, "{name} {args}"),
@@ -126,7 +151,11 @@ impl Modelfile {
     }
     pub fn set_from(&mut self, v: impl Into<String>) {
         let v = v.into();
-        match self.instructions.iter_mut().find(|i| matches!(i, Instruction::From(_))) {
+        match self
+            .instructions
+            .iter_mut()
+            .find(|i| matches!(i, Instruction::From(_)))
+        {
             Some(i) => *i = Instruction::From(v),
             None => self.instructions.insert(0, Instruction::From(v)),
         }
@@ -138,7 +167,9 @@ impl Modelfile {
         })
     }
     pub fn set_system(&mut self, v: impl Into<String>) {
-        self.set_single(Instruction::System(v.into()), |i| matches!(i, Instruction::System(_)));
+        self.set_single(Instruction::System(v.into()), |i| {
+            matches!(i, Instruction::System(_))
+        });
     }
     pub fn template(&self) -> Option<&str> {
         self.instructions.iter().find_map(|i| match i {
@@ -147,7 +178,9 @@ impl Modelfile {
         })
     }
     pub fn set_template(&mut self, v: impl Into<String>) {
-        self.set_single(Instruction::Template(v.into()), |i| matches!(i, Instruction::Template(_)));
+        self.set_single(Instruction::Template(v.into()), |i| {
+            matches!(i, Instruction::Template(_))
+        });
     }
     fn set_single(&mut self, new: Instruction, is: impl Fn(&Instruction) -> bool) {
         match self.instructions.iter().position(&is) {
@@ -155,7 +188,11 @@ impl Modelfile {
                 self.instructions[p] = new;
                 let mut k = p + 1;
                 while k < self.instructions.len() {
-                    if is(&self.instructions[k]) { self.instructions.remove(k); } else { k += 1; }
+                    if is(&self.instructions[k]) {
+                        self.instructions.remove(k);
+                    } else {
+                        k += 1;
+                    }
                 }
             }
             None => self.instructions.push(new),
@@ -167,7 +204,9 @@ impl Modelfile {
         self.instructions
             .iter()
             .filter_map(|i| match i {
-                Instruction::Parameter { key: k, value } if k.eq_ignore_ascii_case(key) => Some(value.as_str()),
+                Instruction::Parameter { key: k, value } if k.eq_ignore_ascii_case(key) => {
+                    Some(value.as_str())
+                }
                 _ => None,
             })
             .collect()
@@ -186,20 +225,28 @@ impl Modelfile {
             .instructions
             .iter()
             .position(|i| matches!(i, Instruction::Parameter { key: k, .. } if *k == key));
-        self.instructions.retain(|i| !matches!(i, Instruction::Parameter { key: k, .. } if *k == key));
+        self.instructions
+            .retain(|i| !matches!(i, Instruction::Parameter { key: k, .. } if *k == key));
         let at = first.unwrap_or_else(|| {
             // After the last PARAMETER, else after FROM.
             self.instructions
                 .iter()
                 .rposition(|i| matches!(i, Instruction::Parameter { .. }))
-                .or_else(|| self.instructions.iter().position(|i| matches!(i, Instruction::From(_))))
+                .or_else(|| {
+                    self.instructions
+                        .iter()
+                        .position(|i| matches!(i, Instruction::From(_)))
+                })
                 .map(|p| p + 1)
                 .unwrap_or(self.instructions.len())
         });
         for (n, v) in values.iter().enumerate() {
             self.instructions.insert(
                 (at + n).min(self.instructions.len()),
-                Instruction::Parameter { key: key.clone(), value: v.as_ref().to_string() },
+                Instruction::Parameter {
+                    key: key.clone(),
+                    value: v.as_ref().to_string(),
+                },
             );
         }
     }
@@ -210,7 +257,12 @@ impl Modelfile {
 
 /// Reads an argument starting at `rest`; consumes following lines for an
 /// open `"""`.
-fn read_value(rest: &str, lines: &[&str], i: &mut usize, lineno: usize) -> Result<String, ModelfileError> {
+fn read_value(
+    rest: &str,
+    lines: &[&str],
+    i: &mut usize,
+    lineno: usize,
+) -> Result<String, ModelfileError> {
     if let Some(after) = rest.strip_prefix("\"\"\"") {
         if let Some(end) = after.find("\"\"\"") {
             return Ok(after[..end].to_string());
@@ -272,9 +324,20 @@ fn quote(v: &str) -> String {
 /// Multi-line / free text: `"""…"""` (only if the text has no `"""`).
 fn quote_block(v: &str) -> String {
     if v.contains("\"\"\"") {
-        return format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n"));
+        return format!(
+            "\"{}\"",
+            v.replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+        );
     }
-    if v.contains('\n') || v.contains('"') || v != v.trim() || v.contains('#') || v.is_empty() || v.contains(' ') {
+    if v.contains('\n')
+        || v.contains('"')
+        || v != v.trim()
+        || v.contains('#')
+        || v.is_empty()
+        || v.contains(' ')
+    {
         format!("\"\"\"{v}\"\"\"")
     } else {
         v.to_string()
@@ -332,21 +395,46 @@ impl Default for LilyParams {
 /// Lily's Modelfile for a local GGUF (`from` = absolute `.gguf` path).
 pub fn lily_modelfile(from: &str, p: &LilyParams) -> Modelfile {
     let mut ins = vec![
-        Instruction::Comment(" Lily (Lillith) - generated by lillith-setup. Local GGUF only.".into()),
+        Instruction::Comment(
+            " Lily (Lillith) - generated by lillith-setup. Local GGUF only.".into(),
+        ),
         Instruction::From(from.to_string()),
-        Instruction::Parameter { key: "temperature".into(), value: fmt_f(p.temperature) },
-        Instruction::Parameter { key: "top_p".into(), value: fmt_f(p.top_p) },
-        Instruction::Parameter { key: "repeat_penalty".into(), value: fmt_f(p.repeat_penalty) },
-        Instruction::Parameter { key: "num_ctx".into(), value: p.num_ctx.to_string() },
-        Instruction::Parameter { key: "num_predict".into(), value: p.num_predict.to_string() },
+        Instruction::Parameter {
+            key: "temperature".into(),
+            value: fmt_f(p.temperature),
+        },
+        Instruction::Parameter {
+            key: "top_p".into(),
+            value: fmt_f(p.top_p),
+        },
+        Instruction::Parameter {
+            key: "repeat_penalty".into(),
+            value: fmt_f(p.repeat_penalty),
+        },
+        Instruction::Parameter {
+            key: "num_ctx".into(),
+            value: p.num_ctx.to_string(),
+        },
+        Instruction::Parameter {
+            key: "num_predict".into(),
+            value: p.num_predict.to_string(),
+        },
     ];
     if p.num_thread > 0 {
-        ins.push(Instruction::Parameter { key: "num_thread".into(), value: p.num_thread.to_string() });
+        ins.push(Instruction::Parameter {
+            key: "num_thread".into(),
+            value: p.num_thread.to_string(),
+        });
     }
     for s in p.template.stop_tokens() {
-        ins.push(Instruction::Parameter { key: "stop".into(), value: (*s).to_string() });
+        ins.push(Instruction::Parameter {
+            key: "stop".into(),
+            value: (*s).to_string(),
+        });
     }
-    ins.push(Instruction::Template(p.template.ollama_template().to_string()));
+    ins.push(Instruction::Template(
+        p.template.ollama_template().to_string(),
+    ));
     ins.push(Instruction::System(p.system_prompt.clone()));
     Modelfile { instructions: ins }
 }
@@ -354,7 +442,9 @@ pub fn lily_modelfile(from: &str, p: &LilyParams) -> Modelfile {
 fn fmt_f(v: f32) -> String {
     let s = format!("{v:.3}");
     let s = s.trim_end_matches('0');
-    s.strip_suffix('.').map(|x| format!("{x}.0")).unwrap_or_else(|| s.to_string())
+    s.strip_suffix('.')
+        .map(|x| format!("{x}.0"))
+        .unwrap_or_else(|| s.to_string())
 }
 
 #[cfg(test)]
@@ -366,7 +456,10 @@ mod tests {
     #[test]
     fn round_trips_kos_old_modelfile() {
         let m = Modelfile::parse(KO_OLD).unwrap();
-        assert_eq!(m.from(), Some("/home/ko-terminal/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf"));
+        assert_eq!(
+            m.from(),
+            Some("/home/ko-terminal/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf")
+        );
         assert_eq!(m.render(), KO_OLD);
         assert_eq!(Modelfile::parse(&m.render()).unwrap(), m);
     }
@@ -376,7 +469,10 @@ mod tests {
         let p = Path::new("/workspace/lillith/source/Modelfile_ollama_dolphin3.bin.txt");
         if let Ok(src) = std::fs::read_to_string(p) {
             let m = Modelfile::parse(&src).unwrap();
-            assert!(m.from().unwrap().ends_with("dolphin3.0-llama3.2-3b-q4_k_m.gguf"));
+            assert!(m
+                .from()
+                .unwrap()
+                .ends_with("dolphin3.0-llama3.2-3b-q4_k_m.gguf"));
             assert_eq!(Modelfile::parse(&m.render()).unwrap(), m);
         }
     }
@@ -407,10 +503,19 @@ FOO bar baz
         assert_eq!(m.from(), Some("./model.gguf"));
         assert_eq!(m.param("temperature"), Some("0.7"));
         assert_eq!(m.params("stop"), vec!["<|im_start|>", "<|im_end|>"]);
-        assert!(m.template().unwrap().starts_with("{{ if .System }}<|im_start|>system\n"));
+        assert!(m
+            .template()
+            .unwrap()
+            .starts_with("{{ if .System }}<|im_start|>system\n"));
         assert_eq!(m.system(), Some("You are \"Lily\".\nBe nice."));
-        assert!(m.instructions.contains(&Instruction::Message { role: "assistant".into(), content: "Hey~\ncutie".into() }));
-        assert!(m.instructions.contains(&Instruction::Other { name: "FOO".into(), args: "bar baz".into() }));
+        assert!(m.instructions.contains(&Instruction::Message {
+            role: "assistant".into(),
+            content: "Hey~\ncutie".into()
+        }));
+        assert!(m.instructions.contains(&Instruction::Other {
+            name: "FOO".into(),
+            args: "bar baz".into()
+        }));
         // Semantic round trip.
         let again = Modelfile::parse(&m.render()).unwrap();
         assert_eq!(again, m);
@@ -443,7 +548,10 @@ FOO bar baz
 
     #[test]
     fn lily_default_is_chatml_and_round_trips() {
-        let m = lily_modelfile("/home/ko-terminal/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf", &LilyParams::default());
+        let m = lily_modelfile(
+            "/home/ko-terminal/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf",
+            &LilyParams::default(),
+        );
         let text = m.render();
         assert!(text.contains("PARAMETER num_ctx 4096"));
         assert!(text.contains("PARAMETER temperature 0.8"));

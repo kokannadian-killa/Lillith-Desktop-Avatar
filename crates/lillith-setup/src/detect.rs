@@ -110,7 +110,10 @@ pub fn detect(opts: &DetectOptions) -> RuntimeReport {
     let dirs = search_dirs(&opts.extra_bin_dirs);
     let find = |name: &str| {
         find_binary(name, &dirs).map(|path| BinaryInfo {
-            version: opts.probe_versions.then(|| binary_version(&path, opts.timeout * 3)).flatten(),
+            version: opts
+                .probe_versions
+                .then(|| binary_version(&path, opts.timeout * 3))
+                .flatten(),
             path,
         })
     };
@@ -127,7 +130,13 @@ pub fn detect(opts: &DetectOptions) -> RuntimeReport {
 pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = extra.to_vec();
     if let Some(h) = paths::home_dir() {
-        for d in ["llama.cpp", "AI/llama.cpp", "src/llama.cpp", "tools/llama.cpp", ".local/share/llama.cpp"] {
+        for d in [
+            "llama.cpp",
+            "AI/llama.cpp",
+            "src/llama.cpp",
+            "tools/llama.cpp",
+            ".local/share/llama.cpp",
+        ] {
             roots.push(h.join(d));
         }
     }
@@ -140,13 +149,25 @@ pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
         dirs.push(h.join(".local/bin"));
         dirs.push(h.join("bin"));
     }
-    dirs.extend(["/usr/local/bin", "/usr/bin", "/opt/ollama/bin", "/opt/llama.cpp/bin"].map(PathBuf::from));
+    dirs.extend(
+        [
+            "/usr/local/bin",
+            "/usr/bin",
+            "/opt/ollama/bin",
+            "/opt/llama.cpp/bin",
+        ]
+        .map(PathBuf::from),
+    );
     // llama.cpp roots: the root, its build dirs, and one level of release
     // sub-folders (e.g. `llama-b4567/`).
     for r in roots {
         let mut cands = vec![r.clone()];
         if let Ok(rd) = std::fs::read_dir(&r) {
-            let mut subs: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+            let mut subs: Vec<PathBuf> = rd
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect();
             subs.sort();
             subs.reverse(); // newest release name first (llama-b1234 sorting)
             cands.extend(subs);
@@ -198,7 +219,11 @@ pub fn binary_version(bin: &Path, timeout: Duration) -> Option<String> {
         }
     }
     let out = child.wait_with_output().ok()?;
-    let text = format!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
     text.lines()
         .map(str::trim)
         .find(|l| l.contains("version"))
@@ -208,7 +233,10 @@ pub fn binary_version(bin: &Path, timeout: Duration) -> Option<String> {
 
 /// Probes llama-server's `/health` and `/v1/models` (loopback only).
 pub fn probe_llama_server(url: &str, timeout: Duration) -> LlamaServerApi {
-    let mut r = LlamaServerApi { url: url.into(), ..Default::default() };
+    let mut r = LlamaServerApi {
+        url: url.into(),
+        ..Default::default()
+    };
     let base = match LocalUrl::parse(url, 8080) {
         Ok(b) => b,
         Err(e) => {
@@ -238,7 +266,10 @@ pub fn probe_llama_server(url: &str, timeout: Duration) -> LlamaServerApi {
     if let Ok(resp) = http::get(&base, "/v1/models", timeout) {
         let v: serde_json::Value = serde_json::from_str(&resp.body).unwrap_or_default();
         if let Some(arr) = v.get("data").and_then(|d| d.as_array()) {
-            r.models = arr.iter().filter_map(|m| m.get("id")?.as_str().map(str::to_string)).collect();
+            r.models = arr
+                .iter()
+                .filter_map(|m| m.get("id")?.as_str().map(str::to_string))
+                .collect();
         }
     }
     r
@@ -246,7 +277,10 @@ pub fn probe_llama_server(url: &str, timeout: Duration) -> LlamaServerApi {
 
 /// Probes Ollama's `/api/version` and `/api/tags` (loopback only).
 pub fn probe_ollama(host: &str, timeout: Duration) -> OllamaApi {
-    let mut r = OllamaApi { url: host.into(), ..Default::default() };
+    let mut r = OllamaApi {
+        url: host.into(),
+        ..Default::default()
+    };
     let base = match LocalUrl::parse(host, 11434) {
         Ok(b) => b,
         Err(e) => {
@@ -271,7 +305,10 @@ pub fn probe_ollama(host: &str, timeout: Duration) -> OllamaApi {
     }
     if let Ok(resp) = http::get(&base, "/api/version", timeout) {
         let v: serde_json::Value = serde_json::from_str(&resp.body).unwrap_or_default();
-        r.version = v.get("version").and_then(|s| s.as_str()).map(str::to_string);
+        r.version = v
+            .get("version")
+            .and_then(|s| s.as_str())
+            .map(str::to_string);
     }
     r
 }
@@ -345,7 +382,13 @@ impl DetectHandle {
 
     /// Blocks until the report is ready (`None` if the worker died).
     pub fn wait(mut self) -> Option<RuntimeReport> {
-        self.result.take().or_else(|| if self.taken { None } else { self.rx.recv().ok() })
+        self.result.take().or_else(|| {
+            if self.taken {
+                None
+            } else {
+                self.rx.recv().ok()
+            }
+        })
     }
 }
 
@@ -358,7 +401,11 @@ pub fn spawn(opts: DetectOptions) -> DetectHandle {
             let _ = tx.send(detect(&opts));
         })
         .expect("spawn detect thread");
-    DetectHandle { rx, result: None, taken: false }
+    DetectHandle {
+        rx,
+        result: None,
+        taken: false,
+    }
 }
 
 #[cfg(test)]
@@ -370,7 +417,10 @@ mod tests {
 
     #[test]
     fn ollama_probe_lists_models() {
-        let port = fake_server(vec![("/api/tags", 200, TAGS), ("/api/version", 200, r#"{"version":"0.12.3"}"#)]);
+        let port = fake_server(vec![
+            ("/api/tags", 200, TAGS),
+            ("/api/version", 200, r#"{"version":"0.12.3"}"#),
+        ]);
         let r = probe_ollama(&format!("127.0.0.1:{port}"), Duration::from_secs(2));
         assert!(r.reachable, "{r:?}");
         assert_eq!(r.version.as_deref(), Some("0.12.3"));
@@ -383,20 +433,37 @@ mod tests {
     fn llama_server_probe() {
         let port = fake_server(vec![
             ("/health", 200, r#"{"status":"ok"}"#),
-            ("/v1/models", 200, r#"{"object":"list","data":[{"id":"qwen2.5-0.5b-instruct-q4_k_m.gguf"}]}"#),
+            (
+                "/v1/models",
+                200,
+                r#"{"object":"list","data":[{"id":"qwen2.5-0.5b-instruct-q4_k_m.gguf"}]}"#,
+            ),
         ]);
         let r = probe_llama_server(&format!("http://localhost:{port}"), Duration::from_secs(2));
         assert!(r.reachable);
         assert_eq!(r.health.as_deref(), Some("ok"));
-        assert_eq!(r.models, vec!["qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string()]);
+        assert_eq!(
+            r.models,
+            vec!["qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string()]
+        );
     }
 
     #[test]
     fn nothing_running_is_not_a_panic() {
-        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let r = probe_llama_server(&format!("http://127.0.0.1:{port}"), Duration::from_millis(200));
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let r = probe_llama_server(
+            &format!("http://127.0.0.1:{port}"),
+            Duration::from_millis(200),
+        );
         assert!(!r.reachable && r.error.is_some());
-        let o = probe_ollama(&format!("http://127.0.0.1:{port}"), Duration::from_millis(200));
+        let o = probe_ollama(
+            &format!("http://127.0.0.1:{port}"),
+            Duration::from_millis(200),
+        );
         assert!(!o.reachable && o.error.is_some());
     }
 
@@ -421,7 +488,9 @@ mod tests {
         std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
         let dirs = search_dirs(std::slice::from_ref(&root));
         let found = find_binary("llama-server", &dirs);
-        let ver = found.as_deref().and_then(|p| binary_version(p, Duration::from_secs(2)));
+        let ver = found
+            .as_deref()
+            .and_then(|p| binary_version(p, Duration::from_secs(2)));
         std::fs::remove_dir_all(&root).ok();
         assert_eq!(found, Some(bin));
         assert_eq!(ver.as_deref(), Some("version: 9999 (test)"));
@@ -444,7 +513,10 @@ mod tests {
         let mut h = spawn(opts);
         let start = Instant::now();
         while h.poll().is_none() {
-            assert!(start.elapsed() < Duration::from_secs(10), "detect never finished");
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "detect never finished"
+            );
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(h.poll().unwrap().llama_server_api.reachable);

@@ -22,7 +22,11 @@ pub struct LaunchCommand {
 impl LaunchCommand {
     /// Shell-quoted line (valid in fish, bash and zsh).
     pub fn to_shell_string(&self) -> String {
-        std::iter::once(&self.program).chain(&self.args).map(|a| shell_quote(a)).collect::<Vec<_>>().join(" ")
+        std::iter::once(&self.program)
+            .chain(&self.args)
+            .map(|a| shell_quote(a))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     pub fn to_command(&self) -> Command {
@@ -33,7 +37,10 @@ impl LaunchCommand {
 }
 
 fn shell_quote(s: &str) -> String {
-    if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_./=:,+@%".contains(c)) {
+    if !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./=:,+@%".contains(c))
+    {
         s.to_string()
     } else {
         // Single quotes; `'` and `\` escaped the way fish requires (bash
@@ -60,7 +67,10 @@ pub enum LaunchError {
 
 /// `llama-server -m <gguf> --host 127.0.0.1 --port 8080 -c 4096 --chat-template chatml`
 /// for `cfg` (host/port from the validated loopback `server_url`).
-pub fn llama_server_command(cfg: &LlmConfig, bin: Option<&Path>) -> Result<LaunchCommand, LaunchError> {
+pub fn llama_server_command(
+    cfg: &LlmConfig,
+    bin: Option<&Path>,
+) -> Result<LaunchCommand, LaunchError> {
     if cfg.gguf_path.trim().is_empty() {
         return Err(LaunchError::NoModel);
     }
@@ -92,10 +102,16 @@ pub fn llama_server_command(cfg: &LlmConfig, bin: Option<&Path>) -> Result<Launc
 /// Checks that a Modelfile only references local files (so `ollama create`
 /// cannot download anything). Relative paths resolve against `base_dir`.
 pub fn ensure_local_modelfile(m: &Modelfile, base_dir: &Path) -> Result<(), LaunchError> {
-    let from = m.from().ok_or_else(|| LaunchError::NotLocalModel("Modelfile has no FROM".into()))?;
+    let from = m
+        .from()
+        .ok_or_else(|| LaunchError::NotLocalModel("Modelfile has no FROM".into()))?;
     let check = |what: &str, p: &str| -> Result<(), LaunchError> {
         let path = crate::paths::expand_tilde(p);
-        let path = if path.is_absolute() { path } else { base_dir.join(path) };
+        let path = if path.is_absolute() {
+            path
+        } else {
+            base_dir.join(path)
+        };
         if path.is_file() {
             Ok(())
         } else {
@@ -121,13 +137,19 @@ pub fn ollama_create_command(
     modelfile_path: &Path,
     cfg: &LlmConfig,
 ) -> Result<LaunchCommand, LaunchError> {
-    let src = std::fs::read_to_string(modelfile_path).map_err(|e| LaunchError::Io(modelfile_path.into(), e))?;
+    let src = std::fs::read_to_string(modelfile_path)
+        .map_err(|e| LaunchError::Io(modelfile_path.into(), e))?;
     let m = Modelfile::parse(&src)?;
     ensure_local_modelfile(&m, modelfile_path.parent().unwrap_or(Path::new(".")))?;
     cfg.ollama()?; // host must be loopback
     Ok(LaunchCommand {
         program: ollama_bin.display().to_string(),
-        args: vec!["create".into(), model_name.into(), "-f".into(), modelfile_path.display().to_string()],
+        args: vec![
+            "create".into(),
+            model_name.into(),
+            "-f".into(),
+            modelfile_path.display().to_string(),
+        ],
     })
 }
 
@@ -147,11 +169,18 @@ pub fn ollama_create(
         .stdin(Stdio::null())
         .output()
         .map_err(|e| LaunchError::Io(ollama_bin.into(), e))?;
-    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
     if out.status.success() {
         Ok(text)
     } else {
-        Err(LaunchError::Failed { status: out.status.to_string(), output: text })
+        Err(LaunchError::Failed {
+            status: out.status.to_string(),
+            output: text,
+        })
     }
 }
 
@@ -161,23 +190,42 @@ mod tests {
 
     #[test]
     fn llama_server_line() {
-        let cfg = LlmConfig { gguf_path: "/workspace/models/qwen2.5-0.5b-instruct-q4_k_m.gguf".into(), ..Default::default() };
+        let cfg = LlmConfig {
+            gguf_path: "/workspace/models/qwen2.5-0.5b-instruct-q4_k_m.gguf".into(),
+            ..Default::default()
+        };
         let c = llama_server_command(&cfg, None).unwrap();
         assert_eq!(
             c.to_shell_string(),
             "llama-server -m /workspace/models/qwen2.5-0.5b-instruct-q4_k_m.gguf --host 127.0.0.1 --port 8080 -c 4096 --chat-template chatml"
         );
-        let cfg = LlmConfig { gguf_path: "/home/ko/My Models/it's.gguf".into(), server_url: "http://localhost:9090".into(), ..Default::default() };
-        let s = llama_server_command(&cfg, Some(Path::new("/opt/llama.cpp/bin/llama-server"))).unwrap().to_shell_string();
+        let cfg = LlmConfig {
+            gguf_path: "/home/ko/My Models/it's.gguf".into(),
+            server_url: "http://localhost:9090".into(),
+            ..Default::default()
+        };
+        let s = llama_server_command(&cfg, Some(Path::new("/opt/llama.cpp/bin/llama-server")))
+            .unwrap()
+            .to_shell_string();
         assert!(s.contains("'/home/ko/My Models/it'\"'\"'s.gguf'"), "{s}");
         assert!(s.contains("--host 127.0.0.1 --port 9090"));
     }
 
     #[test]
     fn llama_server_refuses_remote_and_missing_model() {
-        let cfg = LlmConfig { gguf_path: "/m.gguf".into(), server_url: "http://0.0.0.0:8080".into(), ..Default::default() };
-        assert!(matches!(llama_server_command(&cfg, None), Err(LaunchError::Config(_))));
-        assert!(matches!(llama_server_command(&LlmConfig::default(), None), Err(LaunchError::NoModel)));
+        let cfg = LlmConfig {
+            gguf_path: "/m.gguf".into(),
+            server_url: "http://0.0.0.0:8080".into(),
+            ..Default::default()
+        };
+        assert!(matches!(
+            llama_server_command(&cfg, None),
+            Err(LaunchError::Config(_))
+        ));
+        assert!(matches!(
+            llama_server_command(&LlmConfig::default(), None),
+            Err(LaunchError::NoModel)
+        ));
     }
 
     #[test]
@@ -195,7 +243,10 @@ mod tests {
         let c = ollama_create_command(Path::new("/usr/bin/ollama"), "lily", &mf, &cfg).unwrap();
         assert_eq!(c.args[..3], ["create", "lily", "-f"]);
         // ...but not with a remote OLLAMA host.
-        let remote = LlmConfig { ollama_host: "http://192.168.0.9:11434".into(), ..Default::default() };
+        let remote = LlmConfig {
+            ollama_host: "http://192.168.0.9:11434".into(),
+            ..Default::default()
+        };
         assert!(ollama_create_command(Path::new("/usr/bin/ollama"), "lily", &mf, &remote).is_err());
         std::fs::remove_dir_all(&dir).ok();
     }
