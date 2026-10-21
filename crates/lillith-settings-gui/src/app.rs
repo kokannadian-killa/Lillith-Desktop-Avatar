@@ -157,7 +157,16 @@ impl SettingsApp {
             s(a);
         }
         if self.print_actions {
-            println!("{}", action_line(a));
+            // Not println!: if the overlay that launched us has quit, the
+            // pipe is closed and println! would panic the window.
+            use std::io::Write;
+            let mut out = std::io::stdout().lock();
+            if writeln!(out, "{}", action_line(a))
+                .and_then(|()| out.flush())
+                .is_err()
+            {
+                self.print_actions = false;
+            }
         }
     }
 

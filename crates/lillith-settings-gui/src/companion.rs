@@ -15,7 +15,7 @@
 
 use crate::store::ConfigStore;
 use lillith_core::config::{MoveMode, OverlayPos};
-use lillith_core::menu::{MenuAction, MenuState, Size, MODES, MOODS};
+use lillith_core::menu::{MenuAction, MenuState};
 use lillith_core::mood::Mood;
 
 /// Menu state as stored in config.toml (mood isn't persisted by the core:
@@ -96,82 +96,14 @@ pub fn persist(store: &mut ConfigStore, state: &MenuState, a: MenuAction) -> Per
     }
 }
 
-pub fn mode_key(m: MoveMode) -> &'static str {
-    match m {
-        MoveMode::Stay => "stay",
-        MoveMode::Wander => "wander",
-        MoveMode::Follow => "follow",
-    }
-}
-
-fn mood_key(m: Mood) -> &'static str {
-    match m {
-        Mood::Playful => "playful",
-        Mood::Happy => "happy",
-        Mood::Mischievous => "mischievous",
-        Mood::Alert => "alert",
-        Mood::Sleepy => "sleepy",
-    }
-}
-
-fn size_key(s: Size) -> &'static str {
-    match s {
-        Size::Small => "small",
-        Size::Normal => "normal",
-        Size::Large => "large",
-    }
-}
-
-/// One-line JSON for a pick: `{"menu_action":"set_mode","value":"wander"}`.
-pub fn action_line(a: MenuAction) -> String {
-    let (name, value) = match a {
-        MenuAction::SetMode(m) => ("set_mode", Some(mode_key(m))),
-        MenuAction::SetMood(m) => ("set_mood", Some(mood_key(m))),
-        MenuAction::ToggleMute => ("toggle_mute", None),
-        MenuAction::ToggleMonitor => ("toggle_monitor", None),
-        MenuAction::SetSize(z) => ("set_size", Some(size_key(z))),
-        MenuAction::OpenSettings => ("open_settings", None),
-        MenuAction::ResetPosition => ("reset_position", None),
-        MenuAction::About => ("about", None),
-        MenuAction::Quit => ("quit", None),
-        #[allow(unreachable_patterns)]
-        _ => ("unknown", None),
-    };
-    match value {
-        Some(v) => format!("{{\"menu_action\":\"{name}\",\"value\":\"{v}\"}}"),
-        None => format!("{{\"menu_action\":\"{name}\"}}"),
-    }
-}
-
-/// Parses an [`action_line`] back (for a host reading our stdout).
-pub fn parse_action_line(line: &str) -> Option<MenuAction> {
-    let field = |k: &str| -> Option<String> {
-        let pat = format!("\"{k}\":\"");
-        let i = line.find(&pat)? + pat.len();
-        let j = line[i..].find('"')? + i;
-        Some(line[i..j].to_string())
-    };
-    let name = field("menu_action")?;
-    let value = field("value");
-    let v = value.as_deref();
-    Some(match name.as_str() {
-        "set_mode" => MenuAction::SetMode(*MODES.iter().find(|m| Some(mode_key(**m)) == v)?),
-        "set_mood" => MenuAction::SetMood(*MOODS.iter().find(|m| Some(mood_key(**m)) == v)?),
-        "toggle_mute" => MenuAction::ToggleMute,
-        "toggle_monitor" => MenuAction::ToggleMonitor,
-        "set_size" => MenuAction::SetSize(*Size::ALL.iter().find(|s| Some(size_key(**s)) == v)?),
-        "open_settings" => MenuAction::OpenSettings,
-        "reset_position" => MenuAction::ResetPosition,
-        "about" => MenuAction::About,
-        "quit" => MenuAction::Quit,
-        _ => return None,
-    })
-}
+// The wire format lives in the core so the overlay (which must not pull
+// in egui) parses exactly what this window prints.
+pub use lillith_core::menu::{action_line, mode_key, parse_action_line};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lillith_core::menu::{build_menu, MenuItem};
+    use lillith_core::menu::{build_menu, MenuItem, Size};
 
     #[test]
     fn every_menu_leaf_round_trips_as_a_line() {

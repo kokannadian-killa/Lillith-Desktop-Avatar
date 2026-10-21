@@ -24,6 +24,7 @@ pub mod input_region;
 pub mod menu_popup;
 pub mod pixels;
 pub mod run;
+pub mod settings_window;
 pub mod stage;
 
 #[cfg(feature = "wayland")]

@@ -6,6 +6,7 @@
 use crate::backend::Backend;
 use crate::drag::{Drag, Placement, Release};
 use crate::menu_popup::{Fonts, MenuHit, MenuKey, MenuPopup};
+use crate::settings_window::{Launch, SettingsWindow};
 use crate::stage::{Changed, Stage, StageError};
 use lillith_anim::animator::{AnimatorConfig, Dir};
 use lillith_core::config::{save_overlay, save_scale, MoveMode, OverlayPos};
@@ -134,6 +135,8 @@ pub struct Controller {
     /// The stage changed size (menu Size ▸); the backend resizes its window.
     resized: bool,
     settings_path: Option<PathBuf>,
+    /// The `lillith-settings` window "Open settings" launches.
+    settings: SettingsWindow,
 }
 
 impl Controller {
@@ -173,6 +176,7 @@ impl Controller {
             fonts: Fonts::preload(),
             resized: false,
             settings_path: opts.settings_path.clone(),
+            settings: SettingsWindow::default(),
         }
     }
 
@@ -200,6 +204,7 @@ impl Controller {
     /// Advances the brain and the stage by `dt` seconds.
     pub fn tick(&mut self, dt: f32) -> Result<Changed, OverlayError> {
         self.drain_feed();
+        self.drain_settings();
         let anim = self.stage.animator();
         let busy = anim.overlay_clip().is_some() || anim.queued() > 0;
         let actions = self.brain.tick(dt, busy);
@@ -347,6 +352,15 @@ impl Controller {
         }
         for ev in batch {
             self.event(&ev);
+        }
+    }
+
+    /// Applies picks from the settings window like right-click picks (on
+    /// this thread: brain, voice sink and effects).
+    fn drain_settings(&mut self) {
+        for a in self.settings.drain() {
+            tracing::info!(?a, "settings window pick");
+            self.menu_pick(a);
         }
     }
 
@@ -499,7 +513,22 @@ impl Controller {
                     tracing::warn!("open settings: no config path (no $HOME?)");
                     return;
                 };
-                open_settings(&path);
+                match self.settings.open(&path) {
+                    Launch::Spawned => tracing::info!(
+                        program = %self.settings.program().display(),
+                        path = %path.display(),
+                        "settings window opened"
+                    ),
+                    Launch::AlreadyRunning => tracing::info!("settings window already open"),
+                    Launch::Failed(e) => {
+                        tracing::warn!(
+                            "could not start the settings window `{}` ({e}); \
+                             opening config.toml in the default editor instead",
+                            self.settings.program().display()
+                        );
+                        open_settings(&path);
+                    }
+                }
             }
             MenuEffect::ResetPosition(pos) => {
                 let p = Placement::from_config(&pos);
@@ -554,7 +583,8 @@ impl Controller {
     }
 }
 
-/// "Open settings": writes the template if the file is missing, then
+/// "Open settings" fallback (no `lillith-settings`): writes the template
+/// if the file is missing, then
 /// `xdg-open`s it without blocking (a thread reaps the child).
 fn open_settings(path: &std::path::Path) {
     if !path.exists() {
@@ -937,6 +967,42 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             .any(|a| matches!(a, Action::Say(t) if t.contains("Lillith"))));
         c.menu_pick(MenuAction::Quit);
         assert!(c.quit_requested());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn settings_window_picks_apply_on_tick() {
+        use crate::settings_window::tests::{fake_bin, wait_for};
+        let (dir, mut c) = m3_controller("settingswin", MoveMode::Stay);
+        let (bin_dir, bin) = fake_bin(
+            "ctl",
+            &[
+                r#"{"menu_action":"set_mood","value":"alert"}"#,
+                r#"{"menu_action":"toggle_mute"}"#,
+                r#"{"menu_action":"set_mode","value":"follow"}"#,
+            ],
+        );
+        c.settings = SettingsWindow::with_program(&bin);
+        c.settings_path = Some(dir.join("cfg/config.toml"));
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        c.sink = Some(SinkHandle::new(Rec(seen.clone())));
+        c.menu_pick(MenuAction::OpenSettings);
+        assert!(c.settings.running());
+        // Picks only land when the overlay thread ticks.
+        assert!(wait_for(|| {
+            c.tick(0.01).unwrap();
+            c.brain.muted() && c.brain.mode() == MoveMode::Follow
+        }));
+        assert_eq!(c.brain.mood(), lillith_core::Mood::Alert);
+        let got = seen.lock().unwrap().clone();
+        assert!(got.contains(&Action::MoodChanged(lillith_core::Mood::Alert)));
+        assert!(got.contains(&Action::Muted(true)), "voice sees it");
+        // A second "Open settings" while it is up spawns nothing.
+        c.menu_pick(MenuAction::OpenSettings);
+        assert!(c.settings.running());
+        std::fs::write(bin_dir.join("release"), "").unwrap();
+        assert!(wait_for(|| !c.settings.running()));
+        let _ = std::fs::remove_dir_all(bin_dir);
         let _ = std::fs::remove_dir_all(dir);
     }
 

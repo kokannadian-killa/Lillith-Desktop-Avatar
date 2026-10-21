@@ -15,7 +15,7 @@
 //! [ ] Pause system monitor
 //! Size            ▸ ( ) Small  (•) Normal  ( ) Large
 //! ─────────────
-//! Open settings   (xdg-open config.toml)
+//! Open settings   (lillith-settings window; xdg-open config.toml fallback)
 //! Reset position
 //! About Lillith
 //! ─────────────
@@ -377,6 +377,82 @@ pub fn on_menu_action(action: MenuAction, brain: &mut Brain, state: &MenuState) 
     out
 }
 
+/// Wire name of a mode (`config.toml` `mode` value and the settings
+/// window's JSON lines).
+pub fn mode_key(m: MoveMode) -> &'static str {
+    match m {
+        MoveMode::Stay => "stay",
+        MoveMode::Wander => "wander",
+        MoveMode::Follow => "follow",
+    }
+}
+
+/// Wire name of a mood.
+pub fn mood_key(m: Mood) -> &'static str {
+    match m {
+        Mood::Playful => "playful",
+        Mood::Happy => "happy",
+        Mood::Mischievous => "mischievous",
+        Mood::Alert => "alert",
+        Mood::Sleepy => "sleepy",
+    }
+}
+
+/// Wire name of a size preset.
+pub fn size_key(s: Size) -> &'static str {
+    match s {
+        Size::Small => "small",
+        Size::Normal => "normal",
+        Size::Large => "large",
+    }
+}
+
+/// One-line JSON for a pick, as the `lillith-settings` window prints it on
+/// stdout: `{"menu_action":"set_mode","value":"wander"}`.
+pub fn action_line(a: MenuAction) -> String {
+    let (name, value) = match a {
+        MenuAction::SetMode(m) => ("set_mode", Some(mode_key(m))),
+        MenuAction::SetMood(m) => ("set_mood", Some(mood_key(m))),
+        MenuAction::ToggleMute => ("toggle_mute", None),
+        MenuAction::ToggleMonitor => ("toggle_monitor", None),
+        MenuAction::SetSize(z) => ("set_size", Some(size_key(z))),
+        MenuAction::OpenSettings => ("open_settings", None),
+        MenuAction::ResetPosition => ("reset_position", None),
+        MenuAction::About => ("about", None),
+        MenuAction::Quit => ("quit", None),
+    };
+    match value {
+        Some(v) => format!("{{\"menu_action\":\"{name}\",\"value\":\"{v}\"}}"),
+        None => format!("{{\"menu_action\":\"{name}\"}}"),
+    }
+}
+
+/// Parses an [`action_line`] back (the overlay reads the settings window's
+/// stdout with this). Tolerates whitespace around `:`; anything else
+/// (unknown action, bad value, not a line of ours) is `None`.
+pub fn parse_action_line(line: &str) -> Option<MenuAction> {
+    let field = |k: &str| -> Option<&str> {
+        let key = format!("\"{k}\"");
+        let rest = &line[line.find(&key)? + key.len()..];
+        let rest = rest.trim_start().strip_prefix(':')?.trim_start();
+        let rest = rest.strip_prefix('"')?;
+        Some(&rest[..rest.find('"')?])
+    };
+    let v = field("value");
+    Some(match field("menu_action")? {
+        "set_mode" => MenuAction::SetMode(*MODES.iter().find(|m| Some(mode_key(**m)) == v)?),
+        "set_mood" => MenuAction::SetMood(*MOODS.iter().find(|m| Some(mood_key(**m)) == v)?),
+        "toggle_mute" => MenuAction::ToggleMute,
+        "toggle_monitor" => MenuAction::ToggleMonitor,
+        "set_size" => MenuAction::SetSize(*Size::ALL.iter().find(|s| Some(size_key(**s)) == v)?),
+        "open_settings" => MenuAction::OpenSettings,
+        "reset_position" => MenuAction::ResetPosition,
+        "about" => MenuAction::About,
+        "quit" => MenuAction::Quit,
+        _ => return None,
+    })
+}
+
 /// `xdg-open <path>` (not spawned here; the overlay spawns it off the
 /// render path, e.g. `cmd.spawn()` and forget).
 pub fn open_settings_command(path: &Path) -> std::process::Command {
@@ -612,6 +688,32 @@ mod tests {
         let o = on_menu_action(MenuAction::Quit, &mut b, &s);
         assert_eq!(o.actions, [Action::Quit]);
         assert!(o.effects.is_empty());
+    }
+
+    #[test]
+    fn action_lines_round_trip() {
+        let m = build_menu(&MenuState::from_brain(&brain(), false, 0.55));
+        for (_, it) in m.leaves() {
+            if let MenuItem::Leaf { action, .. } = it {
+                let l = action_line(*action);
+                assert_eq!(parse_action_line(&l), Some(*action), "{l}");
+            }
+        }
+        assert_eq!(
+            action_line(MenuAction::SetMode(MoveMode::Wander)),
+            r#"{"menu_action":"set_mode","value":"wander"}"#
+        );
+        assert_eq!(
+            parse_action_line(r#"{ "menu_action" : "set_size", "value": "large" }"#),
+            Some(MenuAction::SetSize(Size::Large))
+        );
+        assert_eq!(
+            parse_action_line(r#"{"menu_action":"set_mode","value":"fly"}"#),
+            None
+        );
+        assert_eq!(parse_action_line(r#"{"menu_action":"nope"}"#), None);
+        assert_eq!(parse_action_line("lillith-settings: hello"), None);
+        assert_eq!(parse_action_line(""), None);
     }
 
     #[test]
