@@ -36,7 +36,7 @@ use lillith_core::mood::Mood;
 use lillith_core::physics_config::{PhysicsConfig, Recipe};
 use lillith_core::physics_driver::{Motion, Overlay as PhysicsOverlay, PhysicsDriver};
 use lillith_core::spring::{Channel, Physics, SpringMask, Transform};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 /// Errors from the animator.
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -128,9 +128,12 @@ pub struct AnimatorConfig {
 /// Clip tag: the frames already contain bouncy secondary motion.
 pub const BAKED_MOTION_TAG: &str = "baked_motion";
 /// Clip tag prefix: `variant_of:<clip>` marks an alternative take of `<clip>`.
-/// While `<clip>` is the idle base, the animator draws one of its variants
-/// and picks a new one at random at a loop end once the current take has
-/// played for [`IdleConfig::variant_hold_s`].
+/// With [`IdleConfig::variant_play_once`] (default) any tagged base (idle,
+/// walk_right/left, sit_swing) loops its clean clip for
+/// [`IdleConfig::variant_hold_s`], then at a loop end plays one random
+/// variant once and returns to the base. Without it (legacy), only the idle
+/// base cycles: one variant loops until the hold is over, then a new one is
+/// picked at a loop end.
 pub const VARIANT_OF_TAG: &str = "variant_of:";
 
 impl Default for AnimatorConfig {
@@ -390,12 +393,10 @@ pub struct Animator {
     driver: Option<PhysicsDriver>,
     last_key: Option<(String, usize)>,
     idle_base: String,
-    /// Clips tagged `variant_of:<idle_base>` (sorted); empty = no cycling.
-    idle_variants: Vec<String>,
-    /// Index into `idle_variants` currently drawn for the idle base.
-    idle_pick: usize,
-    /// Seconds the current idle take has been drawn.
-    variant_age: f32,
+    /// `variant_of:<base>` tags: base clip -> its variant clips (sorted).
+    variants: BTreeMap<String, Vec<String>>,
+    /// Per base with variants: the take drawn now and its age.
+    takes: BTreeMap<String, VariantTake>,
     /// xorshift state for the variant pick (seeded from `cfg.seed`).
     variant_rng: u64,
     /// Springs switched off for the clip drawn now (its `disable_springs`).
@@ -419,6 +420,17 @@ pub struct Animator {
     mouth: Option<crate::talk::Mouth>,
 }
 
+/// Which take of a base with variants is drawn, and for how long.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct VariantTake {
+    /// Index into the base's variants; `None` = the clean base clip.
+    pick: Option<usize>,
+    /// Last variant played (play-once mode avoids repeating it).
+    last: Option<usize>,
+    /// Seconds on the current take (play-once: since the last variant).
+    age: f32,
+}
+
 /// `playback_speed` sanitised to 0.1..=4 (non-finite = 1).
 fn clamp_speed(s: f32) -> f32 {
     if s.is_finite() {
@@ -428,17 +440,26 @@ fn clamp_speed(s: f32) -> f32 {
     }
 }
 
-/// Variant clips of `base` (tag `variant_of:<base>`), sorted by name.
-fn variants_of(manifest: &Manifest, base: &str) -> Vec<String> {
-    let tag = format!("{VARIANT_OF_TAG}{base}");
-    let mut v: Vec<String> = manifest
-        .clips
-        .iter()
-        .filter(|(_, c)| c.tags.iter().any(|t| *t == tag))
-        .map(|(n, _)| n.clone())
-        .collect();
-    v.sort();
-    v
+/// Base clip -> its variant clips (tag `variant_of:<base>`, sorted by
+/// name), for every base that exists in `manifest`. A clip is never its
+/// own variant.
+pub fn variant_map(manifest: &Manifest) -> BTreeMap<String, Vec<String>> {
+    let mut m: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (name, clip) in &manifest.clips {
+        for t in &clip.tags {
+            if let Some(base) = t.strip_prefix(VARIANT_OF_TAG) {
+                let base = base.trim();
+                if base != name && manifest.clips.contains_key(base) {
+                    m.entry(base.to_string()).or_default().push(name.clone());
+                }
+            }
+        }
+    }
+    for v in m.values_mut() {
+        v.sort();
+        v.dedup();
+    }
+    m
 }
 
 fn once_player(clip: &Clip) -> ClipPlayer {
@@ -479,9 +500,13 @@ impl Animator {
                 .ok_or(AnimError::Empty)?
                 .clone()
         };
-        let idle_variants = variants_of(&manifest, &idle_base);
-        let base_player =
-            ClipPlayer::for_clip(&manifest.clips[idle_variants.first().unwrap_or(&idle_base)]);
+        let variants = variant_map(&manifest);
+        // Legacy mode starts on the first idle variant; play-once on idle.
+        let first = match variants.get(&idle_base) {
+            Some(v) if !cfg.idle.variant_play_once => &v[0],
+            _ => &idle_base,
+        };
+        let base_player = ClipPlayer::for_clip(&manifest.clips[first]);
         let idle = IdleLife::with_available(cfg.idle.clone(), cfg.seed, |n| {
             manifest.clips.contains_key(n)
         });
@@ -507,9 +532,8 @@ impl Animator {
             physics,
             driver,
             last_key: None,
-            idle_variants,
-            idle_pick: 0,
-            variant_age: 0.0,
+            variants,
+            takes: BTreeMap::new(),
             variant_rng: cfg.seed | 1,
             pinned_base_frame: None,
             mouth: None,
@@ -610,50 +634,119 @@ impl Animator {
         self.cfg.idle_enabled = on;
     }
 
-    /// The clip actually drawn for base `name`: a variant for the idle base
-    /// when variants exist, else `name` itself.
+    /// `true`: variants play once and hand back to their base
+    /// ([`IdleConfig::variant_play_once`]).
+    fn play_once(&self) -> bool {
+        self.cfg.idle.variant_play_once
+    }
+
+    /// Variant clips that may be drawn for base `name` (sorted): its
+    /// `variant_of:<name>` clips; legacy mode only cycles the idle base.
+    /// A mirrored walk (`walk_right` drawn flipped for a left walk, see
+    /// [`Animator::locomotion_clip`]) uses the drawn clip's variants,
+    /// flipped the same way.
+    pub fn variants(&self, name: &str) -> &[String] {
+        if !self.play_once() && name != self.idle_base {
+            return &[];
+        }
+        self.variants.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    /// The take state of base `name` (a fresh one if never drawn).
+    fn take(&self, name: &str) -> VariantTake {
+        self.takes.get(name).copied().unwrap_or(VariantTake {
+            // Legacy mode always draws a variant, starting with the first.
+            pick: (!self.play_once()).then_some(0),
+            ..VariantTake::default()
+        })
+    }
+
+    /// The clip actually drawn for base `name`: its current variant take
+    /// when one is on, else `name` itself.
     fn drawn_base<'a>(&'a self, name: &'a str) -> &'a str {
-        if name == self.idle_base && !self.idle_variants.is_empty() {
-            &self.idle_variants[self.idle_pick]
-        } else {
-            name
+        let v = self.variants(name);
+        match self.take(name).pick {
+            Some(i) if i < v.len() => &v[i],
+            _ => name,
         }
     }
 
-    /// Idle variant currently drawn, if the idle base has variants.
+    /// Variant currently drawn for the base clip, if any (e.g. `idle_yawn_stretch`).
+    pub fn base_variant(&self) -> Option<&str> {
+        let d = self.drawn_base(&self.base);
+        (d != self.base).then_some(d)
+    }
+
+    /// Idle variant currently drawn, if the idle base shows one.
     pub fn idle_variant(&self) -> Option<&str> {
-        self.idle_variants.get(self.idle_pick).map(String::as_str)
+        let d = self.drawn_base(&self.idle_base);
+        (d != self.idle_base).then_some(d)
     }
 
-    /// Picks the next idle variant at random (never the same one twice in a
-    /// row when there are two or more) and restarts the base player on it.
-    fn next_idle_variant(&mut self) {
-        let n = self.idle_variants.len();
-        if n < 2 {
-            return;
-        }
+    fn next_rng(&mut self) -> u64 {
         let mut x = self.variant_rng;
         x ^= x << 13;
         x ^= x >> 7;
         x ^= x << 17;
         self.variant_rng = x;
-        let step = 1 + (x % (n as u64 - 1)) as usize;
-        self.idle_pick = (self.idle_pick + step) % n;
-        self.base_player = self.base_player_for_drawn();
-        self.variant_age = 0.0;
+        x
     }
 
-    /// `true` once the current idle take has been on long enough to switch.
+    /// Picks the next variant of the current base at random (never the
+    /// same one twice in a row when there are two or more) and restarts the
+    /// base player on it: once (play-once mode) or looping (legacy).
+    fn next_variant(&mut self) {
+        let n = self.variants(&self.base).len();
+        let mut t = self.take(&self.base);
+        let pick = if self.play_once() {
+            if n == 0 {
+                return;
+            }
+            match t.last {
+                Some(l) if n >= 2 => (l + 1 + (self.next_rng() % (n as u64 - 1)) as usize) % n,
+                _ => (self.next_rng() % n as u64) as usize,
+            }
+        } else {
+            if n < 2 {
+                return;
+            }
+            let cur = t.pick.unwrap_or(0);
+            (cur + 1 + (self.next_rng() % (n as u64 - 1)) as usize) % n
+        };
+        t.pick = Some(pick);
+        t.last = Some(pick);
+        t.age = 0.0;
+        self.takes.insert(self.base.clone(), t);
+        self.base_player = self.base_player_for_drawn();
+    }
+
+    /// Play-once mode: a variant pass ended, back to the clean base.
+    fn end_variant(&mut self) {
+        let mut t = self.take(&self.base);
+        t.pick = None;
+        t.age = 0.0;
+        self.takes.insert(self.base.clone(), t);
+        self.base_player = self.base_player_for_drawn();
+    }
+
+    /// `true` once the current take of the base has been on long enough
+    /// to switch.
     fn variant_due(&self) -> bool {
-        self.variant_age >= self.cfg.idle.variant_hold_s
+        self.take(&self.base).age >= self.cfg.idle.variant_hold_s
     }
 
     /// A fresh base player timed for the clip actually drawn for the base
-    /// (idle variant / baked-jiggle sibling: their frame counts and
-    /// durations can differ from the clean clip's).
+    /// (variant / baked-jiggle sibling: their frame counts and durations
+    /// can differ from the clean clip's). A play-once variant gets a
+    /// `Once` player.
     fn base_player_for_drawn(&self) -> ClipPlayer {
         let name = self.drawn(self.drawn_base(&self.base));
-        ClipPlayer::for_clip(&self.manifest.clips[name])
+        let clip = &self.manifest.clips[name];
+        if self.play_once() && self.base_variant().is_some() {
+            once_player(clip)
+        } else {
+            ClipPlayer::for_clip(clip)
+        }
     }
 
     /// Cross-fade target for a player in smooth mode.
@@ -839,12 +932,20 @@ impl Animator {
             }
             self.entry = None;
             self.base = name.to_string();
+            if self.play_once() && self.takes.contains_key(name) {
+                // Play-once: (re)entering a base always starts on the clean
+                // clip (blends and walk entry frames are cut from it); the
+                // hold keeps counting from where it was.
+                let mut t = self.take(name);
+                t.pick = None;
+                self.takes.insert(name.to_string(), t);
+            }
             self.base_player = self.base_player_for_drawn();
-            // Back to idle: a new take once the current one was held long
-            // enough, else resume the same take (`base_player_for_drawn`
-            // already picked it).
-            if name == self.idle_base && !self.idle_variants.is_empty() && self.variant_due() {
-                self.next_idle_variant();
+            // Legacy, back to idle: a new take once the current one was
+            // held long enough, else resume the same take
+            // (`base_player_for_drawn` already picked it).
+            if !self.play_once() && !self.variants(name).is_empty() && self.variant_due() {
+                self.next_variant();
             }
             self.base_flip = flip;
             self.pinned_base_frame = None;
@@ -1225,12 +1326,23 @@ impl Animator {
         let clip_dt = dt * clamp_speed(self.cfg.playback_speed);
         let before = self.base_player.frame();
         self.base_player.advance(clip_dt);
-        // Idle variants: a new random take at a loop end of the idle base,
-        // once the current one has been held long enough.
-        if self.base == self.idle_base {
-            self.variant_age += dt;
-            if self.base_player.frame() < before && self.variant_due() {
-                self.next_idle_variant();
+        // Variants: at a loop end of the base once the hold is over, a new
+        // random take; play-once mode returns to the base after one pass.
+        if !self.variants(&self.base).is_empty() {
+            let mut t = self.take(&self.base);
+            t.age += dt;
+            self.takes.insert(self.base.clone(), t);
+            let wrapped = self.base_player.frame() < before;
+            if self.play_once() {
+                if t.pick.is_some() {
+                    if self.base_player.finished() {
+                        self.end_variant();
+                    }
+                } else if wrapped && self.variant_due() {
+                    self.next_variant();
+                }
+            } else if wrapped && self.variant_due() {
+                self.next_variant();
             }
         }
         if let Some(bl) = &mut self.blink {
@@ -1823,8 +1935,10 @@ mod tests {
 
     #[test]
     fn idle_variants_cycle_at_loop_end() {
+        // Legacy mode (variant_play_once = false): one variant loops.
         let mut cfg = quiet();
         cfg.idle.variant_hold_s = 0.0;
+        cfg.idle.variant_play_once = false;
         let mut a = Animator::new(variant_manifest(), cfg).unwrap();
         assert_eq!(a.base(), "idle");
         let mut seen = std::collections::BTreeSet::new();
@@ -1852,8 +1966,10 @@ mod tests {
     }
 
     #[test]
-    fn idle_variants_are_held_by_default() {
-        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+    fn legacy_idle_variants_are_held_for_the_hold() {
+        let mut cfg = quiet();
+        cfg.idle.variant_play_once = false;
+        let mut a = Animator::new(variant_manifest(), cfg).unwrap();
         assert_eq!(a.cfg.idle.variant_hold_s, 30.0);
         let mut last = a.current().clip_name.to_string();
         let mut switches = Vec::new();
@@ -1868,6 +1984,212 @@ mod tests {
         // 0.4 s loops, 30 s hold: two switches in 70 s, not ~175.
         assert_eq!(switches.len(), 2, "{switches:?}");
         assert!(switches[0] >= 29.9 && switches[0] <= 30.5, "{switches:?}");
+    }
+
+    /// Clips `(name, frames, tags)`, all looping at 10 fps.
+    fn tagged_manifest(clips: &[(&str, usize, &str)]) -> Manifest {
+        let mut s = String::new();
+        for (name, n, tags) in clips {
+            s += &format!("[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\nmode = \"loop\"\ntags = {tags}\nframes = [");
+            for i in 0..*n {
+                s += &format!(
+                    "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                    i * 400
+                );
+            }
+            s += "]\n";
+        }
+        Manifest::from_toml_str(&s).unwrap()
+    }
+
+    const BAKED: &str = "[\"baked_motion\"]";
+
+    fn variant_set() -> Manifest {
+        tagged_manifest(&[
+            ("idle", 4, BAKED),
+            ("idle_yawn", 6, "[\"baked_motion\", \"variant_of:idle\"]"),
+            ("idle_nails", 6, "[\"baked_motion\", \"variant_of:idle\"]"),
+            ("walk_right", 8, "[]"),
+            (
+                "walk_sassy_right",
+                7,
+                "[\"baked_motion\", \"variant_of:walk_right\"]",
+            ),
+            (
+                "walk_skip_right",
+                5,
+                "[\"baked_motion\", \"variant_of:walk_right\"]",
+            ),
+            ("walk_left", 8, "[]"),
+            (
+                "walk_skip_left",
+                5,
+                "[\"baked_motion\", \"variant_of:walk_left\"]",
+            ),
+            ("sit_swing", 4, "[]"),
+            (
+                "sit_heel_kick",
+                6,
+                "[\"baked_motion\", \"variant_of:sit_swing\"]",
+            ),
+            // Base missing from the set: ignored.
+            ("orphan", 3, "[\"variant_of:nope\"]"),
+        ])
+    }
+
+    #[test]
+    fn variant_map_resolves_variant_of_tags() {
+        let m = variant_set();
+        let map = variant_map(&m);
+        let keys: Vec<&str> = map.keys().map(String::as_str).collect();
+        assert_eq!(keys, ["idle", "sit_swing", "walk_left", "walk_right"]);
+        assert_eq!(map["idle"], ["idle_nails", "idle_yawn"]);
+        assert_eq!(map["walk_right"], ["walk_sassy_right", "walk_skip_right"]);
+        assert_eq!(map["walk_left"], ["walk_skip_left"]);
+        assert_eq!(map["sit_swing"], ["sit_heel_kick"]);
+        let a = Animator::new(m, quiet()).unwrap();
+        assert_eq!(a.variants("sit_swing"), ["sit_heel_kick"]);
+        assert!(a.variants("orphan").is_empty() && a.variants("nope").is_empty());
+        // Legacy mode cycles the idle base only.
+        let mut cfg = quiet();
+        cfg.idle.variant_play_once = false;
+        let a = Animator::new(variant_set(), cfg).unwrap();
+        assert_eq!(a.variants("idle").len(), 2);
+        assert!(a.variants("walk_right").is_empty() && a.variants("sit_swing").is_empty());
+    }
+
+    /// Ticks until a variant of the base is drawn (max `secs`); returns the
+    /// drawn clip and its flip.
+    fn until_variant(a: &mut Animator, secs: f32) -> Option<(String, bool)> {
+        for _ in 0..(secs * 60.0) as usize {
+            a.tick(1.0 / 60.0);
+            if a.base_variant().is_some() {
+                let f = a.current();
+                return Some((f.clip_name.to_string(), f.flip));
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn mirrored_walk_draws_the_drawn_clips_variants_flipped() {
+        let mut cfg = quiet();
+        cfg.idle.variant_hold_s = 0.0;
+        // Only walk_right (+ variants): a left walk is walk_right mirrored,
+        // and so are its variants.
+        let m = tagged_manifest(&[
+            ("idle", 4, "[]"),
+            ("walk_right", 8, "[]"),
+            ("walk_sassy_right", 7, "[\"variant_of:walk_right\"]"),
+        ]);
+        let mut a = Animator::new(m, cfg.clone()).unwrap();
+        assert_eq!(
+            a.locomotion_clip(Dir::Left, false),
+            Some(("walk_right".into(), true))
+        );
+        a.walk(Dir::Left, false).unwrap();
+        // Entering the walk starts on the clean clip.
+        assert_eq!(
+            (a.current().clip_name, a.current().flip),
+            ("walk_right", true)
+        );
+        assert_eq!(
+            until_variant(&mut a, 2.0),
+            Some(("walk_sassy_right".into(), true))
+        );
+        // Dedicated walk_left: its own variants, unflipped.
+        let mut a = Animator::new(variant_set(), cfg).unwrap();
+        a.walk(Dir::Left, false).unwrap();
+        assert_eq!(
+            until_variant(&mut a, 2.0),
+            Some(("walk_skip_left".into(), false))
+        );
+        a.walk(Dir::Right, false).unwrap();
+        assert_eq!(a.current().clip_name, "walk_right", "new base: clean clip");
+        let (c, flip) = until_variant(&mut a, 2.0).unwrap();
+        assert!(c == "walk_sassy_right" || c == "walk_skip_right", "{c}");
+        assert!(!flip);
+        a.stand();
+        assert_eq!(a.current().clip_name, "idle");
+    }
+
+    #[test]
+    fn play_once_short_variant_returns_to_base() {
+        let mut cfg = quiet();
+        cfg.idle.variant_hold_s = 2.0;
+        assert!(cfg.idle.variant_play_once, "default");
+        for base in ["idle", "sit_swing"] {
+            let mut a = Animator::new(variant_set(), cfg.clone()).unwrap();
+            a.set_base(base, false).unwrap();
+            // (clip, first tick, last tick) runs of what the base draws.
+            let mut runs: Vec<(String, usize, usize)> = Vec::new();
+            for i in 0..(12 * 60) {
+                a.tick(1.0 / 60.0);
+                let f = a.current();
+                assert_eq!(f.layer, Layer::Base);
+                match runs.last_mut() {
+                    Some(r) if r.0 == f.clip_name => r.2 = i,
+                    _ => runs.push((f.clip_name.to_string(), i, i)),
+                }
+            }
+            let variants = a.variants(base).to_vec();
+            assert!(runs.len() >= 5, "{base}: {runs:?}");
+            for (k, (clip, start, end)) in runs.iter().enumerate() {
+                let secs = (end - start + 1) as f32 / 60.0;
+                if variants.contains(clip) {
+                    // A 6-frame (0.6 s) variant, far shorter than the 2 s
+                    // hold, plays exactly once and hands back to the base.
+                    assert!((secs - 0.6).abs() < 0.05, "{base}: {clip} {secs}");
+                    assert_eq!(runs.get(k + 1).map(|r| r.0.as_str()).unwrap_or(base), base);
+                } else {
+                    assert_eq!(clip, base);
+                    if k + 1 < runs.len() {
+                        // The base loops for the hold before the next one.
+                        assert!(secs >= 2.0 - 0.02, "{base}: base held {secs}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn play_once_two_variants_never_repeat_back_to_back() {
+        let mut cfg = quiet();
+        cfg.idle.variant_hold_s = 0.0;
+        let mut a = Animator::new(variant_set(), cfg).unwrap();
+        let mut played = Vec::new();
+        let mut last = None;
+        for _ in 0..(20 * 60) {
+            a.tick(1.0 / 60.0);
+            let v = a.idle_variant().map(str::to_string);
+            if v != last {
+                if let Some(v) = &v {
+                    played.push(v.clone());
+                }
+                last = v;
+            }
+        }
+        assert!(played.len() > 10, "{played:?}");
+        assert!(played.windows(2).all(|w| w[0] != w[1]), "{played:?}");
+    }
+
+    #[test]
+    fn play_once_default_draws_clean_idle_until_the_hold() {
+        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+        assert!(a.cfg.idle.variant_play_once);
+        assert_eq!(a.cfg.idle.variant_hold_s, 30.0);
+        assert_eq!(a.current().clip_name, "idle");
+        let mut first = None;
+        for i in 0..(35 * 60) {
+            a.tick(1.0 / 60.0);
+            if first.is_none() && a.idle_variant().is_some() {
+                first = Some(i as f32 / 60.0);
+            }
+        }
+        let t = first.expect("a variant after the hold");
+        assert!((29.9..=30.5).contains(&t), "{t}");
+        // Baked-motion masking is untouched while variants play.
+        assert!(a.spring_mask().contains(Channel::Chest));
     }
 
     #[test]

@@ -37,7 +37,15 @@ pub struct IdleConfig {
     pub reaction_every_s: Range,
     /// Minimum time on one idle take (`variant_of:idle` clips) before the
     /// animator may switch to another at a loop end. 0 = every loop.
+    /// With [`Self::variant_play_once`] it is the time spent on the clean
+    /// base (idle, walk_*, sit_swing) between two variant passes.
     pub variant_hold_s: f32,
+    /// `true` (default): a `variant_of:<base>` clip plays once and hands
+    /// back to its base clip, which then loops for `variant_hold_s` before
+    /// the next variant; covers every tagged base (idle, walk_right/left,
+    /// sit_swing). `false`: the old behaviour, idle only, where one idle
+    /// variant loops for the whole hold and the clean idle is never drawn.
+    pub variant_play_once: bool,
 }
 
 impl Default for IdleConfig {
@@ -49,6 +57,7 @@ impl Default for IdleConfig {
             transition_len_s: (1.2, 2.0),
             reaction_every_s: (45.0, 90.0),
             variant_hold_s: 30.0,
+            variant_play_once: true,
         }
     }
 }
@@ -366,11 +375,25 @@ mod tests {
     }
 
     #[test]
+    fn variant_play_once_defaults_true_and_parses() {
+        assert!(IdleConfig::default().variant_play_once);
+        assert!(IdleConfig::lively().variant_play_once);
+        // Missing key in [behavior.idle] keeps the default.
+        let c: IdleConfig = toml::from_str("variant_hold_s = 12.0").unwrap();
+        assert!(c.variant_play_once);
+        assert_eq!(c.variant_hold_s, 12.0);
+        let c: IdleConfig = toml::from_str("variant_play_once = false").unwrap();
+        assert!(!c.variant_play_once);
+        assert_eq!(c.variant_hold_s, 30.0);
+    }
+
+    #[test]
     fn calm_defaults_mostly_stand_and_breathe() {
         let d = IdleConfig::default();
         assert_eq!(d.transition_every_s, (25.0, 40.0));
         assert_eq!(d.reaction_every_s, (45.0, 90.0));
         assert_eq!(d.variant_hold_s, 30.0);
+        assert!(d.variant_play_once);
         // Breathing and blinks keep their subtle rhythm.
         assert_eq!(d.breath_period_s, (3.5, 4.5));
         assert_eq!(d.blink_every_s, (4.0, 6.0));

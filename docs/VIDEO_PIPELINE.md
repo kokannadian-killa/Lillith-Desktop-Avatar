@@ -89,9 +89,10 @@ and not committed. Examples: a deep bow, or a turn that shows her back.
   - sits: scale 0.5, fixed, aligned to sit_swing, same seat_y / seat_x_range;
   - idles: the idle_a still.
 - The walk variants carry `engine_springs` (gait disabled) like the base walks. They have no `root_motion` or `contact_frames` yet.
-- Engine support: only `variant_of:<idle base>` clips are cycled (Animator, `IdleConfig::variant_hold_s`, 30 s by default).
-  There is no walk or sit variant picker yet, so those tags are inert until one is added.
-- The idle gesture variants are ~4 s loops. With the 30 s hold, one gesture repeats several times before the next pick.
+- Engine support: every `variant_of:<base>` tag is read (Animator `variant_map`; bases idle, walk_right, walk_left, sit_swing).
+  With `IdleConfig::variant_play_once` (default true) the clean base loops for `variant_hold_s` (30 s), then one random variant plays once at a base loop end and hands back to the base. A mirrored walk (walk_right drawn flipped) draws walk_right's variants flipped.
+  While a walk variant is drawn the window moves at the fixed walk speed (no `root_motion` on those clips yet).
+- `variant_play_once = false` keeps the legacy behaviour: idle only, one ~4 s idle variant loops for the whole 30 s hold, and the clean idle is not drawn.
   A shorter per-variant hold, or playing them as one-shots, would suit them better.
 
 ## Known caveats
