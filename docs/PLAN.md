@@ -293,6 +293,23 @@ Each idea is assigned to a milestone. ✅ = already built, ▶ = in progress.
 | 29 | Discord status | M10 | Discord Rich Presence over the local IPC socket: "currently: Hacking" |
 | 30 | Screen reading (OCR) | M10 (opt-in) | Off by default; only on explicit request through the screenshot portal (KDE asks permission each time), tesseract locally |
 
+
+### 5.2 Chat UI + setup wizard (Ko's request, added 2026-10-20, UTC-6)
+
+Folded into the milestones. The chat pieces largely exist on branch `feat/chat-bubble-llama` (speech bubble, click-to-chat, local llama-server) and need review + merge + polish.
+
+| Piece | Milestone | Notes |
+|---|---|---|
+| Speech bubble over her head | M7 | On `feat/chat-bubble-llama` (`[chat] overlay_speech`, overlay grows upward). Needs on-overlay text rendering finished and Wayland self-positioning |
+| Live chat / conversation view (scrollable transcript) | M7 | A separate egui chat window: message history, input box, streaming reply. Reuses `lillith-panel` |
+| Interface bubble / chat window toggle | M7 | Open via right-click menu item "Chat" and the `Y`/`Enter` key; closeable, remembers position |
+| Right-click access to the GUI options menu | M6 ▶ | The right-click menu (being wired now) gains an "Open interface / GUI options" item that raises the egui settings/chat window |
+| First-run setup wizard | M6 | On first launch: detect Ollama / llama-server, scan for local `.gguf` models, pick one, test it, write config. Modeled on the old Aether `aether_main_v2.py` first-run wizard (model scanner + Modelfile editor) |
+| GGUF model picker | M6 | Scan `~/.local/share`, Ollama's model dir, and a user path for `*.gguf`; list name/size/quant; choose the default; store in `[llm]` config |
+| Modelfile customizer | M6 | Edit the Ollama Modelfile / system prompt + params (temperature, context, stop tokens) in the wizard and in settings; save and (re)create the model |
+
+**M6 and M7 acceptance updated** to include the above: M6's egui settings panel also hosts the setup wizard, GGUF picker and Modelfile customizer; M7's chat covers both the over-head bubble and the scrollable conversation window, reachable from the right-click menu and the keyboard.
+
 **New milestone M10: Extras & integrations.** Acceptance: each M10 integration is a separate cargo feature + `[integrations.<name>]` config switch, off by default unless noted, failing gracefully when its service is missing. Opt-in ones (webcam, OCR) never run without an explicit user action.
 
 **Not building (excluded, consistent with the existing exclusion list):**

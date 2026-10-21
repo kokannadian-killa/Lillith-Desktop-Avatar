@@ -5,10 +5,14 @@
 
 use crate::backend::Backend;
 use crate::drag::{Drag, Placement, Release};
+use crate::menu_popup::{Fonts, MenuHit, MenuKey, MenuPopup};
 use crate::stage::{Changed, Stage, StageError};
 use lillith_anim::animator::{AnimatorConfig, Dir};
-use lillith_core::config::{save_overlay, MoveMode, OverlayPos};
+use lillith_core::config::{save_overlay, save_scale, MoveMode, OverlayPos};
 use lillith_core::interaction::Button;
+use lillith_core::menu::{
+    on_menu_action, open_settings_command, settings_template, MenuAction, MenuEffect, MenuState,
+};
 use lillith_core::rules::RuleSet;
 use lillith_core::state::{Action, BehaviorConfig, Brain, Input, Key};
 use lillith_core::Event;
@@ -24,6 +28,32 @@ pub type EventFeed = Arc<Mutex<Receiver<Event>>>;
 
 /// Most feed events applied per frame (a burst cannot stall rendering).
 pub const MAX_EVENTS_PER_TICK: usize = 16;
+
+/// Receives every action batch the [`Controller`] applies (input, tick,
+/// event and menu batches), e.g. the app's `lillith_voice::Voice`
+/// (`Action::Say` speaks, `Action::Muted` mutes). Called on the overlay
+/// thread right before the batch is applied, so it must not block: queue
+/// the work and return.
+pub trait ActionSink {
+    fn on_actions(&mut self, actions: &[Action]);
+}
+
+/// Shared [`ActionSink`] handle (cloneable so the Wayland → X11 fallback
+/// keeps the same voice).
+#[derive(Clone)]
+pub struct SinkHandle(pub Arc<Mutex<dyn ActionSink>>);
+
+impl SinkHandle {
+    pub fn new(sink: impl ActionSink + 'static) -> Self {
+        Self(Arc::new(Mutex::new(sink)))
+    }
+}
+
+impl std::fmt::Debug for SinkHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SinkHandle")
+    }
+}
 
 /// Px of her window kept on screen when dragging off an edge.
 pub const KEEP_ON_SCREEN: i32 = 64;
@@ -72,6 +102,11 @@ pub struct OverlayOptions {
     pub muted: bool,
     /// System-monitor events (`None` = `--no-monitor` / tests).
     pub events: Option<EventFeed>,
+    /// Gets every applied action batch (voice; `None` = silent).
+    pub sink: Option<SinkHandle>,
+    /// config.toml the menu's "Open settings" opens (even with `--no-save`;
+    /// `None` = `Config::default_path()`).
+    pub settings_path: Option<PathBuf>,
 }
 
 /// Shared overlay logic, independent of the windowing system.
@@ -89,6 +124,16 @@ pub struct Controller {
     screen: Option<(u32, u32)>,
     quit: bool,
     feed: Option<EventFeed>,
+    sink: Option<SinkHandle>,
+    /// Menu "Pause system monitor": feed events are dropped while set.
+    pub monitor_paused: bool,
+    menu: Option<MenuPopup>,
+    /// A new menu was opened and the backend has not shown it yet.
+    menu_opened: bool,
+    fonts: Fonts,
+    /// The stage changed size (menu Size ▸); the backend resizes its window.
+    resized: bool,
+    settings_path: Option<PathBuf>,
 }
 
 impl Controller {
@@ -121,6 +166,13 @@ impl Controller {
             screen: None,
             quit: false,
             feed: opts.events.clone(),
+            sink: opts.sink.clone(),
+            monitor_paused: false,
+            menu: None,
+            menu_opened: false,
+            fonts: Fonts::preload(),
+            resized: false,
+            settings_path: opts.settings_path.clone(),
         }
     }
 
@@ -157,6 +209,15 @@ impl Controller {
 
     /// Applies brain actions to the animator / window.
     pub fn apply(&mut self, actions: Vec<Action>) {
+        if actions.is_empty() {
+            return;
+        }
+        if let Some(sink) = &self.sink {
+            // Non-blocking by contract (the voice only queues the line).
+            if let Ok(mut s) = sink.0.lock() {
+                s.on_actions(&actions);
+            }
+        }
         for a in actions {
             let anim = self.stage.animator_mut();
             match a {
@@ -188,7 +249,7 @@ impl Controller {
                 Action::Say(line) => tracing::info!("💬 {line}"),
                 Action::Sfx(cue) => tracing::debug!(cue, "sfx (audio lands with lillith-voice)"),
                 Action::MoodChanged(m) => tracing::info!(mood = ?m, "mood"),
-                Action::ContextMenu => tracing::info!("right-click: pose menu (stub until M6)"),
+                Action::ContextMenu => self.open_menu(),
                 Action::OpenChat => tracing::info!("chat requested (panel chat lands in M7)"),
                 Action::Muted(m) => tracing::info!(muted = m, "sound"),
                 Action::ModeChanged(m) => tracing::info!(mode = ?m, "movement mode"),
@@ -233,6 +294,19 @@ impl Controller {
 
     /// A key while she has keyboard focus.
     pub fn key(&mut self, key: Key) {
+        if self.menu.is_some() {
+            // Esc / Enter go to the open menu (Esc closes it instead of
+            // quitting); other keys keep their usual meaning.
+            let mk = match key {
+                Key::Escape => Some(MenuKey::Escape),
+                Key::Enter => Some(MenuKey::Enter),
+                _ => None,
+            };
+            if let Some(k) = mk {
+                self.menu_key(k);
+                return;
+            }
+        }
         let a = self.brain.input(Input::Key(key));
         self.apply(a);
     }
@@ -255,6 +329,12 @@ impl Controller {
                     Err(_) => break,
                 }
             }
+        }
+        if self.monitor_paused {
+            if !batch.is_empty() {
+                tracing::debug!(dropped = batch.len(), "system monitor paused");
+            }
+            return;
         }
         for ev in batch {
             self.event(&ev);
@@ -292,6 +372,150 @@ impl Controller {
         r
     }
 
+    // ---- right-click menu (M6) ----
+
+    /// Opens the right-click menu for the current state (replaces an open one).
+    pub fn open_menu(&mut self) {
+        let state = MenuState::from_brain(&self.brain, self.monitor_paused, self.stage.scale());
+        tracing::info!("right-click menu opened");
+        self.menu = Some(MenuPopup::new(state));
+        self.menu_opened = true;
+    }
+
+    /// The open menu, if any.
+    pub fn menu(&self) -> Option<&MenuPopup> {
+        self.menu.as_ref()
+    }
+
+    /// `true` once per newly opened menu: the backend should show (or
+    /// re-show) its popup at the pointer.
+    pub fn take_menu_opened(&mut self) -> bool {
+        std::mem::take(&mut self.menu_opened)
+    }
+
+    pub fn close_menu(&mut self) {
+        if self.menu.take().is_some() {
+            tracing::debug!("menu closed");
+        }
+        self.menu_opened = false;
+    }
+
+    /// Pointer over the popup at popup-local `at` (`None` = left it).
+    /// Returns `true` if it needs a redraw.
+    pub fn menu_pointer(&mut self, at: Option<(f64, f64)>) -> bool {
+        self.menu.as_mut().is_some_and(|m| m.pointer(at))
+    }
+
+    /// Left click at popup-local `at` (outside = dismiss).
+    pub fn menu_click(&mut self, at: (f64, f64)) -> MenuHit {
+        let Some(m) = self.menu.as_mut() else {
+            return MenuHit::None;
+        };
+        let hit = m.click(at.0, at.1);
+        self.on_menu_hit(hit);
+        hit
+    }
+
+    /// A key while the menu is open.
+    pub fn menu_key(&mut self, key: MenuKey) -> MenuHit {
+        let Some(m) = self.menu.as_mut() else {
+            return MenuHit::None;
+        };
+        let hit = m.key(key);
+        self.on_menu_hit(hit);
+        hit
+    }
+
+    fn on_menu_hit(&mut self, hit: MenuHit) {
+        match hit {
+            MenuHit::Dismiss => self.close_menu(),
+            MenuHit::Pick(action) => {
+                self.close_menu();
+                self.menu_pick(action);
+            }
+            MenuHit::Changed | MenuHit::None => {}
+        }
+    }
+
+    /// Forces the next [`Controller::render_menu`] to redraw (expose).
+    pub fn invalidate_menu(&mut self) {
+        if let Some(m) = self.menu.as_mut() {
+            m.invalidate();
+        }
+    }
+
+    /// Redraws the popup if it changed (`Some` = new pixels to present).
+    pub fn render_menu(&mut self) -> Option<&tiny_skia::Pixmap> {
+        let m = self.menu.as_mut()?;
+        m.render(&mut self.fonts)
+    }
+
+    /// Applies a picked leaf: brain actions through [`Controller::apply`]
+    /// (and so the voice), then the overlay-side effects.
+    pub fn menu_pick(&mut self, action: MenuAction) {
+        let state = MenuState::from_brain(&self.brain, self.monitor_paused, self.stage.scale());
+        tracing::info!(?action, "menu pick");
+        let out = on_menu_action(action, &mut self.brain, &state);
+        self.apply(out.actions);
+        for e in out.effects {
+            self.menu_effect(e);
+        }
+    }
+
+    fn menu_effect(&mut self, e: MenuEffect) {
+        match e {
+            MenuEffect::SetMonitorPaused(p) => {
+                self.monitor_paused = p;
+                tracing::info!(paused = p, "system monitor");
+            }
+            MenuEffect::SetScale(s) => {
+                if let Err(err) = self.stage.set_scale(s) {
+                    tracing::warn!("resize to scale {s}: {err}");
+                    return;
+                }
+                self.resized = true;
+                if let Some(out) = self.screen {
+                    self.set_screen(out);
+                }
+                tracing::info!(scale = s, size = ?self.stage.size(), "overlay resized");
+                if let Some(path) = &self.config_path {
+                    match save_scale(path, s) {
+                        Ok(()) => tracing::info!(path = %path.display(), "scale saved"),
+                        Err(e) => tracing::warn!("could not save scale to {}: {e}", path.display()),
+                    }
+                }
+            }
+            MenuEffect::OpenSettings(default) => {
+                let Some(path) = self.settings_path.clone().or(default) else {
+                    tracing::warn!("open settings: no config path (no $HOME?)");
+                    return;
+                };
+                open_settings(&path);
+            }
+            MenuEffect::ResetPosition(pos) => {
+                let p = Placement::from_config(&pos);
+                self.brain.set_position(p.left as f32);
+                self.pending_move = Some(p);
+                tracing::info!(left = p.left, bottom = p.bottom, "position reset");
+                if let Some(path) = &self.config_path {
+                    if let Err(e) = save_overlay(path, &pos) {
+                        tracing::warn!("could not save position to {}: {e}", path.display());
+                    }
+                }
+            }
+            MenuEffect::ShowAbout(text) => {
+                tracing::info!("about: {text}");
+                self.apply(vec![Action::Say(text)]);
+            }
+        }
+    }
+
+    /// `true` once after the stage changed size: resize the window to
+    /// `stage.size()` and redraw.
+    pub fn take_resized(&mut self) -> bool {
+        std::mem::take(&mut self.resized)
+    }
+
     /// Logs how much rasterising the session needed (CPU budget check).
     pub fn log_stats(&self) {
         let n = self.stage.renders().max(1);
@@ -318,6 +542,35 @@ impl Controller {
             }
             Err(e) => tracing::warn!("could not save position to {}: {e}", path.display()),
         }
+    }
+}
+
+/// "Open settings": writes the template if the file is missing, then
+/// `xdg-open`s it without blocking (a thread reaps the child).
+fn open_settings(path: &std::path::Path) {
+    if !path.exists() {
+        let r = path
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::write(path, settings_template()));
+        match r {
+            Ok(()) => tracing::info!(path = %path.display(), "settings file created"),
+            Err(e) => {
+                tracing::warn!("could not create {}: {e}", path.display());
+                return;
+            }
+        }
+    }
+    match open_settings_command(path).spawn() {
+        Ok(mut child) => {
+            tracing::info!(path = %path.display(), "opening settings");
+            let _ = std::thread::Builder::new()
+                .name("xdg-open".into())
+                .spawn(move || {
+                    let _ = child.wait();
+                });
+        }
+        Err(e) => tracing::warn!("xdg-open {}: {e}", path.display()),
     }
 }
 
@@ -406,6 +659,8 @@ mod tests {
             mode: MoveMode::Stay,
             muted: false,
             events: None,
+            sink: None,
+            settings_path: None,
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -485,6 +740,8 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             mode,
             muted: false,
             events: None,
+            sink: None,
+            settings_path: None,
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -548,6 +805,132 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[derive(Default)]
+    struct Rec(Arc<Mutex<Vec<Action>>>);
+    impl ActionSink for Rec {
+        fn on_actions(&mut self, actions: &[Action]) {
+            self.0.lock().unwrap().extend_from_slice(actions);
+        }
+    }
+
+    #[test]
+    fn every_applied_batch_reaches_the_sink() {
+        let (dir, mut c) = m3_controller("sink", MoveMode::Stay);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        c.sink = Some(SinkHandle::new(Rec(seen.clone())));
+        c.apply(vec![Action::Say("hi".into()), Action::Muted(true)]);
+        // Input batches go through the same path (M key = mute toggle).
+        c.key(Key::Char('m'));
+        let got = seen.lock().unwrap().clone();
+        assert_eq!(&got[..2], &[Action::Say("hi".into()), Action::Muted(true)]);
+        assert!(got.len() >= 2);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn right_click_menu_picks_apply() {
+        let (dir, mut c) = m3_controller("menu", MoveMode::Stay);
+        let cfg_path = dir.join("cfg/config.toml");
+        c.config_path = Some(cfg_path.clone());
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        c.sink = Some(SinkHandle::new(Rec(seen.clone())));
+        // Right click on her opens the menu (never quits).
+        assert!(c.button(Button::Right, (40.0, 40.0)));
+        assert!(c.menu().is_some());
+        assert!(c.take_menu_opened());
+        assert!(!c.take_menu_opened());
+        assert!(c.render_menu().is_some());
+        // Esc closes the menu instead of quitting.
+        c.key(Key::Escape);
+        assert!(c.menu().is_none());
+        assert!(!c.quit_requested());
+
+        // Mood ▸ Alert through real clicks on the popup rows.
+        c.open_menu();
+        let row_y = |c: &Controller, pred: &dyn Fn(&crate::menu_popup::Row) -> bool| {
+            let rows = c.menu().unwrap().rows();
+            let i = rows.iter().position(pred).unwrap();
+            let top: u32 = crate::menu_popup::PAD
+                + rows[..i]
+                    .iter()
+                    .map(|r| match r {
+                        crate::menu_popup::Row::Separator => crate::menu_popup::SEP_H,
+                        _ => crate::menu_popup::ROW_H,
+                    })
+                    .sum::<u32>();
+            top as f64 + 5.0
+        };
+        use crate::menu_popup::Row;
+        let y = row_y(
+            &c,
+            &|r| matches!(r, Row::Header { label, .. } if label == "Mood"),
+        );
+        assert_eq!(c.menu_click((30.0, y)), MenuHit::Changed);
+        let y = row_y(
+            &c,
+            &|r| matches!(r, Row::Leaf { label, .. } if label == "Alert"),
+        );
+        assert!(matches!(c.menu_click((40.0, y)), MenuHit::Pick(_)));
+        assert!(c.menu().is_none(), "a pick closes the menu");
+        assert_eq!(c.brain.mood(), lillith_core::Mood::Alert);
+        assert!(seen
+            .lock()
+            .unwrap()
+            .contains(&Action::MoodChanged(lillith_core::Mood::Alert)));
+        // Click outside dismisses.
+        c.open_menu();
+        assert_eq!(c.menu_click((-3.0, 4.0)), MenuHit::Dismiss);
+        assert!(c.menu().is_none());
+
+        // Mute reaches the voice sink.
+        c.menu_pick(MenuAction::ToggleMute);
+        assert!(c.brain.muted());
+        assert!(seen.lock().unwrap().contains(&Action::Muted(true)));
+
+        // Pause system monitor: feed events are dropped.
+        let (tx, rx) = std::sync::mpsc::channel();
+        c.feed = Some(Arc::new(Mutex::new(rx)));
+        c.menu_pick(MenuAction::ToggleMonitor);
+        assert!(c.monitor_paused);
+        tx.send(Event::new("idle.asleep")).unwrap();
+        c.tick(0.05).unwrap();
+        assert_ne!(c.stage.animator().base(), "sleep");
+        c.menu_pick(MenuAction::ToggleMonitor);
+        assert!(!c.monitor_paused);
+        tx.send(Event::new("idle.asleep")).unwrap();
+        c.tick(0.05).unwrap();
+        assert_eq!(c.stage.animator().base(), "sleep");
+
+        // Size ▸ Large: stage resized, scale persisted.
+        let before = c.stage.size();
+        c.menu_pick(MenuAction::SetSize(lillith_core::menu::Size::Large));
+        assert!(c.take_resized());
+        assert_eq!(c.stage.scale(), 0.75);
+        assert!(c.stage.size().0 < before.0, "2.0 -> 0.75");
+        c.stage.render().unwrap();
+        let saved = Config::load(&cfg_path).unwrap();
+        assert_eq!(saved.scale, 0.75);
+
+        // Reset position: default spot, moved and saved.
+        c.menu_pick(MenuAction::ResetPosition);
+        let p = c.take_move().unwrap();
+        assert_eq!((p.left, p.bottom), (80, 48));
+        let saved = Config::load(&cfg_path).unwrap();
+        assert_eq!(saved.overlay, OverlayPos::default());
+        assert_eq!(saved.scale, 0.75, "other keys kept");
+
+        // About speaks through the sink; Quit quits.
+        c.menu_pick(MenuAction::About);
+        assert!(seen
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|a| matches!(a, Action::Say(t) if t.contains("Lillith"))));
+        c.menu_pick(MenuAction::Quit);
+        assert!(c.quit_requested());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn wander_moves_the_window() {
         let (dir, mut c) = m3_controller("m3w", MoveMode::Wander);
@@ -586,6 +969,8 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             mode: MoveMode::Stay,
             muted: false,
             events: None,
+            sink: None,
+            settings_path: None,
         };
         // Either the backend is not compiled in, or the manifest is missing:
         // both are clean errors, never a panic or a hang.

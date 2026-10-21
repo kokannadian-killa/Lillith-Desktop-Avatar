@@ -15,11 +15,13 @@ path = "src/main.rs"
 
 [features]
 # Both overlay backends by default (Wayland needs libxkbcommon + libwayland at build time).
+# Each backend also turns on `lillith-overlay/text` (cosmic-text labels for the
+# right-click menu).
 # Desktop idle (presence) comes with each backend: ext-idle-notify-v1 on
 # Wayland, MIT-SCREEN-SAVER on X11 (both pure Rust).
 default = ["wayland", "x11"]
-wayland = ["lillith-overlay/wayland", "lillith-sense/wayland-idle"]
-x11 = ["lillith-overlay/x11", "lillith-sense/x11"]
+wayland = ["lillith-overlay/wayland", "lillith-overlay/text", "lillith-sense/wayland-idle"]
+x11 = ["lillith-overlay/x11", "lillith-overlay/text", "lillith-sense/x11"]
 full = [
     "wayland",
     "x11",
@@ -39,7 +41,9 @@ lillith-anim.workspace = true
 lillith-overlay.workspace = true
 lillith-sense.workspace = true
 lillith-mind.workspace = true
-lillith-voice.workspace = true
+# `voice`: the speech worker + subprocess TTS engines (piper / espeak-ng /
+# spd-say); no system libraries at build time, engines optional at runtime.
+lillith-voice = { workspace = true, features = ["voice"] }
 lillith-panel.workspace = true
 lillith-tray.workspace = true
 anyhow.workspace = true

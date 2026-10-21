@@ -57,6 +57,9 @@ pub struct Stage {
     pages: PageCache,
     canvas: Canvas,
     scale: f32,
+    /// Manifest cell (largest frame) and idle feet anchor, unscaled.
+    cell_size: (u32, u32),
+    anchor: (f32, f32),
     origin: (f32, f32),
     key: Option<Key>,
     mask: Vec<Rect>,
@@ -114,11 +117,34 @@ impl Stage {
             pages,
             canvas,
             scale,
+            cell_size: (cw, ch),
+            anchor: (a.0 as f32, a.1 as f32),
             origin: (a.0 as f32 * scale, a.1 as f32 * scale),
             key: None,
             mask: Vec::new(),
             renders: 0,
         })
+    }
+
+    /// Current scale (overlay size = cell × scale).
+    pub fn scale(&self) -> f32 {
+        self.scale
+    }
+
+    /// Re-sizes the stage to `scale` (menu Size ▸), keeping the animator,
+    /// its springs and the decoded pages. The next [`Stage::render`] draws
+    /// the new size; the backend must resize its window to [`Stage::size`].
+    pub fn set_scale(&mut self, scale: f32) -> Result<(), StageError> {
+        let scale = scale.clamp(0.1, 4.0);
+        let w = (self.cell_size.0 as f32 * scale).round() as u32;
+        let h = (self.cell_size.1 as f32 * scale).round() as u32;
+        self.canvas = Canvas::new(w, h).ok_or(StageError::Size(w, h))?;
+        self.scale = scale;
+        self.origin = (self.anchor.0 * scale, self.anchor.1 * scale);
+        self.key = None;
+        self.mask_key = None;
+        self.mask.clear();
+        Ok(())
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -300,6 +326,12 @@ pub(crate) mod tests {
             any |= s.tick(1.0 / 30.0).unwrap().pixels;
         }
         assert!(any);
+        // Re-scale keeps the animator and re-renders at the new size.
+        s.set_scale(1.0).unwrap();
+        assert_eq!(s.size(), (40, 40));
+        assert!(s.render().unwrap().pixels);
+        assert!(s.hit(20.0, 20.0));
+        assert!(!s.hit(45.0, 20.0));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

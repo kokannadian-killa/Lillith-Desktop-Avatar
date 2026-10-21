@@ -11,6 +11,9 @@ publish.workspace = true
 
 [features]
 default = []
+# Speech worker + subprocess TTS engines (piper / espeak-ng / spd-say).
+# Needs no system libraries at build time; engines are optional at runtime.
+voice = []
 # rodio playback for SFX and TTS audio (needs libasound at build time).
 audio = ["dep:rodio"]
 
@@ -19,4 +22,6 @@ lillith-core.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
+serde.workspace = true
+toml.workspace = true
 rodio = { workspace = true, optional = true }

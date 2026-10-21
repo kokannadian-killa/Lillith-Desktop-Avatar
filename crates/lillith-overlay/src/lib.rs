@@ -21,6 +21,7 @@ pub mod backend;
 pub mod bubble;
 pub mod drag;
 pub mod input_region;
+pub mod menu_popup;
 pub mod pixels;
 pub mod run;
 pub mod stage;
@@ -32,4 +33,4 @@ pub mod wayland;
 pub mod x11;
 
 pub use backend::Backend;
-pub use run::{run, EventFeed, OverlayError, OverlayOptions};
+pub use run::{run, ActionSink, EventFeed, OverlayError, OverlayOptions, SinkHandle};

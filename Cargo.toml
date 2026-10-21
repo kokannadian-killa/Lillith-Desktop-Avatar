@@ -9,6 +9,7 @@ members = [
     "crates/lillith-voice",
     "crates/lillith-panel",
     "crates/lillith-tray",
+    "crates/lillith-setup",
     "apps/lillith",
     "tools/slice-sheets",
     "tools/import-manifest",
@@ -22,6 +23,7 @@ default-members = [
     "crates/lillith-voice",
     "crates/lillith-panel",
     "crates/lillith-tray",
+    "crates/lillith-setup",
     "apps/lillith",
     "tools/slice-sheets",
     "tools/import-manifest",
@@ -46,6 +48,7 @@ lillith-mind = { path = "crates/lillith-mind" }
 lillith-voice = { path = "crates/lillith-voice" }
 lillith-panel = { path = "crates/lillith-panel" }
 lillith-tray = { path = "crates/lillith-tray" }
+lillith-setup = { path = "crates/lillith-setup" }
 
 # Common
 anyhow = "1"
