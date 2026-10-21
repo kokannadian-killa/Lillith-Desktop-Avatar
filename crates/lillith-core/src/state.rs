@@ -71,6 +71,48 @@ pub struct BehaviorConfig {
     /// Idle life: breathing, blinks, idle transitions/gestures, idle-take
     /// switching (`[behavior.idle]`).
     pub idle: crate::idle::IdleConfig,
+    /// Window-bottom margin (px, like `[overlay] margin_bottom`) of the
+    /// floor she falls to when the KWin bridge has not reported the usable
+    /// area (no bridge, or before its first snapshot).
+    pub floor_offset_px: i32,
+    /// Falling after a drop and perching on windows (`[behavior.gravity]`).
+    pub gravity: GravityConfig,
+}
+
+/// `[behavior.gravity]`: after a drag-release she falls (holding the
+/// `drag_held` pose), bounces softly and lands on the floor or, with the
+/// KWin bridge, on the top edge of the window under her.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GravityConfig {
+    /// Gravity (px/s², +down). `0` turns falling off: she stays where dropped.
+    pub g_px_s2: f32,
+    /// Terminal fall speed (px/s).
+    pub max_fall_speed: f32,
+    /// Landing bounce: fraction of the impact speed she rebounds with
+    /// (`0` = no bounce, clamped to 0..0.9). Bounces slower than ~60 px/s
+    /// settle instead.
+    pub bounce: f32,
+    /// Land on window tops (needs the `kwin/lillith-bridge` script); off =
+    /// always the floor.
+    pub perch_enabled: bool,
+    /// Pause between sits while perched, `[min, max]` s.
+    pub sit_every_s: (f32, f32),
+    /// How long a sit on a window edge lasts, `[min, max]` s.
+    pub sit_for_s: (f32, f32),
+}
+
+impl Default for GravityConfig {
+    fn default() -> Self {
+        Self {
+            g_px_s2: 2600.0,
+            max_fall_speed: 2200.0,
+            bounce: 0.22,
+            perch_enabled: true,
+            sit_every_s: (8.0, 20.0),
+            sit_for_s: (20.0, 45.0),
+        }
+    }
 }
 
 impl Default for BehaviorConfig {
@@ -89,6 +131,8 @@ impl Default for BehaviorConfig {
             wander_min_step_px: 120.0,
             event_wake_priority: 80,
             idle: crate::idle::IdleConfig::default(),
+            floor_offset_px: 48,
+            gravity: GravityConfig::default(),
         }
     }
 }
@@ -388,6 +432,17 @@ impl Brain {
     /// Current x (after a drop or at start-up).
     pub fn set_position(&mut self, x: f32) {
         self.x = x;
+    }
+
+    /// She lost her footing (her window moved/closed under her): like a
+    /// drag start without the poke reaction: walks stop, the drag pose
+    /// (`input.drag`) plays while she falls. [`Input::DragEnd`] lands her.
+    pub fn begin_fall(&mut self) -> Vec<Action> {
+        self.phase = Phase::Dragged;
+        if let Some(clip) = self.resolve("input.drag") {
+            self.out.push(Action::SetBase { clip });
+        }
+        self.take()
     }
 
     /// The overlay reports whether the drawn walk has root motion. While on
@@ -1307,6 +1362,17 @@ mod tests {
         }));
         // Clicks during a drag (other buttons) do nothing visible.
         assert!(reacts(&click(&mut b, Button::Middle)).is_empty());
+        let a = b.input(Input::DragEnd { left: 333 });
+        assert!(a.contains(&Action::Stand), "{a:?}");
+        // Losing her footing: drag pose, no walking, until she lands.
+        let a = b.begin_fall();
+        assert_eq!(
+            a,
+            [Action::SetBase {
+                clip: "drag_held".into()
+            }]
+        );
+        assert_eq!(b.phase(), Phase::Dragged);
         let a = b.input(Input::DragEnd { left: 333 });
         assert_eq!(b.phase(), Phase::Idle);
         assert!(a.contains(&Action::Stand));

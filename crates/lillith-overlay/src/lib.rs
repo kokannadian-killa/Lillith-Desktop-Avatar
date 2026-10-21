@@ -12,7 +12,9 @@
 //!   set to the same mask, drawn with `softbuffer`. Feature `x11`.
 //! - [`stage`]: the M2 animator rendered into the overlay canvas + mask;
 //!   [`drag`]: click/drag and `(left, bottom)` placement; [`run`](mod@run): backend
-//!   dispatch, the shared [`run::Controller`] and position persistence.
+//!   dispatch, the shared [`run::Controller`] and position persistence;
+//!   [`gravity`]: falling after a drop, landing bounce and perching on
+//!   window tops (KWin bridge window stack).
 //! - [`chat`]: click-to-chat (single-click gate, bubble hook, `talk_loop`
 //!   lip-flap driven by streamed `chat.*` events).
 //! - [`ui`]: right-click menu, Settings, minimize-to-peek and resize, as
@@ -25,6 +27,7 @@ pub mod backend;
 pub mod bubble;
 pub mod chat;
 pub mod drag;
+pub mod gravity;
 pub mod input_region;
 pub mod menu_popup;
 pub mod pixels;

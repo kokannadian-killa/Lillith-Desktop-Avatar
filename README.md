@@ -81,6 +81,11 @@ Python/Tk prototypes). Everything runs locally.
   Stay until the KWin bridge lands in M5.)
 - ✅ **Click / hover / drag / key interactions** — see [Controls](#controls).
   Her dragged position is saved and restored.
+- ✅ **Gravity and window perching** — drop her and she falls in her
+  `drag_held` pose with a soft landing bounce onto the floor above the panel,
+  or (with the KWin bridge script) onto the top edge of the window under her,
+  where she strolls along it, sits on the edge (`sit_swing` and its takes) and
+  falls again when the window moves, minimizes or closes (`[behavior.gravity]`).
 - ✅ **Secret click sequence** — find it yourself, or peek at [Controls](#controls).
 - ✅ **57 event reactions** — `assets/rules.toml` maps 57 events (system
   events plus her own click/hover/idle/LLM events: `cpu.high`, `battery.low`, `net.lost`, `usb.added`, `window.closed`,

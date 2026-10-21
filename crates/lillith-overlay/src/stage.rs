@@ -341,6 +341,11 @@ impl Stage {
         (self.canvas.width(), self.canvas.height())
     }
 
+    /// Where her feet anchor is drawn in the window (px from the top-left).
+    pub fn feet_anchor(&self) -> (f32, f32) {
+        self.origin
+    }
+
     pub fn animator(&self) -> &Animator {
         &self.anim
     }

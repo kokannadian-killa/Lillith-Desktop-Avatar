@@ -6,6 +6,7 @@
 use crate::backend::Backend;
 use crate::chat::{ChatAnchor, ChatHook, ClickGate, Talk};
 use crate::drag::{Drag, Placement, Release};
+use crate::gravity::{self, FallStep, Frame, Gravity, Mode, PerchCheck, Sit};
 use crate::menu_popup::{Fonts, MenuHit, MenuKey, MenuPopup};
 use crate::settings_window::{Launch, SettingsWindow};
 use crate::stage::{Changed, Stage, StageError};
@@ -14,13 +15,14 @@ use lillith_anim::animator::{AnimatorConfig, Dir};
 use lillith_anim::avatar::AvatarStore;
 use lillith_core::config::{save_overlay, MoveMode, OverlayPos};
 use lillith_core::config::{Config, JiggleMode};
+use lillith_core::desktop::{Desktop, Landing};
 use lillith_core::interaction::Button;
 use lillith_core::menu::{
     on_menu_action, open_settings_command, settings_template, MenuAction, MenuEffect, MenuExtras,
     MenuPage, MenuPick, MenuState, PoseGroup,
 };
 use lillith_core::rules::RuleSet;
-use lillith_core::state::{Action, BehaviorConfig, Brain, Input, Key};
+use lillith_core::state::{Action, BehaviorConfig, Brain, Input, Key, Phase};
 use lillith_core::Event;
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
@@ -63,6 +65,11 @@ impl std::fmt::Debug for SinkHandle {
 /// Reactions below this priority are skipped while she is talking
 /// (hover, idle poses); system alerts and clicks still play.
 pub const TALK_INTERRUPT_PRIORITY: u8 = 60;
+
+/// Seated base clip for perching on a window edge; its `variant_of:sit_swing`
+/// takes (`sit_heel_kick`, `sit_cross_legged_bob`, `sit_bored_chin`,
+/// `sit_stretch_yawn`) play from it through the animator's variants.
+pub const SIT_CLIP: &str = "sit_swing";
 
 /// Px of her window kept on screen when dragging off an edge.
 pub const KEEP_ON_SCREEN: i32 = 64;
@@ -196,6 +203,10 @@ pub struct Controller {
     seed: u64,
     /// Poses page of the last opened menu (picks are resolved against it).
     menu_page: Option<MenuPage>,
+    /// Falling after a drop and perching on windows ([`gravity`]).
+    pub gravity: Gravity,
+    /// Window stack to use instead of the KWin bridge's (tests, sims).
+    desktop_override: Option<Desktop>,
 }
 
 impl Controller {
@@ -281,6 +292,12 @@ impl Controller {
             last_drag_x: None,
             seed: opts.animator.seed,
             menu_page: None,
+            gravity: Gravity::new(
+                opts.behavior.gravity.clone(),
+                opts.behavior.floor_offset_px,
+                opts.animator.seed,
+            ),
+            desktop_override: None,
         }
         .with_click_through(opts.click_through)
     }
@@ -337,6 +354,7 @@ impl Controller {
                 return;
             }
             self.resized = true;
+            self.resettle();
             if let Some((sw, _)) = self.screen {
                 self.set_screen((sw, self.screen.map_or(0, |s| s.1)));
             }
@@ -364,6 +382,7 @@ impl Controller {
         anim.clear_overlays();
         anim.stand();
         self.showoff.clear();
+        self.gravity.mode = Mode::Settle { wait: 0.0 };
         self.set_scale(PEEK_SCALE, false);
         let w = self.stage.size().0 as i32;
         let left = match self.screen {
@@ -380,6 +399,7 @@ impl Controller {
         self.set_scale(p.scale, false);
         self.pending_move = Some(p.placement);
         self.brain.set_position(p.placement.left as f32);
+        self.gravity.mode = Mode::Settle { wait: 0.0 };
         tracing::info!("restored from the peek icon");
     }
 
@@ -517,8 +537,297 @@ impl Controller {
     /// Output size in px; sets the range she wanders over.
     pub fn set_screen(&mut self, output: (u32, u32)) {
         self.screen = Some(output);
-        let w = self.stage.size().0 as f32;
-        self.brain.set_area(0.0, (output.0 as f32 - w).max(0.0));
+        self.apply_area();
+    }
+
+    /// Wander range: the screen, or the window top she is perched on.
+    fn apply_area(&mut self) {
+        let Some((sw, sh)) = self.screen else { return };
+        if let Some(rect) = self.gravity.perch().map(|p| p.rect) {
+            let desk = self.desktop();
+            let frame = self.frame(&desk, sh);
+            let (lo, hi) = gravity::perch_span(&frame, rect, self.perch_margin());
+            self.brain.set_area(lo, hi);
+        } else {
+            let w = self.stage.size().0 as f32;
+            self.brain.set_area(0.0, (sw as f32 - w).max(0.0));
+        }
+    }
+
+    /// Uses `desk` instead of the KWin bridge's window stack (`None` =
+    /// back to the bridge). For tests and simulations.
+    pub fn set_desktop(&mut self, desk: Option<Desktop>) {
+        self.desktop_override = desk;
+    }
+
+    fn desktop(&self) -> Desktop {
+        match &self.desktop_override {
+            Some(d) => d.clone(),
+            None => lillith_core::desktop::snapshot(),
+        }
+    }
+
+    /// Placement ↔ global mapping for the current size and screen.
+    fn frame(&self, desk: &Desktop, screen_h: u32) -> Frame {
+        let (_, h) = self.stage.size();
+        let (fx, fy) = self.stage.feet_anchor();
+        Frame {
+            origin: desk.screen.map_or((0, 0), |r| (r.x, r.y)),
+            screen_h: screen_h as i32,
+            feet: (fx.round() as i32, (h as f32 - fy).round() as i32),
+        }
+    }
+
+    /// Feet kept this far inside a window top: half her seat width (so a
+    /// sit fits), at least 16 px.
+    fn perch_margin(&self) -> i32 {
+        let scale = self.stage.scale();
+        let half_seat = self
+            .stage
+            .animator()
+            .manifest()
+            .clips
+            .get(SIT_CLIP)
+            .and_then(|c| c.seat_x_range)
+            .map_or(0.0, |(a, b)| (b - a).abs() as f32 * 0.5 * scale);
+        (half_seat.round() as i32).max(16)
+    }
+
+    /// Px the window drops so her seat (`seat_y` of [`SIT_CLIP`]) rests on
+    /// the edge her feet stood on; `None` without the clip or seat data.
+    fn seat_drop(&self) -> Option<i32> {
+        let clip = self.stage.animator().manifest().clips.get(SIT_CLIP)?;
+        let seat = clip.seat_y?;
+        let feet = clip.frames.first()?.anchor.1;
+        let d = ((feet - seat) as f32 * self.stage.scale()).round() as i32;
+        (d > 0).then_some(d)
+    }
+
+    /// `true` while gravity may move her (a screen is known, `g_px_s2 > 0`,
+    /// not minimized).
+    fn gravity_active(&self) -> bool {
+        self.screen.is_some() && self.gravity.enabled() && self.peek.is_none()
+    }
+
+    /// Re-check her footing next tick (resize, reset, restore).
+    fn resettle(&mut self) {
+        self.stand_up();
+        if !matches!(self.gravity.mode, Mode::Held | Mode::Falling(_)) {
+            self.gravity.mode = Mode::Settle { wait: 0.0 };
+        }
+    }
+
+    /// Ends a sit on the edge: back on her feet on top of the window.
+    fn stand_up(&mut self) {
+        let Mode::Perched(p) = &mut self.gravity.mode else {
+            return;
+        };
+        let Some(sit) = p.sit.take() else { return };
+        let next = self.gravity.sit_pause();
+        if let Mode::Perched(p) = &mut self.gravity.mode {
+            p.next_sit_s = next;
+        }
+        let anim = self.stage.animator_mut();
+        if anim.base().starts_with("sit_") {
+            anim.stand();
+        }
+        let cur = self.pending_move.unwrap_or(self.placement);
+        self.pending_move = Some(Placement {
+            left: cur.left,
+            bottom: cur.bottom + sit.drop_px,
+        });
+        tracing::debug!("perch: stood up");
+    }
+
+    /// Starts a fall from `from` (her footing went away).
+    fn start_fall(&mut self, from: Placement, why: &str) {
+        tracing::info!(why, bottom = from.bottom, "gravity: falling");
+        let a = self.brain.begin_fall();
+        self.apply(a);
+        self.gravity.mode = Mode::Falling(gravity::Fall::new(from.bottom));
+    }
+
+    /// She came to rest at `p` on `landing`.
+    fn land(&mut self, p: Placement, landing: &Landing, desk: &Desktop) {
+        if p != self.pending_move.unwrap_or(self.placement) {
+            self.pending_move = Some(p);
+        }
+        self.gravity.mode = match landing {
+            Landing::Window { id, .. } => match desk.window(id) {
+                Some(w) => {
+                    tracing::info!(window = %w.class, top = w.rect.y, "gravity: perched on a window");
+                    Mode::Perched(self.gravity.new_perch(id.clone(), w.rect))
+                }
+                None => Mode::Floor,
+            },
+            Landing::Floor { .. } => Mode::Floor,
+        };
+        self.apply_area();
+        if self.brain.phase() == Phase::Dragged {
+            let a = self.brain.input(Input::DragEnd { left: p.left });
+            self.apply(a);
+            self.persist(p);
+        } else {
+            self.brain.set_position(p.left as f32);
+        }
+    }
+
+    /// Gravity, perch checks and sits (after the brain moved her this tick).
+    fn gravity_tick(&mut self, dt: f32) {
+        if !self.gravity_active() || self.drag.active() {
+            return;
+        }
+        let Some((_, sh)) = self.screen else { return };
+        let desk = self.desktop();
+        let frame = self.frame(&desk, sh);
+        let floor_y = gravity::floor_y(&desk, &frame, self.gravity.floor_offset_px);
+        let cur = self.pending_move.unwrap_or(self.placement);
+        let (fx, fy) = frame.feet_at(cur);
+        match self.gravity.mode.clone() {
+            Mode::Held => self.gravity.mode = Mode::Settle { wait: 0.0 },
+            Mode::Settle { wait } => {
+                if !desk.has_bridge && wait > 0.0 {
+                    self.gravity.mode = Mode::Settle { wait: wait - dt };
+                    return;
+                }
+                self.hint_no_bridge(&desk);
+                let landing = self
+                    .gravity
+                    .landing(&desk, fx, fy - gravity::SNAP_PX, floor_y);
+                let ground = frame.bottom_for_feet(landing.y());
+                if cur.bottom > ground + gravity::SNAP_PX {
+                    self.start_fall(cur, "not standing on anything");
+                } else {
+                    // On it (within SNAP_PX: stay put) or below it: snap up.
+                    let bottom = if cur.bottom < ground - gravity::SNAP_PX {
+                        ground
+                    } else {
+                        cur.bottom
+                    };
+                    self.land(Placement { bottom, ..cur }, &landing, &desk);
+                }
+            }
+            Mode::Falling(mut f) => {
+                let at = Placement {
+                    left: cur.left,
+                    bottom: f.bottom.round() as i32,
+                };
+                let (fx, fy) = frame.feet_at(at);
+                self.hint_no_bridge(&desk);
+                let landing = self.gravity.landing(&desk, fx, fy, floor_y);
+                let ground = frame.bottom_for_feet(landing.y()) as f32;
+                match f.step(dt, ground, &self.gravity.cfg) {
+                    FallStep::Moving(bottom) => {
+                        self.pending_move = Some(Placement { bottom, ..cur });
+                        self.gravity.mode = Mode::Falling(f);
+                    }
+                    FallStep::Landed(bottom) => {
+                        self.land(Placement { bottom, ..cur }, &landing, &desk)
+                    }
+                }
+            }
+            Mode::Floor => {
+                // The floor moved (panel, bridge arrived, resolution).
+                let ground = frame.bottom_for_feet(floor_y);
+                if cur.bottom > ground + gravity::SNAP_PX {
+                    self.start_fall(cur, "the floor dropped");
+                } else if cur.bottom < ground - gravity::SNAP_PX {
+                    self.pending_move = Some(Placement {
+                        bottom: ground,
+                        ..cur
+                    });
+                }
+            }
+            Mode::Perched(p) => match gravity::check_perch(&desk, &p, fx) {
+                PerchCheck::Lost(why) => {
+                    let drop = p.sit.map_or(0, |s| s.drop_px);
+                    let anim = self.stage.animator_mut();
+                    if anim.base().starts_with("sit_") {
+                        anim.stand();
+                    }
+                    let from = Placement {
+                        bottom: cur.bottom + drop,
+                        ..cur
+                    };
+                    self.pending_move = Some(from);
+                    self.gravity.mode = Mode::Floor;
+                    self.apply_area();
+                    self.start_fall(from, why);
+                }
+                PerchCheck::Resized(r) => {
+                    if let Mode::Perched(p) = &mut self.gravity.mode {
+                        p.rect = r;
+                    }
+                    self.apply_area();
+                    self.perch_sit(dt);
+                }
+                PerchCheck::Ok => self.perch_sit(dt),
+            },
+        }
+    }
+
+    /// Sits down on the window edge now and then while perched and calm;
+    /// stands up when the sit is over or anything else takes over.
+    fn perch_sit(&mut self, dt: f32) {
+        let Mode::Perched(p) = &self.gravity.mode else {
+            return;
+        };
+        let anim = self.stage.animator();
+        if let Some(sit) = p.sit {
+            let interrupted = !anim.base().starts_with("sit_") || anim.overlay_clip().is_some();
+            if interrupted || sit.left_s - dt <= 0.0 {
+                self.stand_up();
+            } else if let Mode::Perched(p) = &mut self.gravity.mode {
+                p.sit = Some(Sit {
+                    left_s: sit.left_s - dt,
+                    ..sit
+                });
+            }
+            return;
+        }
+        let calm = self.brain.phase() == Phase::Idle
+            && anim.overlay_clip().is_none()
+            && anim.queued() == 0
+            && !anim.stopping()
+            && !anim.base_has_root_motion()
+            && !self.talk.active()
+            && self.showoff.is_empty();
+        if !calm {
+            return;
+        }
+        let next = p.next_sit_s - dt;
+        if next > 0.0 {
+            if let Mode::Perched(p) = &mut self.gravity.mode {
+                p.next_sit_s = next;
+            }
+            return;
+        }
+        let Some(drop_px) = self.seat_drop() else {
+            return;
+        };
+        if self.stage.animator_mut().set_base(SIT_CLIP, false).is_err() {
+            return;
+        }
+        let left_s = self.gravity.sit_length();
+        if let Mode::Perched(p) = &mut self.gravity.mode {
+            p.sit = Some(Sit { left_s, drop_px });
+        }
+        let cur = self.pending_move.unwrap_or(self.placement);
+        self.pending_move = Some(Placement {
+            left: cur.left,
+            bottom: cur.bottom - drop_px,
+        });
+        tracing::debug!(left_s, "perch: sitting on the edge");
+    }
+
+    /// Logs once that without the bridge she only knows the floor.
+    fn hint_no_bridge(&mut self, desk: &Desktop) {
+        if !desk.has_bridge && !self.gravity.hinted && self.desktop_override.is_none() {
+            self.gravity.hinted = true;
+            tracing::info!(
+                "gravity: no window list from the KWin bridge, so she lands on the floor                  ([behavior] floor_offset_px). To perch on windows, install and enable the                  kwin/lillith-bridge KWin script (INSTALL.md)."
+            );
+        }
     }
 
     pub fn has_screen(&self) -> bool {
@@ -545,7 +854,10 @@ impl Controller {
         }
         let anim = self.stage.animator();
         // While she talks the brain does not start walks or idle poses.
-        let busy = anim.overlay_clip().is_some() || anim.queued() > 0 || self.talk.active();
+        let busy = anim.overlay_clip().is_some()
+            || anim.queued() > 0
+            || self.talk.active()
+            || self.gravity.sitting();
         let actions = self.brain.tick(dt, busy);
         self.apply(actions);
         self.talk.tick(dt, self.stage.animator_mut());
@@ -571,6 +883,7 @@ impl Controller {
         let anim = self.stage.animator();
         self.brain
             .set_root_motion(anim.base_has_root_motion() || anim.stopping());
+        self.gravity_tick(dt);
         Ok(changed)
     }
 
@@ -815,6 +1128,7 @@ impl Controller {
         }
         self.last_drag_x = Some((now, p.left));
         if !was {
+            self.gravity.mode = Mode::Held;
             self.click_gate.cancel();
             let a = self.brain.input(Input::DragStart);
             self.apply(a);
@@ -835,7 +1149,13 @@ impl Controller {
             return r;
         }
         match r {
+            Release::Dropped(p) if self.gravity_active() => {
+                // She keeps the drag pose and falls; landing ends the drag
+                // in the brain and saves the spot (`gravity_tick`).
+                self.gravity.mode = Mode::Falling(gravity::Fall::new(p.bottom));
+            }
             Release::Dropped(p) => {
+                self.gravity.mode = Mode::Settle { wait: 0.0 };
                 let a = self.brain.input(Input::DragEnd { left: p.left });
                 self.apply(a);
                 self.persist(p);
@@ -1007,6 +1327,7 @@ impl Controller {
             MenuEffect::ResetPosition(pos) => {
                 let p = Placement::from_config(&pos);
                 self.brain.set_position(p.left as f32);
+                self.resettle();
                 self.pending_move = Some(p);
                 tracing::info!(left = p.left, bottom = p.bottom, "position reset");
                 if let Some(path) = &self.config_path {
@@ -1613,6 +1934,11 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
         c.motion((70.0, 20.0));
         c.release();
         c.tick(1.0).unwrap();
+        // She falls back to the floor and lands (gravity) before talking.
+        for _ in 0..30 {
+            c.tick(0.1).unwrap();
+        }
+        assert_eq!(c.gravity.mode, Mode::Floor);
         assert_eq!(opened.lock().unwrap().len(), 1);
         // Right-click menu ▸ Chat opens it too.
         assert!(c.menu_state(None).extras.chat);

@@ -16,12 +16,15 @@
 //! - [`idle`]: idle-life scheduler (blink, idle transitions, idle reactions).
 //! - [`rng`]: tiny seedable PRNG so idle timing is deterministic in tests.
 //! - [`rules`]: the data-driven event → reaction table (`assets/rules.toml`).
+//! - [`desktop`]: z-ordered window model from the KWin bridge and the pure
+//!   [`desktop::landing_target`] gravity uses to land her on window tops.
 //! - [`config`]: user config (`~/.config/lillith/config.toml`) with README-SP defaults.
 //! - [`state`]: the M3 behaviour state machine ([`state::Brain`]): input
 //!   mapping, moods, mischief, sleep/wake, Wander/Stay, pose cycle, rules.
 
 pub mod command;
 pub mod config;
+pub mod desktop;
 pub mod event;
 pub mod idle;
 pub mod interaction;
