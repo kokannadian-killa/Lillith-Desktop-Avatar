@@ -1,1 +1,120 @@
-//! WIP: settings window (see following commits).
+//! # lillith-settings-gui
+//!
+//! Lillith's settings / options pop-up: a resizable egui window styled as
+//! an ancient demon relic × DemonOS (see `lillith-theme`), with carved tabs
+//! across the top — Companion, Motion, Chat / Brain (first-run LLM setup
+//! wizard on `lillith-setup`), Avatar, Voice, About, and three sealed
+//! add-in slots.
+//!
+//! ## Launching
+//!
+//! The overlay runs in another process, so on `MenuEffect::OpenSettings(path)`
+//! it spawns the binary:
+//!
+//! ```text
+//! lillith-settings [CONFIG_PATH]            # default ~/.config/lillith/config.toml
+//! ```
+//!
+//! Everything is persisted to `config.toml` (non-destructively; other tables,
+//! comments and `[llm]` written by `lillith-setup` are kept). Companion picks
+//! are also printed on stdout as JSON lines (`{"menu_action":"set_mode","value":"wander"}`,
+//! see [`parse_action_line`]) for a host that wants to apply them live.
+//!
+//! In-process (tests, a future embedded mode): [`run`] / [`run_with`].
+//!
+//! ## Add-ins
+//!
+//! Implement [`SettingsTab`] and pass it through [`run_with_tabs`]:
+//! `registry.unseal(Box::new(MyTab))` replaces the first sealed slot.
+
+mod app;
+pub mod chrome;
+pub mod companion;
+pub mod store;
+pub mod tabs;
+mod task;
+
+pub use app::SettingsApp;
+pub use companion::{action_line, parse_action_line};
+pub use lillith_core::menu::MenuAction;
+pub use tabs::{SettingsTab, Shared, TabRegistry};
+
+use std::path::PathBuf;
+
+/// Receives Companion picks in-process.
+pub type ActionSink = Box<dyn FnMut(MenuAction) + Send>;
+
+/// Window options.
+#[derive(Debug, Clone)]
+pub struct Options {
+    /// `None` = `$XDG_CONFIG_HOME/lillith/config.toml`.
+    pub config_path: Option<PathBuf>,
+    /// Initial inner size (default 960×660; minimum is 640×480).
+    pub inner_size: Option<[f32; 2]>,
+    /// Tab id to open (`companion`, `motion`, `brain`, `avatar`, `voice`,
+    /// `about`, `sealed-1`...).
+    pub start_tab: Option<String>,
+    /// Sub-page for the start tab (Brain: `runtime`, `pick-model`, `persona`, `test-save`).
+    pub deep_link: Option<String>,
+    /// Use the window manager's title bar instead of the relic frame's.
+    pub decorated: bool,
+    /// Capture the first settled frame to this PNG, then exit (docs / CI).
+    pub screenshot: Option<PathBuf>,
+    /// Print Companion picks on stdout as JSON lines.
+    pub print_actions: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            config_path: None,
+            inner_size: None,
+            start_tab: None,
+            deep_link: None,
+            decorated: false,
+            screenshot: None,
+            print_actions: false,
+        }
+    }
+}
+
+pub const DEFAULT_SIZE: [f32; 2] = [960.0, 660.0];
+pub const MIN_SIZE: [f32; 2] = [640.0, 480.0];
+
+/// `$XDG_CONFIG_HOME/lillith/config.toml` (same as the overlay).
+pub fn default_config_path() -> PathBuf {
+    lillith_core::config::Config::default_path().unwrap_or_else(|| PathBuf::from("config.toml"))
+}
+
+/// eframe options for the window (Wayland app id `lillith-settings`).
+pub fn native_options(opts: &Options) -> eframe::NativeOptions {
+    let size = opts.inner_size.unwrap_or(DEFAULT_SIZE);
+    let viewport = egui::ViewportBuilder::default()
+        .with_title("Lillith · Settings")
+        .with_app_id("lillith-settings")
+        .with_inner_size(size)
+        .with_min_inner_size(MIN_SIZE)
+        .with_resizable(true)
+        .with_decorations(opts.decorated);
+    eframe::NativeOptions { viewport, centered: true, ..Default::default() }
+}
+
+/// Opens the settings window on `config_path` and blocks until it closes.
+pub fn run(config_path: Option<PathBuf>) -> eframe::Result<()> {
+    run_with(Options { config_path, ..Default::default() }, None)
+}
+
+/// [`run`] with options and an optional in-process action sink.
+pub fn run_with(opts: Options, sink: Option<ActionSink>) -> eframe::Result<()> {
+    run_with_tabs(opts, sink, |_| {})
+}
+
+/// [`run_with`] plus a hook to add / unseal tabs.
+pub fn run_with_tabs(opts: Options, sink: Option<ActionSink>, customize: impl FnOnce(&mut TabRegistry) + 'static) -> eframe::Result<()> {
+    let native = native_options(&opts);
+    eframe::run_native(
+        "lillith-settings",
+        native,
+        Box::new(move |cc| Ok(Box::new(SettingsApp::new(cc, opts, sink, Some(Box::new(customize)))))),
+    )
+}
