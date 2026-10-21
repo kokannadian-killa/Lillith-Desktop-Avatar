@@ -3876,6 +3876,34 @@
    ]
   },
   {
+   "frame_count": 36,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "name": "tease_closeup",
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "tease_closeup/",
+   "sheet": "tease_closeup/tease_closeup_sheet.png",
+   "manifest": "tease_closeup/tease_closeup.json",
+   "preview": "tease_closeup/tease_closeup_preview.gif",
+   "frames": "tease_closeup/frames/",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true
+  },
+  {
    "frame_count": 12,
    "frame_width": 400,
    "frame_height": 400,
