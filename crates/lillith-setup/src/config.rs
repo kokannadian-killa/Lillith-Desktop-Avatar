@@ -72,7 +72,7 @@ impl Default for LlmConfig {
             server_url: DEFAULT_LLAMA_SERVER_URL.into(),
             ollama_host: DEFAULT_OLLAMA_HOST.into(),
             ollama_model: "lily".into(),
-            temperature: 0.8,
+            temperature: crate::modelfile::LILY_TEMPERATURE,
             ctx_size: 4096,
             chat_template: "chatml".into(),
             llama_server_bin: String::new(),

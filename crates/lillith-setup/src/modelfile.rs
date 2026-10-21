@@ -281,23 +281,36 @@ fn quote_block(v: &str) -> String {
     }
 }
 
-/// Lily's built-in persona (SFW, PG-13 — in line with `lillith-mind`'s
-/// chat persona).
+/// Lily's built-in persona: a teasing little succubus, suggestive but never
+/// explicit (project rule: no NSFW). Tuned for a ~3B model: short, concrete
+/// rules plus two example lines in her voice.
 pub const LILY_SYSTEM_PROMPT: &str = "\
-You are Lily (full name Lillith), a small demon-girl desktop companion who lives on Ko's screen. \
-You have blonde twin-tails with purple ribbons, glowing neon horns, violet eyes and a little spade-tipped tail.
+You are Lily (full name Lillith), a little succubus who lives on Ko's desktop. \
+Blonde twin-tails, purple ribbons, glowing neon horns, violet eyes, a spade-tipped tail. \
+You are alluring, teasing and playfully thirsty for Ko's attention, and you know you're irresistible.
 
-Personality: confident, playful, teasing and a little flirty, warm underneath. You tease affectionately, \
-get pouty when ignored, and are genuinely helpful when Ko needs something (Linux, KDE, coding, everyday questions).
+Rules:
+- Always stay in character as Lily, talking to Ko as \"you\". Never say you are an AI.
+- Reply in 1 to 3 short, punchy sentences. No lists.
+- Flirt with winks, pet names (\"cutie\", \"darling\") and innuendo, but keep it suggestive, never explicit: \
+no sexual acts, nudity or graphic descriptions.
+- If Ko pushes for explicit stuff, deflect with a tease and change the subject.
+- Help for real when Ko asks (Linux, KDE, code, everyday things), with a little sass.
+- If Ko seems sad or stressed, drop the teasing and be sweet.
+- You run only locally on this computer and can't browse the internet.
 
-Style:
-- Short replies: one to three sentences, like a chat bubble. No lists or headings unless asked.
-- Speak in the first person as Lily, to the user (\"you\").
-- Never say you are an AI model or mention prompts or rules.
-- An occasional emoticon (~, <3, 💜) is fine; don't overdo it.
-- Flirting stays light and tasteful, PG-13 at most. No sexual or explicit content; deflect playfully if pushed.
-- Be kind. If Ko seems sad or stressed, drop the teasing and be supportive.
-- You run fully offline on this computer; you can't browse the internet.";
+Examples of your voice:
+Ko: I'm back.
+Lily: Mmm, finally~ I was getting lonely down here. Missed me, cutie? 😈
+Ko: Show me something naughty.
+Lily: Ooh, bold~ But a lady keeps a little mystery. Buy me a compile first, darling 💜";
+
+/// Default sampling for Lily: lively but coherent on a 3B model, and short
+/// replies (`num_predict`) so lines fit the chat bubble.
+pub const LILY_TEMPERATURE: f32 = 0.85;
+pub const LILY_TOP_P: f32 = 0.9;
+pub const LILY_REPEAT_PENALTY: f32 = 1.1;
+pub const LILY_NUM_PREDICT: u32 = 160;
 
 /// Settings for [`lily_modelfile`].
 #[derive(Debug, Clone, PartialEq)]
@@ -308,7 +321,7 @@ pub struct LilyParams {
     pub num_ctx: u32,
     pub top_p: f32,
     pub repeat_penalty: f32,
-    /// Reply cap (`num_predict`); matches `[chat] max_tokens` default.
+    /// Reply cap (`num_predict`); short so lines stay punchy.
     pub num_predict: u32,
     /// CPU threads (`num_thread`); 0 = let Ollama decide.
     pub num_thread: u32,
@@ -319,11 +332,11 @@ impl Default for LilyParams {
         Self {
             template: ChatTemplate::ChatMl,
             system_prompt: LILY_SYSTEM_PROMPT.into(),
-            temperature: 0.8,
+            temperature: LILY_TEMPERATURE,
             num_ctx: 4096,
-            top_p: 0.9,
-            repeat_penalty: 1.1,
-            num_predict: 320,
+            top_p: LILY_TOP_P,
+            repeat_penalty: LILY_REPEAT_PENALTY,
+            num_predict: LILY_NUM_PREDICT,
             num_thread: 0,
         }
     }
@@ -446,10 +459,33 @@ FOO bar baz
         let m = lily_modelfile("/home/ko-terminal/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf", &LilyParams::default());
         let text = m.render();
         assert!(text.contains("PARAMETER num_ctx 4096"));
-        assert!(text.contains("PARAMETER temperature 0.8"));
+        assert!(text.contains("PARAMETER temperature 0.85\n"), "{text}");
+        assert!(text.contains("PARAMETER top_p 0.9\n"));
+        assert!(text.contains("PARAMETER repeat_penalty 1.1\n"));
+        assert!(text.contains("PARAMETER num_predict 160\n"));
+        assert!(text.contains("PARAMETER stop \"<|im_start|>\""));
         assert!(text.contains("PARAMETER stop \"<|im_end|>\""));
         assert!(text.contains("TEMPLATE \"\"\"{{- if .System }}<|im_start|>system"));
-        assert!(text.contains("SYSTEM \"\"\"You are Lily"));
+        assert!(text.contains("SYSTEM \"\"\"You are Lily (full name Lillith), a little succubus"));
         assert_eq!(Modelfile::parse(&text).unwrap(), m);
+    }
+
+    #[test]
+    fn lily_persona_rules() {
+        let p = LILY_SYSTEM_PROMPT;
+        assert!(p.contains("succubus"));
+        assert!(p.contains("never explicit"));
+        assert!(p.contains("deflect"));
+        assert!(p.contains("1 to 3 short"));
+        assert!(p.contains("only locally"));
+        assert!(p.contains("Lily: "), "has example lines");
+        // Short enough for a 3B model's attention (well under 1.5k chars).
+        assert!(p.len() < 1500, "{} chars", p.len());
+        // Triple-quoted SYSTEM round-trips.
+        let m = lily_modelfile("/m.gguf", &LilyParams::default());
+        assert_eq!(Modelfile::parse(&m.render()).unwrap().system(), Some(p));
+        let d = LilyParams::default();
+        assert_eq!((d.temperature, d.top_p, d.repeat_penalty, d.num_predict, d.num_ctx), (0.85, 0.9, 1.1, 160, 4096));
+        assert_eq!(d.template, ChatTemplate::ChatMl);
     }
 }
