@@ -1555,7 +1555,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    fn m3_manifest(tag: &str) -> (std::path::PathBuf, lillith_anim::atlas::Manifest) {
+    fn m3_manifest_with(
+        tag: &str,
+        extra: &str,
+    ) -> (std::path::PathBuf, lillith_anim::atlas::Manifest) {
         let (dir, _) = fixture(tag);
         let frames = r#"page = "idle.png"
 fps = 8.0
@@ -1578,6 +1581,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
                 toml.push_str("tags = [\"move_speed_px_s:40\"]\n");
             }
         }
+        toml.push_str(extra);
         (
             dir,
             lillith_anim::atlas::Manifest::from_toml_str(&toml).unwrap(),
@@ -1603,7 +1607,15 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
     }
 
     fn m3_controller(tag: &str, mode: MoveMode) -> (std::path::PathBuf, Controller) {
-        let (dir, m) = m3_manifest(tag);
+        m3_controller_with(tag, mode, "")
+    }
+
+    fn m3_controller_with(
+        tag: &str,
+        mode: MoveMode,
+        extra: &str,
+    ) -> (std::path::PathBuf, Controller) {
+        let (dir, m) = m3_manifest_with(tag, extra);
         let opts = OverlayOptions {
             manifest: dir.join("manifest.toml"),
             scale: 2.0,
@@ -1670,6 +1682,187 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
         // Q quits.
         c.key(Key::Char('q'));
         assert!(c.quit_requested());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Runs `secs` of frames at 60 Hz, applying moves like a backend;
+    /// returns every `bottom` the window took.
+    fn run_frames(c: &mut Controller, secs: f32) -> Vec<i32> {
+        let mut bottoms = Vec::new();
+        for _ in 0..(secs * 60.0) as usize {
+            c.tick(1.0 / 60.0).unwrap();
+            if let Some(p) = c.take_move() {
+                c.placement = p;
+                bottoms.push(p.bottom);
+            }
+        }
+        bottoms
+    }
+
+    /// Drags her (surface-local) by `(dx, dy)` and drops her there.
+    fn drag_drop(c: &mut Controller, dx: f64, dy: f64) -> Placement {
+        assert!(c.press((40.0, 40.0), (40.0, 40.0), true));
+        let p = c.motion((40.0 + dx, 40.0 + dy)).unwrap();
+        c.placement = p;
+        assert_eq!(c.stage.animator().base(), "drag_held");
+        assert_eq!(c.release(), Release::Dropped(p));
+        p
+    }
+
+    #[test]
+    fn drop_falls_with_a_soft_bounce_to_the_floor() {
+        let (dir, mut c) = m3_controller("grav_floor", MoveMode::Stay);
+        c.set_screen((1200, 800));
+        c.set_desktop(Some(Desktop::default()));
+        let p = drag_drop(&mut c, 0.0, -300.0);
+        assert_eq!(p.bottom, 350);
+        // Still held while falling: no landing (and no save) yet.
+        assert!(matches!(c.gravity.mode, Mode::Falling(_)));
+        let mut all = run_frames(&mut c, 0.1);
+        assert_eq!(
+            c.stage.animator().base(),
+            "drag_held",
+            "falls in the drag pose"
+        );
+        all.extend(run_frames(&mut c, 3.0));
+        // No bridge: the floor is `[behavior] floor_offset_px` (48).
+        assert_eq!(c.placement.bottom, 48);
+        assert_eq!(*all.iter().min().unwrap(), 48, "never through the floor");
+        let first = all.iter().position(|&b| b == 48).unwrap();
+        assert!(
+            all[first..].iter().any(|&b| b > 48),
+            "soft landing bounce: {all:?}"
+        );
+        assert!(all[..first].windows(2).all(|w| w[1] <= w[0]), "falls down");
+        assert_eq!(c.gravity.mode, Mode::Floor);
+        assert_eq!(c.brain.phase(), Phase::Idle, "landing ends the drag");
+        assert_eq!(c.stage.animator().base(), "idle");
+        assert_eq!(c.placement.left, p.left, "falls straight down");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn wayland_trusted_press_drag_release_still_falls() {
+        let (dir, mut c) = m3_controller("grav_trusted", MoveMode::Stay);
+        c.set_screen((1200, 800));
+        c.set_desktop(Some(Desktop::default()));
+        // Wayland path: press_trusted (no hit test), surface-local motion.
+        c.press_trusted((40.0, 40.0), true);
+        // Under DRAG_THRESHOLD (6 px): still a click candidate.
+        assert_eq!(c.motion((44.0, 37.0)), None);
+        assert!(matches!(c.gravity.mode, Mode::Settle { .. }));
+        let p = c.motion((40.0, -260.0)).unwrap();
+        c.placement = p;
+        assert_eq!(c.release(), Release::Dropped(p));
+        assert!(matches!(c.gravity.mode, Mode::Falling(_)));
+        run_frames(&mut c, 3.0);
+        assert_eq!(c.placement.bottom, 48);
+        assert_eq!(c.gravity.mode, Mode::Floor);
+        // A plain click on her never makes her fall.
+        c.press_trusted((40.0, 40.0), true);
+        assert_eq!(c.release(), Release::Click);
+        assert_eq!(c.gravity.mode, Mode::Floor);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn gravity_off_keeps_her_where_dropped() {
+        let (dir, mut c) = m3_controller("grav_off", MoveMode::Stay);
+        c.gravity.cfg.g_px_s2 = 0.0;
+        c.set_screen((1200, 800));
+        c.set_desktop(Some(Desktop::default()));
+        let p = drag_drop(&mut c, 0.0, -300.0);
+        run_frames(&mut c, 3.0);
+        assert_eq!(c.placement, p);
+        assert_eq!(c.stage.animator().base(), "idle");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn perches_on_a_window_sits_and_falls_when_it_moves_or_closes() {
+        use lillith_core::desktop::{DeskWindow, Rect};
+        // Seat line 18 cell px above the feet (anchor y 38): 36 px at scale 2.
+        let sit = r#"[clips.sit_swing]
+page = "idle.png"
+fps = 8.0
+mode = "loop"
+seat_y = 20
+seat_x_range = [14, 26]
+frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+"#;
+        let (dir, mut c) = m3_controller_with("grav_perch", MoveMode::Stay, sit);
+        c.set_screen((1200, 800));
+        let desk = |rects: &[Rect]| {
+            let mut d = Desktop::default();
+            d.set_area(Rect::new(0, 0, 1200, 800), Rect::new(0, 0, 1200, 760));
+            d.set_windows(
+                rects
+                    .iter()
+                    .enumerate()
+                    .map(|(i, r)| DeskWindow {
+                        id: format!("w{i}"),
+                        class: "kate".into(),
+                        rect: *r,
+                    })
+                    .collect(),
+            );
+            d
+        };
+        let win = Rect::new(50, 300, 600, 400);
+        c.set_desktop(Some(desk(&[win])));
+        // Feet at x 100 + 40 (inside 50..650), y 800 - 700 - 4 = 96 (above 300).
+        drag_drop(&mut c, 0.0, -650.0);
+        run_frames(&mut c, 2.0);
+        // Feet on the window top: bottom = 800 - 300 - 4.
+        assert_eq!(c.placement.bottom, 496);
+        assert!(matches!(&c.gravity.mode, Mode::Perched(p) if p.id == "w0"));
+
+        // She sits on the edge within `sit_every_s`, seat on the edge.
+        run_frames(&mut c, 21.0);
+        assert!(c.gravity.sitting(), "{:?}", c.gravity.mode);
+        assert_eq!(c.stage.animator().base(), "sit_swing");
+        assert_eq!(c.placement.bottom, 496 - 36);
+
+        // The window moves down: she stands, falls and lands on it again.
+        c.set_desktop(Some(desk(&[Rect::new(50, 350, 600, 400)])));
+        c.tick(1.0 / 60.0).unwrap();
+        assert!(matches!(c.gravity.mode, Mode::Falling(_)));
+        assert_eq!(c.stage.animator().base(), "drag_held");
+        run_frames(&mut c, 2.0);
+        assert_eq!(c.placement.bottom, 800 - 350 - 4);
+        assert!(matches!(c.gravity.mode, Mode::Perched(_)));
+
+        // The window closes (or minimizes): down to the work-area floor (760).
+        c.set_desktop(Some(desk(&[])));
+        run_frames(&mut c, 2.0);
+        assert_eq!(c.placement.bottom, 800 - 760 - 4);
+        assert_eq!(c.gravity.mode, Mode::Floor);
+        assert_eq!(c.stage.animator().base(), "idle");
+
+        // Dropped beside the window (feet outside its x-span): the floor.
+        c.set_desktop(Some(desk(&[win])));
+        drag_drop(&mut c, 700.0, -600.0);
+        run_frames(&mut c, 2.0);
+        assert_eq!(c.placement.bottom, 36);
+        assert_eq!(c.gravity.mode, Mode::Floor);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn startup_without_the_bridge_settles_on_the_floor() {
+        let (dir, mut c) = m3_controller("grav_start", MoveMode::Stay);
+        c.placement.bottom = 400;
+        c.set_screen((1200, 800));
+        c.set_desktop(Some(Desktop::default()));
+        // Waits for the bridge first.
+        run_frames(&mut c, 1.0);
+        assert_eq!(c.placement.bottom, 400);
+        run_frames(&mut c, 4.0);
+        assert_eq!(c.placement.bottom, 48);
+        // Below the floor line: snapped up onto it.
+        c.placement.bottom = 0;
+        run_frames(&mut c, 0.5);
+        assert_eq!(c.placement.bottom, 48);
         let _ = std::fs::remove_dir_all(dir);
     }
 
