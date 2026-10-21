@@ -19,8 +19,13 @@ pub enum ChatTemplate {
 }
 
 impl ChatTemplate {
-    pub const ALL: [ChatTemplate; 5] =
-        [Self::ChatMl, Self::Llama3, Self::Gemma, Self::Phi3, Self::Mistral];
+    pub const ALL: [ChatTemplate; 5] = [
+        Self::ChatMl,
+        Self::Llama3,
+        Self::Gemma,
+        Self::Phi3,
+        Self::Mistral,
+    ];
 
     /// Name used in config (`chat_template`) and for llama-server's
     /// `--chat-template` built-ins.
@@ -70,7 +75,11 @@ impl ChatTemplate {
         }
         let n = name_hint.to_ascii_lowercase();
         let a = arch.unwrap_or("").to_ascii_lowercase();
-        if n.contains("dolphin") || n.contains("hermes") || a.starts_with("qwen") || n.contains("qwen") {
+        if n.contains("dolphin")
+            || n.contains("hermes")
+            || a.starts_with("qwen")
+            || n.contains("qwen")
+        {
             Self::ChatMl
         } else if a.starts_with("gemma") || n.contains("gemma") {
             Self::Gemma
@@ -151,12 +160,30 @@ mod tests {
 
     #[test]
     fn detection() {
-        assert_eq!(ChatTemplate::detect(Some("..<|im_start|>.."), Some("llama"), ""), ChatTemplate::ChatMl);
-        assert_eq!(ChatTemplate::detect(None, Some("llama"), "dolphin3.0-llama3.2-3b-q4_k_m.gguf"), ChatTemplate::ChatMl);
-        assert_eq!(ChatTemplate::detect(None, Some("qwen2"), "x.gguf"), ChatTemplate::ChatMl);
-        assert_eq!(ChatTemplate::detect(None, Some("llama"), "Llama-3.2-3B-Instruct-Q4_K_M.gguf"), ChatTemplate::Llama3);
-        assert_eq!(ChatTemplate::detect(Some("<|start_header_id|>"), None, ""), ChatTemplate::Llama3);
-        assert_eq!(ChatTemplate::detect(None, Some("gemma2"), ""), ChatTemplate::Gemma);
+        assert_eq!(
+            ChatTemplate::detect(Some("..<|im_start|>.."), Some("llama"), ""),
+            ChatTemplate::ChatMl
+        );
+        assert_eq!(
+            ChatTemplate::detect(None, Some("llama"), "dolphin3.0-llama3.2-3b-q4_k_m.gguf"),
+            ChatTemplate::ChatMl
+        );
+        assert_eq!(
+            ChatTemplate::detect(None, Some("qwen2"), "x.gguf"),
+            ChatTemplate::ChatMl
+        );
+        assert_eq!(
+            ChatTemplate::detect(None, Some("llama"), "Llama-3.2-3B-Instruct-Q4_K_M.gguf"),
+            ChatTemplate::Llama3
+        );
+        assert_eq!(
+            ChatTemplate::detect(Some("<|start_header_id|>"), None, ""),
+            ChatTemplate::Llama3
+        );
+        assert_eq!(
+            ChatTemplate::detect(None, Some("gemma2"), ""),
+            ChatTemplate::Gemma
+        );
     }
 
     #[test]

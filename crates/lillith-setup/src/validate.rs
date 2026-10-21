@@ -20,7 +20,10 @@ pub struct FieldError {
 
 impl FieldError {
     fn new(key: &str, message: impl Into<String>) -> Self {
-        Self { key: key.into(), message: message.into() }
+        Self {
+            key: key.into(),
+            message: message.into(),
+        }
     }
 }
 
@@ -63,7 +66,9 @@ pub fn field(key: &str, value: &str, ctx: &ValidateCtx) -> Result<(), FieldError
             None => err("Choose \"llama-server\" or \"ollama\".".into()),
         },
         "temperature" => match v.parse::<f32>() {
-            Ok(t) if t.is_finite() && (TEMPERATURE_RANGE.0..=TEMPERATURE_RANGE.1).contains(&t) => Ok(()),
+            Ok(t) if t.is_finite() && (TEMPERATURE_RANGE.0..=TEMPERATURE_RANGE.1).contains(&t) => {
+                Ok(())
+            }
             Ok(_) => err(format!(
                 "Temperature must be between {} and {} (0.7–0.9 is a good range for Lily).",
                 TEMPERATURE_RANGE.0, TEMPERATURE_RANGE.1
@@ -75,11 +80,16 @@ pub fn field(key: &str, value: &str, ctx: &ValidateCtx) -> Result<(), FieldError
                 return err("Enter a whole number of tokens, like 4096.".into());
             };
             if !(CTX_RANGE.0..=CTX_RANGE.1).contains(&n) {
-                return err(format!("Context must be between {} and {} tokens.", CTX_RANGE.0, CTX_RANGE.1));
+                return err(format!(
+                    "Context must be between {} and {} tokens.",
+                    CTX_RANGE.0, CTX_RANGE.1
+                ));
             }
             if let Some(m) = ctx.model_ctx {
                 if u64::from(n) > m {
-                    return err(format!("This model only supports {m} tokens of context; use {m} or less."));
+                    return err(format!(
+                        "This model only supports {m} tokens of context; use {m} or less."
+                    ));
                 }
             }
             Ok(())
@@ -108,7 +118,10 @@ pub fn field(key: &str, value: &str, ctx: &ValidateCtx) -> Result<(), FieldError
             }
             let p = crate::paths::expand_tilde(v);
             if !p.is_file() {
-                return err("No program at this path (leave empty to find llama-server automatically).".into());
+                return err(
+                    "No program at this path (leave empty to find llama-server automatically)."
+                        .into(),
+                );
             }
             use std::os::unix::fs::PermissionsExt;
             match std::fs::metadata(&p) {
@@ -124,7 +137,9 @@ pub fn field(key: &str, value: &str, ctx: &ValidateCtx) -> Result<(), FieldError
                     Ok(())
                 };
             }
-            if v.chars().all(|c| c.is_ascii_alphanumeric() || "._-:/".contains(c)) {
+            if v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "._-:/".contains(c))
+            {
                 Ok(())
             } else {
                 err("Use letters, numbers, '.', '_', '-', ':' or '/' only (no spaces).".into())
@@ -137,11 +152,19 @@ pub fn field(key: &str, value: &str, ctx: &ValidateCtx) -> Result<(), FieldError
                 err("Pick a chat template (chatml for Dolphin 3 and Qwen).".into())
             } else {
                 // llama-server has more built-ins than we know; allow but explain.
-                let known: Vec<_> = ChatTemplate::ALL.iter().map(|t| t.llama_server_name()).collect();
-                if v.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)) {
+                let known: Vec<_> = ChatTemplate::ALL
+                    .iter()
+                    .map(|t| t.llama_server_name())
+                    .collect();
+                if v.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+                {
                     Ok(())
                 } else {
-                    err(format!("Unknown template; common ones are {}.", known.join(", ")))
+                    err(format!(
+                        "Unknown template; common ones are {}.",
+                        known.join(", ")
+                    ))
                 }
             }
         }
@@ -156,7 +179,11 @@ pub fn field(key: &str, value: &str, ctx: &ValidateCtx) -> Result<(), FieldError
             }
         }
         "scan_paths" => {
-            for part in v.split(['\n', ',']).map(str::trim).filter(|s| !s.is_empty()) {
+            for part in v
+                .split(['\n', ','])
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
                 let p = crate::paths::expand_tilde(part);
                 if p.exists() && !p.is_dir() {
                     return err(format!("{part} is a file, not a folder."));
@@ -188,10 +215,14 @@ fn url(key: &str, v: &str, port: u16) -> Result<(), FieldError> {
             E::NotLoopback { host, .. } => format!(
                 "`{host}` isn't this computer. Lily is local-only: use 127.0.0.1, ::1 or localhost."
             ),
-            E::Scheme { scheme, .. } => format!("Use http:// (got {scheme}://); the server runs on this computer."),
+            E::Scheme { scheme, .. } => {
+                format!("Use http:// (got {scheme}://); the server runs on this computer.")
+            }
             E::Userinfo { .. } => "Remove the user name / password from the address.".into(),
             E::Port { port, .. } => format!("`{port}` isn't a valid port (1–65535)."),
-            E::Malformed { .. } => "That doesn't look like an address; try http://127.0.0.1:8080.".into(),
+            E::Malformed { .. } => {
+                "That doesn't look like an address; try http://127.0.0.1:8080.".into()
+            }
         };
         FieldError::new(key, msg)
     })
@@ -219,7 +250,10 @@ pub fn validate_all(cfg: &LlmConfig) -> Vec<FieldError> {
 
 /// [`validate_all`] with a model context (`backend` defaults to `cfg.backend`).
 pub fn validate_all_with(cfg: &LlmConfig, ctx: &ValidateCtx) -> Vec<FieldError> {
-    let ctx = ValidateCtx { backend: Some(ctx.backend.unwrap_or(cfg.backend)), ..ctx.clone() };
+    let ctx = ValidateCtx {
+        backend: Some(ctx.backend.unwrap_or(cfg.backend)),
+        ..ctx.clone()
+    };
     let fields: [(&str, String); 12] = [
         ("backend", cfg.backend.as_str().into()),
         ("gguf_path", cfg.gguf_path.clone()),
@@ -234,7 +268,10 @@ pub fn validate_all_with(cfg: &LlmConfig, ctx: &ValidateCtx) -> Vec<FieldError> 
         ("threads", cfg.threads.to_string()),
         ("scan_paths", cfg.scan_paths.join("\n")),
     ];
-    fields.iter().filter_map(|(k, v)| field(k, v, &ctx).err()).collect()
+    fields
+        .iter()
+        .filter_map(|(k, v)| field(k, v, &ctx).err())
+        .collect()
 }
 
 #[cfg(test)]
@@ -312,10 +349,19 @@ mod tests {
         std::fs::write(&notg, b"PK\x03\x04").unwrap();
         ok("gguf_path", good.to_str().unwrap());
         bad("gguf_path", notg.to_str().unwrap(), "isn't a GGUF");
-        bad("gguf_path", dir.join("missing.gguf").to_str().unwrap(), "not found");
+        bad(
+            "gguf_path",
+            dir.join("missing.gguf").to_str().unwrap(),
+            "not found",
+        );
         bad("gguf_path", dir.to_str().unwrap(), "folder");
         bad("gguf_path", "", "Pick a .gguf");
-        assert!(field("gguf_path", "", &ValidateCtx::new().with_backend(Backend::Ollama)).is_ok());
+        assert!(field(
+            "gguf_path",
+            "",
+            &ValidateCtx::new().with_backend(Backend::Ollama)
+        )
+        .is_ok());
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -334,6 +380,10 @@ mod tests {
         };
         let errs = validate_all_with(&cfg, &ValidateCtx::new().with_model_ctx(Some(4096)));
         let keys: Vec<_> = errs.iter().map(|e| e.key.as_str()).collect();
-        assert_eq!(keys, vec!["ollama_host", "temperature", "ctx_size"], "{errs:?}");
+        assert_eq!(
+            keys,
+            vec!["ollama_host", "temperature", "ctx_size"],
+            "{errs:?}"
+        );
     }
 }
