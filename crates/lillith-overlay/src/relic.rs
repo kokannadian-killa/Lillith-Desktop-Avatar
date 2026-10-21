@@ -17,31 +17,7 @@ use tiny_skia::{
     Pixmap, Point, SpreadMode, Stroke, Transform,
 };
 
-/// The avatar-matched highlight colours (hover blade, sigil, checks).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Accent {
-    /// Neon colour (edges, sigil, radio fill).
-    pub base: Rgba,
-    /// Hot core (thin bright lines on top of [`Accent::base`]).
-    pub hot: Rgba,
-    /// Dark fill (blade body, behind white text).
-    pub deep: Rgba,
-}
-
-impl Accent {
-    /// Lillith's magenta, the canonical look.
-    pub const LILLITH: Accent = Accent {
-        base: pal::PINK,
-        hot: Rgba::hex(0xffb8f0),
-        deep: Rgba::hex(0x5e0a4f),
-    };
-}
-
-impl Default for Accent {
-    fn default() -> Self {
-        Self::LILLITH
-    }
-}
+pub use lillith_theme::Accent;
 
 pub fn color(c: Rgba) -> Color {
     Color::from_rgba8(c.r, c.g, c.b, c.a)

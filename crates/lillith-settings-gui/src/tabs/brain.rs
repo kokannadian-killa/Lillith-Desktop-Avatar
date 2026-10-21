@@ -370,7 +370,7 @@ impl BrainTab {
             );
             if cur {
                 th::knife_highlight(&p, rect.shrink2(vec2(3.0, 4.0)), 1.0);
-                th::neon_line(&p, &poly, pal::PINK, 1.2, 4.0, true);
+                th::neon_line(&p, &poly, th::accent().base, 1.2, 4.0, true);
             } else {
                 th::knife_highlight(&p, rect.shrink2(vec2(3.0, 4.0)), hover * 0.5);
                 p.add(egui::Shape::closed_line(
@@ -381,7 +381,7 @@ impl BrainTab {
             // number / check medallion
             let mc = pos2(rect.left() + 17.0, rect.center().y);
             let mcol = if cur {
-                pal::PINK
+                th::accent().base
             } else if done {
                 pal::OK
             } else {
@@ -1274,7 +1274,7 @@ impl BrainTab {
                     Some(Ok(t)) => {
                         ui.label(
                             RichText::new(format!("Lily: {t}"))
-                                .color(c32(pal::PINK.lerp(pal::TEXT, 0.4))),
+                                .color(c32(th::accent().base.lerp(pal::TEXT, 0.4))),
                         );
                     }
                     Some(Err(e)) => {

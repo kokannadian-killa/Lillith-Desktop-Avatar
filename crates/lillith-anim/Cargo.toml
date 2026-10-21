@@ -11,6 +11,8 @@ publish.workspace = true
 
 [dependencies]
 lillith-core.workspace = true
+# Avatar-matched accent (toolkit-free part only).
+lillith-theme.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true

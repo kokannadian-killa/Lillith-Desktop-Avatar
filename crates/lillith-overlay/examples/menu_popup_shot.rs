@@ -1,7 +1,7 @@
 //! Renders the right-click popup to a PNG (no window): a submenu open and
 //! a row hovered, composited at 2x over a dark backdrop.
 //!
-//! `cargo run -p lillith-overlay --features text --example menu_popup_shot -- out.png [Submenu] [Row]`
+//! `cargo run -p lillith-overlay --features text --example menu_popup_shot -- out.png [Submenu] [Row] [#accent]`
 
 use lillith_core::config::MoveMode;
 use lillith_core::menu::MenuState;
@@ -41,6 +41,9 @@ fn main() {
         .position(|r| label(r).as_deref() == Some(&hov))
     {
         p.pointer(Some((60.0, (p.row_top(i) + ROW_H / 2) as f64)));
+    }
+    if let Some(a) = args.get(4).and_then(|h| lillith_theme::Accent::from_hex(h)) {
+        p.set_accent(a);
     }
     let mut fonts = Fonts::preload();
     let pm = p.render(&mut fonts).expect("render").clone();

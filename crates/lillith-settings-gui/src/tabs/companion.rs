@@ -93,6 +93,7 @@ impl CompanionTab {
                     if let Err(e) = st.select(id.as_deref()) {
                         shared.toast(format!("avatar choice not saved: {e}"), pal::BLOOD_SHEEN);
                     }
+                    shared.accent_changed = Some(st.accent(id.as_deref()));
                 }
             }
             MenuAction::About => shared.goto_tab = Some("about".into()),

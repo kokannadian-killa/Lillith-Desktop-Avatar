@@ -64,11 +64,15 @@ impl SettingsApp {
         sink: Option<ActionSink>,
         customize: Option<crate::Customize>,
     ) -> Self {
-        th::install(&cc.egui_ctx);
         let config_path = opts
             .config_path
             .clone()
             .unwrap_or_else(crate::default_config_path);
+        // The chrome accent follows the active avatar (Lillith's by default).
+        if let Some(st) = lillith_anim::avatar::AvatarStore::for_config(Some(&config_path)) {
+            th::use_accent(st.selected_accent());
+        }
+        th::install(&cc.egui_ctx);
         let shared = Shared {
             store: ConfigStore::load(&config_path),
             config_path: config_path.clone(),
@@ -84,6 +88,7 @@ impl SettingsApp {
             time: 0.0,
             goto_tab: None,
             want_save: false,
+            accent_changed: None,
         };
         let mut tabs = TabRegistry::with_defaults(&shared);
         if let Some(f) = customize {
@@ -458,7 +463,14 @@ impl SettingsApp {
                     ),
                     1.0,
                 );
-                th::neon_line(&p, &outline[..outline.len()], pal::PINK, 1.3, 4.0, false);
+                th::neon_line(
+                    &p,
+                    &outline[..outline.len()],
+                    th::accent().base,
+                    1.3,
+                    4.0,
+                    false,
+                );
                 th::blood_drips(
                     &p,
                     tr.left() + 9.0,
@@ -521,7 +533,7 @@ impl SettingsApp {
                     t.rune(),
                     pos2(cx0, ry),
                     rh,
-                    pal::VIOLET.lerp(pal::PINK, hover * 0.5),
+                    pal::VIOLET.lerp(th::accent().base, hover * 0.5),
                 );
             } else if active {
                 th::neon_rune(&p, t.rune(), pos2(cx0, ry), rh, pal::NEON_BLUE_CORE);
@@ -562,7 +574,7 @@ impl SettingsApp {
         }
         p.line_segment(
             [pos2(r.left(), r.bottom()), pos2(r.right(), r.bottom())],
-            Stroke::new(1.0, c32(pal::PINK.alpha(140))),
+            Stroke::new(1.0, c32(th::accent().base.alpha(140))),
         );
         if let Some(i) = clicked {
             self.current = i;
@@ -1116,6 +1128,9 @@ impl eframe::App for SettingsApp {
         self.toasts(ctx, body_rect);
         self.confirm_dialog(ctx);
 
+        if let Some(a) = self.shared.accent_changed.take() {
+            th::set_accent(ctx, a);
+        }
         if let Some(t) = self.shared.goto_tab.take() {
             if let Some(i) = self.tabs.index_of(&t) {
                 self.current = i;

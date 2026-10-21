@@ -27,6 +27,32 @@ pub fn additive(c: Rgba, a: f32) -> Color32 {
     Color32::from_rgba_premultiplied(m(c.r), m(c.g), m(c.b), 0)
 }
 
+// ---------------------------------------------------------------------------
+// avatar-matched accent
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    static ACCENT: std::cell::Cell<crate::Accent> = const { std::cell::Cell::new(crate::Accent::LILLITH) };
+}
+
+/// The accent the painters use on this (UI) thread; Lillith's magenta
+/// unless [`set_accent`] / [`use_accent`] changed it.
+pub fn accent() -> crate::Accent {
+    ACCENT.with(|a| a.get())
+}
+
+/// Sets the accent for later painting (call before [`install`]).
+pub fn use_accent(a: crate::Accent) {
+    ACCENT.with(|c| c.set(a));
+}
+
+/// Switches the accent live: painters and the Visuals follow.
+pub fn set_accent(ctx: &Context, a: crate::Accent) {
+    use_accent(a);
+    ctx.set_visuals(visuals());
+    ctx.request_repaint();
+}
+
 fn p2(p: Pt) -> Pos2 {
     Pos2::new(p[0], p[1])
 }
@@ -121,8 +147,8 @@ pub fn visuals() -> egui::Visuals {
     v.warn_fg_color = c32(pal::WARN);
     v.error_fg_color = c32(pal::BLOOD_NEON);
     v.selection.bg_fill = c32(pal::CRIMSON.alpha(170));
-    v.selection.stroke = Stroke::new(1.0, c32(pal::PINK));
-    v.text_cursor.stroke = Stroke::new(2.0, c32(pal::PINK));
+    v.selection.stroke = Stroke::new(1.0, c32(accent().base));
+    v.text_cursor.stroke = Stroke::new(2.0, c32(accent().base));
     v.striped = true;
     v.slider_trailing_fill = true;
     let w = &mut v.widgets;
@@ -145,7 +171,7 @@ pub fn visuals() -> egui::Visuals {
     w.hovered.expansion = 0.0;
     w.active.bg_fill = c32(pal::CRIMSON);
     w.active.weak_bg_fill = c32(pal::CRIMSON);
-    w.active.bg_stroke = Stroke::new(1.0, c32(pal::PINK));
+    w.active.bg_stroke = Stroke::new(1.0, c32(accent().base));
     w.active.fg_stroke = Stroke::new(2.0, Color32::WHITE);
     w.active.corner_radius = cr;
     w.open = w.hovered;
@@ -434,7 +460,7 @@ pub fn knife_highlight(p: &Painter, r: Rect, strength: f32) {
     // gradient along the blade: crimson at the hilt → pink towards the tip
     for (i, v) in outline.iter().enumerate() {
         let t = (v[0] - x0) / (r.right() - x0).max(1.0);
-        let col = pal::CRIMSON.lerp(pal::PINK, t * 0.7);
+        let col = pal::CRIMSON.lerp(accent().base, t * 0.7);
         m.colored_vertex(p2(*v), a(col, if i == 0 || i == 5 { 0.55 } else { 0.32 }));
     }
     for i in 1..outline.len() as u32 - 1 {
@@ -444,7 +470,7 @@ pub fn knife_highlight(p: &Painter, r: Rect, strength: f32) {
     neon_line(
         p,
         &geom::blade_edge(x0, r.right(), r.center().y, h),
-        pal::PINK.fade(strength),
+        accent().base.fade(strength),
         1.2,
         4.0,
         false,
@@ -866,7 +892,11 @@ pub fn claw_grip(p: &Painter, corner: Pos2, size: f32, dir: [f32; 2], hot: bool)
             c32(if hot { pal::VIOLET } else { pal::IRON_EDGE }),
         );
         let tip = t[t.len() - 1];
-        p.circle_filled(p2(tip), 1.0, c32(if hot { pal::PINK } else { pal::BLOOD }));
+        p.circle_filled(
+            p2(tip),
+            1.0,
+            c32(if hot { accent().base } else { pal::BLOOD }),
+        );
     }
     p.circle_filled(p2(k), kr, c32(pal::IRON_HI));
     p.circle_filled(

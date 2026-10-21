@@ -2406,6 +2406,7 @@ dependencies = [
  "glam",
  "image",
  "lillith-core",
+ "lillith-theme",
  "serde",
  "serde_json",
  "thiserror 2.0.21",

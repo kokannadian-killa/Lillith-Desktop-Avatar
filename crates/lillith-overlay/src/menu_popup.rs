@@ -455,6 +455,20 @@ impl MenuPopup {
         }
     }
 
+    /// The avatar-matched accent (default: Lillith's magenta).
+    pub fn accent(&self) -> Accent {
+        self.accent
+    }
+
+    /// Re-tints the popup for the active avatar (drops the cached layers).
+    pub fn set_accent(&mut self, accent: Accent) {
+        if accent != self.accent {
+            self.accent = accent;
+            self.base.clear();
+            self.dirty = true;
+        }
+    }
+
     /// Marks the pixels stale (e.g. the window was exposed).
     pub fn invalidate(&mut self) {
         self.dirty = true;

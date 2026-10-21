@@ -14,6 +14,8 @@
 //! * [`geom`] — toolkit-free shapes in `f32` coordinates: glow layers,
 //!   blood drips, blade outline, rune strokes, skull parts, horns, the
 //!   horns-and-spade-tail sigil, claw talons, stone cracks.
+//! * [`accent`] — the avatar-matched accent (Lillith magenta by default,
+//!   from `avatar.json` or derived from the avatar image).
 //! * [`fonts`] — bundled OFL fonts as `&'static [u8]` (licenses in `fonts/`).
 //! * `egui_theme` (feature `egui`) — `install(ctx)` for fonts + Visuals,
 //!   and Painter helpers built on [`geom`].
@@ -23,6 +25,7 @@
 //! The character art is locked canon and is never drawn here: the sigil
 //! is an abstract horns + spade-tail emblem.
 
+pub mod accent;
 pub mod fonts;
 pub mod geom;
 pub mod palette;
@@ -32,4 +35,5 @@ pub mod bubble;
 #[cfg(feature = "egui")]
 pub mod egui_theme;
 
+pub use accent::Accent;
 pub use palette::Rgba;
