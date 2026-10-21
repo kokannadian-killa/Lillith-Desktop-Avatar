@@ -17,7 +17,10 @@ pub struct CompanionTab {
 
 impl CompanionTab {
     pub fn new(store: &ConfigStore) -> Self {
-        Self { state: model::state_from_store(store), log: Vec::new() }
+        Self {
+            state: model::state_from_store(store),
+            log: Vec::new(),
+        }
     }
 
     fn pick(&mut self, a: MenuAction, shared: &mut Shared) {
@@ -39,13 +42,20 @@ impl CompanionTab {
                 }
             }
             MenuAction::About => shared.goto_tab = Some("about".into()),
-            MenuAction::Quit => shared.toast("quit sent to the host (Lillith reads it if she launched this window)", pal::WARN),
+            MenuAction::Quit => shared.toast(
+                "quit sent to the host (Lillith reads it if she launched this window)",
+                pal::WARN,
+            ),
             _ => {}
         }
         self.log.push(format!(
             "{} {}",
             model::action_line(a),
-            if persisted == Persisted::Staged { "→ config (pending save)" } else { "→ host" }
+            if persisted == Persisted::Staged {
+                "→ config (pending save)"
+            } else {
+                "→ host"
+            }
         ));
         if self.log.len() > 6 {
             self.log.remove(0);
@@ -55,7 +65,9 @@ impl CompanionTab {
 }
 
 fn rune_for(label: &str) -> usize {
-    label.bytes().fold(7usize, |h, b| h.wrapping_mul(31).wrapping_add(b as usize))
+    label
+        .bytes()
+        .fold(7usize, |h, b| h.wrapping_mul(31).wrapping_add(b as usize))
 }
 
 fn emblem(ui: &mut egui::Ui, shared: &Shared, state: &MenuState, h: f32) {
@@ -70,13 +82,36 @@ fn emblem(ui: &mut egui::Ui, shared: &Shared, state: &MenuState, h: f32) {
     let ly = inner.bottom() - 46.0;
     let lines = [
         ("SOUL_SYNTAX", format!("{:?}", state.mood).to_uppercase()),
-        ("CORRUPTION_LEVEL", format!("{}%", (state.scale * 100.0).round() as i32)),
-        ("RUNE_KEY", format!("{} · {}", model::mode_key(state.mode).to_uppercase(), if state.muted { "MUTE" } else { "VOICE" })),
+        (
+            "CORRUPTION_LEVEL",
+            format!("{}%", (state.scale * 100.0).round() as i32),
+        ),
+        (
+            "RUNE_KEY",
+            format!(
+                "{} · {}",
+                model::mode_key(state.mode).to_uppercase(),
+                if state.muted { "MUTE" } else { "VOICE" }
+            ),
+        ),
     ];
     for (i, (k, v)) in lines.iter().enumerate() {
         let y = ly + i as f32 * 15.0;
-        th::glitch_text(p, pos2(inner.left() + 4.0, y), Align2::LEFT_TOP, k, th::display_font(9.5), pal::BLOOD_SHEEN);
-        p.text(pos2(inner.right() - 4.0, y), Align2::RIGHT_TOP, v, egui::FontId::monospace(11.0), c32(pal::TERMINAL_TEXT));
+        th::glitch_text(
+            p,
+            pos2(inner.left() + 4.0, y),
+            Align2::LEFT_TOP,
+            k,
+            th::display_font(9.5),
+            pal::BLOOD_SHEEN,
+        );
+        p.text(
+            pos2(inner.right() - 4.0, y),
+            Align2::RIGHT_TOP,
+            v,
+            egui::FontId::monospace(11.0),
+            c32(pal::TERMINAL_TEXT),
+        );
     }
 }
 
@@ -110,9 +145,22 @@ impl SettingsTab for CompanionTab {
                         chrome::section(ui, &title, Some("radio"), |ui| {
                             ui.horizontal_wrapped(|ui| {
                                 for it in items {
-                                    if let MenuItem::Leaf { label, action, check, enabled } = it {
-                                        let sel = matches!(check, Check::Radio(true) | Check::Checkbox(true));
-                                        let r = ui.add_enabled_ui(*enabled, |ui| chrome::choice(ui, label, sel, rune_for(label))).inner;
+                                    if let MenuItem::Leaf {
+                                        label,
+                                        action,
+                                        check,
+                                        enabled,
+                                    } = it
+                                    {
+                                        let sel = matches!(
+                                            check,
+                                            Check::Radio(true) | Check::Checkbox(true)
+                                        );
+                                        let r = ui
+                                            .add_enabled_ui(*enabled, |ui| {
+                                                chrome::choice(ui, label, sel, rune_for(label))
+                                            })
+                                            .inner;
                                         if r.clicked() {
                                             *picked = Some(*action);
                                         }
@@ -121,7 +169,12 @@ impl SettingsTab for CompanionTab {
                             });
                         });
                     }
-                    MenuItem::Leaf { check: Check::Checkbox(on), label, action, .. } => toggles.push((label.clone(), *on, *action)),
+                    MenuItem::Leaf {
+                        check: Check::Checkbox(on),
+                        label,
+                        action,
+                        ..
+                    } => toggles.push((label.clone(), *on, *action)),
                     MenuItem::Leaf { label, action, .. } => rites.push((label.clone(), *action)),
                     MenuItem::Separator => {}
                 }
@@ -157,10 +210,19 @@ impl SettingsTab for CompanionTab {
             }
             chrome::section(ui, "RITE_LOG", Some("stdout"), |ui| {
                 if log.is_empty() {
-                    ui.label(RichText::new("> awaiting your command_").monospace().color(c32(pal::TEXT_MUTE)));
+                    ui.label(
+                        RichText::new("> awaiting your command_")
+                            .monospace()
+                            .color(c32(pal::TEXT_MUTE)),
+                    );
                 }
                 for l in log {
-                    ui.label(RichText::new(format!("> {l}")).monospace().size(11.5).color(c32(pal::TERMINAL_TEXT)));
+                    ui.label(
+                        RichText::new(format!("> {l}"))
+                            .monospace()
+                            .size(11.5)
+                            .color(c32(pal::TERMINAL_TEXT)),
+                    );
                 }
             });
         };

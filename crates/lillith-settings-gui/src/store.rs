@@ -52,7 +52,9 @@ pub struct ConfigStore {
 
 fn read_doc(path: &Path) -> Result<DocumentMut, String> {
     match std::fs::read_to_string(path) {
-        Ok(s) => s.parse::<DocumentMut>().map_err(|e| format!("{}: {e}", path.display())),
+        Ok(s) => s
+            .parse::<DocumentMut>()
+            .map_err(|e| format!("{}: {e}", path.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(DocumentMut::new()),
         Err(e) => Err(format!("{}: {e}", path.display())),
     }
@@ -76,7 +78,12 @@ impl ConfigStore {
             Ok(d) => (d, None),
             Err(e) => (DocumentMut::new(), Some(e)),
         };
-        Self { path, doc, edits: BTreeMap::new(), load_error }
+        Self {
+            path,
+            doc,
+            edits: BTreeMap::new(),
+            load_error,
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -110,7 +117,9 @@ impl ConfigStore {
             Some(_) => None,
             None => {
                 let it = lookup(&self.doc, path)?;
-                it.as_float().map(|f| f as f32).or_else(|| it.as_integer().map(|i| i as f32))
+                it.as_float()
+                    .map(|f| f as f32)
+                    .or_else(|| it.as_integer().map(|i| i as f32))
             }
         }
     }
@@ -134,10 +143,18 @@ impl ConfigStore {
     /// Stages a value. Staging the value the file already has un-stages it.
     pub fn set(&mut self, path: &[&str], v: Val) {
         let on_disk = match &v {
-            Val::Bool(_) => lookup(&self.doc, path).and_then(|i| i.as_bool()).map(Val::Bool),
-            Val::Int(_) => lookup(&self.doc, path).and_then(|i| i.as_integer()).map(Val::Int),
-            Val::Float(_) => lookup(&self.doc, path).and_then(|i| i.as_float()).map(Val::Float),
-            Val::Str(_) => lookup(&self.doc, path).and_then(|i| i.as_str()).map(|s| Val::Str(s.into())),
+            Val::Bool(_) => lookup(&self.doc, path)
+                .and_then(|i| i.as_bool())
+                .map(Val::Bool),
+            Val::Int(_) => lookup(&self.doc, path)
+                .and_then(|i| i.as_integer())
+                .map(Val::Int),
+            Val::Float(_) => lookup(&self.doc, path)
+                .and_then(|i| i.as_float())
+                .map(Val::Float),
+            Val::Str(_) => lookup(&self.doc, path)
+                .and_then(|i| i.as_str())
+                .map(|s| Val::Str(s.into())),
         };
         if on_disk.as_ref() == Some(&v) {
             self.edits.remove(&Self::key(path));
@@ -228,7 +245,10 @@ mod tests {
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("lillith-settings-test-{}-{name}", std::process::id()));
+        let d = std::env::temp_dir().join(format!(
+            "lillith-settings-test-{}-{name}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&d).unwrap();
         d.join("config.toml")
     }
@@ -265,7 +285,10 @@ mod tests {
         assert!(out.contains("# Lillith settings"));
         assert!(out.contains("mode = \"wander\" # where she lives"), "{out}");
         assert!(out.contains("# my model"));
-        assert!(out.contains("temperature = 0.9"), "fresh read keeps outside edits: {out}");
+        assert!(
+            out.contains("temperature = 0.9"),
+            "fresh read keeps outside edits: {out}"
+        );
         assert!(out.contains("jiggle_gain = 0.6\n"), "rounded: {out}");
         assert!(out.contains("[voice]\nmute = true"), "{out}");
         assert!(out.contains("margin_left = 300"));

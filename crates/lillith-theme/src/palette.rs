@@ -15,10 +15,15 @@ pub struct Rgba {
 impl Rgba {
     /// `0xRRGGBB`, opaque.
     pub const fn hex(rgb: u32) -> Self {
-        Self { r: (rgb >> 16) as u8, g: (rgb >> 8) as u8, b: rgb as u8, a: 255 }
+        Self {
+            r: (rgb >> 16) as u8,
+            g: (rgb >> 8) as u8,
+            b: rgb as u8,
+            a: 255,
+        }
     }
 
-    pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
 
@@ -29,14 +34,22 @@ impl Rgba {
 
     /// Same colour with alpha multiplied by `f` (0..=1).
     pub fn fade(self, f: f32) -> Self {
-        Self { a: (self.a as f32 * f.clamp(0.0, 1.0)).round() as u8, ..self }
+        Self {
+            a: (self.a as f32 * f.clamp(0.0, 1.0)).round() as u8,
+            ..self
+        }
     }
 
     /// Linear blend towards `o` (t = 0 → self, 1 → o), per channel.
     pub fn lerp(self, o: Rgba, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
         let m = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * t).round() as u8;
-        Self { r: m(self.r, o.r), g: m(self.g, o.g), b: m(self.b, o.b), a: m(self.a, o.a) }
+        Self {
+            r: m(self.r, o.r),
+            g: m(self.g, o.g),
+            b: m(self.b, o.b),
+            a: m(self.a, o.a),
+        }
     }
 
     pub const fn to_array(self) -> [u8; 4] {
@@ -103,10 +116,11 @@ pub const BLOOD_SHEEN: Rgba = Rgba::hex(0xff6b78);
 
 // ---- DemonOS terminal --------------------------------------------------------
 /// Translucent red terminal fill.
-pub const TERMINAL_FILL: Rgba = Rgba::rgba(0x4a, 0x00, 0x08, 0xb0);
-pub const TERMINAL_FILL_HI: Rgba = Rgba::rgba(0x6a, 0x00, 0x0e, 0xc0);
+pub const TERMINAL_FILL: Rgba = Rgba::new(0x4a, 0x00, 0x08, 0xb0);
+pub const TERMINAL_FILL_HI: Rgba = Rgba::new(0x6a, 0x00, 0x0e, 0xc0);
 /// Grid lines over terminal panels.
-pub const TERMINAL_GRID: Rgba = Rgba::rgba(0xff, 0x1a, 0x2e, 0x1c);
+/// (egui blends in linear light, so small alphas already read clearly.)
+pub const TERMINAL_GRID: Rgba = Rgba::new(0xff, 0x1a, 0x2e, 0x06);
 /// Terminal text.
 pub const TERMINAL_TEXT: Rgba = Rgba::hex(0xffb3ba);
 
@@ -143,7 +157,10 @@ mod tests {
         assert_eq!(c.to_array(), [0x12, 0x34, 0x56, 255]);
         assert_eq!(c.alpha(7).a, 7);
         assert_eq!(c.fade(0.5).a, 128);
-        assert_eq!(Rgba::rgba(200, 100, 50, 128).premultiplied(), [100, 50, 25, 128]);
+        assert_eq!(
+            Rgba::new(200, 100, 50, 128).premultiplied(),
+            [100, 50, 25, 128]
+        );
         assert_eq!(VOID.lerp(TEXT, 0.0), VOID);
         assert_eq!(VOID.lerp(TEXT, 1.0), TEXT);
     }
@@ -152,8 +169,16 @@ mod tests {
     fn text_stays_readable() {
         // WCAG AA (4.5:1) for body text on every surface we put text on.
         for bg in [VOID, OBSIDIAN, OBSIDIAN_HI, IRON, STONE, BLOOD_DEEP] {
-            assert!(TEXT.contrast(bg) >= 7.0, "TEXT on {bg:?}: {}", TEXT.contrast(bg));
-            assert!(TEXT_DIM.contrast(bg) >= 4.5, "TEXT_DIM on {bg:?}: {}", TEXT_DIM.contrast(bg));
+            assert!(
+                TEXT.contrast(bg) >= 7.0,
+                "TEXT on {bg:?}: {}",
+                TEXT.contrast(bg)
+            );
+            assert!(
+                TEXT_DIM.contrast(bg) >= 4.5,
+                "TEXT_DIM on {bg:?}: {}",
+                TEXT_DIM.contrast(bg)
+            );
         }
         assert!(TERMINAL_TEXT.contrast(BLOOD_DEEP) >= 4.5);
         assert!(TEXT_MUTE.contrast(VOID) >= 4.5);

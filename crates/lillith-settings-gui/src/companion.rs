@@ -26,7 +26,10 @@ pub fn state_from_store(s: &ConfigStore) -> MenuState {
         Some("follow") => MoveMode::Follow,
         _ => MoveMode::Stay,
     };
-    let muted = s.get_bool(&["voice", "mute"]).or_else(|| s.get_bool(&["muted"])).unwrap_or(false);
+    let muted = s
+        .get_bool(&["voice", "mute"])
+        .or_else(|| s.get_bool(&["muted"]))
+        .unwrap_or(false);
     MenuState {
         mode,
         mood: Mood::default(),
@@ -172,7 +175,13 @@ mod tests {
 
     #[test]
     fn every_menu_leaf_round_trips_as_a_line() {
-        let st = MenuState { mode: MoveMode::Stay, mood: Mood::Playful, muted: false, monitor_paused: false, scale: 0.55 };
+        let st = MenuState {
+            mode: MoveMode::Stay,
+            mood: Mood::Playful,
+            muted: false,
+            monitor_paused: false,
+            scale: 0.55,
+        };
         let menu = build_menu(&st);
         let leaves = menu.leaves();
         assert!(leaves.len() >= 16);
@@ -186,8 +195,13 @@ mod tests {
 
     #[test]
     fn picks_persist_to_config() {
-        let p = std::env::temp_dir().join(format!("lillith-settings-comp-{}.toml", std::process::id()));
-        std::fs::write(&p, "scale = 0.55\n[voice]\nmute = false\n[llm]\nbackend = \"ollama\"\n").unwrap();
+        let p =
+            std::env::temp_dir().join(format!("lillith-settings-comp-{}.toml", std::process::id()));
+        std::fs::write(
+            &p,
+            "scale = 0.55\n[voice]\nmute = false\n[llm]\nbackend = \"ollama\"\n",
+        )
+        .unwrap();
         let mut store = ConfigStore::load(&p);
         let mut st = state_from_store(&store);
         assert_eq!(st.scale, 0.55);

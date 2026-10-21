@@ -41,11 +41,14 @@ pub use tabs::{SettingsTab, Shared, TabRegistry};
 
 use std::path::PathBuf;
 
+/// Hook that adds / unseals tabs before the window opens.
+pub type Customize = Box<dyn FnOnce(&mut TabRegistry)>;
+
 /// Receives Companion picks in-process.
 pub type ActionSink = Box<dyn FnMut(MenuAction) + Send>;
 
 /// Window options.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Options {
     /// `None` = `$XDG_CONFIG_HOME/lillith/config.toml`.
     pub config_path: Option<PathBuf>,
@@ -62,20 +65,6 @@ pub struct Options {
     pub screenshot: Option<PathBuf>,
     /// Print Companion picks on stdout as JSON lines.
     pub print_actions: bool,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            config_path: None,
-            inner_size: None,
-            start_tab: None,
-            deep_link: None,
-            decorated: false,
-            screenshot: None,
-            print_actions: false,
-        }
-    }
 }
 
 pub const DEFAULT_SIZE: [f32; 2] = [960.0, 660.0];
@@ -96,12 +85,22 @@ pub fn native_options(opts: &Options) -> eframe::NativeOptions {
         .with_min_inner_size(MIN_SIZE)
         .with_resizable(true)
         .with_decorations(opts.decorated);
-    eframe::NativeOptions { viewport, centered: true, ..Default::default() }
+    eframe::NativeOptions {
+        viewport,
+        centered: true,
+        ..Default::default()
+    }
 }
 
 /// Opens the settings window on `config_path` and blocks until it closes.
 pub fn run(config_path: Option<PathBuf>) -> eframe::Result<()> {
-    run_with(Options { config_path, ..Default::default() }, None)
+    run_with(
+        Options {
+            config_path,
+            ..Default::default()
+        },
+        None,
+    )
 }
 
 /// [`run`] with options and an optional in-process action sink.
@@ -110,11 +109,22 @@ pub fn run_with(opts: Options, sink: Option<ActionSink>) -> eframe::Result<()> {
 }
 
 /// [`run_with`] plus a hook to add / unseal tabs.
-pub fn run_with_tabs(opts: Options, sink: Option<ActionSink>, customize: impl FnOnce(&mut TabRegistry) + 'static) -> eframe::Result<()> {
+pub fn run_with_tabs(
+    opts: Options,
+    sink: Option<ActionSink>,
+    customize: impl FnOnce(&mut TabRegistry) + 'static,
+) -> eframe::Result<()> {
     let native = native_options(&opts);
     eframe::run_native(
         "lillith-settings",
         native,
-        Box::new(move |cc| Ok(Box::new(SettingsApp::new(cc, opts, sink, Some(Box::new(customize)))))),
+        Box::new(move |cc| {
+            Ok(Box::new(SettingsApp::new(
+                cc,
+                opts,
+                sink,
+                Some(Box::new(customize)),
+            )))
+        }),
     )
 }

@@ -20,10 +20,16 @@ Companion picks are saved to config.toml and printed as JSON lines on stdout,
 e.g. {\"menu_action\":\"set_mode\",\"value\":\"wander\"}.";
 
 fn main() {
-    let mut opts = Options { print_actions: true, ..Default::default() };
+    let mut opts = Options {
+        print_actions: true,
+        ..Default::default()
+    };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
-        let mut val = |name: &str| args.next().unwrap_or_else(|| die(&format!("{name} needs a value")));
+        let mut val = |name: &str| {
+            args.next()
+                .unwrap_or_else(|| die(&format!("{name} needs a value")))
+        };
         match a.as_str() {
             "-h" | "--help" => {
                 println!("{HELP}");
@@ -36,8 +42,14 @@ fn main() {
             }
             "--size" => {
                 let v = val("--size");
-                let (w, h) = v.split_once(['x', 'X']).unwrap_or_else(|| die("--size WxH"));
-                let p = |s: &str| s.trim().parse::<f32>().unwrap_or_else(|_| die("--size WxH"));
+                let (w, h) = v
+                    .split_once(['x', 'X'])
+                    .unwrap_or_else(|| die("--size WxH"));
+                let p = |s: &str| {
+                    s.trim()
+                        .parse::<f32>()
+                        .unwrap_or_else(|_| die("--size WxH"))
+                };
                 opts.inner_size = Some([p(w).max(640.0), p(h).max(480.0)]);
             }
             "--decorated" => opts.decorated = true,

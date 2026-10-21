@@ -11,13 +11,31 @@ use lillith_theme::palette as pal;
 #[derive(Clone)]
 pub enum Kind {
     /// Slider `min..=max`, rounded to `decimals`, with a unit suffix.
-    Float { min: f32, max: f32, decimals: u32, unit: &'static str, default: fn(&Config) -> f32 },
-    Int { min: i64, max: i64, unit: &'static str, default: i64 },
-    Bool { default: fn(&Config) -> bool },
+    Float {
+        min: f32,
+        max: f32,
+        decimals: u32,
+        unit: &'static str,
+        default: fn(&Config) -> f32,
+    },
+    Int {
+        min: i64,
+        max: i64,
+        unit: &'static str,
+        default: i64,
+    },
+    Bool {
+        default: fn(&Config) -> bool,
+    },
     /// One of a fixed set of strings.
-    Choice { options: &'static [&'static str], default: &'static str },
+    Choice {
+        options: &'static [&'static str],
+        default: &'static str,
+    },
     /// Free text (paths).
-    Text { hint: &'static str },
+    Text {
+        hint: &'static str,
+    },
 }
 
 #[derive(Clone)]
@@ -43,8 +61,29 @@ pub struct KnobTab {
     text_buf: std::collections::HashMap<String, String>,
 }
 
-const fn f(path: &'static [&'static str], label: &'static str, help: &'static str, min: f32, max: f32, decimals: u32, unit: &'static str, default: fn(&Config) -> f32) -> Knob {
-    Knob { path, label, help, kind: Kind::Float { min, max, decimals, unit, default } }
+#[allow(clippy::too_many_arguments)]
+const fn f(
+    path: &'static [&'static str],
+    label: &'static str,
+    help: &'static str,
+    min: f32,
+    max: f32,
+    decimals: u32,
+    unit: &'static str,
+    default: fn(&Config) -> f32,
+) -> Knob {
+    Knob {
+        path,
+        label,
+        help,
+        kind: Kind::Float {
+            min,
+            max,
+            decimals,
+            unit,
+            default,
+        },
+    }
 }
 
 impl KnobTab {
@@ -136,20 +175,77 @@ impl KnobTab {
                     title: "VOICE · ENGINE",
                     tag: "[voice]",
                     knobs: vec![
-                        Knob { path: &["voice", "enabled"], label: "Speak", help: "Master switch", kind: Kind::Bool { default: |c| c.voice_enabled } },
-                        Knob { path: &["voice", "mute"], label: "Muted", help: "Same as Mute in the right-click menu", kind: Kind::Bool { default: |c| c.muted } },
-                        Knob { path: &["voice", "engine"], label: "Engine", help: "auto = first installed", kind: Kind::Choice { options: &["auto", "piper", "espeak-ng", "spd-say", "none"], default: "auto" } },
-                        Knob { path: &["voice", "model"], label: "Piper model", help: "Path to a Piper .onnx voice", kind: Kind::Text { hint: "~/.local/share/piper/voice.onnx" } },
+                        Knob {
+                            path: &["voice", "enabled"],
+                            label: "Speak",
+                            help: "Master switch",
+                            kind: Kind::Bool {
+                                default: |c| c.voice_enabled,
+                            },
+                        },
+                        Knob {
+                            path: &["voice", "mute"],
+                            label: "Muted",
+                            help: "Same as Mute in the right-click menu",
+                            kind: Kind::Bool {
+                                default: |c| c.muted,
+                            },
+                        },
+                        Knob {
+                            path: &["voice", "engine"],
+                            label: "Engine",
+                            help: "auto = first installed",
+                            kind: Kind::Choice {
+                                options: &["auto", "piper", "espeak-ng", "spd-say", "none"],
+                                default: "auto",
+                            },
+                        },
+                        Knob {
+                            path: &["voice", "model"],
+                            label: "Piper model",
+                            help: "Path to a Piper .onnx voice",
+                            kind: Kind::Text {
+                                hint: "~/.local/share/piper/voice.onnx",
+                            },
+                        },
                     ],
                 },
                 Group {
                     title: "VOICE · CADENCE",
                     tag: "[voice]",
                     knobs: vec![
-                        f(&["voice", "rate"], "Rate", "Speaking speed", 0.5, 2.0, 2, "×", |_| 1.0),
+                        f(
+                            &["voice", "rate"],
+                            "Rate",
+                            "Speaking speed",
+                            0.5,
+                            2.0,
+                            2,
+                            "×",
+                            |_| 1.0,
+                        ),
                         f(&["voice", "volume"], "Volume", "", 0.0, 1.0, 2, "", |_| 0.8),
-                        f(&["voice", "cooldown_s"], "Cooldown", "Quiet time between lines", 0.0, 120.0, 0, "s", |_| 8.0),
-                        Knob { path: &["voice", "max_chars"], label: "Max length", help: "Longer lines are cut", kind: Kind::Int { min: 40, max: 1000, unit: "chars", default: 240 } },
+                        f(
+                            &["voice", "cooldown_s"],
+                            "Cooldown",
+                            "Quiet time between lines",
+                            0.0,
+                            120.0,
+                            0,
+                            "s",
+                            |_| 8.0,
+                        ),
+                        Knob {
+                            path: &["voice", "max_chars"],
+                            label: "Max length",
+                            help: "Longer lines are cut",
+                            kind: Kind::Int {
+                                min: 40,
+                                max: 1000,
+                                unit: "chars",
+                                default: 240,
+                            },
+                        },
                     ],
                 },
             ],
@@ -160,22 +256,49 @@ impl KnobTab {
     fn knob_ui(&mut self, ui: &mut egui::Ui, k: &Knob, shared: &mut Shared, defaults: &Config) {
         let st = &mut shared.store;
         let pending = st.is_pending(k.path);
-        let label = if pending { format!("{} •", k.label) } else { k.label.to_string() };
+        let label = if pending {
+            format!("{} •", k.label)
+        } else {
+            k.label.to_string()
+        };
         chrome::row(ui, &label, |ui| match &k.kind {
-            Kind::Float { min, max, decimals, unit, default } => {
+            Kind::Float {
+                min,
+                max,
+                decimals,
+                unit,
+                default,
+            } => {
                 let mut v = st.get_f32(k.path).unwrap_or_else(|| default(defaults));
+                ui.spacing_mut().slider_width = (ui.available_width() - 90.0).clamp(80.0, 240.0);
                 let r = ui.add(
                     egui::Slider::new(&mut v, *min..=*max)
                         .fixed_decimals(*decimals as usize)
-                        .suffix(if unit.is_empty() { String::new() } else { format!(" {unit}") }),
+                        .suffix(if unit.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" {unit}")
+                        }),
                 );
                 if r.changed() {
                     st.set_f32(k.path, v, *decimals);
                 }
             }
-            Kind::Int { min, max, unit, default } => {
+            Kind::Int {
+                min,
+                max,
+                unit,
+                default,
+            } => {
                 let mut v = st.get_i64(k.path).unwrap_or(*default);
-                if ui.add(egui::DragValue::new(&mut v).range(*min..=*max).suffix(format!(" {unit}"))).changed() {
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut v)
+                            .range(*min..=*max)
+                            .suffix(format!(" {unit}")),
+                    )
+                    .changed()
+                {
                     st.set_i64(k.path, v);
                 }
             }
@@ -187,25 +310,37 @@ impl KnobTab {
             }
             Kind::Choice { options, default } => {
                 let cur = st.get_str(k.path).unwrap_or_else(|| default.to_string());
-                egui::ComboBox::from_id_salt(k.path).selected_text(cur.clone()).show_ui(ui, |ui| {
-                    for o in *options {
-                        if ui.selectable_label(cur == *o, *o).clicked() {
-                            st.set_str(k.path, *o);
+                egui::ComboBox::from_id_salt(k.path)
+                    .selected_text(cur.clone())
+                    .show_ui(ui, |ui| {
+                        for o in *options {
+                            if ui.selectable_label(cur == *o, *o).clicked() {
+                                st.set_str(k.path, *o);
+                            }
                         }
-                    }
-                });
+                    });
             }
             Kind::Text { hint } => {
                 let key = k.path.join(".");
-                let buf = self.text_buf.entry(key).or_insert_with(|| st.get_str(k.path).unwrap_or_default());
-                if ui.add(egui::TextEdit::singleline(buf).hint_text(*hint).desired_width(260.0)).changed() {
+                let buf = self
+                    .text_buf
+                    .entry(key)
+                    .or_insert_with(|| st.get_str(k.path).unwrap_or_default());
+                if ui
+                    .add(
+                        egui::TextEdit::singleline(buf)
+                            .hint_text(*hint)
+                            .desired_width(260.0),
+                    )
+                    .changed()
+                {
                     st.set_str(k.path, buf.trim());
                 }
             }
         });
         if !k.help.is_empty() {
             ui.horizontal(|ui| {
-                ui.add_space(126.0);
+                ui.add_space(142.0);
                 chrome::hint(ui, k.help);
             });
         }

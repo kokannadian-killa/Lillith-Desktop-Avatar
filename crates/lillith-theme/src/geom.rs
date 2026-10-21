@@ -103,7 +103,10 @@ pub fn tapered_quads(line: &[Pt], w0: f32, w1: f32) -> Vec<[Pt; 4]> {
         let w = (w0 + (w1 - w0) * t) * 0.5;
         let nm = normal(i);
         let p = line[i];
-        ([p[0] + nm[0] * w, p[1] + nm[1] * w], [p[0] - nm[0] * w, p[1] - nm[1] * w])
+        (
+            [p[0] + nm[0] * w, p[1] + nm[1] * w],
+            [p[0] - nm[0] * w, p[1] - nm[1] * w],
+        )
     };
     (0..n - 1)
         .map(|i| {
@@ -154,7 +157,12 @@ impl Drip {
         let w = self.width * 0.5;
         let wb = self.width * 0.26;
         let yb = top_y + self.len;
-        [[self.x - w, top_y], [self.x + w, top_y], [self.x + wb, yb], [self.x - wb, yb]]
+        [
+            [self.x - w, top_y],
+            [self.x + w, top_y],
+            [self.x + wb, yb],
+            [self.x - wb, yb],
+        ]
     }
     /// Bulb (drop) at the end: centre and radius.
     pub fn bulb(&self, top_y: f32) -> (Pt, f32) {
@@ -253,13 +261,24 @@ pub fn chamfer_rect(r: RectF, c: f32) -> Vec<Pt> {
 pub fn tab_outline(r: RectF, bevel: f32) -> Vec<Pt> {
     let [x0, y0, x1, y1] = r;
     let b = bevel.min((x1 - x0) * 0.3).min(y1 - y0);
-    vec![[x0, y1], [x0, y0 + b], [x0 + b, y0], [x1 - b, y0], [x1, y0 + b], [x1, y1]]
+    vec![
+        [x0, y1],
+        [x0, y0 + b],
+        [x0 + b, y0],
+        [x1 - b, y0],
+        [x1, y0 + b],
+        [x1, y1],
+    ]
 }
 
 /// L-shaped terminal corner bracket at `corner`, arms of `len` pointing
 /// along `dir` (`[±1, ±1]`, towards the panel's inside).
 pub fn bracket(corner: Pt, len: f32, dir: [f32; 2]) -> [Pt; 3] {
-    [[corner[0] + dir[0] * len, corner[1]], corner, [corner[0], corner[1] + dir[1] * len]]
+    [
+        [corner[0] + dir[0] * len, corner[1]],
+        corner,
+        [corner[0], corner[1] + dir[1] * len],
+    ]
 }
 
 /// Seeded cracks in a stone rectangle: jagged polylines starting on an edge.
@@ -281,7 +300,10 @@ pub fn cracks(seed: u32, r: RectF, count: usize) -> Vec<Vec<Pt>> {
         for _ in 0..steps {
             ang += rng.range(-0.75, 0.75);
             let len = rng.range(5.0, 14.0);
-            p = [(p[0] + ang.cos() * len).clamp(x0, x1), (p[1] + ang.sin() * len).clamp(y0, y1)];
+            p = [
+                (p[0] + ang.cos() * len).clamp(x0, x1),
+                (p[1] + ang.sin() * len).clamp(y0, y1),
+            ];
             line.push(p);
         }
         out.push(line);
@@ -309,28 +331,185 @@ macro_rules! rune {
 
 /// Elder Futhark subset, all straight strokes.
 pub const RUNES: &[Rune] = &[
-    rune!('ᚠ', "fehu", [[0.2, 0.0, 0.2, 1.0], [0.2, 0.45, 0.9, 0.12], [0.2, 0.2, 0.8, 0.0]]),
-    rune!('ᚢ', "uruz", [[0.15, 1.0, 0.15, 0.0], [0.15, 0.0, 0.85, 0.35], [0.85, 0.35, 0.85, 1.0]]),
-    rune!('ᚦ', "thurisaz", [[0.2, 0.0, 0.2, 1.0], [0.2, 0.25, 0.75, 0.5], [0.75, 0.5, 0.2, 0.75]]),
-    rune!('ᚨ', "ansuz", [[0.2, 0.0, 0.2, 1.0], [0.2, 0.0, 0.8, 0.3], [0.2, 0.3, 0.8, 0.6]]),
-    rune!('ᚱ', "raido", [[0.2, 0.0, 0.2, 1.0], [0.2, 0.0, 0.8, 0.25], [0.8, 0.25, 0.2, 0.5], [0.2, 0.5, 0.85, 1.0]]),
-    rune!('ᚲ', "kenaz", [[0.8, 0.15, 0.25, 0.5], [0.25, 0.5, 0.8, 0.85]]),
+    rune!(
+        'ᚠ',
+        "fehu",
+        [
+            [0.2, 0.0, 0.2, 1.0],
+            [0.2, 0.45, 0.9, 0.12],
+            [0.2, 0.2, 0.8, 0.0]
+        ]
+    ),
+    rune!(
+        'ᚢ',
+        "uruz",
+        [
+            [0.15, 1.0, 0.15, 0.0],
+            [0.15, 0.0, 0.85, 0.35],
+            [0.85, 0.35, 0.85, 1.0]
+        ]
+    ),
+    rune!(
+        'ᚦ',
+        "thurisaz",
+        [
+            [0.2, 0.0, 0.2, 1.0],
+            [0.2, 0.25, 0.75, 0.5],
+            [0.75, 0.5, 0.2, 0.75]
+        ]
+    ),
+    rune!(
+        'ᚨ',
+        "ansuz",
+        [
+            [0.2, 0.0, 0.2, 1.0],
+            [0.2, 0.0, 0.8, 0.3],
+            [0.2, 0.3, 0.8, 0.6]
+        ]
+    ),
+    rune!(
+        'ᚱ',
+        "raido",
+        [
+            [0.2, 0.0, 0.2, 1.0],
+            [0.2, 0.0, 0.8, 0.25],
+            [0.8, 0.25, 0.2, 0.5],
+            [0.2, 0.5, 0.85, 1.0]
+        ]
+    ),
+    rune!(
+        'ᚲ',
+        "kenaz",
+        [[0.8, 0.15, 0.25, 0.5], [0.25, 0.5, 0.8, 0.85]]
+    ),
     rune!('ᚷ', "gebo", [[0.1, 0.1, 0.9, 0.9], [0.9, 0.1, 0.1, 0.9]]),
-    rune!('ᚹ', "wunjo", [[0.2, 0.0, 0.2, 1.0], [0.2, 0.0, 0.8, 0.25], [0.8, 0.25, 0.2, 0.5]]),
-    rune!('ᚺ', "hagalaz", [[0.2, 0.0, 0.2, 1.0], [0.8, 0.0, 0.8, 1.0], [0.2, 0.35, 0.8, 0.6]]),
+    rune!(
+        'ᚹ',
+        "wunjo",
+        [
+            [0.2, 0.0, 0.2, 1.0],
+            [0.2, 0.0, 0.8, 0.25],
+            [0.8, 0.25, 0.2, 0.5]
+        ]
+    ),
+    rune!(
+        'ᚺ',
+        "hagalaz",
+        [
+            [0.2, 0.0, 0.2, 1.0],
+            [0.8, 0.0, 0.8, 1.0],
+            [0.2, 0.35, 0.8, 0.6]
+        ]
+    ),
     rune!('ᚾ', "naudiz", [[0.5, 0.0, 0.5, 1.0], [0.2, 0.35, 0.8, 0.6]]),
     rune!('ᛁ', "isa", [[0.5, 0.0, 0.5, 1.0]]),
-    rune!('ᛃ', "jera", [[0.45, 0.1, 0.15, 0.4], [0.15, 0.4, 0.45, 0.7], [0.55, 0.3, 0.85, 0.6], [0.85, 0.6, 0.55, 0.9]]),
-    rune!('ᛇ', "eihwaz", [[0.5, 0.0, 0.5, 1.0], [0.5, 0.0, 0.82, 0.2], [0.5, 1.0, 0.18, 0.8]]),
-    rune!('ᛉ', "algiz", [[0.5, 0.0, 0.5, 1.0], [0.5, 0.45, 0.1, 0.05], [0.5, 0.45, 0.9, 0.05]]),
-    rune!('ᛊ', "sowilo", [[0.75, 0.05, 0.25, 0.45], [0.25, 0.45, 0.75, 0.55], [0.75, 0.55, 0.25, 0.95]]),
-    rune!('ᛏ', "tiwaz", [[0.5, 0.0, 0.5, 1.0], [0.5, 0.0, 0.1, 0.35], [0.5, 0.0, 0.9, 0.35]]),
-    rune!('ᛒ', "berkano", [[0.2, 0.0, 0.2, 1.0], [0.2, 0.0, 0.8, 0.25], [0.8, 0.25, 0.2, 0.5], [0.2, 0.5, 0.8, 0.75], [0.8, 0.75, 0.2, 1.0]]),
-    rune!('ᛖ', "ehwaz", [[0.15, 1.0, 0.15, 0.0], [0.15, 0.0, 0.5, 0.35], [0.5, 0.35, 0.85, 0.0], [0.85, 0.0, 0.85, 1.0]]),
-    rune!('ᛗ', "mannaz", [[0.15, 0.0, 0.15, 1.0], [0.85, 0.0, 0.85, 1.0], [0.15, 0.0, 0.85, 0.45], [0.85, 0.0, 0.15, 0.45]]),
-    rune!('ᛜ', "ingwaz", [[0.5, 0.15, 0.85, 0.5], [0.85, 0.5, 0.5, 0.85], [0.5, 0.85, 0.15, 0.5], [0.15, 0.5, 0.5, 0.15]]),
-    rune!('ᛞ', "dagaz", [[0.1, 0.0, 0.1, 1.0], [0.9, 0.0, 0.9, 1.0], [0.1, 0.0, 0.9, 1.0], [0.9, 0.0, 0.1, 1.0]]),
-    rune!('ᛟ', "othala", [[0.5, 0.0, 0.85, 0.35], [0.5, 0.0, 0.15, 0.35], [0.15, 0.35, 0.8, 1.0], [0.85, 0.35, 0.2, 1.0]]),
+    rune!(
+        'ᛃ',
+        "jera",
+        [
+            [0.45, 0.1, 0.15, 0.4],
+            [0.15, 0.4, 0.45, 0.7],
+            [0.55, 0.3, 0.85, 0.6],
+            [0.85, 0.6, 0.55, 0.9]
+        ]
+    ),
+    rune!(
+        'ᛇ',
+        "eihwaz",
+        [
+            [0.5, 0.0, 0.5, 1.0],
+            [0.5, 0.0, 0.82, 0.2],
+            [0.5, 1.0, 0.18, 0.8]
+        ]
+    ),
+    rune!(
+        'ᛉ',
+        "algiz",
+        [
+            [0.5, 0.0, 0.5, 1.0],
+            [0.5, 0.45, 0.1, 0.05],
+            [0.5, 0.45, 0.9, 0.05]
+        ]
+    ),
+    rune!(
+        'ᛊ',
+        "sowilo",
+        [
+            [0.75, 0.05, 0.25, 0.45],
+            [0.25, 0.45, 0.75, 0.55],
+            [0.75, 0.55, 0.25, 0.95]
+        ]
+    ),
+    rune!(
+        'ᛏ',
+        "tiwaz",
+        [
+            [0.5, 0.0, 0.5, 1.0],
+            [0.5, 0.0, 0.1, 0.35],
+            [0.5, 0.0, 0.9, 0.35]
+        ]
+    ),
+    rune!(
+        'ᛒ',
+        "berkano",
+        [
+            [0.2, 0.0, 0.2, 1.0],
+            [0.2, 0.0, 0.8, 0.25],
+            [0.8, 0.25, 0.2, 0.5],
+            [0.2, 0.5, 0.8, 0.75],
+            [0.8, 0.75, 0.2, 1.0]
+        ]
+    ),
+    rune!(
+        'ᛖ',
+        "ehwaz",
+        [
+            [0.15, 1.0, 0.15, 0.0],
+            [0.15, 0.0, 0.5, 0.35],
+            [0.5, 0.35, 0.85, 0.0],
+            [0.85, 0.0, 0.85, 1.0]
+        ]
+    ),
+    rune!(
+        'ᛗ',
+        "mannaz",
+        [
+            [0.15, 0.0, 0.15, 1.0],
+            [0.85, 0.0, 0.85, 1.0],
+            [0.15, 0.0, 0.85, 0.45],
+            [0.85, 0.0, 0.15, 0.45]
+        ]
+    ),
+    rune!(
+        'ᛜ',
+        "ingwaz",
+        [
+            [0.5, 0.15, 0.85, 0.5],
+            [0.85, 0.5, 0.5, 0.85],
+            [0.5, 0.85, 0.15, 0.5],
+            [0.15, 0.5, 0.5, 0.15]
+        ]
+    ),
+    rune!(
+        'ᛞ',
+        "dagaz",
+        [
+            [0.1, 0.0, 0.1, 1.0],
+            [0.9, 0.0, 0.9, 1.0],
+            [0.1, 0.0, 0.9, 1.0],
+            [0.9, 0.0, 0.1, 1.0]
+        ]
+    ),
+    rune!(
+        'ᛟ',
+        "othala",
+        [
+            [0.5, 0.0, 0.85, 0.35],
+            [0.5, 0.0, 0.15, 0.35],
+            [0.15, 0.35, 0.8, 1.0],
+            [0.85, 0.35, 0.2, 1.0]
+        ]
+    ),
 ];
 
 /// Rune `idx` (wrapping) as segments in a cell at `origin` (top-left) of
@@ -340,7 +519,12 @@ pub fn rune_segments(idx: usize, origin: Pt, height: f32) -> Vec<(Pt, Pt)> {
     let w = height * 0.62;
     r.strokes
         .iter()
-        .map(|s| ([origin[0] + s[0] * w, origin[1] + s[1] * height], [origin[0] + s[2] * w, origin[1] + s[3] * height]))
+        .map(|s| {
+            (
+                [origin[0] + s[0] * w, origin[1] + s[1] * height],
+                [origin[0] + s[2] * w, origin[1] + s[3] * height],
+            )
+        })
         .collect()
 }
 
@@ -383,8 +567,15 @@ pub fn skull(c: Pt, s: f32) -> Skull {
     Skull {
         cranium: ([cx, cy - 0.1 * s], 0.4 * s),
         jaw: [cx - 0.24 * s, cy + 0.05 * s, cx + 0.24 * s, cy + 0.43 * s],
-        eyes: [([cx - 0.15 * s, cy - 0.04 * s], 0.115 * s), ([cx + 0.15 * s, cy - 0.04 * s], 0.115 * s)],
-        nose: [[cx, cy + 0.09 * s], [cx - 0.055 * s, cy + 0.21 * s], [cx + 0.055 * s, cy + 0.21 * s]],
+        eyes: [
+            ([cx - 0.15 * s, cy - 0.04 * s], 0.115 * s),
+            ([cx + 0.15 * s, cy - 0.04 * s], 0.115 * s),
+        ],
+        nose: [
+            [cx, cy + 0.09 * s],
+            [cx - 0.055 * s, cy + 0.21 * s],
+            [cx + 0.055 * s, cy + 0.21 * s],
+        ],
         teeth: (-2..=2)
             .map(|k| {
                 let x = cx + k as f32 * 0.085 * s;
@@ -434,7 +625,13 @@ pub fn sigil(c: Pt, s: f32) -> Sigil {
         horns: [horn(-1.0), horn(1.0)],
         horn_width: 0.085 * s,
         ring: ([cx, cy], 0.15 * s),
-        tail: cubic([cx, cy + 0.15 * s], [cx + 0.26 * s, cy + 0.24 * s], [cx - 0.24 * s, cy + 0.34 * s], [cx, tip[1] - 0.04 * s], 24),
+        tail: cubic(
+            [cx, cy + 0.15 * s],
+            [cx + 0.26 * s, cy + 0.24 * s],
+            [cx - 0.24 * s, cy + 0.34 * s],
+            [cx, tip[1] - 0.04 * s],
+            24,
+        ),
         spade: vec![
             [tip[0], tip[1] - k * 0.9],
             [tip[0] + k, tip[1]],
@@ -443,7 +640,11 @@ pub fn sigil(c: Pt, s: f32) -> Sigil {
             [tip[0] - k * 0.75, tip[1] + k * 0.55],
             [tip[0] - k, tip[1]],
         ],
-        eye: [[cx - 0.07 * s, cy - 0.04 * s], [cx + 0.07 * s, cy - 0.04 * s], [cx, cy + 0.07 * s]],
+        eye: [
+            [cx - 0.07 * s, cy - 0.04 * s],
+            [cx + 0.07 * s, cy - 0.04 * s],
+            [cx, cy + 0.07 * s],
+        ],
     }
 }
 
@@ -476,7 +677,10 @@ pub fn sigil_traces(seed: u32, c: Pt, s: f32, count: usize) -> Vec<Vec<Pt>> {
 /// into the window (`[-1, -1]` for bottom-right). Returns centrelines
 /// (base first, tip last) and the knuckle (centre, radius).
 pub fn claw(corner: Pt, size: f32, dir: [f32; 2]) -> (Vec<Vec<Pt>>, (Pt, f32)) {
-    let knuckle = [corner[0] + dir[0] * size * 0.62, corner[1] + dir[1] * size * 0.62];
+    let knuckle = [
+        corner[0] + dir[0] * size * 0.62,
+        corner[1] + dir[1] * size * 0.62,
+    ];
     let mut talons = Vec::new();
     for k in [-1.0f32, 0.0, 1.0] {
         // spread the three talons around the diagonal towards the corner
@@ -487,7 +691,10 @@ pub fn claw(corner: Pt, size: f32, dir: [f32; 2]) -> (Vec<Vec<Pt>>, (Pt, f32)) {
         let tip = [knuckle[0] + ca * reach, knuckle[1] + sa * reach];
         // hook: bend the tip back towards the window inside
         let hook = [tip[0] + dir[0] * size * 0.10, tip[1] + dir[1] * size * 0.10];
-        let mid = [knuckle[0] + ca * reach * 0.62 - sa * size * 0.08, knuckle[1] + sa * reach * 0.62 + ca * size * 0.08];
+        let mid = [
+            knuckle[0] + ca * reach * 0.62 - sa * size * 0.08,
+            knuckle[1] + sa * reach * 0.62 + ca * size * 0.08,
+        ];
         talons.push(cubic(base, mid, tip, hook, 10));
     }
     (talons, (knuckle, size * 0.16))
@@ -543,7 +750,11 @@ mod tests {
         assert!(is_convex(&chamfer_rect([0.0, 0.0, 100.0, 40.0], 8.0)));
         assert!(is_convex(&tab_outline([0.0, 0.0, 120.0, 34.0], 10.0)));
         assert!(is_convex(&sigil([0.0, 0.0], 200.0).spade));
-        for q in tapered_quads(&cubic([0.0, 0.0], [10.0, 0.0], [20.0, 10.0], [20.0, 30.0], 12), 8.0, 1.0) {
+        for q in tapered_quads(
+            &cubic([0.0, 0.0], [10.0, 0.0], [20.0, 10.0], [20.0, 30.0], 12),
+            8.0,
+            1.0,
+        ) {
             assert!(is_convex(&q));
         }
     }
@@ -554,7 +765,11 @@ mod tests {
         for r in RUNES {
             assert!(!r.strokes.is_empty(), "{}", r.name);
             for s in r.strokes {
-                assert!(s.iter().all(|v| (0.0..=1.0).contains(v)), "{} out of cell", r.name);
+                assert!(
+                    s.iter().all(|v| (0.0..=1.0).contains(v)),
+                    "{} out of cell",
+                    r.name
+                );
             }
         }
         let segs = rune_segments(0, [10.0, 20.0], 30.0);

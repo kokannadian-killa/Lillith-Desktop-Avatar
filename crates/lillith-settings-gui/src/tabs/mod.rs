@@ -124,7 +124,8 @@ mod tests {
     use super::*;
 
     pub(crate) fn shared() -> Shared {
-        let p = std::env::temp_dir().join(format!("lillith-settings-reg-{}.toml", std::process::id()));
+        let p =
+            std::env::temp_dir().join(format!("lillith-settings-reg-{}.toml", std::process::id()));
         Shared {
             store: ConfigStore::load(&p),
             config_path: p,
@@ -159,7 +160,17 @@ mod tests {
         let mut r = TabRegistry::with_defaults(&s);
         assert_eq!(
             r.ids(),
-            ["companion", "motion", "brain", "avatar", "voice", "about", "sealed-1", "sealed-2", "sealed-3"]
+            [
+                "companion",
+                "motion",
+                "brain",
+                "avatar",
+                "voice",
+                "about",
+                "sealed-1",
+                "sealed-2",
+                "sealed-3"
+            ]
         );
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 3);
         r.unseal(Box::new(Dummy));

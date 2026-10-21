@@ -12,10 +12,12 @@ impl<T: Send + 'static> Task<T> {
     pub fn spawn(ctx: &egui::Context, name: &str, f: impl FnOnce() -> T + Send + 'static) -> Self {
         let (tx, rx) = channel();
         let ctx = ctx.clone();
-        let _ = std::thread::Builder::new().name(format!("lillith-settings-{name}")).spawn(move || {
-            let _ = tx.send(f());
-            ctx.request_repaint();
-        });
+        let _ = std::thread::Builder::new()
+            .name(format!("lillith-settings-{name}"))
+            .spawn(move || {
+                let _ = tx.send(f());
+                ctx.request_repaint();
+            });
         Self { rx }
     }
 
