@@ -207,7 +207,12 @@ lillith preview --list                     # list clips in the manifest
 lillith preview knife_tap --physics        # render a clip through the animator → ./preview/
 lillith preview --all --out preview        # contact sheet for every clip
 lillith panel                              # egui window, Poses tab = clip browser
+lillith settings                           # interim window: avatar import/anchors, jiggle/speed/chat (right-click ▸ Settings… opens lillith-settings)
+lillith settings --section avatar --import ~/Pictures/me.png
 ```
+
+Right-click her for the menu (poses, chat, avatar, resize, minimize,
+settings, close). See [docs/MENU_SETTINGS_AVATAR.md](docs/MENU_SETTINGS_AVATAR.md).
 
 ## 5. Configuration
 
@@ -224,7 +229,21 @@ opacity = 1.0
 render_hz = 30.0
 physics_hz = 120.0
 baked_jiggle = false   # true: use the baked _jiggle clip variants when present
+# jiggle_mode = "springs"  # baked | springs | off (overrides baked_jiggle)
+always_on_top = true
+click_through = false  # true: only her head takes clicks
+autostart = false      # true: writes ~/.config/autostart/lillith.desktop
 muted = false
+
+[anim]
+playback_speed = 0.7
+talk_speed = 0.62
+smooth_frames = true   # cross-fade consecutive sprite frames
+crossfade = 0.5
+
+[avatar]               # custom single-image avatars (Settings ▸ Avatar)
+pace = 0.8
+render_hz = 60.0
 
 [overlay]              # where she sits (px from the bottom-left corner)
 margin_left = 80

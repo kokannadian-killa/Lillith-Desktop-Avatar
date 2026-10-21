@@ -45,6 +45,14 @@
 //! Baked-jiggle batch (2026-10, 197 clips):
 //! - `jiggle_baked`, `jiggle_of` (on the `<name>_jiggle` variant) and
 //!   `jiggle_variant` (on the engine-clean clip) are carried as fields;
+//! - `clean_frame_index` (jiggle frame -> clean frame; slow4 settle
+//!   sub-frames make a jiggle clip longer than its clean clip) is carried;
+//!   the jiggle clip keeps its own `frame_durations_ms`/`frame_points`, and
+//!   per-frame data only the clean clip has (`base_frames`, `frame_points`,
+//!   mouth data) is mapped through it. A length mismatch without the index
+//!   is an error (except two looping clips); a different total duration is
+//!   a warning. `impulse_frames` are not imported (kicks come from
+//!   physics.toml recipes, timed in seconds, so they need no mapping);
 //! - `engine_springs` (free text, e.g. "disable chest/pigtails/hip for this
 //!   clip", or a list of group names) becomes `disable_springs = [...]`; text
 //!   that names no spring group is an error;
@@ -59,7 +67,7 @@
 
 use anyhow::{bail, ensure, Context, Result};
 use clap::Parser;
-use lillith_anim::atlas::{load_page, Blend, Clip, FrameRect, LoopMode, Manifest};
+use lillith_anim::atlas::{load_page, Blend, Clip, FrameRect, LoopMode, Manifest, MouthPatch};
 use lillith_core::spring::{Channel, SpringMask};
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -249,6 +257,17 @@ fn convert(
     if let Some(px) = int_field(&anim.extra, side, "feet_off_ground_px") {
         tags.push(format!("feet_off_ground_px:{px}"));
     }
+    // Gait-rig clips (walk/strut/run): the planted boot moves at exactly
+    // this canvas speed, so the overlay can translate her without sliding.
+    if let Some(v) = anim
+        .extra
+        .get("move_speed_px_s")
+        .or_else(|| side.and_then(|m| m.get("move_speed_px_s")))
+        .and_then(Value::as_f64)
+        .filter(|v| v.is_finite() && *v > 0.0)
+    {
+        tags.push(format!("move_speed_px_s:{}", (v * 100.0).round() / 100.0));
+    }
     let scale = match &anim.scale {
         Some(JsonScale::Single(s)) => Some(*s),
         Some(JsonScale::Phases(phases)) => {
@@ -265,6 +284,76 @@ fn convert(
         None => None,
     };
 
+    // Speaking clips: the baked mouth shape of each frame
+    // (`mouth_sequence`, else `lip_flap.baked_sequence`), e.g.
+    // ["closed", "mid", "open", "smile", ...]. (`mouth_shapes` in the JSON
+    // is the patch-image map, not used here.)
+    let mouth_sequence: Vec<String> =
+        match typed_field(&anim.name, &anim.extra, side, "mouth_sequence")? {
+            Some(v) => v,
+            None => typed_field::<Value>(&anim.name, &anim.extra, side, "lip_flap")?
+                .and_then(|lf| lf.get("baked_sequence").cloned())
+                .map(serde_json::from_value::<Vec<String>>)
+                .transpose()
+                .with_context(|| format!("{}: lip_flap.baked_sequence", anim.name))?
+                .unwrap_or_default(),
+        };
+    // Mouth patches (`lip_flap.shapes.mouth_<shape>.{patch, centre_in_patch}`),
+    // per-frame head tilt and the recommended shape-change rate.
+    let lip_flap: Option<Value> = typed_field(&anim.name, &anim.extra, side, "lip_flap")?;
+    let mut mouth_patches = BTreeMap::new();
+    if let Some(shapes) = lip_flap
+        .as_ref()
+        .and_then(|lf| lf.get("shapes"))
+        .and_then(|s| s.as_object())
+    {
+        for (key, v) in shapes {
+            let shape = key.trim_start_matches("mouth_").to_string();
+            let page = v.get("patch").and_then(|p| p.as_str());
+            let centre = v
+                .get("centre_in_patch")
+                .and_then(|c| serde_json::from_value::<(f32, f32)>(c.clone()).ok());
+            if let (Some(page), Some(centre)) = (page, centre) {
+                mouth_patches.insert(
+                    shape,
+                    MouthPatch {
+                        page: page.to_string(),
+                        centre,
+                    },
+                );
+            }
+        }
+    }
+    let mouth_angle_deg: Vec<f32> =
+        typed_field(&anim.name, &anim.extra, side, "mouth_angle_deg")?.unwrap_or_default();
+    ensure!(
+        mouth_angle_deg.is_empty() || mouth_angle_deg.len() == anim.frame_count as usize,
+        "{}: mouth_angle_deg has {} entries for {} frames",
+        anim.name,
+        mouth_angle_deg.len(),
+        anim.frame_count
+    );
+    // Baked-jiggle clips with settle sub-frames: jiggle frame -> clean frame.
+    let clean_frame_index: Vec<u32> =
+        typed_field(&anim.name, &anim.extra, side, "clean_frame_index")?.unwrap_or_default();
+    ensure!(
+        clean_frame_index.is_empty() || clean_frame_index.len() == anim.frame_count as usize,
+        "{}: clean_frame_index has {} entries for {} frames",
+        anim.name,
+        clean_frame_index.len(),
+        anim.frame_count
+    );
+    let mouth_shape_ms: Option<(u32, u32)> = lip_flap
+        .as_ref()
+        .and_then(|lf| lf.pointer("/recommended_rate/mouth_shape_change_ms"))
+        .and_then(|v| serde_json::from_value(v.clone()).ok());
+    ensure!(
+        mouth_sequence.is_empty() || mouth_sequence.len() == anim.frame_count as usize,
+        "{}: mouth_sequence has {} entries for {} frames",
+        anim.name,
+        mouth_sequence.len(),
+        anim.frame_count
+    );
     let frame_points: BTreeMap<String, Vec<(i32, i32)>> =
         typed_field(&anim.name, &anim.extra, side, "frame_points")?.unwrap_or_default();
     for (pname, v) in &frame_points {
@@ -331,8 +420,13 @@ fn convert(
         jiggle_of: typed_field(&anim.name, &anim.extra, side, "jiggle_of")?,
         jiggle_variant: typed_field(&anim.name, &anim.extra, side, "jiggle_variant")?,
         disable_springs,
+        clean_frame_index,
         frame_points,
         blend,
+        mouth_sequence,
+        mouth_patches,
+        mouth_angle_deg,
+        mouth_shape_ms,
         frames,
     })
 }
@@ -476,7 +570,83 @@ fn build(json: &JsonManifest, in_dir: &Path, out_dir: &Path, tags: &[String]) ->
     for note in align_jiggle_anchors(&mut m) {
         eprintln!("{note}");
     }
+    for note in map_jiggle_frames(&mut m)? {
+        eprintln!("{note}");
+    }
     Ok(m)
+}
+
+/// Baked-jiggle clips whose frame count differs from their clean clip must
+/// carry `clean_frame_index` (unless both loop). Their own timing and
+/// per-frame data are kept; per-frame data only the clean clip has
+/// (`base_frames`, attachment `frame_points`, `mouth_sequence`,
+/// `mouth_angle_deg`) is mapped through the index. Returns warnings (e.g.
+/// a total duration that differs from the clean clip's).
+fn map_jiggle_frames(m: &mut Manifest) -> Result<Vec<String>> {
+    let mut notes = Vec::new();
+    let names: Vec<String> = m.clips.keys().cloned().collect();
+    for name in names {
+        let clip = &m.clips[&name];
+        let Some(clean_name) = clip.jiggle_of.clone() else {
+            continue;
+        };
+        let Some(clean) = m.clips.get(&clean_name).cloned() else {
+            continue;
+        };
+        let n = clip.frames.len();
+        let cfi = clip.clean_frame_index.clone();
+        if cfi.is_empty() {
+            let both_loop = clip.mode == LoopMode::Loop && clean.mode == LoopMode::Loop;
+            ensure!(
+                n == clean.frames.len() || both_loop,
+                "{name}: {n} frames but `{clean_name}` has {}; needs clean_frame_index",
+                clean.frames.len()
+            );
+            continue;
+        }
+        if let Some(&bad) = cfi.iter().find(|&&i| i as usize >= clean.frames.len()) {
+            bail!(
+                "{name}: clean_frame_index {bad} out of range for `{clean_name}` ({} frames)",
+                clean.frames.len()
+            );
+        }
+        let (dj, dc) = (clip.duration_s(), clean.duration_s());
+        if (dj - dc).abs() > 0.002 * n.max(1) as f32 {
+            notes.push(format!(
+                "warning: {name}: one pass is {:.3}s but `{clean_name}` is {:.3}s",
+                dj, dc
+            ));
+        }
+        let map = |i: usize| cfi[i] as usize;
+        let clip = m.clips.get_mut(&name).expect("present");
+        if clip.base_frames.is_none() {
+            if let Some(bf) = clean
+                .base_frames
+                .as_ref()
+                .filter(|b| b.len() == clean.frames.len())
+            {
+                clip.base_frames = Some((0..n).map(|i| bf[map(i)]).collect());
+                if clip.base_clip.is_none() {
+                    clip.base_clip = clean.base_clip.clone();
+                }
+            }
+        }
+        for (key, pts) in &clean.frame_points {
+            if pts.len() == clean.frames.len() && !clip.frame_points.contains_key(key) {
+                clip.frame_points
+                    .insert(key.clone(), (0..n).map(|i| pts[map(i)]).collect());
+            }
+        }
+        if clip.mouth_sequence.is_empty() && clean.mouth_sequence.len() == clean.frames.len() {
+            clip.mouth_sequence = (0..n)
+                .map(|i| clean.mouth_sequence[map(i)].clone())
+                .collect();
+        }
+        if clip.mouth_angle_deg.is_empty() && clean.mouth_angle_deg.len() == clean.frames.len() {
+            clip.mouth_angle_deg = (0..n).map(|i| clean.mouth_angle_deg[map(i)]).collect();
+        }
+    }
+    Ok(notes)
 }
 
 /// Reads a per-animation JSON object; a missing file is not an error.
@@ -697,6 +867,30 @@ mod tests {
     }
 
     #[test]
+    fn gait_clips_carry_their_ground_speed() {
+        // The rebuilt walk/strut/run clips add move_speed_px_s + a gait
+        // object; the speed becomes a tag, the rest is ignored.
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [ { "name": "walk_right", "sheet": "w.png", "frame_count": 1,
+                 "fps": 9, "loop": true, "anchor": [200, 392], "baseline_y": 392,
+                 "move_speed_px_s": 134, "contact_frames": [0, 5],
+                 "gait": { "cycle_s": 1.15, "duty_factor": 0.6, "per_frame": [] } } ] }"#,
+        )
+        .unwrap();
+        let clip = convert(&json.animations[0], None, "w.png".into(), &[]).unwrap();
+        assert!(clip.tags.contains(&"move_speed_px_s:134".to_string()));
+        assert_eq!(clip.move_speed_px_s(), Some(134.0));
+        let side: Value = serde_json::from_str(r#"{ "move_speed_px_s": 346.5 }"#).unwrap();
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [ { "name": "run_right", "sheet": "r.png", "frame_count": 1,
+                 "fps": 9, "anchor": [200, 392] } ] }"#,
+        )
+        .unwrap();
+        let clip = convert(&json.animations[0], side.as_object(), "r.png".into(), &[]).unwrap();
+        assert_eq!(clip.move_speed_px_s(), Some(346.5));
+    }
+
+    #[test]
     fn carries_points_from_entry_and_side_json() {
         let json: JsonManifest = serde_json::from_str(
             r#"{ "animations": [ { "name": "drag_held", "sheet": "d.png", "frame_count": 1,
@@ -727,6 +921,113 @@ mod tests {
         )
         .unwrap();
         assert_eq!(back.clips["drag_held"], clip);
+    }
+
+    #[test]
+    fn carries_mouth_patches_tilt_and_shape_rate() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [ { "name": "talk_loop", "sheet": "t.png", "frame_count": 2,
+                 "fps": 5, "anchor": [200, 392], "baseline_y": 392, "dir": "talk_loop/",
+                 "mouth_point": [193, 85],
+                 "mouth_shapes": { "mouth_open": "talk_loop/mouth/mouth_open.png" } } ] }"#,
+        )
+        .unwrap();
+        let side: Value = serde_json::from_str(
+            r#"{ "mouth_angle_deg": [0.0, 1.5],
+                 "lip_flap": {
+                   "shapes": {
+                     "mouth_open": { "patch": "talk_loop/mouth/mouth_open.png",
+                                     "patch_size": [18, 13], "centre_in_patch": [9.0, 5.96] },
+                     "mouth_closed": { "patch": "talk_loop/mouth/mouth_closed.png",
+                                       "centre_in_patch": [9.0, 6.0] } },
+                   "baked_sequence": ["mouth_closed", "mouth_open"],
+                   "recommended_rate": { "mouth_shape_change_ms": [200, 260] } } }"#,
+        )
+        .unwrap();
+        let clip = convert(&json.animations[0], side.as_object(), "t.png".into(), &[]).unwrap();
+        assert_eq!(clip.mouth_patches.len(), 2);
+        assert_eq!(
+            clip.mouth_patches["open"],
+            MouthPatch {
+                page: "talk_loop/mouth/mouth_open.png".into(),
+                centre: (9.0, 5.96)
+            }
+        );
+        assert_eq!(clip.mouth_angle_deg, vec![0.0, 1.5]);
+        assert_eq!(clip.mouth_shape_ms, Some((200, 260)));
+        assert_eq!(clip.mouth_sequence, vec!["mouth_closed", "mouth_open"]);
+        assert_eq!(clip.point("mouth_point"), Some((193, 85)));
+    }
+
+    #[test]
+    fn maps_jiggle_subframes_through_clean_frame_index() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [
+                { "name": "ev", "sheet": "e.png", "frame_count": 2, "fps": 5, "loop": false,
+                  "anchor": [200, 392], "baseline_y": 392,
+                  "jiggle_variant": "ev_jiggle", "frame_durations_ms": [200, 400] },
+                { "name": "ev_jiggle", "sheet": "j.png", "frame_count": 4, "fps": 5, "loop": false,
+                  "anchor": [200, 392], "baseline_y": 392, "jiggle_baked": true, "jiggle_of": "ev",
+                  "engine_springs": "disable chest/pigtails/hip for this clip",
+                  "clean_frame_index": [0, 1, 1, 1], "frame_durations_ms": [200, 134, 133, 133] },
+                { "name": "think", "sheet": "t.png", "frame_count": 3, "fps": 5,
+                  "anchor": [200, 392], "baseline_y": 392 } ] }"#,
+        )
+        .unwrap();
+        let a = &json.animations;
+        let ev_side: Value = serde_json::from_str(
+            r#"{ "base_clip": "think", "base_frames": [2, 0],
+                 "frame_points": { "hand_point": [[10, 10], [20, 20]] } }"#,
+        )
+        .unwrap();
+        let jig_side: Value = serde_json::from_str(
+            r#"{ "frame_points": { "chest_point": [[1, 1], [2, 2], [3, 3], [4, 4]] } }"#,
+        )
+        .unwrap();
+        let mut m = Manifest::default();
+        m.clips.insert(
+            "ev".into(),
+            convert(&a[0], ev_side.as_object(), "e.png".into(), &[]).unwrap(),
+        );
+        m.clips.insert(
+            "ev_jiggle".into(),
+            convert(&a[1], jig_side.as_object(), "j.png".into(), &[]).unwrap(),
+        );
+        m.clips.insert(
+            "think".into(),
+            convert(&a[2], None, "t.png".into(), &[]).unwrap(),
+        );
+        let notes = map_jiggle_frames(&mut m).unwrap();
+        assert!(notes.is_empty(), "{notes:?}");
+        let j = &m.clips["ev_jiggle"];
+        // Own timing and own per-frame data kept; clean-only data mapped.
+        assert_eq!(
+            j.frame_durations_ms.as_deref(),
+            Some(&[200, 134, 133, 133][..])
+        );
+        assert_eq!(j.clean_frame_index, vec![0, 1, 1, 1]);
+        assert_eq!(j.frame_points["chest_point"].len(), 4);
+        assert_eq!(
+            j.frame_points["hand_point"],
+            vec![(10, 10), (20, 20), (20, 20), (20, 20)]
+        );
+        assert_eq!(j.base_frames.as_deref(), Some(&[2, 0, 0, 0][..]));
+        assert_eq!(j.base_clip.as_deref(), Some("think"));
+        let back = Manifest::from_toml_str(&toml::to_string(&m).unwrap()).unwrap();
+        assert_eq!(back.clips["ev_jiggle"].clean_frame(3), 1);
+        // Without the index the length mismatch is an error.
+        m.clips
+            .get_mut("ev_jiggle")
+            .unwrap()
+            .clean_frame_index
+            .clear();
+        assert!(map_jiggle_frames(&mut m).is_err());
+        // A different total duration is reported.
+        let mut m2 = m.clone();
+        let j = m2.clips.get_mut("ev_jiggle").unwrap();
+        j.clean_frame_index = vec![0, 1, 1, 1];
+        j.frame_durations_ms = Some(vec![200, 200, 200, 200]);
+        assert_eq!(map_jiggle_frames(&mut m2).unwrap().len(), 1);
     }
 
     #[test]
