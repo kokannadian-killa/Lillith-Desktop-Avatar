@@ -129,6 +129,7 @@ def main():
     ap.add_argument('--keep-old-fields', default='', help='comma list of fields copied from the old clip json (e.g. seat_y,seat_x_range)')
     ap.add_argument('--durations-from-old', action='store_true', help='derive frame_durations_ms from the old clip: resample its profile to N frames, scale non-final frames to the real video time, keep the final hold')
     ap.add_argument('--snap-thresh', type=float, default=0, help='snap only frames whose lowest pixel is within this many canvas px of the ground (keeps real flight frames)')
+    ap.add_argument('--ground-from', help='START:STOP (stop exclusive): take the global ground line only from these video frames (keeps a re-cut clip at the exact height of the shipped one)')
     ap.add_argument('--snap', action='store_true', help='per-frame: lowest pixel -> y=392 (clips with constant ground contact, e.g. walk)')
     a = ap.parse_args()
     name = a.out_name or a.clip
@@ -138,7 +139,11 @@ def main():
     keyed = [key_combined(load(i)) for i in idx]
     ref_keyed = key_combined(load(1))
     lows = [np.where(k[..., 3] > 16)[0].max() for k in keyed]
-    ground = float(np.percentile(lows, 90))
+    if a.ground_from:
+        g0, g1 = map(int, a.ground_from.split(':')); gl = [lo for i, lo in zip(idx, lows) if g0 <= i < g1 and (i - g0) % a.step == 0]
+        ground = float(np.percentile(gl, 90))
+    else:
+        ground = float(np.percentile(lows, 90))
     ty = 392 - (ground + 1) * a.scale + 1
     if a.center == 'fixed' and a.cx_src is None:
         a.cx_src = body_x(ref_keyed[..., 3])

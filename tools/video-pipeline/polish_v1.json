@@ -1,0 +1,28 @@
+{
+  "version": "polish_v1",
+  "out_root": "_polish_v1",
+  "rules": "Clip-definition fixes only: same source video, same step/fps/anchor/centering/snap as the shipped generated_v2 clip. No resampling, no re-matting, no regeneration. Loop end: pick the last frame so the frame after it ~= the first frame (seamless wrap). Static trims: drop frozen sampled frames (step < 0.1 grey-level) at a loop start, keeping one so the eased hold stays. Scale: only when the frame-0 idle-stance height is off the 370 px house height by >= 3 px; walks skipped.",
+  "clips": [
+    {"clip": "idle_flirt_look_away", "last": 95, "why": "loop end cut 2 source frames early (seam 1.68x step)"},
+    {"clip": "idle_flirt_stretch", "last": 95, "why": "loop end cut 2 source frames early (seam 1.32x)"},
+    {"clip": "idle_flirt_pigtail_twirl", "last": 119, "why": "loop end cut 2 source frames early (seam 1.30x)"},
+    {"clip": "idle_flirt_foot_tap", "last": 95, "why": "loop end 2 frames early"},
+    {"clip": "idle_flirt_glove_adjust", "last": 95, "why": "loop end 2 frames early"},
+    {"clip": "idle_flirt_hands_behind_sway", "last": 95, "why": "loop end 2 frames early"},
+    {"clip": "idle_flirt_hip_lean", "last": 95, "why": "loop end 2 frames early"},
+    {"clip": "idle_flirt_lip_bite", "first": 5, "last": 95, "why": "loop end 2 frames early; 3 frozen frames at start (keep 1)"},
+    {"clip": "idle_flirt_shy_giggle", "first": 9, "last": 95, "why": "loop end 2 frames early; 5 frozen frames at start (keep 1)"},
+    {"clip": "idle_bored_sigh", "first": 3, "last": 95, "why": "loop end 2 frames early (seam 1.27x); frozen frames at start (keep 1)"},
+    {"clip": "sway_dance", "last": 119, "why": "loop end 2 frames early"},
+    {"clip": "lean_forward", "last": 47, "why": "loop end 2 frames early"},
+    {"clip": "tail_tease", "last": 47, "why": "loop end 2 frames early"},
+    {"clip": "hip_sway", "last": 47, "why": "loop end 2 frames early"},
+    {"clip": "shoulder_roll", "last": 47, "why": "loop end 2 frames early"},
+    {"clip": "shoulder_shimmy", "last": 47, "why": "loop end 2 frames early"},
+    {"clip": "_poses/pose_hacking", "scale": 0.526, "why": "frame-0 height 373 px vs 370 house height (+0.8%)"},
+    {"clip": "_poses/pose_present", "scale": 0.526, "why": "frame-0 height 373 px vs 370 house height (+0.8%)"}
+  ],
+  "transitions": [
+    {"clip": "blend_sleep_to_wake", "end": 45, "why": "video settles on wake[0] by ~f45 (f49 and f61 were near-duplicate dead frames); interior frames re-picked over f1-f45, same count/fps"}
+  ]
+}

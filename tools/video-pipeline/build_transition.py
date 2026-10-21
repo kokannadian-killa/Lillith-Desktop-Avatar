@@ -4,7 +4,10 @@ Placement is registered to the two clips so the blend joins them without a jump:
 A's canvas frame and the last video frame to B's canvas frame (scale = each clip's own scale, offset from the
 alpha centroids), and scale/offset are interpolated linearly in between. Interior frames only (the boundary
 frames already belong to A and B).
-usage: build_transition.py <blend_name> <video> <clipA> <idxA> <clipB> <idxB> [n=6] [fps=10] [--snap]"""
+usage: build_transition.py <blend_name> <video> <clipA> <idxA> <clipB> <idxB> [n=6] [fps=10] [--snap] [--end=F] [--out-dir=DIR]
+--end=F: last video frame of real motion (default: last frame). Interior frames are picked over 1..F and the
+         placement reaches clip B at F, so a static tail (video already settled on B) is not sampled as a dead hold.
+--out-dir=DIR: write the blend here instead of generated_v2/<blend_name> (versioned polish builds)."""
 import sys, os, glob, json
 import numpy as np
 from PIL import Image
@@ -15,6 +18,7 @@ from horn_fix import fix_frames
 import os as _o, sys as _s; _s.path.insert(0, _o.path.dirname(_o.path.abspath(__file__))); import paths
 V2 = bc.ROOT; G = paths.V1
 args = [a for a in sys.argv[1:] if not a.startswith('--')]; snap = '--snap' in sys.argv
+opt = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--') and '=' in a)
 name, video, ca, ia, cb, ib = args[:6]; ia, ib = int(ia), int(ib)
 n = int(args[6]) if len(args) > 6 else 6; fps = float(args[7]) if len(args) > 7 else 10
 def canvas(c, i):
@@ -33,10 +37,11 @@ def scale_for(kv, canv, js):
     return s if abs(est / s - 1) < 0.04 else float(est)
 sa, sb = scale_for(k1, A, ja), scale_for(kN, B, jb)
 txa, tya = reg(k1, A, sa); txb, tyb = reg(kN, B, sb)
-sel = [int(round(x)) for x in np.linspace(1, nf, n + 2)[1:-1]]
+end = min(int(opt.get('end', nf)), nf)
+sel = [int(round(x)) for x in np.linspace(1, end, n + 2)[1:-1]]
 frames = []
 for i in sel:
-    t = (i - 1) / (nf - 1); s = sa + (sb - sa) * t
+    t = (i - 1) / (end - 1); s = sa + (sb - sa) * t
     k = load(i); f = bc.place(k, s, txa + (txb - txa) * t, tya + (tyb - tya) * t)
     a = np.asarray(f).copy()
     ys = np.where((a[..., 3] > 0).any(1))[0]; lo = ys.max()
@@ -44,11 +49,13 @@ for i in sel:
     a[393:] = 0; frames.append(Image.fromarray(a))
 frames, horn = fix_frames(frames, Image.fromarray(A))
 old = json.load(open(f'{G}/{name}/{name}.json'))
-rel = os.path.relpath(os.path.abspath(video), f'{V2}/{name}')
+outdir = os.path.abspath(opt['out-dir']) if 'out-dir' in opt else f'{V2}/{name}'
+rel = os.path.relpath(os.path.abspath(video), outdir)
 extra = {'from_clip': ca, 'to_clip': cb, 'source_frames': {ca: ia, cb: ib}, 'facing': old.get('facing'),
          'source_files': [rel], 'source_video_frames': sel, 'horn_fix': horn,
          'blend_method': 'real transition video (Grok Imagine I2V, first frame = clip A boundary frame, last = clip B boundary frame); placement registered to both clips, scale/offset interpolated; interior frames only',
          'scale_from_to': [sa, sb], 'baked_secondary_motion': ['full_body_bounce', 'pigtails', 'tail'],
          'notes': f'Transition helper {ca.replace("idle_a", "idle")} -> {cb.replace("idle_a", "idle")}: {n} frames from a dedicated transition video between {ca}[{ia}] and {cb}[{ib}]. idle endpoints use idle_a frame 0 (= idle_b frame 0 = idle still).'}
-m = bc.write_clip(name, frames, fps, 'once', 200, round((sa + sb) / 2, 3), extra, f'{V2}/{name}', None)
+if end != nf: extra['source_motion_end_frame'] = end
+m = bc.write_clip(name, frames, fps, 'once', 200, round((sa + sb) / 2, 3), extra, outdir, None)
 print(name, len(frames), 'video frames', sel, 'scale', sa, '->', sb, 'compliant', m['canvas_compliant'])
