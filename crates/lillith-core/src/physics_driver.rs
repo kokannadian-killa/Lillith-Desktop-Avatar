@@ -499,6 +499,17 @@ impl PhysicsDriver {
     pub fn physics(&self) -> &Physics {
         &self.physics
     }
+    /// Re-applies the user's `[springs]` (Settings, live): stiffness,
+    /// damping (mood multipliers stay on top) and the three gains.
+    pub fn set_user_springs(&mut self, u: &UserSprings) {
+        let mut cfg = (*self.cfg).clone();
+        cfg.apply_user_springs(u);
+        self.cfg = Arc::new(cfg);
+        self.apply_mood_params();
+        self.physics
+            .set_gains(u.jiggle_gain, u.chest_bounce_gain, u.pigtail_sway_gain);
+    }
+
     pub fn physics_mut(&mut self) -> &mut Physics {
         &mut self.physics
     }

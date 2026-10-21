@@ -370,6 +370,13 @@ impl Brain {
     pub fn config(&self) -> &BehaviorConfig {
         &self.cfg
     }
+    /// Wander walking speed (screen px/s), e.g. matched to the walk clip's
+    /// foot-locked `move_speed_px_s` so her boots don't slide.
+    pub fn set_walk_speed(&mut self, px_s: f32) {
+        if px_s.is_finite() && px_s > 0.0 {
+            self.cfg.wander_speed_px_s = px_s;
+        }
+    }
 
     // ── Setup from the overlay ───────────────────────────────────────────
 
