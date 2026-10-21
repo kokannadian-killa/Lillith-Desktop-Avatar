@@ -60,6 +60,13 @@ fn main() {
         events: None,
         sink: None,
         settings_path: None,
+        chat: None,
+        chat_on_click: false,
+        overlay_speech: false,
+        always_on_top: true,
+        click_through: false,
+        avatars: None,
+        avatar: Default::default(),
     };
     let mut c = Controller::new(&opts).expect("controller");
     let (w, h) = c.stage.size();

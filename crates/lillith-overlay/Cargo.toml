@@ -38,3 +38,6 @@ ashpd = { workspace = true, optional = true }
 [[example]]
 name = "x11_click_probe"
 required-features = ["x11"]
+
+[dev-dependencies]
+image.workspace = true

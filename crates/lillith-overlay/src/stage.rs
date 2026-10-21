@@ -6,9 +6,13 @@
 //! they only re-upload pixels / input region when needed (idle CPU).
 
 use crate::input_region::{mask_rects, rects_hit, Rect};
+use crate::speech::{draw_speech, SpeechLayout, SpeechView};
 use lillith_anim::animator::{Animator, AnimatorConfig, Layer};
 use lillith_anim::atlas::Manifest;
-use lillith_anim::render::{draw_cell, PageCache};
+use lillith_anim::avatar::{draw_avatar, Avatar, AvatarMotion, AvatarPose, MotionInputs};
+use lillith_anim::render::{draw_cell, draw_cell_mix, draw_mouth, frame_transform, PageCache};
+use lillith_anim::talk::Mouth;
+use lillith_anim::text::Fonts;
 use lillith_anim::Canvas;
 use std::path::Path;
 
@@ -44,12 +48,38 @@ struct Key {
     frame: usize,
     flip: bool,
     q: [i32; 6],
+    mouth: Option<Mouth>,
+    /// Smooth mode: next frame + quantised cross-fade weight.
+    blend: Option<(usize, i32)>,
+    /// Hash of the speech bubble's text + quantised opacity (0 = none).
+    speech: u64,
+    /// Custom avatar pose, quantised (all zero for Lillith's sprites).
+    pose: [i32; 6],
+}
+
+/// A custom avatar on stage, animated per render frame.
+struct AvatarRig {
+    av: Avatar,
+    motion: AvatarMotion,
+    pose: AvatarPose,
+    inputs: MotionInputs,
+}
+
+/// Overlay speech bubble state (see [`Stage::with_speech_area`]).
+struct SpeechArea {
+    fonts: Fonts,
+    layout: SpeechLayout,
+    view: Option<SpeechView>,
+    /// Wrapped lines of `view`, cached by its text.
+    lines: (String, Vec<String>),
 }
 
 pub struct Stage {
     anim: Animator,
     /// Last cropped cell, keyed by (clip, frame): crops only on frame change.
     cell: Option<((String, usize), Canvas)>,
+    /// Second cached cell: the frame being cross-faded in (smooth mode).
+    cell_next: Option<((String, usize), Canvas)>,
     /// Coarse key of the last mask: the mask is only rescanned when the
     /// frame changes or the body moved by ≥ 1 px / 0.3° / 0.5 %.
     mask_key: Option<Key>,
@@ -57,13 +87,20 @@ pub struct Stage {
     pages: PageCache,
     canvas: Canvas,
     scale: f32,
-    /// Manifest cell (largest frame) and idle feet anchor, unscaled.
-    cell_size: (u32, u32),
-    anchor: (f32, f32),
     origin: (f32, f32),
     key: Option<Key>,
     mask: Vec<Rect>,
     renders: u64,
+    speech: Option<SpeechArea>,
+    /// Largest manifest cell (unscaled) and the idle feet anchor in it.
+    cell_wh: (u32, u32),
+    base_anchor: (i32, i32),
+    /// Click-through mode: only her head catches clicks (a grab handle so
+    /// the menu stays reachable); the rest passes to the desktop.
+    click_through: bool,
+    avatar: Option<AvatarRig>,
+    /// Jiggle strength 0..1 of the custom avatar (Settings slider).
+    avatar_strength: f32,
 }
 
 impl std::fmt::Debug for Stage {
@@ -103,6 +140,9 @@ impl Stage {
                 ch = ch.max(f.h);
             }
         }
+        let mut manifest = manifest;
+        let mut pages = pages;
+        drop_unloadable_mouth_patches(&mut manifest, &mut pages);
         let anim = Animator::new(manifest, cfg)?;
         // Feet anchor of the idle base: every clip shares the canvas/baseline.
         let a = anim.current().rect.anchor;
@@ -112,17 +152,22 @@ impl Stage {
         Ok(Self {
             anim,
             cell: None,
+            cell_next: None,
             mask_key: None,
             render_time: std::time::Duration::ZERO,
             pages,
             canvas,
             scale,
-            cell_size: (cw, ch),
-            anchor: (a.0 as f32, a.1 as f32),
             origin: (a.0 as f32 * scale, a.1 as f32 * scale),
             key: None,
             mask: Vec::new(),
             renders: 0,
+            speech: None,
+            cell_wh: (cw, ch),
+            base_anchor: a,
+            click_through: false,
+            avatar: None,
+            avatar_strength: lillith_anim::avatar::DEFAULT_STRENGTH,
         })
     }
 
@@ -131,20 +176,165 @@ impl Stage {
         self.scale
     }
 
-    /// Re-sizes the stage to `scale` (menu Size ▸), keeping the animator,
-    /// its springs and the decoded pages. The next [`Stage::render`] draws
-    /// the new size; the backend must resize its window to [`Stage::size`].
+    /// Resizes the overlay live (Resize menu / Settings): canvas, feet
+    /// anchor and speech area follow; the animator keeps playing.
     pub fn set_scale(&mut self, scale: f32) -> Result<(), StageError> {
         let scale = scale.clamp(0.1, 4.0);
-        let w = (self.cell_size.0 as f32 * scale).round() as u32;
-        let h = (self.cell_size.1 as f32 * scale).round() as u32;
+        let (cw, ch) = self.cell_wh;
+        let w = (cw as f32 * scale).round() as u32;
+        let mut h = (ch as f32 * scale).round() as u32;
+        let mut pad = 0;
+        if let Some(s) = &mut self.speech {
+            s.layout = SpeechLayout::new(&s.fonts, w, scale);
+            s.lines = (String::new(), Vec::new());
+            pad = s.layout.pad;
+            h += pad;
+        }
         self.canvas = Canvas::new(w, h).ok_or(StageError::Size(w, h))?;
         self.scale = scale;
-        self.origin = (self.anchor.0 * scale, self.anchor.1 * scale);
+        let a = self.base_anchor;
+        self.origin = (a.0 as f32 * scale, a.1 as f32 * scale + pad as f32);
         self.key = None;
         self.mask_key = None;
         self.mask.clear();
         Ok(())
+    }
+
+    /// Turns the overlay speech area on/off live (resizes the canvas).
+    pub fn set_speech_enabled(&mut self, on: bool) -> Result<(), StageError> {
+        if on == self.speech.is_some() {
+            return Ok(());
+        }
+        if on {
+            self.speech = Some(SpeechArea {
+                fonts: Fonts::new(),
+                layout: SpeechLayout::new(&Fonts::bundled(), 1, self.scale),
+                view: None,
+                lines: (String::new(), Vec::new()),
+            });
+        } else {
+            self.speech = None;
+        }
+        self.set_scale(self.scale)
+    }
+
+    /// Click-through mode (only her head stays clickable).
+    pub fn set_click_through(&mut self, on: bool) {
+        if self.click_through != on {
+            self.click_through = on;
+            self.mask_key = None;
+            self.key = None;
+        }
+    }
+
+    pub fn click_through(&self) -> bool {
+        self.click_through
+    }
+
+    /// Shows a custom avatar instead of Lillith's sprites (`None` = her).
+    pub fn set_avatar(&mut self, av: Option<Avatar>) {
+        self.avatar = av.map(|av| {
+            self.avatar_strength = av.meta.jiggle_strength;
+            AvatarRig {
+                av,
+                motion: AvatarMotion::default(),
+                pose: AvatarPose::default(),
+                inputs: MotionInputs::default(),
+            }
+        });
+        self.key = None;
+        self.mask_key = None;
+    }
+
+    /// Id of the custom avatar on stage (`None` = Lillith).
+    pub fn avatar_id(&self) -> Option<&str> {
+        self.avatar.as_ref().map(|r| r.av.meta.id.as_str())
+    }
+
+    /// Custom avatar jiggle strength 0..1 (live).
+    pub fn set_avatar_strength(&mut self, s: f32) {
+        self.avatar_strength = s.clamp(0.0, 1.0);
+        self.key = None;
+    }
+
+    /// Custom avatar motion pace (1 = default; lower = slower).
+    pub fn set_avatar_pace(&mut self, pace: f32) {
+        if let Some(r) = &mut self.avatar {
+            r.motion.pace = pace.clamp(0.2, 3.0);
+        }
+    }
+
+    /// Inputs for the custom avatar motion (talking mouth, hover, drag).
+    pub fn set_avatar_inputs(&mut self, talk: Option<f32>, hovered: bool, dragged: Option<f32>) {
+        if let Some(r) = &mut self.avatar {
+            r.inputs.talk = talk;
+            r.inputs.hovered = hovered;
+            r.inputs.dragged = dragged;
+        }
+    }
+
+    /// A click/poke: the custom avatar does a soft bounce.
+    pub fn avatar_react(&mut self, seconds: f32) {
+        if let Some(r) = &mut self.avatar {
+            r.motion.react(seconds);
+        }
+    }
+
+    /// Current custom-avatar pose (tests, logs).
+    pub fn avatar_pose(&self) -> Option<AvatarPose> {
+        self.avatar.as_ref().map(|r| r.pose)
+    }
+
+    /// Grows the canvas upward to make room for her overlay speech bubble
+    /// (`[chat] overlay_speech`). The feet anchor moves down by the same
+    /// amount, so with the window anchored at its bottom edge she stays put.
+    pub fn with_speech_area(mut self) -> Result<Self, StageError> {
+        if self.speech.is_some() {
+            return Ok(self);
+        }
+        let fonts = Fonts::new();
+        let layout = SpeechLayout::new(&fonts, self.canvas.width(), self.scale);
+        let (w, h) = (self.canvas.width(), self.canvas.height() + layout.pad);
+        self.canvas = Canvas::new(w, h).ok_or(StageError::Size(w, h))?;
+        self.origin.1 += layout.pad as f32;
+        self.key = None;
+        self.mask_key = None;
+        self.speech = Some(SpeechArea {
+            fonts,
+            layout,
+            view: None,
+            lines: (String::new(), Vec::new()),
+        });
+        Ok(self)
+    }
+
+    /// Px above the sprite cell reserved for the speech bubble (0 if none).
+    pub fn speech_pad(&self) -> u32 {
+        self.speech.as_ref().map_or(0, |s| s.layout.pad)
+    }
+
+    /// Sets what the overlay speech bubble shows (`None` hides it). No-op
+    /// without [`Stage::with_speech_area`].
+    pub fn set_speech(&mut self, view: Option<SpeechView>) {
+        if let Some(s) = &mut self.speech {
+            s.view = view.filter(|v| v.alpha > 0.01 && !v.text.trim().is_empty());
+        }
+    }
+
+    /// Lines the speech bubble shows right now (for tests/logs).
+    pub fn speech_lines(&mut self) -> Vec<String> {
+        match &mut self.speech {
+            Some(s) => match &s.view {
+                Some(v) => {
+                    if s.lines.0 != v.text {
+                        s.lines = (v.text.clone(), s.layout.lines(&s.fonts, &v.text));
+                    }
+                    s.lines.1.clone()
+                }
+                None => Vec::new(),
+            },
+            None => Vec::new(),
+        }
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -201,6 +391,13 @@ impl Stage {
     /// ~¼ px / 0.05° / 0.1 %).
     pub fn tick(&mut self, dt: f32) -> Result<Changed, StageError> {
         self.anim.tick(dt);
+        if let Some(r) = &mut self.avatar {
+            let walking =
+                self.anim.base().starts_with("walk") || self.anim.base().starts_with("run");
+            let flip = self.anim.current().flip;
+            r.inputs.walk = walking.then_some(if flip { -1.0 } else { 1.0 });
+            r.pose = r.motion.tick(dt, r.inputs);
+        }
         self.render()
     }
 
@@ -209,10 +406,25 @@ impl Stage {
         let f = self.anim.current();
         let t = f.transform;
         // Quantisation steps: fine for pixels, coarse for the mask.
+        let speech_hash = self
+            .speech
+            .as_ref()
+            .and_then(|s| s.view.as_ref())
+            .map_or(0, |v| {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                v.text.hash(&mut h);
+                ((v.alpha * 50.0).round() as i32).hash(&mut h);
+                h.finish() | 1
+            });
         let quant = |px: f32, ang: f32, sc: f32| Key {
             clip: f.clip_name.to_string(),
             frame: f.frame,
             flip: f.flip,
+            mouth: f.mouth.map(|m| m.shape),
+            blend: f.blend.map(|(n, w)| (n, (w * 24.0).round() as i32)),
+            speech: 0,
+            pose: [0; 6],
             q: [
                 (t.x / px).round() as i32,
                 (t.y / px).round() as i32,
@@ -222,48 +434,228 @@ impl Stage {
                 (t.pigtail_offset / (2.0 * px)).round() as i32,
             ],
         };
-        let key = quant(0.25, 0.001, 0.002);
+        let pose_q = self.avatar.as_ref().map_or([0; 6], |r| {
+            let p = &r.pose;
+            let q = |v: f32, step: f32| (v / step).round() as i32;
+            [
+                q(p.breath, 0.01),
+                q(p.sway, 0.0002),
+                q(p.hop, 0.05),
+                q(p.squash, 0.0005),
+                q(p.talk, 0.05),
+                q(p.tilt, 0.005),
+            ]
+        });
+        let key = Key {
+            speech: speech_hash,
+            pose: pose_q,
+            ..quant(0.25, 0.001, 0.002)
+        };
         if self.key.as_ref() == Some(&key) {
             return Ok(Changed::default());
         }
         let started = std::time::Instant::now();
-        let ck = (f.clip_name.to_string(), f.frame);
-        if self.cell.as_ref().map(|(k, _)| k) != Some(&ck) {
-            let cell = self.pages.cell(f.clip, f.frame)?;
-            self.cell = Some((ck, cell));
-        }
-        let cell = &self.cell.as_ref().expect("cell cached").1;
-        self.canvas.fill(tiny_skia::Color::TRANSPARENT);
-        draw_cell(
-            &mut self.canvas,
-            cell,
-            f.rect.anchor,
-            self.origin,
-            f.flip,
-            &t,
-            self.scale,
-        );
+        let head = if let Some(r) = &self.avatar {
+            self.canvas.fill(tiny_skia::Color::TRANSPARENT);
+            draw_avatar(
+                &mut self.canvas,
+                &r.av,
+                &r.pose,
+                &t,
+                self.avatar_strength,
+                self.origin,
+                f.flip,
+                self.scale,
+            );
+            let tf = frame_transform(
+                lillith_anim::avatar::ANCHOR,
+                self.origin,
+                f.flip,
+                &t,
+                self.scale,
+            );
+            let mut pt =
+                tiny_skia::Point::from_xy(r.av.meta.anchors.head.0, r.av.meta.anchors.head.1);
+            tf.map_points(std::slice::from_mut(&mut pt));
+            pt.x
+        } else {
+            Self::render_sprite(
+                &mut self.pages,
+                &mut self.cell,
+                &mut self.cell_next,
+                &mut self.canvas,
+                self.origin,
+                self.scale,
+                &f,
+                &t,
+            )?
+        };
         self.key = Some(key);
         self.renders += 1;
-        let mkey = quant(1.0 / self.scale.max(0.1), 0.005, 0.005);
+        let mut mkey = quant(1.0 / self.scale.max(0.1), 0.005, 0.005);
+        if self.avatar.is_some() {
+            mkey.pose = pose_q.map(|v| v / 8);
+        }
         let mut mask_changed = false;
         if self.mask_key.as_ref() != Some(&mkey) {
-            let mask = mask_rects(
+            let mut mask = mask_rects(
                 self.canvas.data(),
                 self.canvas.width(),
                 self.canvas.height(),
                 HIT_ALPHA,
                 MASK_GRID,
             );
+            if self.click_through {
+                mask = head_only(
+                    &mask,
+                    self.origin.1 - self.cell_wh.1 as f32 * self.scale * 0.72,
+                );
+            }
             mask_changed = mask != self.mask;
             self.mask = mask;
             self.mask_key = Some(mkey);
         }
+        self.draw_speech_bubble(head);
         self.render_time += started.elapsed();
         Ok(Changed {
             pixels: true,
             mask: mask_changed,
         })
+    }
+
+    /// Draws Lillith's sprite frame (cross-faded in smooth mode) plus the
+    /// mouth patch; returns the x of her head for the bubble tail.
+    #[allow(clippy::too_many_arguments)]
+    fn render_sprite(
+        pages: &mut PageCache,
+        cell_cache: &mut Option<((String, usize), Canvas)>,
+        cell_next: &mut Option<((String, usize), Canvas)>,
+        canvas: &mut Canvas,
+        origin: (f32, f32),
+        scale: f32,
+        f: &lillith_anim::animator::FrameRef<'_>,
+        t: &lillith_core::spring::Transform,
+    ) -> Result<f32, StageError> {
+        let t = *t;
+        let ck = (f.clip_name.to_string(), f.frame);
+        if cell_cache.as_ref().map(|(k, _)| k) != Some(&ck) {
+            let cell = pages.cell(f.clip, f.frame)?;
+            *cell_cache = Some((ck, cell));
+        }
+        canvas.fill(tiny_skia::Color::TRANSPARENT);
+        let blend = f.blend.filter(|&(_, w)| w > 1.0 / 48.0);
+        if let Some((next, w)) = blend {
+            let nk = (f.clip_name.to_string(), next);
+            if cell_next.as_ref().map(|(k, _)| k) != Some(&nk) {
+                // Usually the previous "next" becomes the current cell.
+                let cell = pages.cell(f.clip, next)?;
+                *cell_next = Some((nk, cell));
+            }
+            let a = &cell_cache.as_ref().expect("cell cached").1;
+            let b = &cell_next.as_ref().expect("cell cached").1;
+            let anchor_b = f.clip.frames[next].anchor;
+            draw_cell_mix(
+                canvas,
+                a,
+                f.rect.anchor,
+                origin,
+                f.flip,
+                &t,
+                scale,
+                1.0 - w,
+                tiny_skia::BlendMode::SourceOver,
+            );
+            draw_cell_mix(
+                canvas,
+                b,
+                anchor_b,
+                origin,
+                f.flip,
+                &t,
+                scale,
+                w,
+                tiny_skia::BlendMode::Plus,
+            );
+        } else {
+            let cell = &cell_cache.as_ref().expect("cell cached").1;
+            draw_cell(canvas, cell, f.rect.anchor, origin, f.flip, &t, scale);
+        }
+        if let Some(m) = &f.mouth {
+            match pages.image(&m.patch.page) {
+                Ok(patch) => draw_mouth(canvas, patch, m, f.rect.anchor, origin, f.flip, &t, scale),
+                Err(e) => tracing::debug!(error = %e, "mouth patch"),
+            }
+        }
+        // Where the bubble tail points: her head (mouth point, else the
+        // cell's top centre), in canvas px.
+        let head = {
+            let tf = frame_transform(f.rect.anchor, origin, f.flip, &t, scale);
+            let p = f
+                .clip
+                .frame_points
+                .get("mouth_point")
+                .and_then(|v| v.get(f.frame))
+                .or_else(|| f.clip.points.get("mouth_point"))
+                .map(|&(x, y)| (x as f32, y as f32))
+                .unwrap_or((f.rect.anchor.0 as f32, 80.0));
+            let mut pt = tiny_skia::Point::from_xy(p.0, p.1);
+            tf.map_points(std::slice::from_mut(&mut pt));
+            pt.x
+        };
+        Ok(head)
+    }
+
+    /// The bubble goes on after the mask scan: it never catches clicks.
+    fn draw_speech_bubble(&mut self, head: f32) {
+        if let Some(s) = &mut self.speech {
+            if let Some(v) = &s.view {
+                if s.lines.0 != v.text {
+                    s.lines = (v.text.clone(), s.layout.lines(&s.fonts, &v.text));
+                }
+                let tip = s.layout.pad as f32 + 5.0 * self.scale / 0.75;
+                draw_speech(
+                    &mut self.canvas,
+                    &s.fonts,
+                    &s.layout,
+                    &s.lines.1,
+                    head,
+                    tip,
+                    v.alpha,
+                );
+            }
+        }
+    }
+}
+
+/// Keeps only the mask above `y_max` (her head): click-through mode.
+fn head_only(mask: &[Rect], y_max: f32) -> Vec<Rect> {
+    let y_max = y_max.max(0.0) as i32;
+    mask.iter()
+        .filter(|r| r.y < y_max)
+        .map(|r| Rect {
+            h: r.h.min(y_max - r.y),
+            ..*r
+        })
+        .collect()
+}
+
+/// Clears `mouth_patches` of clips whose patch images don't load, so the
+/// talk code falls back to picking frames by their baked mouths.
+fn drop_unloadable_mouth_patches(manifest: &mut Manifest, pages: &mut PageCache) {
+    for (name, clip) in manifest.clips.iter_mut() {
+        if clip.mouth_patches.is_empty() {
+            continue;
+        }
+        let bad: Vec<String> = clip
+            .mouth_patches
+            .values()
+            .filter(|p| pages.image(&p.page).is_err())
+            .map(|p| p.page.clone())
+            .collect();
+        if !bad.is_empty() {
+            tracing::warn!(clip = %name, missing = ?bad, "mouth patches missing; using baked mouths");
+            clip.mouth_patches.clear();
+        }
     }
 }
 
@@ -339,6 +731,86 @@ pub(crate) mod tests {
         assert!(s.render().unwrap().pixels);
         assert!(s.hit(20.0, 20.0));
         assert!(!s.hit(45.0, 20.0));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn smooth_mode_cross_fades_between_frames() {
+        let dir = std::env::temp_dir().join(format!("lillith-stage-smooth-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Frame 0: block at x 5..15; frame 1: block at x 25..35.
+        let mut img = image_png(80, 40);
+        for y in 5..38u32 {
+            for (x0, off) in [(5u32, 0u32), (25, 40)] {
+                for x in x0..x0 + 10 {
+                    let i = ((y * 80 + x + off) * 4) as usize;
+                    img[i..i + 4].copy_from_slice(&[220, 60, 140, 255]);
+                }
+            }
+        }
+        write_png(&dir.join("idle.png"), 80, 40, &img);
+        let m = Manifest::from_toml_str(
+            r#"
+            [clips.idle]
+            page = "idle.png"
+            fps = 2.0
+            frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+        "#,
+        )
+        .unwrap();
+        let cfg = AnimatorConfig {
+            idle_enabled: false,
+            smooth_frames: true,
+            crossfade: 0.5,
+            playback_speed: 1.0,
+            ..AnimatorConfig::default()
+        };
+        let mut st = Stage::new(m, PageCache::new(&dir), 1.0, cfg).unwrap();
+        let alpha_at = |st: &Stage, x: u32| st.canvas().pixel(x, 20).unwrap().alpha();
+        st.tick(0.05).unwrap();
+        // Early in frame 0: hard frame 0, nothing of frame 1 yet.
+        assert_eq!(alpha_at(&st, 10), 255);
+        assert_eq!(alpha_at(&st, 30), 0);
+        // 3/4 through frame 0 (0.5 s frames, fade over the last half):
+        // halfway mixed, both blocks semi-transparent.
+        let mut steps = Vec::new();
+        for _ in 0..9 {
+            st.tick(0.05).unwrap();
+            steps.push((alpha_at(&st, 10), alpha_at(&st, 30)));
+        }
+        let mid = steps[5];
+        assert!(
+            mid.0 > 60 && mid.0 < 200 && mid.1 > 60 && mid.1 < 200,
+            "{steps:?}"
+        );
+        // Monotonic fade: frame 0 goes out, frame 1 comes in.
+        for w in steps.windows(2) {
+            assert!(w[1].0 <= w[0].0 && w[1].1 >= w[0].1, "{steps:?}");
+        }
+        // Smooth mode off: hard steps again.
+        st.animator_mut().set_smooth_frames(false, 0.5);
+        st.tick(0.0).unwrap();
+        let a = (alpha_at(&st, 10), alpha_at(&st, 30));
+        assert!(a == (255, 0) || a == (0, 255), "{a:?}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn live_resize_keeps_feet_and_speech_area() {
+        let (dir, m) = fixture("resize");
+        let mut st = Stage::new(m, PageCache::new(&dir), 2.0, AnimatorConfig::default())
+            .unwrap()
+            .with_speech_area()
+            .unwrap();
+        let pad2 = st.speech_pad();
+        st.set_scale(4.0).unwrap();
+        assert_eq!(st.size().0, 160);
+        assert!(st.speech_pad() > pad2, "bubble grows with her");
+        assert_eq!(st.size().1, 160 + st.speech_pad());
+        st.set_speech_enabled(false).unwrap();
+        assert_eq!(st.size(), (160, 160));
+        st.render().unwrap();
+        assert!(st.hit(40.0, 120.0));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

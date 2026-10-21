@@ -166,7 +166,8 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
     handle
         .insert_source(Timer::from_duration(frame), move |_, _, app: &mut App| {
             app.on_timer();
-            TimeoutAction::ToDuration(frame)
+            // The rate can change (custom avatars redraw more often).
+            TimeoutAction::ToDuration(period(app.ctl.render_hz()))
         })
         .map_err(|e| OverlayError::Wayland(format!("timer: {e}")))?;
 
@@ -250,25 +251,35 @@ impl App {
             self.signal.stop();
             return;
         }
+        self.apply_resize();
+        if let Some(on_top) = self.ctl.take_level() {
+            self.layer.set_layer(if on_top {
+                Layer::Overlay
+            } else {
+                Layer::Bottom
+            });
+            self.layer.commit();
+        }
         if let Some(p) = self.ctl.take_move() {
             if !self.ctl.drag.active() {
                 self.pending = Some(p);
             }
         }
-        self.apply_resize();
         self.sync_menu();
         if self.configured && (self.pixels_dirty || self.mask_dirty || self.pending.is_some()) {
             self.draw();
         }
     }
 
-    /// Resizes the layer surface after a menu Size ▸ pick.
+    /// Resizes the layer surface when the stage changed size (Resize,
+    /// peek, speech area). Anchored bottom|left: the feet stay put.
     fn apply_resize(&mut self) {
         if !self.ctl.take_resized() {
             return;
         }
         let (w, h) = self.ctl.stage.size();
         self.layer.set_size(w, h);
+        self.pending.get_or_insert(self.ctl.placement);
         if let Err(e) = self.ctl.stage.render() {
             tracing::warn!("render after resize: {e}");
         }

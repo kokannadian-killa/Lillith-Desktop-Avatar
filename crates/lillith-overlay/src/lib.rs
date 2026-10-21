@@ -13,19 +13,26 @@
 //! - [`stage`]: the M2 animator rendered into the overlay canvas + mask;
 //!   [`drag`]: click/drag and `(left, bottom)` placement; [`run`](mod@run): backend
 //!   dispatch, the shared [`run::Controller`] and position persistence.
+//! - [`chat`]: click-to-chat (single-click gate, bubble hook, `talk_loop`
+//!   lip-flap driven by streamed `chat.*` events).
+//! - [`ui`]: right-click menu, Settings, minimize-to-peek and resize, as
+//!   commands from the app's menu/settings windows.
 //! - Speech bubbles ([`bubble`], M3), walk/patrol as margin animation (M3).
 //!
 //! Rendering is CPU-side (`tiny-skia`) at 30 Hz; `wgpu` only if effects need it.
 
 pub mod backend;
 pub mod bubble;
+pub mod chat;
 pub mod drag;
 pub mod input_region;
 pub mod menu_popup;
 pub mod pixels;
 pub mod run;
 pub mod settings_window;
+pub mod speech;
 pub mod stage;
+pub mod ui;
 
 #[cfg(feature = "wayland")]
 pub mod wayland;
@@ -34,4 +41,5 @@ pub mod wayland;
 pub mod x11;
 
 pub use backend::Backend;
+pub use chat::{ChatAnchor, ChatHook};
 pub use run::{run, ActionSink, EventFeed, OverlayError, OverlayOptions, SinkHandle};

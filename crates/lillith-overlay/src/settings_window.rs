@@ -4,13 +4,15 @@
 //!
 //! The window prints every Companion pick on stdout as one JSON line
 //! (`{"menu_action":"set_mode","value":"wander"}`, see
-//! [`lillith_core::menu::action_line`]). A reader thread parses those lines
-//! into [`MenuAction`]s and only sends them over a channel; the
+//! [`lillith_core::menu::action_line`] / [`lillith_core::menu::pick_line`];
+//! names in [`lillith_core::menu::wire`]). A reader thread parses those
+//! lines into [`MenuPick`]s (a [`MenuAction`], or a pose / avatar by name,
+//! or a config reload) and only sends them over a channel; the
 //! [`crate::run::Controller`] drains the channel on the overlay thread each
 //! tick and applies them like a right-click pick (brain, voice, effects).
 //! Nothing here touches overlay state or rendering.
 
-use lillith_core::menu::{parse_action_line, MenuAction};
+use lillith_core::menu::{parse_pick, MenuAction, MenuPick};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -40,8 +42,8 @@ pub enum Launch {
 pub struct SettingsWindow {
     program: PathBuf,
     alive: Option<Arc<AtomicBool>>,
-    tx: Sender<MenuAction>,
-    rx: Receiver<MenuAction>,
+    tx: Sender<MenuPick>,
+    rx: Receiver<MenuPick>,
 }
 
 impl Default for SettingsWindow {
@@ -117,9 +119,9 @@ impl SettingsWindow {
                     if line.is_empty() {
                         continue;
                     }
-                    match parse_action_line(line) {
+                    match parse_pick(line) {
                         // The window is already open; ignore re-entry.
-                        Some(MenuAction::OpenSettings) => {}
+                        Some(MenuPick::Action(MenuAction::OpenSettings)) => {}
                         Some(a) => {
                             if tx.send(a).is_err() {
                                 break;
@@ -141,7 +143,7 @@ impl SettingsWindow {
 
     /// Picks the window sent since the last call (at most
     /// [`MAX_PICKS_PER_TICK`]).
-    pub fn drain(&self) -> Vec<MenuAction> {
+    pub fn drain(&self) -> Vec<MenuPick> {
         self.rx.try_iter().take(MAX_PICKS_PER_TICK).collect()
     }
 }
@@ -212,9 +214,9 @@ pub(crate) mod tests {
         assert_eq!(
             got,
             [
-                MenuAction::SetMode(MoveMode::Wander),
-                MenuAction::SetSize(Size::Large),
-                MenuAction::ToggleMute,
+                MenuPick::Action(MenuAction::SetMode(MoveMode::Wander)),
+                MenuPick::Action(MenuAction::SetSize(Size::Large)),
+                MenuPick::Action(MenuAction::ToggleMute),
             ]
         );
         let arg = std::fs::read_to_string(dir.join("arg")).unwrap();
