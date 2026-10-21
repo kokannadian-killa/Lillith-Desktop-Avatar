@@ -83,8 +83,8 @@ impl Default for BehaviorConfig {
             asleep_after_s: 900.0,
             pose_cycle_s: 45.0,
             left_repeat_s: 4.0,
-            wander_every_s: (60.0, 120.0),
-            wander_speed_px_s: 60.0,
+            wander_every_s: (20.0, 45.0),
+            wander_speed_px_s: 45.0,
             walk_root_motion: true,
             wander_min_step_px: 120.0,
             event_wake_priority: 80,
@@ -289,6 +289,8 @@ pub struct Brain {
     muted: bool,
     /// The overlay drives walks by root motion right now.
     root_motion: bool,
+    /// Last clip picked from each `[rule_clip_pools]` entry (no repeats).
+    last_pool_pick: BTreeMap<String, String>,
     out: Vec<Action>,
 }
 
@@ -326,6 +328,7 @@ impl Brain {
             area: None,
             muted: false,
             root_motion: false,
+            last_pool_pick: BTreeMap::new(),
             out: Vec::new(),
         }
     }
@@ -614,6 +617,26 @@ impl Brain {
         self.has(pose).then(|| pose.clone())
     }
 
+    /// A random loaded clip from the event's `[rule_clip_pools]` entry,
+    /// never the one picked last time for that event.
+    fn resolve_pool(&mut self, event: &str) -> Option<String> {
+        let pool: Vec<String> = self
+            .rules
+            .clip_pool(event)
+            .iter()
+            .filter(|c| self.has(c))
+            .cloned()
+            .collect();
+        let last = self
+            .last_pool_pick
+            .get(event)
+            .and_then(|l| pool.iter().position(|c| c == l));
+        let i = crate::bag::pick_no_repeat(&mut self.rng, pool.len(), last)?;
+        let clip = pool[i].clone();
+        self.last_pool_pick.insert(event.to_string(), clip.clone());
+        Some(clip)
+    }
+
     /// Clip for a key-map pose: the clip itself, else the clip of the first
     /// rule using that pose, else `event_<pose>`.
     pub fn resolve_pose(&self, pose: &str) -> Option<String> {
@@ -703,7 +726,7 @@ impl Brain {
             self.cooldowns
                 .insert(event.to_string(), self.t + rule.cooldown_s);
         }
-        if let Some(clip) = self.resolve(event) {
+        if let Some(clip) = self.resolve_pool(event).or_else(|| self.resolve(event)) {
             self.out.push(Action::React {
                 clip,
                 priority: priority.unwrap_or(rule.priority),
@@ -1122,10 +1145,12 @@ mod tests {
             Some(d.gestures.secret_window_s as f64)
         );
         assert_eq!(crate::config::Config::default().pose_cycle_s, None);
-        // Calm defaults: long pose cycle, slow wander, she stays put.
+        // Defaults: long pose cycle, calm but regular wandering (Ko: she
+        // walks left and right on her own between idle poses).
         assert_eq!(d.pose_cycle_s, 45.0);
-        assert_eq!(d.wander_every_s, (60.0, 120.0));
-        assert_eq!(crate::config::Config::default().mode, MoveMode::Stay);
+        assert_eq!(d.wander_every_s, (20.0, 45.0));
+        assert_eq!(d.wander_speed_px_s, 45.0);
+        assert_eq!(crate::config::Config::default().mode, MoveMode::Wander);
     }
 
     #[test]
@@ -1298,6 +1323,44 @@ mod tests {
     }
 
     #[test]
+    fn hover_and_click_pick_flirty_pool_clips_without_repeats() {
+        let mut clips: Vec<String> = CLIPS.iter().map(|s| s.to_string()).collect();
+        for c in [
+            "hip_pop_wink",
+            "blow_kiss",
+            "lean_tease",
+            "cheeky_tongue_wink",
+        ] {
+            clips.push(c.to_string());
+        }
+        let mut b = Brain::new(
+            BehaviorConfig {
+                sleepy_after_s: 1e6,
+                asleep_after_s: 2e6,
+                ..BehaviorConfig::default()
+            },
+            MoveMode::Stay,
+            RuleSet::bundled(),
+            clips,
+            11,
+        );
+        let mut seen = Vec::new();
+        for _ in 0..12 {
+            let a = b.input(Input::Hover(true));
+            let r: Vec<String> = reacts(&a).into_iter().map(String::from).collect();
+            assert_eq!(r.len(), 1, "{r:?}");
+            assert!(["hip_pop_wink", "blow_kiss", "lean_tease"].contains(&&*r[0]));
+            seen.push(r[0].clone());
+            b.input(Input::Hover(false));
+            run(&mut b, 3.5, false);
+        }
+        for w in seen.windows(2) {
+            assert_ne!(w[0], w[1], "{seen:?}");
+        }
+        assert!(seen.iter().collect::<std::collections::BTreeSet<_>>().len() >= 2);
+    }
+
+    #[test]
     fn drag_sets_pose_and_drop_stands() {
         let mut b = brain();
         let a = b.input(Input::DragStart);
@@ -1422,6 +1485,7 @@ mod tests {
                 asleep_after_s: 2e6,
                 pose_cycle_s: 1e6,
                 wander_every_s: (20.0, 45.0),
+                wander_speed_px_s: 60.0,
                 mischief: MischiefConfig {
                     boredom_s: 0.0,
                     ..MischiefConfig::default()

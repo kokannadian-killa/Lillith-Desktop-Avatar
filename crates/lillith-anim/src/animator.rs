@@ -136,6 +136,41 @@ pub const BAKED_MOTION_TAG: &str = "baked_motion";
 /// picked at a loop end.
 pub const VARIANT_OF_TAG: &str = "variant_of:";
 
+/// Sultry walk takes (name prefixes + `_left` / `_right`). When a walk base
+/// has any of these among its takes, only these are drawn as walk variants
+/// (the skip and other playful takes are left out); `strut_<dir>` joins
+/// `walk_<dir>`'s takes even without a `variant_of` tag.
+pub const SULTRY_WALK_TAKES: &[&str] = &["walk_saunter_", "walk_sassy_", "strut_"];
+
+/// Adds `strut_<dir>` to `walk_<dir>` and narrows walk takes to the sultry
+/// ones when any exist (see [`SULTRY_WALK_TAKES`]).
+pub fn prefer_sultry_walks(manifest: &Manifest, map: &mut BTreeMap<String, Vec<String>>) {
+    for dir in ["left", "right"] {
+        let base = format!("walk_{dir}");
+        if !manifest.clips.contains_key(&base) {
+            continue;
+        }
+        let strut = format!("strut_{dir}");
+        let v = map.entry(base.clone()).or_default();
+        if manifest.clips.contains_key(&strut) && !v.contains(&strut) {
+            v.push(strut);
+        }
+        let sultry: Vec<String> = v
+            .iter()
+            .filter(|n| SULTRY_WALK_TAKES.iter().any(|p| n.starts_with(p)))
+            .cloned()
+            .collect();
+        if !sultry.is_empty() {
+            *v = sultry;
+        }
+        v.sort();
+        v.dedup();
+        if v.is_empty() {
+            map.remove(&base);
+        }
+    }
+}
+
 impl Default for AnimatorConfig {
     fn default() -> Self {
         Self {
@@ -500,7 +535,8 @@ impl Animator {
                 .ok_or(AnimError::Empty)?
                 .clone()
         };
-        let variants = variant_map(&manifest);
+        let mut variants = variant_map(&manifest);
+        prefer_sultry_walks(&manifest, &mut variants);
         // Legacy mode starts on the first idle variant; play-once on idle.
         let first = match variants.get(&idle_base) {
             Some(v) if !cfg.idle.variant_play_once => &v[0],
@@ -732,7 +768,12 @@ impl Animator {
     /// `true` once the current take of the base has been on long enough
     /// to switch.
     fn variant_due(&self) -> bool {
-        self.take(&self.base).age >= self.cfg.idle.variant_hold_s
+        let hold = if self.base.starts_with("walk_") {
+            self.cfg.idle.walk_variant_hold_s
+        } else {
+            self.cfg.idle.variant_hold_s
+        };
+        self.take(&self.base).age >= hold
     }
 
     /// A fresh base player timed for the clip actually drawn for the base
@@ -1969,6 +2010,7 @@ mod tests {
     fn legacy_idle_variants_are_held_for_the_hold() {
         let mut cfg = quiet();
         cfg.idle.variant_play_once = false;
+        cfg.idle.variant_hold_s = 30.0;
         let mut a = Animator::new(variant_manifest(), cfg).unwrap();
         assert_eq!(a.cfg.idle.variant_hold_s, 30.0);
         let mut last = a.current().clip_name.to_string();
@@ -2174,8 +2216,21 @@ mod tests {
     }
 
     #[test]
+    fn walks_prefer_sultry_takes_and_add_strut() {
+        let m = variant_set();
+        let mut map = variant_map(&m);
+        prefer_sultry_walks(&m, &mut map);
+        // variant_set(): walk_right has sassy + skip; skip is dropped.
+        assert_eq!(map["walk_right"], ["walk_sassy_right"]);
+        // walk_left only had skip (no sultry take): left as is.
+        assert_eq!(map["walk_left"], ["walk_skip_left"]);
+    }
+
+    #[test]
     fn play_once_default_draws_clean_idle_until_the_hold() {
-        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+        let mut cfg = quiet();
+        cfg.idle.variant_hold_s = 30.0;
+        let mut a = Animator::new(variant_manifest(), cfg).unwrap();
         assert!(a.cfg.idle.variant_play_once);
         assert_eq!(a.cfg.idle.variant_hold_s, 30.0);
         assert_eq!(a.current().clip_name, "idle");

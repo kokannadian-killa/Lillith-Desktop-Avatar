@@ -2,7 +2,7 @@
 # use the defaults. "Open settings" in her right-click menu creates the file
 # from a template (with this [voice] block, commented) if it doesn't exist.
 
-# mode = "stay"          # stay | wander | follow
+# mode = "wander"        # wander (default) | stay | follow
 # scale = 0.55           # Small 0.45 / Normal 0.55 / Large 0.75 (the menu saves this)
 # muted = false          # mutes SFX and voice
 

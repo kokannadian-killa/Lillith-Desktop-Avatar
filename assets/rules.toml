@@ -668,6 +668,16 @@ status = "PY-missing"
 "window.opened.terminal" = "event_window_opened_terminal"  # * hacker typing on a holo keyboard
 "window.opened.media"    = "event_window_opened_media"     # dance beat beside a media player
 
+# ── Flirty reaction pools ─────────────────────────────────────────────────
+# Rule event -> several clips; one is picked at random each time (never the
+# same twice in a row). Clips missing from the loaded art set are skipped;
+# with none left the event falls back to [rule_clips] / its pose.
+[rule_clip_pools]
+"input.hover"       = ["hip_pop_wink", "blow_kiss", "lean_tease", "idle_flirt_lip_bite", "tail_tease"]
+"input.click.left"  = ["blow_kiss", "hip_pop_wink", "lean_tease", "cheeky_tongue_wink", "hair_flip", "knife_tap"]
+"input.hover_long"  = ["lean_tease", "idle_flirt_look_away", "tail_tease", "event_input_hover_long"]
+"input.click.double" = ["blow_kiss", "heart_hands", "event_input_click_double"]
+
 # ── Key map (README-SP; active only while she has keyboard focus) ─────────
 # Each entry is either { pose = "<pose>" } or { action = "<action>" }.
 [keys]

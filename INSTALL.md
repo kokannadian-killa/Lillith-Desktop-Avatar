@@ -223,7 +223,7 @@ rewritten when you drag her (other keys are kept).
 
 ```toml
 # Top-level keys (must come before any [table])
-mode = "stay"          # stay | wander | follow  (G toggles wander while she has focus)
+mode = "wander"        # wander | stay | follow  (default wander; G toggles while she has focus)
 scale = 1.0            # 1.0 here means "use the 0.55 default" (220 px); set e.g. 0.7 to override
 opacity = 1.0
 render_hz = 30.0
@@ -255,19 +255,20 @@ sleepy_after_s = 300.0
 asleep_after_s = 900.0
 pose_cycle_s = 45.0          # automatic pose change while idle
 left_repeat_s = 4.0          # second left click within this → wave
-wander_every_s = [60.0, 120.0]  # pause between walks in wander mode
-wander_speed_px_s = 60.0
+wander_every_s = [20.0, 45.0]   # pause between calm walks in wander mode
+wander_speed_px_s = 45.0        # glide speed for walk takes without root motion
 wander_min_step_px = 120.0
 event_wake_priority = 80     # events at/above this priority wake her
 mood_tau_s = 45.0
 
-[behavior.idle]              # idle life: she mostly stands and breathes
+[behavior.idle]              # idle life: rotating flirty poses, never the same twice in a row
 breath_period_s = [3.5, 4.5]
 blink_every_s = [4.0, 6.0]
-transition_every_s = [25.0, 40.0]  # hip sway / lean / shoulder roll (old: [8, 12])
+transition_every_s = [8.0, 15.0]   # hip sway / hip lean / shimmy / tail curl …
 transition_len_s = [1.2, 2.0]
-reaction_every_s = [45.0, 90.0]    # unprompted gestures (old: [12, 26])
-variant_hold_s = 30.0              # keep one idle take at least this long (0 = every loop)
+reaction_every_s = [15.0, 30.0]    # unprompted gestures: idle_flirt_*, hip_pop_wink, blow_kiss …
+variant_hold_s = 12.0              # keep one idle take at least this long (0 = every loop)
+walk_variant_hold_s = 1.0          # plain walk this long before a sultry take (saunter / sassy / strut)
 
 [behavior.gestures]
 double_click_s = 0.35

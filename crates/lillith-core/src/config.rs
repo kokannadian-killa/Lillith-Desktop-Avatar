@@ -86,10 +86,12 @@ impl JiggleMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MoveMode {
+    /// Default: she strolls calmly along the bottom of the screen between
+    /// idle poses (G toggles Stay).
+    #[default]
     Wander,
     Follow,
-    /// Default: she stays where you put her (G toggles wandering).
-    #[default]
+    /// She stays where you put her.
     Stay,
 }
 
