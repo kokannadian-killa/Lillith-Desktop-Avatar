@@ -114,6 +114,34 @@ impl ClipPlayer {
         }
     }
 
+    /// Current frame, the frame after it (`None` on the last frame of a
+    /// `Once` clip) and how far (0..1) the current frame has played.
+    pub fn phase(&self) -> (usize, Option<usize>, f32) {
+        let f = self.frame();
+        let (start, end) = match &self.frame_ends {
+            None => (f as f32 / self.fps, (f + 1) as f32 / self.fps),
+            Some(ends) => (if f == 0 { 0.0 } else { ends[f - 1] }, ends[f]),
+        };
+        let total = self.duration_s();
+        let t = match self.mode {
+            LoopMode::Loop if total > 0.0 => self.elapsed.rem_euclid(total),
+            _ => self.elapsed,
+        };
+        let frac = if end > start {
+            ((t - start) / (end - start)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let next = if f + 1 < self.frame_count {
+            Some(f + 1)
+        } else if self.mode == LoopMode::Loop && self.frame_count > 1 {
+            Some(0)
+        } else {
+            None
+        };
+        (f, next, frac)
+    }
+
     /// `true` once a `Once` clip has shown its last frame for its full time.
     pub fn finished(&self) -> bool {
         if self.mode != LoopMode::Once {
@@ -211,5 +239,22 @@ mod tests {
         clip.frame_durations_ms = Some(WAKE_MS.to_vec());
         let timed = ClipPlayer::for_clip(&clip);
         assert!((timed.duration_s() - 3.28).abs() < 1e-4);
+    }
+
+    #[test]
+    fn phase_reports_next_frame_and_progress() {
+        let mut p = ClipPlayer::new(4, 10.0, LoopMode::Loop);
+        p.advance(0.025);
+        let (f, n, t) = p.phase();
+        assert_eq!((f, n), (0, Some(1)));
+        assert!((t - 0.25).abs() < 1e-4);
+        p.advance(0.3);
+        assert_eq!(p.phase().0, 3);
+        assert_eq!(p.phase().1, Some(0), "loops wrap to the first frame");
+        let mut o = ClipPlayer::with_durations_ms(&[100, 300], 10.0, LoopMode::Once);
+        o.advance(0.25);
+        let (f, n, t) = o.phase();
+        assert_eq!((f, n), (1, None), "last frame of a once clip has no next");
+        assert!((t - 0.5).abs() < 1e-4);
     }
 }

@@ -89,6 +89,21 @@ pub struct AnimatorConfig {
     /// into the pixels; full engine springs on top would double the motion.
     /// 1.0 = no change, 0.0 = off. Root offset/angle (drag, footfalls) stay.
     pub baked_motion_gain: f32,
+    /// Switch the engine's chest, pigtail and hip (`root_x`) springs fully
+    /// off while a clip tagged [`BAKED_MOTION_TAG`] is drawn, exactly as if
+    /// the clip listed them in `disable_springs` (same [`SpringMask`] path:
+    /// parked at rest, kicks dropped). The v2 video clips bake that jiggle
+    /// into the pixels, so engine springs on top would double it. Breathing
+    /// scale is still damped by `baked_motion_gain`; drag sway (`angle`) and
+    /// footfall bob (`root_y`) stay.
+    pub baked_motion_springs_off: bool,
+    /// Global clip playback speed: frame timing (fps / `frame_durations_ms`)
+    /// of every clip is stretched by `1 / playback_speed` (0.7 = 30%
+    /// slower). Physics, breathing and idle timers keep real time.
+    pub playback_speed: f32,
+    /// Lip-flap pace while she talks (1.0 = original fast pace; lower is
+    /// slower). See [`crate::talk::LipFlap::with_speed`].
+    pub talk_speed: f32,
     /// Draw a clip's baked-jiggle sibling (`jiggle_variant`) in its place
     /// whenever one exists. The sibling's `disable_springs` then switches the
     /// matching engine springs off while it is drawn (no double bounce).
@@ -99,6 +114,15 @@ pub struct AnimatorConfig {
     /// side-on walk. The stop waits (at most one cycle) for the walk frame
     /// the blend was cut from, so the legs don't jump.
     pub walk_blends: bool,
+    /// Clips always drawn engine-clean even when
+    /// [`AnimatorConfig::prefer_jiggle_variants`] is on (e.g. the talk
+    /// clips when `[chat] talk_jiggle = false`).
+    pub no_jiggle_clips: Vec<String>,
+    /// Smooth mode: cross-fade into the next frame over the last
+    /// `crossfade` part of each frame (0 = hard frame steps).
+    pub smooth_frames: bool,
+    /// Fraction (0..1) of each frame spent cross-fading into the next.
+    pub crossfade: f32,
 }
 
 /// Clip tag: the frames already contain bouncy secondary motion.
@@ -124,8 +148,14 @@ impl Default for AnimatorConfig {
             idle_enabled: true,
             physics_driver: false,
             baked_motion_gain: 0.2,
+            baked_motion_springs_off: true,
+            playback_speed: 1.0,
+            talk_speed: crate::talk::DEFAULT_TALK_SPEED,
             prefer_jiggle_variants: false,
             walk_blends: true,
+            no_jiggle_clips: Vec::new(),
+            smooth_frames: false,
+            crossfade: 0.5,
         }
     }
 }
@@ -254,6 +284,9 @@ enum OverlayKind {
 #[derive(Debug, Clone)]
 struct Overlay {
     clip: String,
+    /// Clip drawn for it (its baked-jiggle sibling, or `clip`), fixed at
+    /// start: the player is timed for this clip's own frames.
+    drawn: String,
     player: ClipPlayer,
     flip: bool,
     kind: OverlayKind,
@@ -284,6 +317,59 @@ pub struct FrameRef<'a> {
     pub flip: bool,
     pub layer: Layer,
     pub transform: Transform,
+    /// Mouth patch to paste over the face (true lip-sync while talking).
+    pub mouth: Option<MouthDraw<'a>>,
+    /// Smooth mode: the next frame of the same clip and its cross-fade
+    /// weight (0..1) toward the end of the current frame.
+    pub blend: Option<(usize, f32)>,
+}
+
+impl FrameRef<'_> {
+    /// Frame of the clean clip this frame shows (differs from `frame` on
+    /// baked-jiggle clips with settle sub-frames, see
+    /// [`Clip::clean_frame_index`]).
+    pub fn clean_frame(&self) -> usize {
+        self.clip.clean_frame(self.frame)
+    }
+}
+
+/// A mouth patch placed on the current frame, in cell coordinates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MouthDraw<'a> {
+    pub patch: &'a crate::atlas::MouthPatch,
+    pub shape: crate::talk::Mouth,
+    /// Where the patch centre lands (cell px).
+    pub point: (f32, f32),
+    /// Rotation about `point` (degrees, + = clockwise).
+    pub angle_deg: f32,
+}
+
+/// Mouth patch for `shape` on `frame` of `clip` (patches/points looked up
+/// in `clip`, then in `fallback`, e.g. the clean clip of a jiggle sibling).
+pub fn mouth_draw<'a>(
+    clip: &'a Clip,
+    fallback: Option<&'a Clip>,
+    frame: usize,
+    shape: crate::talk::Mouth,
+) -> Option<MouthDraw<'a>> {
+    let key = shape.name();
+    let patch = clip
+        .mouth_patches
+        .get(key)
+        .or_else(|| fallback.and_then(|f| f.mouth_patches.get(key)))?;
+    let point = clip
+        .frame_points
+        .get("mouth_point")
+        .and_then(|v| v.get(frame))
+        .or_else(|| clip.points.get("mouth_point"))
+        .map(|&(x, y)| (x as f32, y as f32))?;
+    let angle_deg = clip.mouth_angle_deg.get(frame).copied().unwrap_or(0.0);
+    Some(MouthDraw {
+        patch,
+        shape,
+        point,
+        angle_deg,
+    })
 }
 
 /// The composed animator.
@@ -325,6 +411,21 @@ pub struct Animator {
     stop_wait_s: f32,
     /// After an idle→walk blend: the walk clip and the frame to resume on.
     entry: Option<(String, usize)>,
+    /// Externally chosen base frame (lip-flap on `talk_loop`); cleared
+    /// whenever the base clip changes.
+    pinned_base_frame: Option<usize>,
+    /// Mouth shape to paste on the base clip (true lip-sync); cleared
+    /// whenever the base clip changes.
+    mouth: Option<crate::talk::Mouth>,
+}
+
+/// `playback_speed` sanitised to 0.1..=4 (non-finite = 1).
+fn clamp_speed(s: f32) -> f32 {
+    if s.is_finite() {
+        s.clamp(0.1, 4.0)
+    } else {
+        1.0
+    }
 }
 
 /// Variant clips of `base` (tag `variant_of:<base>`), sorted by name.
@@ -393,7 +494,7 @@ impl Animator {
         let driver = cfg
             .physics_driver
             .then(|| PhysicsDriver::bundled(&cfg.springs, cfg.physics_hz, cfg.seed));
-        Ok(Self {
+        let mut a = Self {
             base: idle_base.clone(),
             idle_base,
             base_flip: false,
@@ -410,6 +511,8 @@ impl Animator {
             idle_pick: 0,
             variant_age: 0.0,
             variant_rng: cfg.seed | 1,
+            pinned_base_frame: None,
+            mouth: None,
             spring_mask: SpringMask::NONE,
             root_dx: 0.0,
             foot: 0,
@@ -418,7 +521,10 @@ impl Animator {
             entry: None,
             manifest,
             cfg,
-        })
+        };
+        // The starting clip's spring mask (e.g. a baked_motion idle).
+        a.sync_spring_mask();
+        Ok(a)
     }
 
     pub fn manifest(&self) -> &Manifest {
@@ -533,14 +639,95 @@ impl Animator {
         self.variant_rng = x;
         let step = 1 + (x % (n as u64 - 1)) as usize;
         self.idle_pick = (self.idle_pick + step) % n;
-        let clip = &self.manifest.clips[&self.idle_variants[self.idle_pick]];
-        self.base_player = ClipPlayer::for_clip(clip);
+        self.base_player = self.base_player_for_drawn();
         self.variant_age = 0.0;
     }
 
     /// `true` once the current idle take has been on long enough to switch.
     fn variant_due(&self) -> bool {
         self.variant_age >= self.cfg.idle.variant_hold_s
+    }
+
+    /// A fresh base player timed for the clip actually drawn for the base
+    /// (idle variant / baked-jiggle sibling: their frame counts and
+    /// durations can differ from the clean clip's).
+    fn base_player_for_drawn(&self) -> ClipPlayer {
+        let name = self.drawn(self.drawn_base(&self.base));
+        ClipPlayer::for_clip(&self.manifest.clips[name])
+    }
+
+    /// Cross-fade target for a player in smooth mode.
+    fn blend_for(&self, p: &ClipPlayer, frames: usize) -> Option<(usize, f32)> {
+        if !self.cfg.smooth_frames || frames < 2 {
+            return None;
+        }
+        let cf = self.cfg.crossfade.clamp(0.0, 1.0);
+        if cf <= 0.0 {
+            return None;
+        }
+        let (f, next, frac) = p.phase();
+        let next = next.filter(|&n| n < frames && n != f)?;
+        let x = ((frac - (1.0 - cf)) / cf).clamp(0.0, 1.0);
+        let w = x * x * (3.0 - 2.0 * x);
+        (w > 0.0).then_some((next, w))
+    }
+
+    /// Smooth mode on/off and its cross-fade fraction (live, Settings).
+    pub fn set_smooth_frames(&mut self, on: bool, crossfade: f32) {
+        self.cfg.smooth_frames = on;
+        self.cfg.crossfade = crossfade.clamp(0.0, 1.0);
+    }
+
+    /// Clip playback speed (live, Settings).
+    pub fn set_playback_speed(&mut self, speed: f32) {
+        self.cfg.playback_speed = speed;
+    }
+
+    /// Effective clip playback speed (sanitised).
+    pub fn playback_speed(&self) -> f32 {
+        clamp_speed(self.cfg.playback_speed)
+    }
+
+    /// Spring tuning + gains (live, Settings): applied to the driver's
+    /// config (mood multipliers stay on top) or the plain springs.
+    pub fn set_springs(&mut self, s: &lillith_core::config::Springs) {
+        self.cfg.springs = s.clone();
+        match &mut self.driver {
+            Some(d) => d.set_user_springs(s),
+            None => {
+                let p = &mut self.physics;
+                p.set_params(Channel::Chest, s.chest);
+                p.set_params(Channel::Pigtail, s.pig);
+                p.set_params(Channel::RootX, s.root);
+                p.set_params(Channel::RootY, s.root);
+                p.set_params(Channel::Angle, s.angle);
+                p.set_params(Channel::Scale, s.scale);
+                p.set_gains(s.jiggle_gain, s.chest_bounce_gain, s.pigtail_sway_gain);
+            }
+        }
+    }
+
+    /// Clip drawn in place of `name` (its baked-jiggle sibling when
+    /// [`AnimatorConfig::prefer_jiggle_variants`] is on, else `name`).
+    pub fn drawn_clip<'a>(&'a self, name: &'a str) -> &'a str {
+        if self.manifest.clips.contains_key(name) {
+            self.drawn(name)
+        } else {
+            name
+        }
+    }
+
+    /// Engine spring channels switched off while `clip` is drawn: its
+    /// `disable_springs`, plus chest / pigtails / hip for [`BAKED_MOTION_TAG`]
+    /// clips when [`AnimatorConfig::baked_motion_springs_off`] is on.
+    pub fn clip_mask(&self, clip: &Clip) -> SpringMask {
+        let mut m = clip.spring_mask();
+        if self.cfg.baked_motion_springs_off && clip.has_tag(BAKED_MOTION_TAG) {
+            for c in [Channel::Chest, Channel::Pigtail, Channel::RootX] {
+                m.insert(c);
+            }
+        }
+        m
     }
 
     /// Spring transform for a frame of `clip`: secondary channels (chest,
@@ -550,7 +737,7 @@ impl Animator {
         let mut t = self.physics().transform();
         // Baked-jiggle clips: their disabled springs read as rest, even
         // before the next tick parks them (see `sync_spring_mask`).
-        let m = clip.spring_mask();
+        let m = self.clip_mask(clip);
         let rest = Transform::IDENTITY;
         if m.contains(Channel::RootX) {
             t.x = rest.x;
@@ -582,7 +769,7 @@ impl Animator {
     /// The clip actually drawn for `name`: its baked-jiggle sibling when
     /// [`AnimatorConfig::prefer_jiggle_variants`] is on and one exists.
     fn drawn<'a>(&'a self, name: &'a str) -> &'a str {
-        if self.cfg.prefer_jiggle_variants {
+        if self.cfg.prefer_jiggle_variants && !self.cfg.no_jiggle_clips.iter().any(|c| c == name) {
             if let Some(v) = self.manifest.clips[name]
                 .jiggle_variant
                 .as_deref()
@@ -597,7 +784,11 @@ impl Animator {
     /// Draw baked-jiggle siblings in place of clean clips (see
     /// [`AnimatorConfig::prefer_jiggle_variants`]).
     pub fn set_prefer_jiggle_variants(&mut self, on: bool) {
-        self.cfg.prefer_jiggle_variants = on;
+        if self.cfg.prefer_jiggle_variants != on {
+            self.cfg.prefer_jiggle_variants = on;
+            self.base_player = self.base_player_for_drawn();
+            self.pinned_base_frame = None;
+        }
         self.sync_spring_mask();
     }
 
@@ -614,7 +805,7 @@ impl Animator {
     /// gait the same way.
     fn sync_spring_mask(&mut self) {
         let clip = self.current().clip;
-        let (mask, gait) = (clip.spring_mask(), clip.bakes_gait());
+        let (mask, gait) = (self.clip_mask(clip), clip.bakes_gait());
         self.apply_clip_mask(mask, gait);
     }
 
@@ -647,21 +838,49 @@ impl Animator {
                 }
             }
             self.entry = None;
-            self.base_player = ClipPlayer::for_clip(&self.manifest.clips[name]);
-            if name == self.idle_base && !self.idle_variants.is_empty() {
-                if self.variant_due() {
-                    self.next_idle_variant();
-                } else {
-                    // Back to idle: resume the same take.
-                    let clip = &self.manifest.clips[&self.idle_variants[self.idle_pick]];
-                    self.base_player = ClipPlayer::for_clip(clip);
-                }
-            }
             self.base = name.to_string();
+            self.base_player = self.base_player_for_drawn();
+            // Back to idle: a new take once the current one was held long
+            // enough, else resume the same take (`base_player_for_drawn`
+            // already picked it).
+            if name == self.idle_base && !self.idle_variants.is_empty() && self.variant_due() {
+                self.next_idle_variant();
+            }
             self.base_flip = flip;
+            self.pinned_base_frame = None;
+            self.mouth = None;
         }
         self.sync_spring_mask();
         Ok(())
+    }
+
+    /// Draws frame `frame` of the base clip instead of the player's frame
+    /// (`None` = play normally). Used for token-driven lip-flap on the
+    /// `talk_loop` base; reactions still draw over it. Changing the base
+    /// clip clears the pin.
+    pub fn pin_base_frame(&mut self, frame: Option<usize>) {
+        self.pinned_base_frame = frame;
+    }
+
+    /// Pastes the `shape` mouth patch on the base clip's frames (`None` =
+    /// the frames' own mouths). Only clips with `mouth_patches` and a
+    /// `mouth_point` show it.
+    pub fn set_mouth(&mut self, shape: Option<crate::talk::Mouth>) {
+        self.mouth = shape;
+    }
+
+    pub fn mouth(&self) -> Option<crate::talk::Mouth> {
+        self.mouth
+    }
+
+    /// Frame the base player is on (ignores the pin).
+    pub fn base_frame(&self) -> usize {
+        self.base_player.frame()
+    }
+
+    /// The pinned base frame, if any.
+    pub fn pinned_base_frame(&self) -> Option<usize> {
+        self.pinned_base_frame
     }
 
     /// Picks the walk (or run) clip for `dir`: the dedicated `<kind>_left` /
@@ -838,12 +1057,13 @@ impl Animator {
     }
 
     fn start_overlay(&mut self, clip: String, flip: bool, kind: OverlayKind) {
-        let player = once_player(&self.manifest.clips[&clip]);
+        let drawn = self.drawn(&clip).to_string();
+        let player = once_player(&self.manifest.clips[&drawn]);
         let sign = if flip { -1.0 } else { 1.0 };
         // Mask first, so a baked-jiggle clip's own start kick is dropped on
         // the channels it disables.
-        let drawn = &self.manifest.clips[self.drawn(&clip)];
-        let (mask, gait) = (drawn.spring_mask(), drawn.bakes_gait());
+        let d = &self.manifest.clips[&drawn];
+        let (mask, gait) = (self.clip_mask(d), d.bakes_gait());
         self.apply_clip_mask(mask, gait);
         match &mut self.driver {
             Some(d) => {
@@ -855,6 +1075,7 @@ impl Animator {
         self.blink = None;
         self.overlay = Some(Overlay {
             clip,
+            drawn,
             player,
             flip,
             kind,
@@ -999,8 +1220,11 @@ impl Animator {
                 .set_target(Channel::Chest, self.cfg.breath_chest * b);
         }
 
+        // Clip frame timing runs at `playback_speed`; everything else
+        // (physics, breath, idle timers, transition lengths) in real time.
+        let clip_dt = dt * clamp_speed(self.cfg.playback_speed);
         let before = self.base_player.frame();
-        self.base_player.advance(dt);
+        self.base_player.advance(clip_dt);
         // Idle variants: a new random take at a loop end of the idle base,
         // once the current one has been held long enough.
         if self.base == self.idle_base {
@@ -1017,7 +1241,7 @@ impl Animator {
         }
         let mut done = false;
         if let Some(o) = &mut self.overlay {
-            o.player.advance(dt);
+            o.player.advance(clip_dt);
             done = match &mut o.kind {
                 OverlayKind::Reaction { .. } => o.player.finished(),
                 OverlayKind::Transition { remaining_s } => {
@@ -1036,7 +1260,7 @@ impl Animator {
                     .is_some_and(|b| b.to == walk);
                 if leads_in && self.base == walk {
                     self.entry = None;
-                    self.base_player = ClipPlayer::for_clip(&self.manifest.clips[&walk]);
+                    self.base_player = self.base_player_for_drawn();
                     self.base_player.seek(f);
                 }
             }
@@ -1130,7 +1354,7 @@ impl Animator {
     /// The frame to draw now, with the spring transform.
     pub fn current(&self) -> FrameRef<'_> {
         if let Some(o) = &self.overlay {
-            let name = self.drawn(&o.clip);
+            let name = o.drawn.as_str();
             let clip = &self.manifest.clips[name];
             let transform = self.transform_for(clip);
             let frame = o.player.frame().min(clip.frames.len() - 1);
@@ -1145,6 +1369,8 @@ impl Animator {
                     OverlayKind::Transition { .. } => Layer::Transition,
                 },
                 transform,
+                mouth: None,
+                blend: self.blend_for(&o.player, clip.frames.len()),
             };
         }
         if let Some(bl) = &self.blink {
@@ -1168,12 +1394,48 @@ impl Animator {
                 flip: false,
                 layer: Layer::Blink,
                 transform,
+                mouth: None,
+                blend: None,
             };
         }
         let name = self.drawn(self.drawn_base(&self.base));
         let clip = &self.manifest.clips[name];
-        let frame = self.base_player.frame().min(clip.frames.len() - 1);
+        let frame = self
+            .pinned_base_frame
+            .unwrap_or_else(|| self.base_player.frame())
+            .min(clip.frames.len() - 1);
         let transform = self.transform_for(clip);
+        let mouth = self.mouth.and_then(|m| {
+            let clean = clip
+                .jiggle_of
+                .as_deref()
+                .and_then(|c| self.manifest.clips.get(c))
+                .or_else(|| self.manifest.clips.get(&self.base));
+            mouth_draw(clip, clean, frame, m)
+        });
+        let blend = if self.pinned_base_frame.is_some() {
+            None
+        } else {
+            self.blend_for(&self.base_player, clip.frames.len())
+        };
+        // A mouth patch follows the cross-fade (point and tilt in between).
+        let mouth = match (mouth, blend) {
+            (Some(mut m), Some((next, w))) if w > 0.0 => {
+                if let Some(n) = self.mouth.and_then(|s| {
+                    let clean = clip
+                        .jiggle_of
+                        .as_deref()
+                        .and_then(|c| self.manifest.clips.get(c));
+                    mouth_draw(clip, clean, next, s)
+                }) {
+                    m.point.0 += (n.point.0 - m.point.0) * w;
+                    m.point.1 += (n.point.1 - m.point.1) * w;
+                    m.angle_deg += (n.angle_deg - m.angle_deg) * w;
+                }
+                Some(m)
+            }
+            (m, _) => m,
+        };
         FrameRef {
             clip_name: name,
             clip,
@@ -1182,6 +1444,8 @@ impl Animator {
             flip: self.base_flip,
             layer: Layer::Base,
             transform,
+            mouth,
+            blend,
         }
     }
 }
@@ -1229,6 +1493,34 @@ mod tests {
             idle_enabled: false,
             ..AnimatorConfig::default()
         }
+    }
+
+    #[test]
+    fn playback_speed_stretches_clip_timing() {
+        // idle: 4 frames at 10 fps.
+        let mut normal = Animator::new(manifest(), quiet()).unwrap();
+        let mut slow = Animator::new(
+            manifest(),
+            AnimatorConfig {
+                playback_speed: 0.5,
+                ..quiet()
+            },
+        )
+        .unwrap();
+        for _ in 0..3 {
+            normal.tick(0.05);
+            slow.tick(0.05);
+        }
+        assert_eq!(normal.base_frame(), 1);
+        assert_eq!(
+            slow.base_frame(),
+            0,
+            "half speed: still on frame 0 after 0.15 s"
+        );
+        for _ in 0..2 {
+            slow.tick(0.05);
+        }
+        assert_eq!(slow.base_frame(), 1);
     }
 
     fn run(a: &mut Animator, secs: f32) {
@@ -1579,6 +1871,33 @@ mod tests {
     }
 
     #[test]
+    fn baked_motion_clips_switch_off_engine_jiggle() {
+        // variant_manifest(): idle (+ variants) tagged baked_motion, wave not.
+        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+        let m = a.spring_mask();
+        assert!(m.contains(Channel::Chest) && m.contains(Channel::Pigtail));
+        assert!(m.contains(Channel::RootX));
+        a.physics_mut().impulse(Channel::Chest, 80.0);
+        a.physics_mut().impulse(Channel::Pigtail, 80.0);
+        a.physics_mut().impulse(Channel::RootX, 80.0);
+        for _ in 0..30 {
+            a.tick(1.0 / 60.0);
+            let t = a.current().transform;
+            assert_eq!((t.chest_offset, t.pigtail_offset, t.x), (0.0, 0.0, 0.0));
+        }
+        // An engine-clean clip gets its springs back.
+        a.set_base("wave", false).unwrap();
+        assert!(a.spring_mask().is_empty());
+        // Opt out: only the gain applies (scaffold's damped behaviour).
+        let cfg = AnimatorConfig {
+            baked_motion_springs_off: false,
+            ..quiet()
+        };
+        let a = Animator::new(variant_manifest(), cfg).unwrap();
+        assert!(a.spring_mask().is_empty());
+    }
+
+    #[test]
     fn baked_motion_clips_damp_secondary_springs() {
         let cfg = AnimatorConfig {
             baked_motion_gain: 0.0,
@@ -1756,7 +2075,12 @@ mod tests {
         a.walk(Dir::Right, false).unwrap();
         assert_eq!(a.current().clip_name, "walk_right");
         assert!(a.driver().unwrap().gait_suppressed());
-        assert!(a.spring_mask().is_empty(), "jiggle springs untouched");
+        // baked_motion: the engine jiggle is off too (no double jiggle);
+        // drag sway / footfall bob channels stay.
+        let m = a.spring_mask();
+        assert!(m.contains(Channel::Chest) && m.contains(Channel::Pigtail));
+        assert!(m.contains(Channel::RootX));
+        assert!(!m.contains(Channel::Angle) && !m.contains(Channel::RootY));
         run(&mut a, 2.0);
         let g = a.physics_overlay().unwrap().gait;
         assert_eq!((g.gait_amp, g.hip_bob_px, g.left_arm_deg), (0.0, 0.0, 0.0));
@@ -1793,5 +2117,147 @@ mod tests {
         run(&mut a, 1.0);
         assert_eq!(a.current().clip_name, "idle");
         assert!(a.spring_mask().is_empty());
+    }
+
+    #[test]
+    fn no_jiggle_clips_stay_clean_and_jiggle_base_plays_its_own_frames() {
+        let mut s = String::new();
+        for (name, n, extra) in [
+            ("idle", 2, ""),
+            ("talk_loop", 4, "jiggle_variant = \"talk_loop_jiggle\"\n"),
+            (
+                "talk_loop_jiggle",
+                6,
+                "jiggle_baked = true\njiggle_of = \"talk_loop\"\ndisable_springs = [\"chest\", \"pigtails\", \"hip\"]\n",
+            ),
+        ] {
+            s += &format!("[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\nmode = \"loop\"\n{extra}frames = [");
+            for i in 0..n {
+                s += &format!("{{ x = {}, y = 0, w = 40, h = 40, anchor = [20, 38] }},", i * 40);
+            }
+            s += "]\n";
+        }
+        let m = Manifest::from_toml_str(&s).unwrap();
+        let cfg = AnimatorConfig {
+            prefer_jiggle_variants: true,
+            ..quiet()
+        };
+        let mut a = Animator::new(m.clone(), cfg.clone()).unwrap();
+        a.set_base("talk_loop", false).unwrap();
+        assert_eq!(a.current().clip_name, "talk_loop_jiggle");
+        assert!(a.spring_mask().contains(Channel::Chest));
+        // The jiggle sibling has 6 frames: all of them play.
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..120 {
+            a.tick(1.0 / 60.0);
+            seen.insert(a.current().frame);
+        }
+        assert_eq!(seen.len(), 6, "{seen:?}");
+        // `[chat] talk_jiggle = false`: talk clips stay engine-clean.
+        let mut b = Animator::new(
+            m,
+            AnimatorConfig {
+                no_jiggle_clips: vec!["talk_loop".into()],
+                ..cfg
+            },
+        )
+        .unwrap();
+        b.set_base("talk_loop", false).unwrap();
+        assert_eq!(b.current().clip_name, "talk_loop");
+        assert!(b.spring_mask().is_empty());
+        assert_eq!(b.drawn_clip("talk_loop"), "talk_loop");
+    }
+
+    #[test]
+    fn mouth_patch_follows_frame_point_and_tilt() {
+        let toml = r#"
+            [clips.idle]
+            page = "idle.png"
+            fps = 10.0
+            frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+            [clips.talk_loop]
+            page = "t.png"
+            fps = 10.0
+            mouth_angle_deg = [0.0, 4.5]
+            frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+            [clips.talk_loop.points]
+            mouth_point = [20, 10]
+            [clips.talk_loop.frame_points]
+            mouth_point = [[20, 10], [22, 11]]
+            [clips.talk_loop.mouth_patches.open]
+            page = "m/open.png"
+            centre = [3.0, 2.0]
+        "#;
+        let mut a = Animator::new(Manifest::from_toml_str(toml).unwrap(), quiet()).unwrap();
+        a.set_base("talk_loop", false).unwrap();
+        a.set_mouth(Some(crate::talk::Mouth::Open));
+        a.pin_base_frame(Some(1));
+        let m = a.current().mouth.expect("patch drawn");
+        assert_eq!(m.patch.page, "m/open.png");
+        assert_eq!((m.point, m.angle_deg), ((22.0, 11.0), 4.5));
+        // No patch for this shape: nothing pasted.
+        a.set_mouth(Some(crate::talk::Mouth::Smile));
+        assert!(a.current().mouth.is_none());
+        // Changing the base clears the mouth.
+        a.set_mouth(Some(crate::talk::Mouth::Open));
+        a.set_base("idle", false).unwrap();
+        assert_eq!(a.mouth(), None);
+        assert!(a.current().mouth.is_none());
+    }
+
+    #[test]
+    fn once_jiggle_with_settle_subframes_plays_its_own_frames_and_timing() {
+        // knife_tap: 3 frames x 200 ms; its jiggle sibling splits the last
+        // hold into 3 sub-frames (5 frames, same 600 ms in total).
+        let toml = r#"
+            [clips.idle]
+            page = "i.png"
+            fps = 10.0
+            frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+            [clips.knife_tap]
+            page = "k.png"
+            mode = "once"
+            fps = 5.0
+            jiggle_variant = "knife_tap_jiggle"
+            frame_durations_ms = [200, 200, 200]
+            frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 80, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+            [clips.knife_tap_jiggle]
+            page = "kj.png"
+            mode = "once"
+            fps = 5.0
+            jiggle_baked = true
+            jiggle_of = "knife_tap"
+            disable_springs = ["chest"]
+            clean_frame_index = [0, 1, 2, 2, 2]
+            frame_durations_ms = [200, 200, 66, 67, 67]
+            frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 80, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 120, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 160, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+        "#;
+        let m = Manifest::from_toml_str(toml).unwrap();
+        let mut a = Animator::new(
+            m,
+            AnimatorConfig {
+                prefer_jiggle_variants: true,
+                playback_speed: 1.0,
+                ..quiet()
+            },
+        )
+        .unwrap();
+        a.react("knife_tap", 1).unwrap();
+        let mut seen = Vec::new();
+        let mut t = 0.0f32;
+        while a.overlay_clip().is_some() && t < 2.0 {
+            let f = a.current();
+            assert_eq!(f.clip_name, "knife_tap_jiggle");
+            if seen.last().map(|s: &(usize, usize)| s.0) != Some(f.frame) {
+                seen.push((f.frame, f.clean_frame()));
+            }
+            a.tick(1.0 / 120.0);
+            t += 1.0 / 120.0;
+        }
+        // Every jiggle frame shown, each mapped to its clean frame.
+        assert_eq!(seen, vec![(0, 0), (1, 1), (2, 2), (3, 2), (4, 2)]);
+        // Same length as the clean clip (600 ms), not cut at 3 frames.
+        assert!((t - 0.6).abs() < 0.03, "reaction lasted {t}s");
+        assert_eq!(a.current().clip_name, "idle");
     }
 }

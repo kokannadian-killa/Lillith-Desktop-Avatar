@@ -6,7 +6,7 @@
 //! squash/stretch and the pigtail channel a slight skew of the upper body
 //! (PLAN.md §3.1 design note). Both are tiny by design.
 
-use crate::animator::FrameRef;
+use crate::animator::{FrameRef, MouthDraw};
 use crate::atlas::{AtlasError, Clip};
 use crate::Canvas;
 use lillith_core::spring::Transform;
@@ -74,6 +74,20 @@ impl PageCache {
         Ok(&self.pages[&clip.page])
     }
 
+    /// Any image under the manifest directory (e.g. a mouth patch), cached
+    /// by its relative path.
+    pub fn image(&mut self, rel: &str) -> Result<&Canvas, AtlasError> {
+        if !self.pages.contains_key(rel) {
+            let img = crate::atlas::load_page(&self.dir.join(rel))?;
+            let pm = pixmap_from_rgba(&img).ok_or_else(|| AtlasError::InvalidClip {
+                clip: rel.to_string(),
+                reason: "empty image".into(),
+            })?;
+            self.pages.insert(rel.to_string(), pm);
+        }
+        Ok(&self.pages[rel])
+    }
+
     /// Crops one frame cell out of its page.
     pub fn cell(&mut self, clip: &Clip, frame: usize) -> Result<Canvas, AtlasError> {
         let r = clip.frames[frame.min(clip.frames.len() - 1)];
@@ -109,6 +123,36 @@ pub fn frame_transform(
         .pre_translate(-anchor.0 as f32, -anchor.1 as f32)
 }
 
+/// [`draw_cell`] at `opacity` with `blend` (cross-fades: the outgoing
+/// frame at `1 - w` source-over, the incoming one at `w` with
+/// [`tiny_skia::BlendMode::Plus`] gives an exact linear mix).
+#[allow(clippy::too_many_arguments)]
+pub fn draw_cell_mix(
+    canvas: &mut Canvas,
+    cell: &Canvas,
+    anchor: (i32, i32),
+    origin: (f32, f32),
+    flip: bool,
+    t: &Transform,
+    scale: f32,
+    opacity: f32,
+    blend: tiny_skia::BlendMode,
+) {
+    let tf = frame_transform(anchor, origin, flip, t, scale);
+    canvas.draw_pixmap(
+        0,
+        0,
+        cell.as_ref(),
+        &PixmapPaint {
+            quality: tiny_skia::FilterQuality::Bilinear,
+            opacity: opacity.clamp(0.0, 1.0),
+            blend_mode: blend,
+        },
+        tf,
+        None,
+    );
+}
+
 /// Draws `cell` into `canvas` per [`frame_transform`].
 pub fn draw_cell(
     canvas: &mut Canvas,
@@ -133,6 +177,50 @@ pub fn draw_cell(
     );
 }
 
+/// Pastes a mouth patch (`patch` = the [`MouthDraw`]'s image) over a cell
+/// drawn with the same `anchor`/`origin`/`flip`/`t`/`scale`: the patch
+/// centre lands on the frame's mouth point, rotated by its head tilt and
+/// scaled/mirrored with the body.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_mouth(
+    canvas: &mut Canvas,
+    patch: &Canvas,
+    m: &MouthDraw<'_>,
+    anchor: (i32, i32),
+    origin: (f32, f32),
+    flip: bool,
+    t: &Transform,
+    scale: f32,
+) {
+    let tf = mouth_transform(m, anchor, origin, flip, t, scale);
+    canvas.draw_pixmap(
+        0,
+        0,
+        patch.as_ref(),
+        &PixmapPaint {
+            quality: tiny_skia::FilterQuality::Bilinear,
+            ..PixmapPaint::default()
+        },
+        tf,
+        None,
+    );
+}
+
+/// Patch-space → canvas transform used by [`draw_mouth`].
+pub fn mouth_transform(
+    m: &MouthDraw<'_>,
+    anchor: (i32, i32),
+    origin: (f32, f32),
+    flip: bool,
+    t: &Transform,
+    scale: f32,
+) -> SkTransform {
+    frame_transform(anchor, origin, flip, t, scale)
+        .pre_translate(m.point.0, m.point.1)
+        .pre_rotate(m.angle_deg)
+        .pre_translate(-m.patch.centre.0, -m.patch.centre.1)
+}
+
 /// Renders the animator's current frame into a fresh `w`×`h` canvas with
 /// the feet anchor at `origin`.
 pub fn render_frame(
@@ -154,6 +242,19 @@ pub fn render_frame(
         &f.transform,
         scale,
     );
+    if let Some(m) = &f.mouth {
+        let patch = pages.image(&m.patch.page)?.clone();
+        draw_mouth(
+            &mut canvas,
+            &patch,
+            m,
+            f.rect.anchor,
+            origin,
+            f.flip,
+            &f.transform,
+            scale,
+        );
+    }
     Ok(canvas)
 }
 
