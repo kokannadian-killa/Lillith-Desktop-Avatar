@@ -145,7 +145,7 @@ impl KnobTab {
                     title: "VESSEL",
                     tag: "top-level",
                     knobs: vec![
-                        f(&["scale"], "Size", "Multiplier on the 400 px cell (presets: 0.45 / 0.55 / 0.75)", 0.25, 1.5, 2, "×", |c| c.scale),
+                        // No size knob: the overlay owns `scale` (Companion ▸ Resize sends set_size / scale_step).
                         f(&["opacity"], "Opacity", "Whole-avatar opacity", 0.2, 1.0, 2, "", |c| c.opacity),
                         Knob { path: &["baked_jiggle"], label: "Baked motion clips", help: "Use the pre-baked secondary-motion clip variants", kind: Kind::Bool { default: |c| c.baked_jiggle } },
                     ],

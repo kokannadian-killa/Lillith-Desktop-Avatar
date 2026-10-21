@@ -8,7 +8,8 @@
 //!
 //! * applied to the local [`MenuState`] (so the radios/checks update),
 //! * persisted to config.toml where a key exists ([`persist`]) — the
-//!   overlay runs in another process and reads them on (re)start,
+//!   overlay runs in another process and reads them on (re)start or on a
+//!   `reload_config` line; size is the exception (the overlay owns it),
 //! * forwarded to the optional in-process sink, and printed on stdout by
 //!   the `lillith-settings` binary as `{"menu_action": ...}` lines
 //!   ([`action_line`]) for a host that wants them live.
@@ -53,9 +54,25 @@ pub fn apply(state: &mut MenuState, a: MenuAction) {
         MenuAction::SetMood(m) => state.mood = m,
         MenuAction::ToggleMute => state.muted = !state.muted,
         MenuAction::ToggleMonitor => state.monitor_paused = !state.monitor_paused,
+        // Local mirror only (radio state): the overlay owns size and
+        // persists it itself.
         MenuAction::SetSize(z) => state.scale = z.scale(),
+        MenuAction::ScaleStep(n) => state.scale = stepped(state.scale, n),
         _ => {}
     }
+}
+
+/// The scale a Bigger / Smaller step lands on (the overlay's own rule in
+/// `lillith_core::menu::on_menu_action`: 0.05 grid, clamped, never exactly
+/// 1.0). Only mirrors the radio state; nothing is written.
+fn stepped(scale: f32, n: i8) -> f32 {
+    use lillith_core::menu::{SCALE_RANGE, SCALE_STEP};
+    let v = scale + n as f32 * SCALE_STEP;
+    let mut v = ((v / SCALE_STEP).round() * SCALE_STEP).clamp(SCALE_RANGE.0, SCALE_RANGE.1);
+    if (v - 1.0).abs() < 1e-3 {
+        v += if n > 0 { SCALE_STEP } else { -SCALE_STEP };
+    }
+    v
 }
 
 /// What persisting a pick did.
@@ -68,6 +85,9 @@ pub enum Persisted {
 }
 
 /// Stages the config.toml keys for a pick (after [`apply`]).
+///
+/// Size is **not** written: the overlay owns `scale` (it applies
+/// `set_size` / `scale_step` from the wire and saves it itself).
 pub fn persist(store: &mut ConfigStore, state: &MenuState, a: MenuAction) -> Persisted {
     match a {
         MenuAction::SetMode(m) => {
@@ -86,10 +106,6 @@ pub fn persist(store: &mut ConfigStore, state: &MenuState, a: MenuAction) -> Per
             // TODO(LillithBot): the overlay has no persisted "paused" flag; the
             // nearest key is [monitor] enabled (read at start).
             store.set_bool(&["monitor", "enabled"], !state.monitor_paused);
-            Persisted::Staged
-        }
-        MenuAction::SetSize(_) => {
-            store.set_f32(&["scale"], state.scale, 2);
             Persisted::Staged
         }
         MenuAction::ResetPosition => {
@@ -133,6 +149,41 @@ mod tests {
     }
 
     #[test]
+    fn resize_shows_all_five_sizes_and_steps() {
+        let st = MenuState {
+            mode: MoveMode::Stay,
+            mood: Mood::Playful,
+            muted: false,
+            monitor_paused: false,
+            scale: 0.55,
+            extras: Default::default(),
+        };
+        let menu = build_menu(&st);
+        let resize: Vec<MenuAction> = menu
+            .leaves()
+            .into_iter()
+            .filter(|(p, _)| p.first() == Some(&"Resize"))
+            .filter_map(|(_, it)| match it {
+                MenuItem::Leaf { action, .. } => Some(*action),
+                _ => None,
+            })
+            .collect();
+        let sizes: Vec<MenuAction> = Size::ALL.into_iter().map(MenuAction::SetSize).collect();
+        assert_eq!(&resize[..5], &sizes[..]);
+        assert_eq!(
+            &resize[5..],
+            [MenuAction::ScaleStep(1), MenuAction::ScaleStep(-1)]
+        );
+        assert_eq!(
+            action_line(MenuAction::SetSize(Size::Huge)),
+            r#"{"menu_action":"set_size","value":"xxl"}"#
+        );
+        // Steps skip exactly 1.0 like the overlay.
+        assert!((stepped(0.95, 1) - 1.05).abs() < 1e-4);
+        assert!((stepped(lillith_core::menu::SCALE_RANGE.0, -1) - 0.3).abs() < 1e-4);
+    }
+
+    #[test]
     fn picks_persist_to_config() {
         let p =
             std::env::temp_dir().join(format!("lillith-settings-comp-{}.toml", std::process::id()));
@@ -156,11 +207,20 @@ mod tests {
             persist(&mut store, &st, a);
         }
         assert_eq!(st.mood, Mood::Sleepy);
+        // Size is mirrored locally but never staged.
+        assert_eq!(st.scale, 0.75);
+        assert!(!store.is_pending(&["scale"]));
+        apply(&mut st, MenuAction::ScaleStep(1));
+        assert_eq!(
+            persist(&mut store, &st, MenuAction::ScaleStep(1)),
+            Persisted::RuntimeOnly
+        );
+        assert!((st.scale - 0.8).abs() < 1e-4);
         store.save().unwrap();
         let text = std::fs::read_to_string(&p).unwrap();
         let core = lillith_core::config::Config::from_toml_str(&text).unwrap();
         assert_eq!(core.mode, MoveMode::Follow);
-        assert!((core.scale - 0.75).abs() < 1e-6);
+        assert!((core.scale - 0.55).abs() < 1e-6, "scale untouched: {text}");
         assert!(core.muted);
         assert!(!core.monitor.enabled);
         assert_eq!(core.overlay, OverlayPos::default());

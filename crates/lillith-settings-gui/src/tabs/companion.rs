@@ -139,7 +139,7 @@ impl SettingsTab for CompanionTab {
                         let title = match label.as_str() {
                             "Mode" => "MODE · MOVEMENT".to_string(),
                             "Mood" => "MOOD · SOUL_SYNTAX".to_string(),
-                            "Size" => "SIZE · VESSEL".to_string(),
+                            "Resize" => "RESIZE · VESSEL".to_string(),
                             l => l.to_uppercase(),
                         };
                         chrome::section(ui, &title, Some("radio"), |ui| {
@@ -205,7 +205,7 @@ impl SettingsTab for CompanionTab {
                             }
                         }
                     });
-                    chrome::hint(ui, "Mode, size, mute, monitor and position are saved to config.toml; mood, about and quit go to the running overlay.");
+                    chrome::hint(ui, "Mode, mute, monitor and position are saved to config.toml; size, mood, poses, chat and the rest go live to the running overlay (it owns size).");
                 });
             }
             chrome::section(ui, "RITE_LOG", Some("stdout"), |ui| {
