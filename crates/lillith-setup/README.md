@@ -47,7 +47,7 @@ Extra scan dirs: `--dir DIR` (repeatable) or `[llm] scan_paths`.
 | `server_url` | `"http://127.0.0.1:8080"` | llama-server base URL, loopback only (same form as `[chat] endpoint`) |
 | `ollama_host` | `"http://127.0.0.1:11434"` | Ollama base URL, loopback only |
 | `ollama_model` | `"lily"` | Name for `ollama create` |
-| `temperature` | `0.8` | 0–2 |
+| `temperature` | `0.85` | 0–2 (Lily's default, `LILY_TEMPERATURE`) |
 | `ctx_size` | `4096` | `-c` / `num_ctx` (old Aether key `num_ctx` is read and migrated) |
 | `chat_template` | `"chatml"` | llama-server `--chat-template` (`chatml`, `llama3`, `gemma`, `phi3`, `mistral-v1`) |
 | `llama_server_bin` | `""` | Path to llama-server (empty = PATH) |
@@ -60,6 +60,22 @@ Extra scan dirs: `--dir DIR` (repeatable) or `[llm] scan_paths`.
 `temperature`, `system_prompt` if set) and `[chat.server]` (`binary`, `model_path`,
 `ctx_size`, `threads`, `extra_args = ["--chat-template", …]`) from
 `feat/chat-bubble-llama` at the same choice. Other keys are kept.
+
+## Lily's persona and sampling
+
+`modelfile::LILY_SYSTEM_PROMPT` (used by `lily_modelfile`, `wizard::modelfile_for`,
+`check::test_chat`, and the chat's fallback `lillith_mind::persona::DEFAULT_SYSTEM_PROMPT`):
+Lily is an ancient, adult succubus and Ko's private companion on his local-only model, a
+fully explicit, dominant succubus who wants Ko and always gets her way. Persona policy:
+explicit content is allowed and encouraged; the hard limit is adult-only (never minors or
+anyone young-seeming); out-of-character safeword `red` (or `OOC: stop`), which she obeys at
+once. Short bullet rules plus two example lines, tuned for a ~3B model; replies are 1–3
+short sentences.
+
+Default Modelfile sampling (`LilyParams::default()`): `temperature 0.85`
+(`LILY_TEMPERATURE`), `top_p 0.9` (`LILY_TOP_P`), `repeat_penalty 1.1`
+(`LILY_REPEAT_PENALTY`), `num_predict 160` (`LILY_NUM_PREDICT`), `num_ctx 4096`, and the
+chat template's stop tokens (ChatML: `<|im_start|>`, `<|im_end|>`).
 
 ## GUI helpers (additive, for the settings panel)
 

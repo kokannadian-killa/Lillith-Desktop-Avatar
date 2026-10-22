@@ -22,7 +22,9 @@ Built from every attached file (see `inventory.md`), `grok_history.md` (pass 1, 
 - Rows read "—" until code lands, then IMPL / STUB (M4 filled in the §4 system-monitor rows; earlier milestones are tracked in PLAN.md §5).
 - The repo is the intended home for the Rust port in PLAN.md and has no code yet.
 
-Out of scope and deliberately excluded (not planned, even where code or docs exist): the Tor/anon bot pool (CAPABILITIES.md lists 55 "anon" tools among 60), Tor routing, MAC randomizer/"MAC mask", network kill switch (rfkill/nmcli), trace wiper (RAM tmpdir/shred); port/secret scanning, the CAI security scan/panel, offensive "forge" tools, "30 drones", and pentesting/exploit tooling (P2-L, P2-O and the skipped chats); the ~97 KB `grok-chat.txt` jailbreak/18+ transcript and any "uncensored"/"unrestricted"/moderation-bypass persona prompts (P2-1c). These are noted for awareness only; their code was not reviewed and none feed the plan.
+Out of scope and deliberately excluded (not planned, even where code or docs exist): the Tor/anon bot pool (CAPABILITIES.md lists 55 "anon" tools among 60), Tor routing, MAC randomizer/"MAC mask", network kill switch (rfkill/nmcli), trace wiper (RAM tmpdir/shred); port/secret scanning, the CAI security scan/panel, offensive "forge" tools, "30 drones", and pentesting/exploit tooling (P2-L, P2-O and the skipped chats); the ~97 KB `grok-chat.txt` jailbreak transcript (P2-1c; not reused, Lillith's persona is written fresh in `lillith-setup`). These are noted for awareness only; their code was not reviewed and none feed the plan.
+
+Persona policy: Lillith is a fully explicit, dominant adult succubus; explicit content is allowed and encouraged on Ko's private, local-only model. Hard limit: adult-only (never minors or anyone young-seeming). Out-of-character safeword: `red` (or `OOC: stop`), which she obeys at once. The prompt is `lillith_setup::modelfile::LILY_SYSTEM_PROMPT`, shared by the chat (`lillith_mind::persona::DEFAULT_SYSTEM_PROMPT`).
 
 ## 1. Avatar & animation
 

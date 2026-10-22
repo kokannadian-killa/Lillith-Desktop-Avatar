@@ -2,7 +2,7 @@
 
 # Lillith — Desktop Companion & System Monitor
 
-**An animated anime-style demon girl who lives on your Linux desktop and reacts to what your machine is doing.**
+**An animated anime-style succubus demon woman who lives on your Linux desktop and reacts to what your machine is doing.**
 
 [![CI](https://github.com/kokannadian-killa/Lillith-Desktop-Avatar/actions/workflows/ci.yml/badge.svg)](https://github.com/kokannadian-killa/Lillith-Desktop-Avatar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -81,6 +81,11 @@ Python/Tk prototypes). Everything runs locally.
   Stay until the KWin bridge lands in M5.)
 - ✅ **Click / hover / drag / key interactions** — see [Controls](#controls).
   Her dragged position is saved and restored.
+- ✅ **Gravity and window perching** — drop her and she falls in her
+  `drag_held` pose with a soft landing bounce onto the floor above the panel,
+  or (with the KWin bridge script) onto the top edge of the window under her,
+  where she strolls along it, sits on the edge (`sit_swing` and its takes) and
+  falls again when the window moves, minimizes or closes (`[behavior.gravity]`).
 - ✅ **Secret click sequence** — find it yourself, or peek at [Controls](#controls).
 - ✅ **57 event reactions** — `assets/rules.toml` maps 57 events (system
   events plus her own click/hover/idle/LLM events: `cpu.high`, `battery.low`, `net.lost`, `usb.added`, `window.closed`,

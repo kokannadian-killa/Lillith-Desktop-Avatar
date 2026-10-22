@@ -216,6 +216,11 @@ pub struct RuleSet {
     /// without an entry fall back to their `pose`.
     #[serde(default, alias = "event_clips")]
     pub rule_clips: BTreeMap<String, String>,
+    /// Rule event name -> several clips (`[rule_clip_pools]`): the brain
+    /// picks one at random each time (never the same twice in a row) and
+    /// falls back to `[rule_clips]` / the pose when none is loaded.
+    #[serde(default)]
+    pub rule_clip_pools: BTreeMap<String, Vec<String>>,
 }
 
 impl RuleSet {
@@ -239,6 +244,11 @@ impl RuleSet {
     /// if one is mapped.
     pub fn clip_for(&self, event: &str) -> Option<&str> {
         self.rule_clips.get(event).map(String::as_str)
+    }
+
+    /// Clip pool for a rule event (`[rule_clip_pools]`), empty if none.
+    pub fn clip_pool(&self, event: &str) -> &[String] {
+        self.rule_clip_pools.get(event).map_or(&[], Vec::as_slice)
     }
 
     /// Same as [`RuleSet::clip_for`] (kept for existing callers).
@@ -429,6 +439,30 @@ mod tests {
         }
         // Every generated event clip is reachable from some rule.
         assert!(rs.clips_without_rule(KNOWN_EVENT_CLIPS).is_empty());
+    }
+
+    #[test]
+    fn clip_pools_and_idle_pools_exist_in_the_bundled_art() {
+        let manifest = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/generated/manifest.toml"
+        ))
+        .expect("bundled manifest");
+        let has = |c: &str| manifest.contains(&format!("[clips.{c}]"));
+        let r = RuleSet::bundled();
+        assert!(!r.clip_pool("input.hover").is_empty());
+        for (ev, pool) in &r.rule_clip_pools {
+            assert!(r.find(ev).is_some(), "pool for unknown rule {ev}");
+            for c in pool {
+                assert!(has(c), "{ev}: clip {c} not in the art set");
+            }
+        }
+        for c in crate::idle::DEFAULT_TRANSITIONS
+            .iter()
+            .chain(crate::idle::DEFAULT_IDLE_REACTIONS)
+        {
+            assert!(has(c), "idle pool clip {c} not in the art set");
+        }
     }
 
     #[test]

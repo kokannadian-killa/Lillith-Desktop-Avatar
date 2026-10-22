@@ -169,11 +169,30 @@ impl Channel {
 /// `pigtails`/`pigtail`/`pig` → [`Channel::Pigtail`], `hip` → [`Channel::RootX`]
 /// (the lateral hip/root sway; physics.toml plants root motion at the hip).
 /// Every [`Channel::from_name`] name is accepted as well.
+///
+/// One more group, [`SpringMask::GAIT_GROUP`] (`gait`), names no spring
+/// channel: it marks a clip whose frames bake the walk itself (legs, arms,
+/// hip bob), so the engine gait (`physics.toml [gait]`) must not drive it.
+/// It is accepted everywhere a group name is, but never sets a mask bit;
+/// test it with [`SpringMask::names_gait`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct SpringMask(u8);
 
 impl SpringMask {
     pub const NONE: Self = Self(0);
+
+    /// Non-channel group: "this clip bakes its own gait" (see the type docs).
+    pub const GAIT_GROUP: &'static str = "gait";
+
+    /// `true` if `name` is the [`Self::GAIT_GROUP`] group.
+    pub fn is_gait_group(name: &str) -> bool {
+        name.trim().eq_ignore_ascii_case(Self::GAIT_GROUP)
+    }
+
+    /// `true` if any of `names` is the [`Self::GAIT_GROUP`] group.
+    pub fn names_gait<S: AsRef<str>>(names: &[S]) -> bool {
+        names.iter().any(|n| Self::is_gait_group(n.as_ref()))
+    }
 
     /// Mask with exactly `channels`.
     pub fn of(channels: &[Channel]) -> Self {
@@ -207,9 +226,13 @@ impl SpringMask {
     }
 
     /// Mask from group names; unknown names are returned as the error.
+    /// [`Self::GAIT_GROUP`] is accepted and sets no channel.
     pub fn from_groups<S: AsRef<str>>(names: &[S]) -> Result<Self, String> {
         let mut m = Self::NONE;
         for n in names {
+            if Self::is_gait_group(n.as_ref()) {
+                continue;
+            }
             m.insert(Self::group(n.as_ref()).ok_or_else(|| n.as_ref().to_string())?);
         }
         Ok(m)
@@ -229,7 +252,7 @@ impl SpringMask {
             .split(|c: char| c == '/' || c == ',' || c == '+' || c.is_whitespace())
             .filter(|w| !w.is_empty() && *w != "and" && *w != "the")
         {
-            if Self::group(w).is_some() {
+            if Self::group(w).is_some() || Self::is_gait_group(w) {
                 out.push(w.to_string());
             } else if !out.is_empty() {
                 break;
@@ -635,6 +658,20 @@ mod tests {
             ["chest", "pigtails", "hip"]
         );
         assert_eq!(SpringMask::from_groups(&["elbow"]), Err("elbow".into()));
+    }
+
+    #[test]
+    fn gait_group_is_accepted_but_sets_no_channel() {
+        let g = SpringMask::parse_directive("disable gait for this clip (baked walk)");
+        assert_eq!(g, ["gait"]);
+        assert_eq!(SpringMask::from_groups(&g), Ok(SpringMask::NONE));
+        assert!(SpringMask::names_gait(&g));
+        let g = SpringMask::parse_directive("disable chest/gait");
+        let m = SpringMask::from_groups(&g).unwrap();
+        assert_eq!(m.channels().collect::<Vec<_>>(), [Channel::Chest]);
+        assert!(SpringMask::names_gait(&["Gait"]));
+        assert!(!SpringMask::names_gait(&["chest", "hip"]));
+        assert_eq!(SpringMask::group("gait"), None, "not a spring channel");
     }
 
     #[test]

@@ -16,6 +16,12 @@
 //! points = { beam_origin = [306, 78] }  # optional named points
 //! # optional seat metadata (sit_swing): seat_y = 230, seat_x_range = [136, 279],
 //! # feet_lowest_y = 364
+//! # optional locomotion metadata (in-place walk/run cycles), one entry per
+//! # frame: how far the ground moves under the planted foot when frame i
+//! # gives way to frame i+1, in cell px along +x (negative for left-facing
+//! # art), so the window can move exactly as far as the feet do:
+//! # root_motion = [20.0, 21.0, ...]
+//! # contact_frames = [3, 9]   # frames where a foot lands (footfall bounce)
 //! # optional event reaction metadata: event = "cpu_busy",
 //! # base_clip = "facepalm", base_frames = [0, 1, ...] (one per frame)
 //! # rule_events = ["window.opened.folder"]  # every rule event it serves
@@ -23,8 +29,19 @@
 //! # (jiggle_variant = "idle_jiggle"); the sibling has jiggle_baked = true,
 //! # jiggle_of = "idle" and the engine spring groups to switch off while it
 //! # is drawn: disable_springs = ["chest", "pigtails", "hip"]
+//! # baked-WALK clips (video walk/strut/run takes) add the non-spring group
+//! # "gait" so the engine gait ([gait] in physics.toml) never drives them:
+//! # disable_springs = ["gait"]
 //! # optional per-frame attachment points (one [x, y] per frame):
 //! # frame_points = { chest_point = [[242, 133], ...], hip_point = [...] }
+//! # optional speaking-clip mouth shape per frame (lip-flap):
+//! # mouth_sequence = ["closed", "mid", "open", "smile", ...]
+//! # optional mouth patches for true lip-sync (speaking clips):
+//! # mouth_angle_deg = [0.0, 1.1, ...]   # one per frame
+//! # mouth_shape_ms = [200, 260]
+//! # [clips.talk_loop.mouth_patches.open]
+//! # page = "talk_loop/mouth/mouth_open.png"
+//! # centre = [9.0, 5.96]
 //! # optional blend-helper metadata (transition clips between two clips):
 //! # blend = { from = "idle", to = "wave", from_frame = 9, to_frame = 0,
 //! #           blend_t = [0.2, 0.4, 0.6, 0.8], easing = "smoothstep" }
@@ -124,6 +141,17 @@ pub struct Clip {
     /// `baseline_y`, e.g. legs dangling below a seat).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feet_lowest_y: Option<i32>,
+    /// Optional root motion of an in-place (treadmill) locomotion cycle, one
+    /// entry per frame: cell px the character advances along +x when frame
+    /// `i` gives way to frame `i + 1` (the last entry wraps to frame 0).
+    /// Measured from the planted foot, so moving the window by this much
+    /// keeps the feet still on the desktop. Negative for left-facing art.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_motion: Option<Vec<f32>>,
+    /// Optional frames on which a foot lands (heel strike) in a locomotion
+    /// cycle; footfall bounces fire there instead of at fixed cycle phases.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contact_frames: Option<Vec<usize>>,
     /// Optional system event this clip reacts to (e.g. `cpu_busy`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<String>,
@@ -147,9 +175,17 @@ pub struct Clip {
     pub jiggle_variant: Option<String>,
     /// Engine spring groups switched off while this clip is drawn
     /// (`chest`, `pigtails`, `hip`; see [`SpringMask::group`]), so the
-    /// engine adds no motion on top of baked jiggle.
+    /// engine adds no motion on top of baked jiggle. `gait`
+    /// ([`SpringMask::GAIT_GROUP`]) marks a baked walk: the engine gait is
+    /// suppressed while it is drawn (see [`Clip::bakes_gait`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disable_springs: Vec<String>,
+    /// Baked-jiggle clips whose frame count differs from their clean clip
+    /// (long holds split into settle sub-frames): the clean frame shown in
+    /// each of this clip's frames. Its own `frame_durations_ms` add up to the
+    /// clean clip's duration. Empty = frame `j` is clean frame `j`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clean_frame_index: Vec<u32>,
     /// Optional per-frame attachment points (cell coords), one entry per
     /// frame, e.g. `chest_point` for the jiggle springs. Clip-level medians
     /// stay in [`Clip::points`].
@@ -158,7 +194,47 @@ pub struct Clip {
     /// Optional blend-helper metadata (transition between two clips).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blend: Option<Blend>,
+    /// Speaking clips: the mouth shape baked into each frame
+    /// (`closed` / `mid` / `open` / `smile`, one per frame), from the
+    /// JSON's `lip_flap.baked_sequence`. Drives the token lip-flap
+    /// ([`crate::talk`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mouth_sequence: Vec<String>,
+    /// Speaking clips: mouth patch images per shape (`closed`, `mid`,
+    /// `open`, `smile`), pasted over the face at the per-frame
+    /// `mouth_point` for true lip-sync (from `lip_flap.shapes`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mouth_patches: BTreeMap<String, MouthPatch>,
+    /// Head tilt per frame (degrees, + = clockwise) to rotate the mouth
+    /// patch by; one per frame.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mouth_angle_deg: Vec<f32>,
+    /// Recommended time between mouth-shape changes `[min, max]` in ms
+    /// (`lip_flap.recommended_rate.mouth_shape_change_ms`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mouth_shape_ms: Option<(u32, u32)>,
     pub frames: Vec<FrameRect>,
+}
+
+impl Clip {
+    /// Ground speed (canvas px/s at playback speed 1) the clip's planted
+    /// feet are locked to, from the importer's `move_speed_px_s:<n>` tag.
+    pub fn move_speed_px_s(&self) -> Option<f32> {
+        self.tags
+            .iter()
+            .find_map(|t| t.strip_prefix("move_speed_px_s:"))
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|v| v.is_finite() && *v > 0.0)
+    }
+}
+
+/// One mouth patch image.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MouthPatch {
+    /// Image path, relative to the manifest's directory (or absolute).
+    pub page: String,
+    /// Patch pixel that lands on `mouth_point`.
+    pub centre: (f32, f32),
 }
 
 impl Default for Clip {
@@ -175,6 +251,8 @@ impl Default for Clip {
             seat_y: None,
             seat_x_range: None,
             feet_lowest_y: None,
+            root_motion: None,
+            contact_frames: None,
             event: None,
             base_clip: None,
             base_frames: None,
@@ -183,8 +261,13 @@ impl Default for Clip {
             jiggle_of: None,
             jiggle_variant: None,
             disable_springs: Vec::new(),
+            clean_frame_index: Vec::new(),
             frame_points: BTreeMap::new(),
             blend: None,
+            mouth_sequence: Vec::new(),
+            mouth_patches: BTreeMap::new(),
+            mouth_angle_deg: Vec::new(),
+            mouth_shape_ms: None,
             frames: Vec::new(),
         }
     }
@@ -213,6 +296,15 @@ impl Clip {
         }
     }
 
+    /// The clean-clip frame shown in frame `j` ([`Clip::clean_frame_index`],
+    /// identity for clips without one).
+    pub fn clean_frame(&self, j: usize) -> usize {
+        match self.clean_frame_index.get(j) {
+            Some(&c) => c as usize,
+            None => j,
+        }
+    }
+
     /// Named attachment point, if the clip defines it.
     pub fn point(&self, name: &str) -> Option<(i32, i32)> {
         self.points.get(name).copied()
@@ -225,6 +317,14 @@ impl Clip {
             .get(name)
             .and_then(|v| v.get(frame).copied())
             .or_else(|| self.point(name))
+    }
+
+    /// Average ground speed of a root-motion cycle in cell px/s (signed,
+    /// +x = right), or `None` without `root_motion`.
+    pub fn root_speed_px_s(&self) -> Option<f32> {
+        let rm = self.root_motion.as_ref()?;
+        let total: f32 = self.frame_durations_s().iter().sum();
+        (total > 0.0).then(|| rm.iter().sum::<f32>() / total)
     }
 
     /// `true` for blend-helper (transition) clips.
@@ -250,6 +350,13 @@ impl Clip {
             m.insert(c);
         }
         m
+    }
+
+    /// The frames bake the walk itself (legs, arms, hip bob): its
+    /// `disable_springs` names `gait`. The animator then suppresses the
+    /// engine gait (`PhysicsDriver::set_gait_suppressed`) while it is drawn.
+    pub fn bakes_gait(&self) -> bool {
+        SpringMask::names_gait(&self.disable_springs)
     }
 
     /// Tag test (`allure`, `idle_variant`, `blend`, ...).
@@ -294,11 +401,45 @@ impl Clip {
                 )));
             }
         }
+        if !self.mouth_angle_deg.is_empty() && self.mouth_angle_deg.len() != self.frames.len() {
+            return Err(bad(format!(
+                "mouth_angle_deg has {} entries but clip has {} frames",
+                self.mouth_angle_deg.len(),
+                self.frames.len()
+            )));
+        }
+        if !self.mouth_sequence.is_empty() && self.mouth_sequence.len() != self.frames.len() {
+            return Err(bad(format!(
+                "mouth_sequence has {} entries but clip has {} frames",
+                self.mouth_sequence.len(),
+                self.frames.len()
+            )));
+        }
         for (pname, v) in &self.frame_points {
             if v.len() != self.frames.len() {
                 return Err(bad(format!(
                     "frame_points.{pname} has {} entries but clip has {} frames",
                     v.len(),
+                    self.frames.len()
+                )));
+            }
+        }
+        if let Some(rm) = &self.root_motion {
+            if rm.len() != self.frames.len() {
+                return Err(bad(format!(
+                    "root_motion has {} entries but clip has {} frames",
+                    rm.len(),
+                    self.frames.len()
+                )));
+            }
+            if rm.iter().any(|v| !v.is_finite()) {
+                return Err(bad("root_motion must be finite".into()));
+            }
+        }
+        if let Some(cf) = &self.contact_frames {
+            if let Some(f) = cf.iter().find(|&&f| f >= self.frames.len()) {
+                return Err(bad(format!(
+                    "contact_frames: frame {f} out of range ({} frames)",
                     self.frames.len()
                 )));
             }
@@ -359,8 +500,37 @@ impl Manifest {
                     )));
                 }
             }
-            // Jiggle pairs must point at existing clips with the same frame
-            // count (the animator swaps one for the other mid-play).
+            // Jiggle pairs must point at existing clips. Their frame counts
+            // may differ (the animator times the player for the clip
+            // actually drawn) when the jiggle side maps its frames to clean
+            // frames (`clean_frame_index`), or when both clips loop.
+            if !clip.clean_frame_index.is_empty() {
+                let bad = |reason: String| AtlasError::InvalidClip {
+                    clip: name.clone(),
+                    reason,
+                };
+                if clip.clean_frame_index.len() != clip.frames.len() {
+                    return Err(bad(format!(
+                        "clean_frame_index has {} entries but clip has {} frames",
+                        clip.clean_frame_index.len(),
+                        clip.frames.len()
+                    )));
+                }
+                let Some(clean) = clip.jiggle_of.as_ref().and_then(|c| m.clips.get(c)) else {
+                    return Err(bad("clean_frame_index without a valid jiggle_of".into()));
+                };
+                if let Some(&i) = clip
+                    .clean_frame_index
+                    .iter()
+                    .find(|&&i| i as usize >= clean.frames.len())
+                {
+                    return Err(bad(format!(
+                        "clean_frame_index {i} out of range for `{}` ({} frames)",
+                        clip.jiggle_of.as_deref().unwrap_or_default(),
+                        clean.frames.len()
+                    )));
+                }
+            }
             for (field, other) in [
                 ("jiggle_of", &clip.jiggle_of),
                 ("jiggle_variant", &clip.jiggle_variant),
@@ -373,7 +543,11 @@ impl Manifest {
                 let Some(o) = m.clips.get(other) else {
                     return Err(bad(format!("{field} `{other}` not in manifest")));
                 };
-                if o.frames.len() != clip.frames.len() {
+                let both_loop = o.mode == LoopMode::Loop && clip.mode == LoopMode::Loop;
+                // The jiggle side of the pair carries the map.
+                let jiggle = if field == "jiggle_of" { clip } else { o };
+                let mapped = !jiggle.clean_frame_index.is_empty();
+                if o.frames.len() != clip.frames.len() && !both_loop && !mapped {
                     return Err(bad(format!(
                         "{field} `{other}` has {} frames, this clip {}",
                         o.frames.len(),
@@ -601,6 +775,8 @@ mod tests {
                 seat_y: Some(230),
                 seat_x_range: Some((136, 279)),
                 feet_lowest_y: Some(364),
+                root_motion: None,
+                contact_frames: None,
                 event: Some("cpu_busy".into()),
                 base_clip: Some("a".into()),
                 base_frames: Some(vec![0]),
@@ -609,7 +785,19 @@ mod tests {
                 jiggle_of: Some("a".into()),
                 jiggle_variant: Some("a".into()),
                 disable_springs: vec!["chest".into(), "pigtails".into(), "hip".into()],
+                clean_frame_index: Vec::new(),
                 frame_points: [("chest_point".to_string(), vec![(240, 130)])].into(),
+                mouth_sequence: vec!["open".into()],
+                mouth_patches: [(
+                    "open".to_string(),
+                    MouthPatch {
+                        page: "m/open.png".into(),
+                        centre: (9.0, 5.96),
+                    },
+                )]
+                .into(),
+                mouth_angle_deg: vec![1.5],
+                mouth_shape_ms: Some((200, 260)),
                 blend: Some(Blend {
                     from: "a".into(),
                     to: "a".into(),
@@ -718,10 +906,25 @@ mod tests {
         for clip in [
             "[clips.e]\npage = \"e.png\"\ndisable_springs = [\"elbow\"]\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
             "[clips.e]\npage = \"e.png\"\njiggle_of = \"nope\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 } ]",
-            "[clips.e]\npage = \"e.png\"\njiggle_variant = \"idle\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 }, { x = 1, y = 0, w = 1, h = 1 } ]",
+            "[clips.e]\npage = \"e.png\"\nmode = \"once\"\njiggle_variant = \"idle\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 }, { x = 1, y = 0, w = 1, h = 1 } ]",
         ] {
             let err = Manifest::from_toml_str(&format!("{base}\n{clip}")).unwrap_err();
             assert!(matches!(err, AtlasError::InvalidClip { .. }), "{err}");
         }
+        // A once jiggle clip of another length needs a valid
+        // clean_frame_index on its jiggle side.
+        let jig = |cfi: &str| {
+            format!(
+                "{base}\n[clips.e]\npage = \"e.png\"\nmode = \"once\"\njiggle_baked = true\njiggle_of = \"idle\"\n{cfi}frames = [ {{ x = 0, y = 0, w = 1, h = 1 }}, {{ x = 1, y = 0, w = 1, h = 1 }} ]"
+            )
+        };
+        assert!(Manifest::from_toml_str(&jig("")).is_err());
+        assert!(Manifest::from_toml_str(&jig("clean_frame_index = [0, 0]\n")).is_ok());
+        assert!(Manifest::from_toml_str(&jig("clean_frame_index = [0, 1]\n")).is_err());
+        assert!(Manifest::from_toml_str(&jig("clean_frame_index = [0]\n")).is_err());
+        // Two looping clips may differ in length (talk_loop 32 f, its
+        // jiggle sibling 36 f).
+        let loops = "[clips.e]\npage = \"e.png\"\njiggle_variant = \"idle\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 }, { x = 1, y = 0, w = 1, h = 1 } ]";
+        assert!(Manifest::from_toml_str(&format!("{base}\n{loops}")).is_ok());
     }
 }

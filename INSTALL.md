@@ -207,7 +207,12 @@ lillith preview --list                     # list clips in the manifest
 lillith preview knife_tap --physics        # render a clip through the animator → ./preview/
 lillith preview --all --out preview        # contact sheet for every clip
 lillith panel                              # egui window, Poses tab = clip browser
+lillith settings                           # interim window: avatar import/anchors, jiggle/speed/chat (right-click ▸ Settings… opens lillith-settings)
+lillith settings --section avatar --import ~/Pictures/me.png
 ```
+
+Right-click her for the menu (poses, chat, avatar, resize, minimize,
+settings, close). See [docs/MENU_SETTINGS_AVATAR.md](docs/MENU_SETTINGS_AVATAR.md).
 
 ## 5. Configuration
 
@@ -218,13 +223,27 @@ rewritten when you drag her (other keys are kept).
 
 ```toml
 # Top-level keys (must come before any [table])
-mode = "stay"          # stay | wander | follow  (G toggles wander while she has focus)
+mode = "wander"        # wander | stay | follow  (default wander; G toggles while she has focus)
 scale = 1.0            # 1.0 here means "use the 0.55 default" (220 px); set e.g. 0.7 to override
 opacity = 1.0
 render_hz = 30.0
 physics_hz = 120.0
 baked_jiggle = false   # true: use the baked _jiggle clip variants when present
+# jiggle_mode = "springs"  # baked | springs | off (overrides baked_jiggle)
+always_on_top = true
+click_through = false  # true: only her head takes clicks
+autostart = false      # true: writes ~/.config/autostart/lillith.desktop
 muted = false
+
+[anim]
+playback_speed = 0.7
+talk_speed = 0.62
+smooth_frames = true   # cross-fade consecutive sprite frames
+crossfade = 0.5
+
+[avatar]               # custom single-image avatars (Settings ▸ Avatar)
+pace = 0.8
+render_hz = 60.0
 
 [overlay]              # where she sits (px from the bottom-left corner)
 margin_left = 80
@@ -236,19 +255,30 @@ sleepy_after_s = 300.0
 asleep_after_s = 900.0
 pose_cycle_s = 45.0          # automatic pose change while idle
 left_repeat_s = 4.0          # second left click within this → wave
-wander_every_s = [60.0, 120.0]  # pause between walks in wander mode
-wander_speed_px_s = 60.0
+wander_every_s = [20.0, 45.0]   # pause between calm walks in wander mode
+wander_speed_px_s = 45.0        # glide speed for walk takes without root motion
 wander_min_step_px = 120.0
 event_wake_priority = 80     # events at/above this priority wake her
 mood_tau_s = 45.0
 
-[behavior.idle]              # idle life: she mostly stands and breathes
+[behavior.idle]              # idle life: rotating flirty poses, never the same twice in a row
 breath_period_s = [3.5, 4.5]
 blink_every_s = [4.0, 6.0]
-transition_every_s = [25.0, 40.0]  # hip sway / lean / shoulder roll (old: [8, 12])
+transition_every_s = [8.0, 15.0]   # hip sway / hip lean / shimmy / tail curl …
 transition_len_s = [1.2, 2.0]
-reaction_every_s = [45.0, 90.0]    # unprompted gestures (old: [12, 26])
-variant_hold_s = 30.0              # keep one idle take at least this long (0 = every loop)
+reaction_every_s = [15.0, 30.0]    # unprompted gestures: idle_flirt_*, hip_pop_wink, blow_kiss …
+variant_hold_s = 12.0              # keep one idle take at least this long (0 = every loop)
+walk_variant_hold_s = 1.0          # plain walk this long before a sultry take (saunter / sassy / strut)
+
+floor_offset_px = 48         # floor (window-bottom margin) without the KWin bridge's work area
+
+[behavior.gravity]           # after a drop she falls, bounces softly and lands
+g_px_s2 = 2600.0             # gravity, px/s² (0 = no falling: she stays where dropped)
+max_fall_speed = 2200.0      # terminal speed, px/s
+bounce = 0.22                # rebound fraction of the impact speed (0 = none, max 0.9)
+perch_enabled = true         # land on window tops (needs the KWin bridge, below)
+sit_every_s = [8.0, 20.0]    # while perched: calm time before she sits on the edge
+sit_for_s = [20.0, 45.0]     # how long a sit lasts (sit_swing + its variants)
 
 [behavior.gestures]
 double_click_s = 0.35
@@ -265,6 +295,39 @@ boredom_s = 150.0
 Spring tuning lives in a `[springs]` table, and the tuned jiggle physics in
 [`assets/physics.toml`](assets/physics.toml). Event reactions and the key map
 are data, in [`assets/rules.toml`](assets/rules.toml).
+
+### KWin bridge: window events and perching on windows
+
+On Plasma the `kwin/lillith-bridge` KWin script tells her about windows
+(Wayland hides them from normal clients): open/close/minimize reactions,
+and for gravity the stacking order of visible normal windows plus the
+usable screen area. With it, a drop above a window lands her on its top
+edge; she strolls along it, sits on the edge now and then, and falls again
+when the window moves, minimizes or closes. Without it she lands on the
+floor (`[behavior] floor_offset_px`) and logs a hint. Same steps on Wayland
+and X11 sessions; from the repo root (fish):
+
+```fish
+# install, or upgrade an older copy
+kpackagetool6 --type=KWin/Script --install kwin/lillith-bridge
+or kpackagetool6 --type=KWin/Script --upgrade kwin/lillith-bridge
+
+# enable (same as System Settings → Window Management → KWin Scripts →
+# tick "Lillith Bridge" → Apply) and make KWin load it
+kwriteconfig6 --file kwinrc --group Plugins --key lillith-bridgeEnabled true
+qdbus6 org.kde.KWin /KWin reconfigure
+
+# check: prints "true"
+qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded lillith-bridge
+```
+
+After an upgrade, reload it: untick and tick it again in KWin Scripts, or
+set the key to `false`, `reconfigure`, then back to `true`, `reconfigure`.
+With Lillith running (`[monitor] kwin_bridge = true`, the default) her log
+shows `KWin bridge: window stack received`; `dbus-monitor --session
+"interface='org.lillith.Bridge'"` shows the `Stack`/`Area` calls once a
+second. Script errors land in the journal:
+`journalctl --user -b | grep -i lillith-bridge`.
 
 ## 6. Troubleshooting
 

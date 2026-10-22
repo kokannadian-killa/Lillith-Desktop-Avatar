@@ -37,8 +37,19 @@ struct Args {
 fn parse_args() -> Result<Args, String> {
     let mut it = std::env::args().skip(1);
     let mut a = Args {
-        cmd: String::new(), positional: vec![], dirs: vec![], bin_dirs: vec![], gguf: None, out: None,
-        config: None, modelfile: None, backend: None, server_url: None, ollama_host: None, sync_chat: false, json: false,
+        cmd: String::new(),
+        positional: vec![],
+        dirs: vec![],
+        bin_dirs: vec![],
+        gguf: None,
+        out: None,
+        config: None,
+        modelfile: None,
+        backend: None,
+        server_url: None,
+        ollama_host: None,
+        sync_chat: false,
+        json: false,
     };
     while let Some(x) = it.next() {
         let mut val = |n: &str| it.next().ok_or(format!("{n} needs a value"));
@@ -82,16 +93,27 @@ fn scan_opts(a: &Args, cfg: Option<&LlmConfig>) -> ScanOptions {
 }
 
 fn detect_opts(a: &Args) -> DetectOptions {
-    let mut o = DetectOptions { extra_bin_dirs: a.bin_dirs.clone(), ..Default::default() };
-    if let Some(u) = &a.server_url { o.llama_server_url = u.clone(); }
-    if let Some(h) = &a.ollama_host { o.ollama_host = h.clone(); }
+    let mut o = DetectOptions {
+        extra_bin_dirs: a.bin_dirs.clone(),
+        ..Default::default()
+    };
+    if let Some(u) = &a.server_url {
+        o.llama_server_url = u.clone();
+    }
+    if let Some(h) = &a.ollama_host {
+        o.ollama_host = h.clone();
+    }
     o
 }
 
 fn print_detect(r: &RuntimeReport) {
     println!("== Runtimes ==");
     let bin = |n: &str, b: &Option<detect::BinaryInfo>| match b {
-        Some(b) => println!("  {n:<13} {}  [{}]", b.path.display(), b.version.as_deref().unwrap_or("version ?")),
+        Some(b) => println!(
+            "  {n:<13} {}  [{}]",
+            b.path.display(),
+            b.version.as_deref().unwrap_or("version ?")
+        ),
         None => println!("  {n:<13} not found"),
     };
     bin("llama-server", &r.llama_server);
@@ -99,30 +121,63 @@ fn print_detect(r: &RuntimeReport) {
     bin("ollama", &r.ollama);
     let s = &r.llama_server_api;
     if s.reachable {
-        println!("  llama-server API {}  health={} models={:?}", s.url, s.health.as_deref().unwrap_or("?"), s.models);
+        println!(
+            "  llama-server API {}  health={} models={:?}",
+            s.url,
+            s.health.as_deref().unwrap_or("?"),
+            s.models
+        );
     } else {
-        println!("  llama-server API {}  not answering ({})", s.url, s.error.as_deref().unwrap_or("-"));
+        println!(
+            "  llama-server API {}  not answering ({})",
+            s.url,
+            s.error.as_deref().unwrap_or("-")
+        );
     }
     let o = &r.ollama_api;
     if o.reachable {
-        println!("  ollama API       {}  version={} models:", o.url, o.version.as_deref().unwrap_or("?"));
+        println!(
+            "  ollama API       {}  version={} models:",
+            o.url,
+            o.version.as_deref().unwrap_or("?")
+        );
         for m in &o.models {
-            println!("    - {} ({}, {} {})", m.name, gb(m.size_bytes), m.parameter_size.as_deref().unwrap_or("?"), m.quantization.as_deref().unwrap_or("?"));
+            println!(
+                "    - {} ({}, {} {})",
+                m.name,
+                gb(m.size_bytes),
+                m.parameter_size.as_deref().unwrap_or("?"),
+                m.quantization.as_deref().unwrap_or("?")
+            );
         }
     } else {
-        println!("  ollama API       {}  not answering ({})", o.url, o.error.as_deref().unwrap_or("-"));
+        println!(
+            "  ollama API       {}  not answering ({})",
+            o.url,
+            o.error.as_deref().unwrap_or("-")
+        );
     }
     println!(
         "  suggested backend: {}",
-        r.suggested_backend().map(|b| b.as_str()).unwrap_or("none installed (llama-server recommended)")
+        r.suggested_backend()
+            .map(|b| b.as_str())
+            .unwrap_or("none installed (llama-server recommended)")
     );
 }
 
 fn print_scan(rep: &ScanReport, recs: &[Recommendation]) {
     println!("== Searched ==");
     for d in &rep.dirs {
-        println!("  [{}] {}{}", if d.exists { "x" } else { " " }, d.path.display(),
-            if d.models_found > 0 { format!("  ({} found)", d.models_found) } else { String::new() });
+        println!(
+            "  [{}] {}{}",
+            if d.exists { "x" } else { " " },
+            d.path.display(),
+            if d.models_found > 0 {
+                format!("  ({} found)", d.models_found)
+            } else {
+                String::new()
+            }
+        );
     }
     for w in &rep.warnings {
         println!("  warning: {w}");
@@ -145,9 +200,19 @@ fn print_scan(rep: &ScanReport, recs: &[Recommendation]) {
             m.header_error.as_ref().map(|e| format!(" ERROR: {e}")).unwrap_or_default(),
         );
     }
-    println!("== Recommendations (RAM {}) ==", scan::total_ram_bytes().map(gb).unwrap_or("unknown".into()));
+    println!(
+        "== Recommendations (RAM {}) ==",
+        scan::total_ram_bytes().map(gb).unwrap_or("unknown".into())
+    );
     for (n, r) in recs.iter().enumerate() {
-        println!("  {}. [{:?}] score {:>4}  {}  ({})", n + 1, r.tier, r.score, r.name, r.path.display());
+        println!(
+            "  {}. [{:?}] score {:>4}  {}  ({})",
+            n + 1,
+            r.tier,
+            r.score,
+            r.name,
+            r.path.display()
+        );
         println!("       {}", r.reasons.join("; "));
     }
 }
@@ -156,7 +221,8 @@ fn print_scan(rep: &ScanReport, recs: &[Recommendation]) {
 fn pick_model(a: &Args, cfg: Option<&LlmConfig>) -> Result<ModelInfo, String> {
     if let Some(g) = &a.gguf {
         let p = paths::expand_tilde(g);
-        return ModelInfo::from_path(&p, scan::ModelSource::File).map_err(|e| format!("{}: {e}", p.display()));
+        return ModelInfo::from_path(&p, scan::ModelSource::File)
+            .map_err(|e| format!("{}: {e}", p.display()));
     }
     let rep = scan(&scan_opts(a, cfg));
     let recs = recommend(&rep.models, scan::total_ram_bytes());
@@ -166,17 +232,33 @@ fn pick_model(a: &Args, cfg: Option<&LlmConfig>) -> Result<ModelInfo, String> {
 }
 
 fn config_path(a: &Args) -> Result<PathBuf, String> {
-    a.config.clone().or_else(paths::default_config_path).ok_or("no $HOME; pass --config".into())
+    a.config
+        .clone()
+        .or_else(paths::default_config_path)
+        .ok_or("no $HOME; pass --config".into())
 }
 
 fn run(a: Args) -> Result<(), String> {
     match a.cmd.as_str() {
         "help" => {
-            println!("{}", include_str!("wizard.rs").lines().skip(2).take(11).map(|l| l.trim_start_matches("//!")).collect::<Vec<_>>().join("\n"));
+            println!(
+                "{}",
+                include_str!("wizard.rs")
+                    .lines()
+                    .skip(2)
+                    .take(11)
+                    .map(|l| l.trim_start_matches("//!"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
         }
         "detect" => {
             let r = detect(&detect_opts(&a));
-            if a.json { println!("{}", serde_json::to_string_pretty(&r).unwrap()); } else { print_detect(&r); }
+            if a.json {
+                println!("{}", serde_json::to_string_pretty(&r).unwrap());
+            } else {
+                print_detect(&r);
+            }
         }
         "scan" => {
             let cfg = config_path(&a).ok().and_then(|p| config::load(&p).ok());
@@ -191,21 +273,35 @@ fn run(a: Args) -> Result<(), String> {
                 print_scan(&rep, &recs);
                 if let Some(top) = recs.first() {
                     let m = &rep.models[top.index];
-                    let c = wizard::config_for_model(m, r.suggested_backend().unwrap_or(Backend::LlamaServer));
-                    if let Ok(l) = launch::llama_server_command(&c, r.llama_server.as_ref().map(|b| b.path.as_path())) {
+                    let c = wizard::config_for_model(
+                        m,
+                        r.suggested_backend().unwrap_or(Backend::LlamaServer),
+                    );
+                    if let Ok(l) = launch::llama_server_command(
+                        &c,
+                        r.llama_server.as_ref().map(|b| b.path.as_path()),
+                    ) {
                         println!("== Launch (top pick) ==\n  {}", l.to_shell_string());
                     }
                 }
             }
         }
         "modelfile" => {
-            let cfg = config_path(&a).ok().and_then(|p| config::load(&p).ok()).unwrap_or_default();
+            let cfg = config_path(&a)
+                .ok()
+                .and_then(|p| config::load(&p).ok())
+                .unwrap_or_default();
             let m = pick_model(&a, Some(&cfg))?;
-            let c = LlmConfig { ctx_size: wizard::suggested_ctx(&m).min(cfg.ctx_size), ..cfg };
+            let c = LlmConfig {
+                ctx_size: wizard::suggested_ctx(&m).min(cfg.ctx_size),
+                ..cfg
+            };
             let text = wizard::modelfile_for(&m, &c).render();
             match &a.out {
                 Some(p) => {
-                    if let Some(d) = p.parent() { std::fs::create_dir_all(d).map_err(|e| e.to_string())?; }
+                    if let Some(d) = p.parent() {
+                        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+                    }
                     std::fs::write(p, &text).map_err(|e| format!("{}: {e}", p.display()))?;
                     println!("wrote {}", p.display());
                 }
@@ -220,53 +316,126 @@ fn run(a: Args) -> Result<(), String> {
                 Some(b) => Backend::parse(b).ok_or(format!("bad --backend {b}"))?,
                 None => old.backend,
             };
-            let rt = detect(&DetectOptions { probe_versions: false, ..detect_opts(&a) });
-            let mut c = LlmConfig { scan_paths: old.scan_paths.clone(), system_prompt: old.system_prompt.clone(),
-                temperature: old.temperature, ollama_model: old.ollama_model.clone(), ..wizard::config_for_model(&m, backend) };
-            if let Some(u) = &a.server_url { c.server_url = u.clone(); } else { c.server_url = old.server_url.clone(); }
-            if let Some(h) = &a.ollama_host { c.ollama_host = h.clone(); } else { c.ollama_host = old.ollama_host.clone(); }
-            c.llama_server_bin = rt.llama_server.as_ref().map(|b| b.path.display().to_string()).unwrap_or(old.llama_server_bin.clone());
-            let mf_path = a.modelfile.clone().or_else(paths::default_modelfile_path).ok_or("no modelfile path")?;
+            let rt = detect(&DetectOptions {
+                probe_versions: false,
+                ..detect_opts(&a)
+            });
+            let mut c = LlmConfig {
+                scan_paths: old.scan_paths.clone(),
+                system_prompt: old.system_prompt.clone(),
+                temperature: old.temperature,
+                ollama_model: old.ollama_model.clone(),
+                ..wizard::config_for_model(&m, backend)
+            };
+            if let Some(u) = &a.server_url {
+                c.server_url = u.clone();
+            } else {
+                c.server_url = old.server_url.clone();
+            }
+            if let Some(h) = &a.ollama_host {
+                c.ollama_host = h.clone();
+            } else {
+                c.ollama_host = old.ollama_host.clone();
+            }
+            c.llama_server_bin = rt
+                .llama_server
+                .as_ref()
+                .map(|b| b.path.display().to_string())
+                .unwrap_or(old.llama_server_bin.clone());
+            let mf_path = a
+                .modelfile
+                .clone()
+                .or_else(paths::default_modelfile_path)
+                .ok_or("no modelfile path")?;
             c.modelfile_path = mf_path.display().to_string();
             config::save(&path, &c, a.sync_chat).map_err(|e| e.to_string())?;
-            if let Some(d) = mf_path.parent() { std::fs::create_dir_all(d).map_err(|e| e.to_string())?; }
-            std::fs::write(&mf_path, wizard::modelfile_for(&m, &c).render()).map_err(|e| e.to_string())?;
-            println!("wrote [llm]{} to {}", if a.sync_chat { " + [chat] bridge" } else { "" }, path.display());
+            if let Some(d) = mf_path.parent() {
+                std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&mf_path, wizard::modelfile_for(&m, &c).render())
+                .map_err(|e| e.to_string())?;
+            println!(
+                "wrote [llm]{} to {}",
+                if a.sync_chat { " + [chat] bridge" } else { "" },
+                path.display()
+            );
             println!("wrote Modelfile to {}", mf_path.display());
             println!("model: {} ({})", m.name, m.path.display());
-            if let Ok(l) = launch::llama_server_command(&c, None) { println!("launch: {}", l.to_shell_string()); }
+            if let Ok(l) = launch::llama_server_command(&c, None) {
+                println!("launch: {}", l.to_shell_string());
+            }
         }
         "launch-cmd" => {
             let c = config::load(&config_path(&a)?).map_err(|e| e.to_string())?;
-            println!("{}", launch::llama_server_command(&c, None).map_err(|e| e.to_string())?.to_shell_string());
+            println!(
+                "{}",
+                launch::llama_server_command(&c, None)
+                    .map_err(|e| e.to_string())?
+                    .to_shell_string()
+            );
         }
         "check-modelfile" => {
             let p = a.positional.first().ok_or("check-modelfile FILE")?;
             let src = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?;
             let m = Modelfile::parse(&src).map_err(|e| e.to_string())?;
             let again = Modelfile::parse(&m.render()).map_err(|e| e.to_string())?;
-            println!("{} instructions, FROM={:?}, round-trip {}", m.instructions.len(), m.from(), if again == m { "OK" } else { "CHANGED" });
+            println!(
+                "{} instructions, FROM={:?}, round-trip {}",
+                m.instructions.len(),
+                m.from(),
+                if again == m { "OK" } else { "CHANGED" }
+            );
             print!("{}", m.render());
         }
         "ollama-create" => {
             let c = config::load(&config_path(&a)?).map_err(|e| e.to_string())?;
-            let rt = detect(&DetectOptions { probe_versions: false, ..detect_opts(&a) });
+            let rt = detect(&DetectOptions {
+                probe_versions: false,
+                ..detect_opts(&a)
+            });
             let bin = rt.ollama.ok_or("ollama is not installed")?.path;
-            let mf = a.modelfile.clone()
-                .or_else(|| (!c.modelfile_path.is_empty()).then(|| PathBuf::from(&c.modelfile_path)))
-                .or_else(paths::default_modelfile_path).ok_or("no Modelfile")?;
-            println!("{}", launch::ollama_create(&bin, &c.ollama_model, Path::new(&mf), &c).map_err(|e| e.to_string())?);
+            let mf = a
+                .modelfile
+                .clone()
+                .or_else(|| {
+                    (!c.modelfile_path.is_empty()).then(|| PathBuf::from(&c.modelfile_path))
+                })
+                .or_else(paths::default_modelfile_path)
+                .ok_or("no Modelfile")?;
+            println!(
+                "{}",
+                launch::ollama_create(&bin, &c.ollama_model, Path::new(&mf), &c)
+                    .map_err(|e| e.to_string())?
+            );
         }
         "check" => {
-            let mut c = config_path(&a).ok().and_then(|p| config::load(&p).ok()).unwrap_or_default();
-            if let Some(b) = &a.backend { c.backend = Backend::parse(b).ok_or(format!("bad --backend {b}"))?; }
-            if let Some(u) = &a.server_url { c.server_url = u.clone(); }
-            if let Some(h) = &a.ollama_host { c.ollama_host = h.clone(); }
-            for e in validate_all(&c) { println!("  field {}: {}", e.key, e.message); }
+            let mut c = config_path(&a)
+                .ok()
+                .and_then(|p| config::load(&p).ok())
+                .unwrap_or_default();
+            if let Some(b) = &a.backend {
+                c.backend = Backend::parse(b).ok_or(format!("bad --backend {b}"))?;
+            }
+            if let Some(u) = &a.server_url {
+                c.server_url = u.clone();
+            }
+            if let Some(h) = &a.ollama_host {
+                c.ollama_host = h.clone();
+            }
+            for e in validate_all(&c) {
+                println!("  field {}: {}", e.key, e.message);
+            }
             let h = check::ping_server(&c).map_err(|e| e.to_string())?;
-            println!("ping: ready={} status={:?} model={:?} ctx={:?} version={:?}", h.ready, h.status, h.model, h.ctx, h.version);
+            println!(
+                "ping: ready={} status={:?} model={:?} ctx={:?} version={:?}",
+                h.ready, h.status, h.model, h.ctx, h.version
+            );
             if h.ready {
-                let prompt = a.positional.first().map(String::as_str).unwrap_or("Say hi to Ko in one short sentence.");
+                let prompt = a
+                    .positional
+                    .first()
+                    .map(String::as_str)
+                    .unwrap_or("Say hi to Ko in one short sentence.");
                 let t = std::time::Instant::now();
                 let reply = check::test_chat(&c, prompt).map_err(|e| e.to_string())?;
                 println!("chat ({:.1}s): {reply}", t.elapsed().as_secs_f32());

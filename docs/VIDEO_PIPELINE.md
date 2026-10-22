@@ -70,8 +70,30 @@ and not committed. Examples: a deep bow, or a turn that shows her back.
   tags. The app's pose cycle picks these clips by name, so `idle_flirt_*` are not `variant_of:idle`.
   The 84 v1 `*_jiggle` clips are not rebuilt: each is a code-jiggled copy of a base clip, and v2 bakes
   secondary motion into every clip.
+- The seven own-pose event bases (`pose_clutch_head`, `pose_hacking`, `pose_pout`, `pose_present`,
+  `pose_shush`, `pose_vsign`, `pose_wait_palm`) are also built as standalone clips in `assets/generated/`
+  (whole 49-frame take, f1-47 step 2, 24 frames @12 fps, scale 0.53, fixed centre, loop), adding 7 clips (136 in
+  total after batch 13). Their entries were appended to the committed `manifest.json` rather than regenerating it, because
+  the committed file carries walk root-motion / gait fields that `make_manifest_v2.py` does not emit.
 - The runtime looks for `$LILLITH_MANIFEST`, then `./assets/generated/manifest.toml` (relative to the
   working directory), then `$XDG_DATA_HOME/lillith/generated/manifest.toml`.
+
+## Variants (batch 13)
+
+- `make_manifest_v2.py` has a `VARIANT_OF` map that tags alternative takes with `variant_of:<base>`:
+  - `walk_{sassy,skip,saunter}_{right,left}` -> `walk_right` / `walk_left`;
+  - `sit_{bored_chin,cross_legged_bob,heel_kick,stretch_yawn}` -> `sit_swing`;
+  - `idle_{bored_sigh,nail_check,tail_fidget,yawn_stretch}` -> `idle` (these also carry `idle_variant`).
+- Each take starts and ends on the base clip's source still. Placement matches the base:
+  - walks: scale 0.54, body_trend centring, per-frame snap;
+  - sits: scale 0.5, fixed, aligned to sit_swing, same seat_y / seat_x_range;
+  - idles: the idle_a still.
+- The walk variants carry `engine_springs` (gait disabled) like the base walks. They have no `root_motion` or `contact_frames` yet.
+- Engine support: every `variant_of:<base>` tag is read (Animator `variant_map`; bases idle, walk_right, walk_left, sit_swing).
+  With `IdleConfig::variant_play_once` (default true) the clean base loops for `variant_hold_s` (30 s), then one random variant plays once at a base loop end and hands back to the base. A mirrored walk (walk_right drawn flipped) draws walk_right's variants flipped.
+  While a walk variant is drawn the window moves at the fixed walk speed (no `root_motion` on those clips yet).
+- `variant_play_once = false` keeps the legacy behaviour: idle only, one ~4 s idle variant loops for the whole 30 s hold, and the clean idle is not drawn.
+  A shorter per-variant hold, or playing them as one-shots, would suit them better.
 
 ## Known caveats
 

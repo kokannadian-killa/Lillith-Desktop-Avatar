@@ -6,7 +6,7 @@
 
 
 Based on `inventory.md`, `FEATURES.md`, `grok_history.md` (pass 1) and the 223 user attachments. Items marked **(guess)** or **(verify)** are not confirmed by the sources.
-Scope: the desktop companion (avatar, animation, interactions), the system state/action monitor, and local LLM chat with voice and memory. Excluded: Tor/anon bots, MAC/kill-switch, security-audit tooling, Demon OS distro work, and NSFW/unmoderated modes.
+Scope: the desktop companion (avatar, animation, interactions), the system state/action monitor, and local LLM chat with voice and memory. Excluded: Tor/anon bots, MAC/kill-switch, security-audit tooling, and Demon OS distro work. Persona policy: Lillith is a fully explicit, dominant adult succubus; explicit content is allowed and encouraged on Ko's private, local-only model. Hard limit: adult-only (never minors or anyone young-seeming). Out-of-character safeword: `red` (or `OOC: stop`), which she obeys at once (prompt: `lillith_setup::modelfile::LILY_SYSTEM_PROMPT`, shared by the chat).
 
 
 ## R. Repository status (added 2026-10-19, UTC-6)
@@ -286,9 +286,9 @@ Each idea is assigned to a milestone. ✅ = already built, ▶ = in progress.
 | 20 | Git hook reactions | M10 | Optional local git hooks that ping her: commit / push / failed build poses |
 | 21 | Docker / Podman | M10 | Container start/stop via the socket API → Sandbox / Virtual Machine poses |
 | 24 | Reminders / scheduler | M9 | She schedules reminders herself (internal timer + systemd user timers), Task Scheduler pose |
-| 25 | Generate new sprites/skins | M10 | Asset tool, not a runtime feature: new outfits/seasonal skins go through the art pipeline + `import-manifest`, locked style only, no NSFW |
+| 25 | Generate new sprites/skins | M10 | Asset tool, not a runtime feature: new outfits/seasonal skins go through the art pipeline + `import-manifest`, locked style only |
 | 26 | Global hotkeys | M6 | KDE global shortcuts via the XDG GlobalShortcuts portal (pynput can't do this on Wayland) |
-| 27 | Personality modes | M7 | JSON/TOML personality modules: Hacker, Assistant, Sweet, Playful, Feral (all SFW) |
+| 27 | Personality modes | M7 | JSON/TOML personality modules: Hacker, Assistant, Sweet, Playful, Feral (all follow the persona policy: adult-only, safeword `red`) |
 | 28 | Game detection | M5/M9 | KWin bridge + Steam/Heroic process names → Excited pose, playtime counter, optional hide-in-fullscreen |
 | 29 | Discord status | M10 | Discord Rich Presence over the local IPC socket: "currently: Hacking" |
 | 30 | Screen reading (OCR) | M10 (opt-in) | Off by default; only on explicit request through the screenshot portal (KDE asks permission each time), tesseract locally |
@@ -315,7 +315,7 @@ Folded into the milestones. The chat pieces largely exist on branch `feat/chat-b
 **Not building (excluded, consistent with the existing exclusion list):**
 - #22 nmap / network scanning: security-tool territory, same as the excluded port-scan / audit tools.
 - #23 clipboard monitoring that reacts to passwords: reading secrets from the clipboard is out. A plain "copied a URL / code" reaction could come later, but only if you ask for it, it never stores contents, and it ignores password managers.
-- "Uncensored / no filter" LLM mode: excluded with the NSFW / moderation-bypass modes. The local LLM in #1 is fine without it.
+- Persona policy for the local LLM in #1: Lillith is a fully explicit, dominant adult succubus; explicit content is allowed and encouraged on Ko's private, local-only model. Hard limit: adult-only (never minors or anyone young-seeming). Out-of-character safeword: `red` (or `OOC: stop`), which she obeys at once. The hard limit and the safeword stay in her system prompt.
 
 ## 6. Open questions
 

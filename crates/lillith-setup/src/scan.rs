@@ -52,12 +52,22 @@ impl ModelInfo {
     /// Builds the info for one file, reading its header.
     pub fn from_path(path: &Path, source: ModelSource) -> std::io::Result<Self> {
         let size_bytes = std::fs::metadata(path)?.len();
-        let file_name = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let file_name = path
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let (header, header_error) = match gguf::read_header(path) {
             Ok(h) => (Some(h), None),
             Err(e) => (None, Some(e.to_string())),
         };
-        Ok(Self::build(path, file_name, size_bytes, source, header.as_ref(), header_error))
+        Ok(Self::build(
+            path,
+            file_name,
+            size_bytes,
+            source,
+            header.as_ref(),
+            header_error,
+        ))
     }
 
     fn build(
@@ -68,8 +78,14 @@ impl ModelInfo {
         h: Option<&GgufHeader>,
         header_error: Option<String>,
     ) -> Self {
-        let stem = file_name.strip_suffix(".gguf").unwrap_or(&file_name).to_string();
-        let name = h.and_then(|h| h.name()).map(str::to_string).unwrap_or_else(|| stem.clone());
+        let stem = file_name
+            .strip_suffix(".gguf")
+            .unwrap_or(&file_name)
+            .to_string();
+        let name = h
+            .and_then(|h| h.name())
+            .map(str::to_string)
+            .unwrap_or_else(|| stem.clone());
         let architecture = h.and_then(|h| h.architecture()).map(str::to_string);
         let file_type = h.and_then(|h| h.file_type());
         let quant = file_type
@@ -77,7 +93,9 @@ impl ModelInfo {
             .map(str::to_string)
             .or_else(|| gguf::quant_from_filename(&file_name))
             .or_else(|| gguf::quant_from_filename(&name));
-        let label = h.and_then(|h| h.get_str("general.size_label")).and_then(parse_size_label);
+        let label = h
+            .and_then(|h| h.get_str("general.size_label"))
+            .and_then(parse_size_label);
         let (params_b, params_estimated) = match label {
             Some(p) => (Some(p), false),
             None => {
@@ -87,7 +105,11 @@ impl ModelInfo {
             }
         };
         let jinja = h.and_then(|h| h.chat_template());
-        let chat_template = ChatTemplate::detect(jinja, architecture.as_deref(), &format!("{name} {file_name}"));
+        let chat_template = ChatTemplate::detect(
+            jinja,
+            architecture.as_deref(),
+            &format!("{name} {file_name}"),
+        );
         let est_ram_bytes = size_bytes + kv_cache_bytes(h, params_b, 4096) + OVERHEAD_BYTES;
         Self {
             path: path.to_path_buf(),
@@ -117,9 +139,11 @@ fn kv_cache_bytes(h: Option<&GgufHeader>, params_b: Option<f64>, ctx: u64) -> u6
     if let Some(h) = h {
         if let Some(a) = h.architecture() {
             let g = |k: &str| h.get_u64(&format!("{a}.{k}"));
-            if let (Some(layers), Some(emb), Some(heads)) =
-                (g("block_count"), g("embedding_length"), g("attention.head_count"))
-            {
+            if let (Some(layers), Some(emb), Some(heads)) = (
+                g("block_count"),
+                g("embedding_length"),
+                g("attention.head_count"),
+            ) {
                 let kv_heads = g("attention.head_count_kv").unwrap_or(heads).max(1);
                 let kv_dim = emb * kv_heads / heads.max(1);
                 return 2 * layers * ctx * kv_dim * 2;
@@ -176,7 +200,14 @@ impl Default for ScanOptions {
 pub fn default_scan_dirs() -> Vec<PathBuf> {
     let mut v = Vec::new();
     if let Some(h) = paths::home_dir() {
-        for d in ["AI/models", "models", ".cache/llama.cpp", ".ollama/models/blobs", ".lmstudio/models", "Downloads"] {
+        for d in [
+            "AI/models",
+            "models",
+            ".cache/llama.cpp",
+            ".ollama/models/blobs",
+            ".lmstudio/models",
+            "Downloads",
+        ] {
             v.push(h.join(d));
         }
     }
@@ -263,10 +294,22 @@ pub struct ScanProgress {
 /// [`scan`] with a progress callback (called on entering each directory and
 /// for each model found) and a cancel flag. When cancelled it stops soon and
 /// returns what it found so far (check `cancel.is_cancelled()`).
-pub fn scan_with_progress(opts: &ScanOptions, cancel: &CancelToken, mut progress: impl FnMut(ScanProgress)) -> ScanReport {
+pub fn scan_with_progress(
+    opts: &ScanOptions,
+    cancel: &CancelToken,
+    mut progress: impl FnMut(ScanProgress),
+) -> ScanReport {
     let mut seen = HashSet::new();
-    let mut report = ScanReport { models: Vec::new(), dirs: Vec::new(), warnings: Vec::new() };
-    let mut st = WalkState { cancel, progress: &mut progress, files_seen: 0 };
+    let mut report = ScanReport {
+        models: Vec::new(),
+        dirs: Vec::new(),
+        warnings: Vec::new(),
+    };
+    let mut st = WalkState {
+        cancel,
+        progress: &mut progress,
+        files_seen: 0,
+    };
     for dir in &opts.dirs {
         if cancel.is_cancelled() {
             break;
@@ -276,7 +319,11 @@ pub fn scan_with_progress(opts: &ScanOptions, cancel: &CancelToken, mut progress
         if exists {
             walk(dir, 0, opts, &mut seen, &mut report, &mut st);
         }
-        report.dirs.push(DirStatus { path: dir.clone(), exists, models_found: report.models.len() - before });
+        report.dirs.push(DirStatus {
+            path: dir.clone(),
+            exists,
+            models_found: report.models.len() - before,
+        });
     }
     report
 }
@@ -336,7 +383,12 @@ pub fn spawn_scan(opts: ScanOptions) -> ScanHandle {
             let _ = dtx.send(r);
         })
         .expect("spawn scan thread");
-    ScanHandle { progress_rx, done_rx, last: None, cancel }
+    ScanHandle {
+        progress_rx,
+        done_rx,
+        last: None,
+        cancel,
+    }
 }
 
 fn walk(
@@ -350,7 +402,11 @@ fn walk(
     if st.cancel.is_cancelled() {
         return;
     }
-    (st.progress)(ScanProgress { dir: dir.to_path_buf(), files_seen: st.files_seen, models_found: r.models.len() });
+    (st.progress)(ScanProgress {
+        dir: dir.to_path_buf(),
+        files_seen: st.files_seen,
+        models_found: r.models.len(),
+    });
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(e) => {
@@ -367,7 +423,9 @@ fn walk(
         }
         st.files_seen += 1;
         let p = e.path();
-        let Ok(meta) = std::fs::metadata(&p) else { continue }; // follows symlinks (HF snapshots)
+        let Ok(meta) = std::fs::metadata(&p) else {
+            continue;
+        }; // follows symlinks (HF snapshots)
         if meta.is_dir() {
             let hidden = e.file_name().to_string_lossy().starts_with('.');
             if depth < opts.max_depth && !hidden && !e.file_type().is_ok_and(|t| t.is_symlink()) {
@@ -381,7 +439,11 @@ fn walk(
         let name = e.file_name().to_string_lossy().into_owned();
         let source = if name.to_ascii_lowercase().ends_with(".gguf") {
             ModelSource::File
-        } else if opts.include_ollama_blobs && in_blobs && name.starts_with("sha256") && gguf::is_gguf(&p) {
+        } else if opts.include_ollama_blobs
+            && in_blobs
+            && name.starts_with("sha256")
+            && gguf::is_gguf(&p)
+        {
             ModelSource::OllamaBlob
         } else {
             continue;
@@ -397,7 +459,11 @@ fn walk(
         match ModelInfo::from_path(&p, source) {
             Ok(m) => {
                 r.models.push(m);
-                (st.progress)(ScanProgress { dir: dir.to_path_buf(), files_seen: st.files_seen, models_found: r.models.len() });
+                (st.progress)(ScanProgress {
+                    dir: dir.to_path_buf(),
+                    files_seen: st.files_seen,
+                    models_found: r.models.len(),
+                });
             }
             Err(err) => r.warnings.push(format!("{}: {err}", p.display())),
         }
@@ -463,7 +529,14 @@ pub fn recommend(models: &[ModelInfo], total_ram: Option<u64>) -> Vec<Recommenda
             } else {
                 Tier::Ok
             };
-            Recommendation { index: i, path: m.path.clone(), name: m.name.clone(), score, tier, reasons }
+            Recommendation {
+                index: i,
+                path: m.path.clone(),
+                name: m.name.clone(),
+                score,
+                tier,
+                reasons,
+            }
         })
         .collect();
     out.sort_by(|a, b| b.score.cmp(&a.score).then(a.path.cmp(&b.path)));
@@ -495,7 +568,9 @@ fn score_model(m: &ModelInfo, budget: u64) -> (i32, Vec<String>) {
         }
         Some(p) if p < 1.0 => {
             s += 8;
-            why.push(format!("{p:.1}B: very fast, weak persona (good for smoke tests)"));
+            why.push(format!(
+                "{p:.1}B: very fast, weak persona (good for smoke tests)"
+            ));
         }
         Some(p) => {
             s -= 20;
@@ -518,17 +593,28 @@ fn score_model(m: &ModelInfo, budget: u64) -> (i32, Vec<String>) {
     why.push(qwhy.to_string());
     if m.est_ram_bytes <= budget {
         s += 20;
-        why.push(format!("~{} RAM, fits the {} budget", gib(m.est_ram_bytes), gib(budget)));
+        why.push(format!(
+            "~{} RAM, fits the {} budget",
+            gib(m.est_ram_bytes),
+            gib(budget)
+        ));
     } else {
         s -= 50;
-        why.push(format!("~{} RAM, over the {} budget", gib(m.est_ram_bytes), gib(budget)));
+        why.push(format!(
+            "~{} RAM, over the {} budget",
+            gib(m.est_ram_bytes),
+            gib(budget)
+        ));
     }
     let lname = format!("{} {}", m.name, m.file_name).to_ascii_lowercase();
     if lname.contains("dolphin") {
         s += 5;
         why.push("Dolphin: Ko's preferred brain".into());
     }
-    if ["instruct", "chat", "dolphin", "hermes", "-it"].iter().any(|k| lname.contains(k)) {
+    if ["instruct", "chat", "dolphin", "hermes", "-it"]
+        .iter()
+        .any(|k| lname.contains(k))
+    {
         s += 5;
     } else if lname.contains("base") {
         s -= 10;
@@ -569,9 +655,19 @@ mod tests {
     #[test]
     fn ranks_3b_q4km_first_on_8gb() {
         let models = vec![
-            fake("qwen2.5-0.5b-instruct-q4_k_m.gguf", 470, Some("Q4_K_M"), 0.5),
+            fake(
+                "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+                470,
+                Some("Q4_K_M"),
+                0.5,
+            ),
             fake("llama-3.1-8b-instruct-f16.gguf", 15300, Some("F16"), 8.0),
-            fake("dolphin3.0-llama3.2-3b-q4_k_m.gguf", 1930, Some("Q4_K_M"), 3.2),
+            fake(
+                "dolphin3.0-llama3.2-3b-q4_k_m.gguf",
+                1930,
+                Some("Q4_K_M"),
+                3.2,
+            ),
             fake("llama-3.2-3b-instruct-q8_0.gguf", 3300, Some("Q8_0"), 3.2),
         ];
         let r = recommend(&models, Some(8 * 1024 * 1024 * 1024));
@@ -623,7 +719,11 @@ mod tests {
         let r = scan(&opts);
         std::fs::remove_dir_all(&root).ok();
         assert_eq!(r.models.len(), 2, "{r:#?}");
-        let f = r.models.iter().find(|m| m.source == ModelSource::File).unwrap();
+        let f = r
+            .models
+            .iter()
+            .find(|m| m.source == ModelSource::File)
+            .unwrap();
         assert_eq!(f.name, "Tiny Test");
         assert_eq!(f.quant.as_deref(), Some("Q4_K_M"));
         assert_eq!(f.context_length, Some(32768));
@@ -647,7 +747,12 @@ mod tests {
     #[test]
     fn progress_is_reported() {
         let root = tree_with_models("progress", 3);
-        let opts = ScanOptions { dirs: vec![root.clone()], max_depth: 3, include_ollama_blobs: false, min_size_bytes: 1 };
+        let opts = ScanOptions {
+            dirs: vec![root.clone()],
+            max_depth: 3,
+            include_ollama_blobs: false,
+            min_size_bytes: 1,
+        };
         let mut events = Vec::new();
         let r = scan_with_progress(&opts, &CancelToken::new(), |p| events.push(p));
         std::fs::remove_dir_all(&root).ok();
@@ -655,13 +760,20 @@ mod tests {
         assert_eq!(events.first().unwrap().dir, root);
         assert_eq!(events.last().unwrap().models_found, 3);
         assert!(events.last().unwrap().files_seen >= 6);
-        assert!(events.windows(2).all(|w| w[0].files_seen <= w[1].files_seen));
+        assert!(events
+            .windows(2)
+            .all(|w| w[0].files_seen <= w[1].files_seen));
     }
 
     #[test]
     fn cancel_stops_the_scan() {
         let root = tree_with_models("cancel", 4);
-        let opts = ScanOptions { dirs: vec![root.clone(), root.clone()], max_depth: 3, include_ollama_blobs: false, min_size_bytes: 1 };
+        let opts = ScanOptions {
+            dirs: vec![root.clone(), root.clone()],
+            max_depth: 3,
+            include_ollama_blobs: false,
+            min_size_bytes: 1,
+        };
         let cancel = CancelToken::new();
         let c = cancel.clone();
         let r = scan_with_progress(&opts, &cancel, |p| {
@@ -683,7 +795,12 @@ mod tests {
         assert_send::<ScanHandle>();
         assert_send::<CancelToken>();
         let root = tree_with_models("spawn", 2);
-        let opts = ScanOptions { dirs: vec![root.clone()], max_depth: 3, include_ollama_blobs: false, min_size_bytes: 1 };
+        let opts = ScanOptions {
+            dirs: vec![root.clone()],
+            max_depth: 3,
+            include_ollama_blobs: false,
+            min_size_bytes: 1,
+        };
         let mut h = spawn_scan(opts);
         let start = std::time::Instant::now();
         let r = loop {

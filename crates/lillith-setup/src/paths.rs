@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 
 /// `$HOME`, if set and non-empty.
 pub fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").filter(|h| !h.is_empty()).map(PathBuf::from)
+    std::env::var_os("HOME")
+        .filter(|h| !h.is_empty())
+        .map(PathBuf::from)
 }
 
 fn xdg(var: &str, fallback: &str) -> Option<PathBuf> {

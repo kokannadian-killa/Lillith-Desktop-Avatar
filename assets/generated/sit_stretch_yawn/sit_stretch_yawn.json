@@ -1,0 +1,440 @@
+{
+  "name": "sit_stretch_yawn",
+  "placeholder": false,
+  "frame_count": 47,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "sit_stretch_yawn_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.5,
+  "body_anchor_x": 200,
+  "facing": "right (side profile, seated on an edge)",
+  "source_files": [
+    "../../source/video/sit_stretch_yawn/sit_stretch_yawn_v3_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 93,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1,
+    592.1
+  ],
+  "horn_fix": {
+    "ref_horn_px": 529,
+    "ref_hue_median": 264.3,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      -0.3,
+      -1.0,
+      0.2,
+      -0.7,
+      -0.1,
+      -0.6,
+      0.6,
+      0.8,
+      1.3,
+      1.1,
+      1.9,
+      1.6,
+      1.4,
+      1.5,
+      3.4,
+      0.6,
+      0.5,
+      -1.4,
+      -0.3,
+      -0.0,
+      0.8,
+      3.2,
+      4.4,
+      6.8,
+      8.9,
+      9.7,
+      9.3,
+      8.6,
+      7.0,
+      4.4,
+      2.7,
+      0.1,
+      -0.4,
+      -0.1,
+      1.6,
+      -0.5,
+      0.3,
+      1.1,
+      0.0,
+      2.2,
+      1.5,
+      0.9,
+      2.7,
+      0.2,
+      0.0,
+      0.3
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Sit variant of sit_swing: arms-forward stretch + yawn behind her hand; whole 4 s video (first = last = sit_swing source still). Take a rejected (arms overhead left the video frame and the camera drifted). Placement aligned like sit_swing.",
+  "seat_y": 230,
+  "seat_x_range": [
+    136,
+    279
+  ],
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      110,
+      290,
+      17,
+      364
+    ],
+    [
+      110,
+      290,
+      17,
+      364
+    ],
+    [
+      110,
+      290,
+      17,
+      364
+    ],
+    [
+      110,
+      290,
+      17,
+      365
+    ],
+    [
+      110,
+      290,
+      16,
+      365
+    ],
+    [
+      109,
+      289,
+      16,
+      365
+    ],
+    [
+      109,
+      289,
+      17,
+      365
+    ],
+    [
+      108,
+      288,
+      17,
+      365
+    ],
+    [
+      108,
+      305,
+      17,
+      365
+    ],
+    [
+      107,
+      321,
+      17,
+      365
+    ],
+    [
+      107,
+      329,
+      17,
+      365
+    ],
+    [
+      106,
+      330,
+      17,
+      365
+    ],
+    [
+      106,
+      330,
+      17,
+      365
+    ],
+    [
+      106,
+      330,
+      18,
+      365
+    ],
+    [
+      106,
+      329,
+      18,
+      365
+    ],
+    [
+      106,
+      329,
+      18,
+      365
+    ],
+    [
+      106,
+      325,
+      17,
+      365
+    ],
+    [
+      105,
+      313,
+      16,
+      365
+    ],
+    [
+      106,
+      293,
+      17,
+      366
+    ],
+    [
+      106,
+      282,
+      18,
+      366
+    ],
+    [
+      103,
+      282,
+      18,
+      366
+    ],
+    [
+      99,
+      285,
+      17,
+      365
+    ],
+    [
+      95,
+      288,
+      18,
+      365
+    ],
+    [
+      91,
+      290,
+      17,
+      364
+    ],
+    [
+      88,
+      292,
+      17,
+      363
+    ],
+    [
+      85,
+      293,
+      18,
+      363
+    ],
+    [
+      81,
+      294,
+      18,
+      363
+    ],
+    [
+      77,
+      294,
+      18,
+      363
+    ],
+    [
+      73,
+      294,
+      18,
+      363
+    ],
+    [
+      69,
+      293,
+      18,
+      363
+    ],
+    [
+      66,
+      291,
+      18,
+      364
+    ],
+    [
+      63,
+      289,
+      18,
+      365
+    ],
+    [
+      59,
+      287,
+      18,
+      365
+    ],
+    [
+      56,
+      286,
+      19,
+      365
+    ],
+    [
+      50,
+      285,
+      19,
+      365
+    ],
+    [
+      37,
+      285,
+      19,
+      365
+    ],
+    [
+      26,
+      286,
+      18,
+      365
+    ],
+    [
+      21,
+      287,
+      17,
+      365
+    ],
+    [
+      27,
+      288,
+      16,
+      365
+    ],
+    [
+      38,
+      290,
+      17,
+      364
+    ],
+    [
+      47,
+      291,
+      17,
+      364
+    ],
+    [
+      55,
+      292,
+      17,
+      364
+    ],
+    [
+      63,
+      292,
+      17,
+      364
+    ],
+    [
+      71,
+      292,
+      17,
+      364
+    ],
+    [
+      80,
+      292,
+      17,
+      364
+    ],
+    [
+      90,
+      291,
+      17,
+      364
+    ],
+    [
+      98,
+      291,
+      17,
+      364
+    ]
+  ],
+  "feet_lowest_y": 366
+}

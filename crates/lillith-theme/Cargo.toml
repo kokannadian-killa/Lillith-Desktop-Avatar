@@ -1,0 +1,19 @@
+[package]
+name = "lillith-theme"
+description = "Lillith's 'ancient demon relic x DemonOS' look: palette, bundled fonts, toolkit-free ornament geometry (runes, skulls, horns, blades, blood drips, claws), plus optional egui Visuals and painter helpers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# egui Visuals/Style + Painter helpers. tiny-skia users (the overlay popup)
+# leave this off and use `palette` + `geom` + `fonts` only.
+egui = ["dep:egui"]
+
+[dependencies]
+egui = { version = "0.31", default-features = false, features = ["default_fonts"], optional = true }

@@ -695,6 +695,7 @@ mod tests {
             muted: false,
             monitor_paused: false,
             scale: 0.55,
+            extras: Default::default(),
         }
     }
 
@@ -721,8 +722,10 @@ mod tests {
             }
         }
         assert!(seen.iter().all(|&s| s), "{seen:?}");
-        // Collapsed: 3 headers + 6 top leaves + 2 separators.
-        assert_eq!(rows_of(&p.menu, None).len(), 11);
+        // Collapsed (no poses): 4 headers (Avatar, Resize, Mode, Mood) +
+        // 8 top leaves (Chat, Minimize, Mute, Pause, Settings, Reset,
+        // About, Close) + 3 separators.
+        assert_eq!(rows_of(&p.menu, None).len(), 15);
         assert!(p.size().1 >= p.content_height());
     }
 
@@ -766,9 +769,19 @@ mod tests {
     #[test]
     fn keyboard_navigation() {
         let mut p = MenuPopup::new(state());
-        assert_eq!(p.key(MenuKey::Down), MenuHit::Changed); // Mode header
+        let mode = find(
+            &p,
+            |r| matches!(r, Row::Header { label, .. } if label == "Mode"),
+        );
+        // Chat (disabled without a chat hook) is skipped; Down walks to Mode.
+        assert_eq!(p.key(MenuKey::Down), MenuHit::Changed);
+        assert_ne!(p.hover, Some(0), "disabled Chat is skipped");
+        while p.hover != Some(mode) {
+            p.key(MenuKey::Down);
+        }
         assert_eq!(p.key(MenuKey::Right), MenuHit::Changed); // expand
-        assert_eq!(p.expanded(), Some(0));
+        assert!(p.expanded().is_some());
+        assert!(matches!(p.rows()[mode], Row::Header { open: true, .. }));
         p.key(MenuKey::Down); // Stay
         p.key(MenuKey::Down); // Wander
         assert_eq!(
@@ -777,9 +790,13 @@ mod tests {
         );
         assert_eq!(p.key(MenuKey::Left), MenuHit::Changed);
         assert_eq!(p.expanded(), None);
-        p.key(MenuKey::Up); // wraps to Quit
-        assert_eq!(p.key(MenuKey::Enter), MenuHit::Pick(MenuAction::Quit));
+        p.key(MenuKey::Up); // the leaf above Mode
+        assert_eq!(p.key(MenuKey::Enter), MenuHit::Pick(MenuAction::Minimize));
         assert_eq!(p.key(MenuKey::Escape), MenuHit::Dismiss);
+        // From the top, Up wraps to Close.
+        let mut p = MenuPopup::new(state());
+        p.key(MenuKey::Up);
+        assert_eq!(p.key(MenuKey::Enter), MenuHit::Pick(MenuAction::Quit));
         let size = MenuPopup::new(MenuState {
             scale: 0.75,
             ..state()
@@ -803,7 +820,11 @@ mod tests {
             assert_eq!(a(&px, 100, p.size().1 - 1), 0);
         }
         assert!(p.render(&mut fonts).is_none(), "nothing changed");
-        assert!(p.pointer(Some((20.0, row_y(&p, 0)))));
+        let avatar = find(
+            &p,
+            |r| matches!(r, Row::Header { label, .. } if label == "Avatar"),
+        );
+        assert!(p.pointer(Some((20.0, row_y(&p, avatar)))));
         assert!(p.render(&mut fonts).is_some());
         assert!(!p.mask(128).is_empty());
     }

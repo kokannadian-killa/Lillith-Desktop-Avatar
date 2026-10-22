@@ -56,17 +56,24 @@ pub struct PhysicsConfig {
     /// Engine gait (physics-lab v3-v5, SPEC 16-18): phase, hip bob, arm /
     /// forearm / torso-twist springs, per-step jiggle, timed view turns with
     /// hard cuts, walking tail sway. Absent = off: walking behaves exactly as
-    /// before and every gait output reads rest.
+    /// before and every gait output reads rest. Present with
+    /// `enabled = false` (the bundled file) = also off, tunables kept.
     #[serde(default)]
     pub gait: Option<Gait>,
 }
 
-/// `[gait]`: angles in DEGREES, + arm = swung forward (toward facing),
-/// + twist = right shoulder forward. Missing keys take the physics-lab v5
-/// values ([`Gait::default`]).
+/// `[gait]`: angles in DEGREES; positive arm = swung forward (toward
+/// facing), positive twist = right shoulder forward. Missing keys take the
+/// physics-lab v5 values ([`Gait::default`]).
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Gait {
+    /// Master switch. A `[gait]` table without the key is on (physics-lab
+    /// files); the bundled `assets/physics.toml` ships `enabled = false`
+    /// because the canonical v2 walk/strut/run clips bake their leg/arm
+    /// motion. Even when on, clips whose manifest `disable_springs` names
+    /// `gait` (see `SpringMask::GAIT_GROUP`) are not driven.
+    pub enabled: bool,
     /// Stance fraction per leg (two legs 0.5 apart).
     pub duty: f32,
     /// Stride weight 0 -> 1 over this after the turn-in, 1 -> 0 after a stop.
@@ -126,6 +133,7 @@ impl Default for Gait {
             max_offset: None,
         };
         Self {
+            enabled: true,
             duty: 0.6,
             start_ramp_s: 0.45,
             stop_ramp_s: 0.45,
@@ -528,6 +536,11 @@ impl PhysicsConfig {
         Self::from_toml_str(&s)
     }
 
+    /// `[gait]` when present AND `enabled` (the driver's start-up state).
+    pub fn active_gait(&self) -> Option<Gait> {
+        self.gait.filter(|g| g.enabled)
+    }
+
     /// The bundled `assets/physics.toml` (validated by tests).
     pub fn bundled() -> Self {
         Self::bundled_shared().clone()
@@ -552,24 +565,42 @@ impl PhysicsConfig {
     }
 
     /// Applies the user's `config.toml [springs]` (README-SP keys) over
-    /// `[springs]` stiffness/damping and `[gains]`. The defaults are identical,
-    /// so this is a no-op unless the user tuned something. Clamps stay.
+    /// `[springs]` stiffness/damping and `[gains]`. Only values the user
+    /// actually tuned (that differ from [`UserSprings::default`], the
+    /// README-SP defaults) are applied, so physics.toml's own retunes (e.g.
+    /// the physics-lab chest/pigtail springs) survive an untouched
+    /// config.toml. Clamps stay.
     pub fn apply_user_springs(&mut self, u: &UserSprings) {
-        let set = |c: &mut SpringCfg, p: crate::spring::SpringParams| {
-            c.stiffness = p.stiffness;
-            c.damping = p.damping;
+        let d = UserSprings::default();
+        let set =
+            |c: &mut SpringCfg, p: crate::spring::SpringParams, dp: crate::spring::SpringParams| {
+                if p != dp {
+                    c.stiffness = p.stiffness;
+                    c.damping = p.damping;
+                }
+            };
+        set(&mut self.springs.root_x, u.root, d.root);
+        set(&mut self.springs.root_y, u.root, d.root);
+        set(&mut self.springs.angle, u.angle, d.angle);
+        set(&mut self.springs.scale, u.scale, d.scale);
+        set(&mut self.springs.chest, u.chest, d.chest);
+        set(&mut self.springs.pigtails, u.pig, d.pig);
+        let gain = |g: &mut f32, v: f32, dv: f32| {
+            if v != dv {
+                *g = v;
+            }
         };
-        set(&mut self.springs.root_x, u.root);
-        set(&mut self.springs.root_y, u.root);
-        set(&mut self.springs.angle, u.angle);
-        set(&mut self.springs.scale, u.scale);
-        set(&mut self.springs.chest, u.chest);
-        set(&mut self.springs.pigtails, u.pig);
-        self.gains = Gains {
-            jiggle: u.jiggle_gain,
-            chest_bounce: u.chest_bounce_gain,
-            pigtail_sway: u.pigtail_sway_gain,
-        };
+        gain(&mut self.gains.jiggle, u.jiggle_gain, d.jiggle_gain);
+        gain(
+            &mut self.gains.chest_bounce,
+            u.chest_bounce_gain,
+            d.chest_bounce_gain,
+        );
+        gain(
+            &mut self.gains.pigtail_sway,
+            u.pigtail_sway_gain,
+            d.pigtail_sway_gain,
+        );
     }
 
     /// Cross-reference checks: channel names, recipe names, moods.
@@ -691,11 +722,18 @@ mod tests {
         let cfg = PhysicsConfig::bundled(); // panics with every validation error
         assert_eq!(cfg.schema_version, 1);
         assert_eq!(cfg.physics_hz, 120.0);
-        // README-SP defaults == config.rs Springs::default().
+        // Root / angle / scale: README-SP defaults == config.rs
+        // Springs::default(). Chest / pigtails and their gains: the
+        // physics-lab motion-review retune (zeta ~0.75, gains restore peaks).
         let d = UserSprings::default();
-        assert_eq!(cfg.springs.chest.stiffness, d.chest.stiffness);
-        assert_eq!(cfg.springs.chest.damping, d.chest.damping);
-        assert_eq!(cfg.springs.pigtails.stiffness, d.pig.stiffness);
+        assert_eq!(
+            (cfg.springs.chest.stiffness, cfg.springs.chest.damping),
+            (90.0, 14.5)
+        );
+        assert_eq!(
+            (cfg.springs.pigtails.stiffness, cfg.springs.pigtails.damping),
+            (40.0, 9.5)
+        );
         assert_eq!(cfg.springs.root_x.damping, d.root.damping);
         assert_eq!(cfg.springs.angle.stiffness, d.angle.stiffness);
         assert_eq!(cfg.springs.scale.damping, d.scale.damping);
@@ -705,8 +743,20 @@ mod tests {
                 cfg.gains.chest_bounce,
                 cfg.gains.pigtail_sway
             ),
-            (d.jiggle_gain, d.chest_bounce_gain, d.pigtail_sway_gain)
+            (d.jiggle_gain, 1.3, 1.05)
         );
+        // The retune survives an untouched config.toml [springs].
+        let mut applied = cfg.clone();
+        applied.apply_user_springs(&d);
+        assert_eq!(applied.springs.chest, cfg.springs.chest);
+        assert_eq!(applied.springs.pigtails, cfg.springs.pigtails);
+        assert_eq!(applied.gains.chest_bounce, 1.3);
+        // Gait ships present but OFF; the walk footfall no longer kicks
+        // root_y (the [gait] hip bob owns the vertical step).
+        let g = cfg.gait.expect("[gait] table bundled");
+        assert!(!g.enabled && cfg.active_gait().is_none());
+        assert_eq!(cfg.walk.walk_footfall.root_y, 0.0);
+        assert!(cfg.clip_boundary.on_locomotion_change);
         assert!(!BUNDLED_TOML.contains("channel = \"pigtail\""));
         for e in [
             "knife_tap",
@@ -755,6 +805,12 @@ mod tests {
         assert_eq!(cfg.springs.chest.stiffness, 80.0);
         assert_eq!(cfg.springs.chest.max_offset, Some(12.0), "clamps kept");
         assert_eq!(cfg.gains.pigtail_sway, 1.2);
+        // Only CHANGED keys apply: untouched ones keep the physics.toml retune.
+        assert_eq!(
+            (cfg.springs.pigtails.stiffness, cfg.springs.pigtails.damping),
+            (40.0, 9.5)
+        );
+        assert_eq!(cfg.gains.chest_bounce, 1.3);
 
         let bad = BUNDLED_TOML.replacen(
             "{ channel = \"angle\", strength = 0.6, signed = true },",

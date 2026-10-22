@@ -13,6 +13,8 @@ members = [
     "apps/lillith",
     "tools/slice-sheets",
     "tools/import-manifest",
+    "crates/lillith-theme",
+    "crates/lillith-settings-gui",
 ]
 default-members = [
     "crates/lillith-core",
@@ -27,6 +29,8 @@ default-members = [
     "apps/lillith",
     "tools/slice-sheets",
     "tools/import-manifest",
+    "crates/lillith-theme",
+    "crates/lillith-settings-gui",
 ]
 
 [workspace.package]
@@ -48,6 +52,8 @@ lillith-mind = { path = "crates/lillith-mind" }
 lillith-voice = { path = "crates/lillith-voice" }
 lillith-panel = { path = "crates/lillith-panel" }
 lillith-tray = { path = "crates/lillith-tray" }
+lillith-theme = { path = "crates/lillith-theme" }
+lillith-settings-gui = { path = "crates/lillith-settings-gui" }
 lillith-setup = { path = "crates/lillith-setup" }
 
 # Common
@@ -69,6 +75,8 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # Rendering / windowing (PLAN.md §2)
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 tiny-skia = "0.11"
+ab_glyph = "0.2.32"
+epaint_default_fonts = "0.31.1"
 cosmic-text = "0.12"
 smithay-client-toolkit = "0.19"
 wayland-client = "0.31"

@@ -4,6 +4,7 @@
 //! so it needs nothing special from Wayland (PLAN.md §1.1, M6/M7):
 //!
 //! - **Chat** tab: input line + streamed replies (also shown in her bubble).
+//! - [`chat_bubble`]: the small click-to-chat window beside her (own process).
 //! - **Settings** tab: live-edit `config.toml` (springs, thresholds, size, opacity).
 //! - **Poses** tab: browse and play every manifest clip through the animator
 //!   (springs, breathing, idle life, walk flip, reactions) — M2, see [`poses`].
@@ -15,7 +16,9 @@ use eframe::egui;
 use lillith_core::rules::RuleSet;
 use std::path::PathBuf;
 
+pub mod chat_bubble;
 pub mod poses;
+pub mod settings;
 
 /// Which tab is visible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

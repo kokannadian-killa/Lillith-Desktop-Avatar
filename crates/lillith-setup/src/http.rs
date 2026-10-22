@@ -50,9 +50,19 @@ pub fn post_json(
     read_timeout: Duration,
 ) -> Result<Response, HttpError> {
     if body.len() > MAX_REQUEST_BODY {
-        return Err(HttpError::Bad(format!("request body {} bytes > {MAX_REQUEST_BODY}", body.len())));
+        return Err(HttpError::Bad(format!(
+            "request body {} bytes > {MAX_REQUEST_BODY}",
+            body.len()
+        )));
     }
-    request(base, "POST", path, Some(body), connect_timeout, read_timeout)
+    request(
+        base,
+        "POST",
+        path,
+        Some(body),
+        connect_timeout,
+        read_timeout,
+    )
 }
 
 fn request(
@@ -74,7 +84,10 @@ fn request(
         base.host, base.port
     );
     if let Some(b) = body {
-        req.push_str(&format!("Content-Type: application/json\r\nContent-Length: {}\r\n", b.len()));
+        req.push_str(&format!(
+            "Content-Type: application/json\r\nContent-Length: {}\r\n",
+            b.len()
+        ));
     }
     req.push_str("\r\n");
     if let Some(b) = body {
@@ -104,17 +117,28 @@ fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
         l.starts_with("transfer-encoding:") && l.contains("chunked")
     });
     let body = &raw[split + 4..];
-    let body = if chunked { dechunk(body) } else { body.to_vec() };
-    Ok(Response { status, body: String::from_utf8_lossy(&body).into_owned() })
+    let body = if chunked {
+        dechunk(body)
+    } else {
+        body.to_vec()
+    };
+    Ok(Response {
+        status,
+        body: String::from_utf8_lossy(&body).into_owned(),
+    })
 }
 
 fn dechunk(mut b: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     loop {
-        let Some(nl) = b.windows(2).position(|w| w == b"\r\n") else { break };
+        let Some(nl) = b.windows(2).position(|w| w == b"\r\n") else {
+            break;
+        };
         let size_s = String::from_utf8_lossy(&b[..nl]);
         let size_s = size_s.split(';').next().unwrap_or("").trim();
-        let Ok(size) = usize::from_str_radix(size_s, 16) else { break };
+        let Ok(size) = usize::from_str_radix(size_s, 16) else {
+            break;
+        };
         b = &b[nl + 2..];
         if size == 0 || b.len() < size {
             out.extend_from_slice(&b[..size.min(b.len())]);
@@ -185,14 +209,20 @@ pub(crate) mod tests {
 
     #[test]
     fn post_json_against_fake_server() {
-        let port = fake_server(vec![("POST /echo", 200, "{\"ok\":true}"), ("GET /echo", 405, "{}")]);
+        let port = fake_server(vec![
+            ("POST /echo", 200, "{\"ok\":true}"),
+            ("GET /echo", 405, "{}"),
+        ]);
         let u = LocalUrl::parse(&format!("127.0.0.1:{port}"), 1).unwrap();
         let t = Duration::from_secs(2);
         let r = post_json(&u, "/echo", "{\"a\":1}", t, t).unwrap();
         assert_eq!((r.status, r.body.as_str()), (200, "{\"ok\":true}"));
         assert_eq!(get(&u, "/echo", t).unwrap().status, 405);
         let big = "x".repeat(MAX_REQUEST_BODY + 1);
-        assert!(matches!(post_json(&u, "/echo", &big, t, t), Err(HttpError::Bad(_))));
+        assert!(matches!(
+            post_json(&u, "/echo", &big, t, t),
+            Err(HttpError::Bad(_))
+        ));
     }
 
     #[test]
@@ -202,7 +232,10 @@ pub(crate) mod tests {
         let r = get(&u, "/health", Duration::from_secs(2)).unwrap();
         assert_eq!(r.status, 200);
         assert_eq!(r.body, "{\"status\":\"ok\"}");
-        assert_eq!(get(&u, "/nope", Duration::from_secs(2)).unwrap().status, 404);
+        assert_eq!(
+            get(&u, "/nope", Duration::from_secs(2)).unwrap().status,
+            404
+        );
     }
 
     #[test]
@@ -214,7 +247,11 @@ pub(crate) mod tests {
     #[test]
     fn closed_port_is_an_error_not_a_panic() {
         // Bind then drop to get a (very likely) closed port.
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
         let u = LocalUrl::parse(&format!("127.0.0.1:{port}"), 1).unwrap();
         assert!(get(&u, "/", Duration::from_millis(300)).is_err());
     }

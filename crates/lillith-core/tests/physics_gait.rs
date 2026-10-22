@@ -2,8 +2,10 @@
 //! twist, hip bob, per-step jiggle, timed view turns with hard cuts and the
 //! walking tail. Ported from `physics-lab/tests/physics.rs` and run against
 //! a verbatim copy of the lab's physics.toml (`tests/fixtures/
-//! physics_lab_v5.toml`); the bundled assets/physics.toml has no `[gait]`
-//! table, so the in-app behaviour is unchanged until it gets one.
+//! physics_lab_v5.toml`). The bundled assets/physics.toml carries the same
+//! tables but ships `[gait] enabled = false`, and clips that bake their own
+//! walk (manifest `disable_springs = ["gait"]`) suppress it even when on;
+//! see the "bundled gait switch" section at the end.
 
 use lillith_core::config::Springs as UserSprings;
 use lillith_core::physics_config::{ClipBoundary, Gait, PhysicsConfig, BUNDLED_TOML};
@@ -39,6 +41,34 @@ fn walk_driver(mute: bool) -> PhysicsDriver {
     let mut d = driver(&cfg, mute);
     d.set_motion(walk(&cfg));
     d
+}
+
+/// `toml` with its `[gait]` table (header to the next table) cut out.
+fn without_gait_table(toml: &str) -> String {
+    let mut out = String::new();
+    let mut skip = false;
+    for line in toml.lines() {
+        if line.starts_with('[') {
+            skip = line.trim_end().starts_with("[gait]");
+        }
+        if !skip {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// The bundled physics.toml with `[gait] enabled = true` (Ko flips this).
+fn bundled_gait_on() -> PhysicsConfig {
+    let on = BUNDLED_TOML.replacen("[gait]\nenabled = false", "[gait]\nenabled = true", 1);
+    assert_ne!(
+        on, BUNDLED_TOML,
+        "bundled [gait] starts with `enabled = false`"
+    );
+    let cfg = PhysicsConfig::from_toml_str(&on).unwrap();
+    assert!(cfg.active_gait().is_some());
+    cfg
 }
 
 fn tick(d: &mut PhysicsDriver) {
@@ -78,12 +108,16 @@ fn lab_toml_parses_with_gait_defaults_matching() {
 }
 
 #[test]
-fn bundled_toml_has_gait_off_and_boundary_noop() {
+fn bundled_toml_has_gait_off_and_lab_boundary() {
     let cfg = PhysicsConfig::bundled();
-    assert!(cfg.gait.is_none());
-    assert_eq!(cfg.clip_boundary, ClipBoundary::default());
+    let g = cfg.gait.expect("bundled [gait] table");
+    assert!(!g.enabled, "bundled gait ships OFF");
+    assert!(cfg.active_gait().is_none());
+    // Everything else in [gait] is the lab v5 tune.
+    assert_eq!(Gait { enabled: true, ..g }, Gait::default());
+    assert_eq!(cfg.clip_boundary, lab().clip_boundary);
     let mut d = PhysicsDriver::bundled(&UserSprings::default(), HZ, 3);
-    assert!(!d.gait_enabled());
+    assert!(!d.gait_enabled() && !d.gait_active());
     d.set_motion(Motion::Walking {
         vx: 60.0,
         cycle_s: 1.1667,
@@ -98,23 +132,19 @@ fn bundled_toml_has_gait_off_and_boundary_noop() {
         (g.gait_amp, g.left_arm_deg, g.torso_twist_deg, g.hip_bob_px),
         (0.0, 0.0, 0.0, 0.0)
     );
-    assert_eq!(d.heel_strikes().count(), 0);
-    d.set_motion(Motion::Idle);
-    tick(&mut d);
-    assert_eq!(d.gait().turn_view, 0);
 }
 
 #[test]
 fn partial_gait_table_and_validation() {
-    let cfg = PhysicsConfig::from_toml_str(&format!(
-        "{BUNDLED_TOML}\n[gait]\narm_amplitude_deg = 12.0\n"
-    ))
-    .unwrap();
+    let base = without_gait_table(BUNDLED_TOML);
+    let cfg = PhysicsConfig::from_toml_str(&format!("{base}\n[gait]\narm_amplitude_deg = 12.0\n"))
+        .unwrap();
     let g = gait(&cfg);
     assert_eq!(g.arm_amplitude_deg, 12.0);
     assert_eq!(g.duty, Gait::default().duty);
+    assert!(g.enabled, "a [gait] table without `enabled` is on");
     let err = PhysicsConfig::from_toml_str(&format!(
-        "{BUNDLED_TOML}\n[gait]\nduty = 1.5\nturn_cut_lo = 0.9\nturn_cut_hi = 0.1\n"
+        "{base}\n[gait]\nduty = 1.5\nturn_cut_lo = 0.9\nturn_cut_hi = 0.1\n"
     ))
     .unwrap_err();
     assert!(err.contains("duty") && err.contains("turn_cut_lo"), "{err}");
@@ -581,4 +611,230 @@ fn tail_swings_with_the_gait_and_trails_the_hips() {
         .map(|(x, y)| (x.1 - y.1).abs())
         .fold(0.0f32, f32::max);
     assert!(flick > 1.5, "heel-strike flick adds only {flick} px");
+}
+
+// ---------------------------------------------------------------- bundled gait switch + baked-gait clips
+
+/// Walks `d` for `secs` and returns (max |root y|, max |arm|, max |hip bob|,
+/// heel strikes seen, last gait pose).
+fn walk_for(
+    d: &mut PhysicsDriver,
+    secs: f32,
+) -> (f32, f32, f32, usize, lillith_core::physics_driver::GaitPose) {
+    let (mut y, mut arm, mut bob) = (0f32, 0f32, 0f32);
+    for _ in 0..(secs * HZ) as usize {
+        tick(d);
+        let g = d.gait();
+        y = y.max(d.transform().y.abs());
+        arm = arm.max(g.left_arm_deg.abs()).max(g.right_arm_deg.abs());
+        bob = bob.max(g.hip_bob_px.abs());
+    }
+    (y, arm, bob, d.heel_strikes().count(), d.gait())
+}
+
+fn bundled_walk(cfg: &PhysicsConfig) -> Motion {
+    // The canonical walk_right: 14 frames @ 12 fps.
+    Motion::Walking {
+        vx: cfg.walk.demo_speed_px_s,
+        cycle_s: 14.0 / 12.0,
+    }
+}
+
+#[test]
+fn bundled_gait_off_walk_has_no_root_bob_or_gait() {
+    let cfg = PhysicsConfig::bundled();
+    let mut d = driver(&cfg, false);
+    d.set_motion(bundled_walk(&cfg));
+    let (y, arm, bob, strikes, g) = walk_for(&mut d, 3.0);
+    assert!(!d.gait_enabled());
+    // walk_footfall.root_y = 0: the baked frames own the vertical step.
+    assert!(y < 0.05, "root_y bob on a baked walk {y}");
+    assert_eq!((arm, bob, strikes, g.gait_amp), (0.0, 0.0, 0, 0.0));
+    assert!(d.transform().chest_offset.abs() + d.transform().pigtail_offset.abs() > 0.0);
+}
+
+#[test]
+fn gait_on_baked_clip_is_suppressed_like_gait_off() {
+    let on = bundled_gait_on();
+    let mut sup = driver(&on, false);
+    sup.set_gait_suppressed(true); // animator: walk_right has disable_springs = ["gait"]
+    assert!(sup.gait_enabled() && sup.gait_suppressed() && !sup.gait_active());
+    let mut off = driver(&PhysicsConfig::bundled(), false);
+    let w = bundled_walk(&on);
+    sup.set_motion(w);
+    off.set_motion(w);
+    for _ in 0..(3 * 120) {
+        tick(&mut sup);
+        tick(&mut off);
+        // Identical to gait off: same kicks, no gait outputs, no extra bob.
+        assert_eq!(sup.transform(), off.transform());
+        assert_eq!(sup.gait(), off.gait());
+        assert_eq!(sup.overlay().tail_tip_x, off.overlay().tail_tip_x);
+    }
+    let g = sup.gait();
+    assert_eq!(
+        (
+            g.gait_amp,
+            g.hip_bob_px,
+            g.left_arm_deg,
+            g.torso_twist_deg,
+            g.tail_sway_px
+        ),
+        (0.0, 0.0, 0.0, 0.0, 0.0)
+    );
+    assert_eq!(sup.heel_strikes().count(), 0);
+}
+
+#[test]
+fn gait_on_non_baked_clip_is_driven() {
+    let on = bundled_gait_on();
+    let mut d = driver(&on, false);
+    d.set_motion(bundled_walk(&on));
+    assert!(d.gait_active());
+    let (y, arm, bob, strikes, g) = walk_for(&mut d, 3.0);
+    assert!(g.gait_amp > 0.99, "stride ramped in {}", g.gait_amp);
+    assert!(arm > 10.0, "arms swing {arm}");
+    assert!(bob > 2.0, "hip bob {bob}");
+    assert!(strikes >= 3, "heel strikes {strikes}");
+    // The hip bob is the ONLY vertical step motion: no root_y footfall kick
+    // on top (walk_footfall.root_y = 0), so no double bob.
+    assert!(y < 0.05, "root_y moved {y} on top of the hip bob");
+}
+
+#[test]
+fn baked_gait_toggle_mid_walk_parks_and_resumes() {
+    let on = bundled_gait_on();
+    let mut d = driver(&on, false);
+    d.set_motion(bundled_walk(&on));
+    walk_for(&mut d, 2.0);
+    assert!(d.gait_amp() > 0.99);
+    // Walk -> strut swap to a baked clip: everything parks at once.
+    d.set_gait_suppressed(true);
+    let g = d.gait();
+    assert_eq!((g.gait_amp, g.left_arm_deg, g.hip_bob_px), (0.0, 0.0, 0.0));
+    assert_eq!(g.turn_view, 2, "still the side view while walking");
+    walk_for(&mut d, 0.5);
+    assert_eq!(d.gait().right_forearm_deg, 0.0);
+    // Back to a non-baked clip mid-walk: no re-turn, the stride ramps in.
+    d.set_gait_suppressed(false);
+    tick(&mut d);
+    assert_eq!(d.gait().turn_progress, 1.0);
+    let (_, arm, _, _, g) = walk_for(&mut d, 1.0);
+    assert!(
+        g.gait_amp > 0.99 && arm > 10.0,
+        "amp {} arm {arm}",
+        g.gait_amp
+    );
+    // Runtime switch behaves the same way.
+    d.set_gait_enabled(false);
+    assert!(!d.gait_enabled() && !d.gait_active());
+    assert_eq!(d.gait().gait_amp, 0.0);
+    d.set_gait_enabled(true);
+    assert!(d.gait_active());
+}
+
+#[test]
+fn gait_on_with_frame_footfalls_does_not_double_the_steps() {
+    let on = bundled_gait_on();
+    let mut d = driver(&on, false);
+    d.set_frame_footfalls(true); // the animator feeds contact frames
+    d.set_motion(bundled_walk(&on));
+    let (_, arm, _, strikes, g) = walk_for(&mut d, 2.0);
+    assert!(
+        g.gait_amp > 0.99 && arm > 10.0,
+        "gait still drives the body"
+    );
+    assert_eq!(
+        strikes, 0,
+        "no phase-derived heel strikes on top of contact frames"
+    );
+    d.on_footfall(1);
+    assert_eq!(d.heel_strikes().count(), 1);
+}
+
+// ---------------------------------------------------------------- run footfall root_y guard
+
+fn bundled_run(cfg: &PhysicsConfig) -> Motion {
+    // The canonical run_right: 10 frames @ 12 fps.
+    Motion::Running {
+        vx: 2.0 * cfg.walk.demo_speed_px_s,
+        cycle_s: 10.0 / 12.0,
+    }
+}
+
+/// Max |root y| over `secs` of running, impulses only (breathing etc. muted
+/// out by diffing against a muted twin).
+fn run_root_y(mut d: PhysicsDriver, secs: f32, frame_footfalls: bool) -> f32 {
+    let mut quiet = PhysicsDriver::from_config(d.config().clone(), 3);
+    quiet.auto_idle = false;
+    quiet.mute_impulses = true;
+    quiet.set_gait_enabled(d.gait_enabled());
+    quiet.set_gait_suppressed(d.gait_suppressed());
+    let m = bundled_run(d.config());
+    d.set_motion(m);
+    quiet.set_motion(m);
+    let mut y = 0f32;
+    for i in 0..(secs * HZ) as usize {
+        if frame_footfalls && i % 50 == 0 {
+            d.on_footfall((i / 50) as u32);
+        }
+        tick(&mut d);
+        tick(&mut quiet);
+        y = y.max((d.transform().y - quiet.transform().y).abs());
+    }
+    y
+}
+
+#[test]
+fn baked_run_clip_gets_no_run_footfall_root_y() {
+    let off = PhysicsConfig::bundled();
+    assert!(
+        off.walk.run_footfall.root_y > 0.0,
+        "the recipe still has a run bob"
+    );
+    for cfg in [off, bundled_gait_on()] {
+        for frames in [false, true] {
+            let mut d = driver(&cfg, false);
+            d.set_gait_suppressed(true); // run_right: disable_springs = ["gait"]
+            assert_eq!(d.footfall_root_y(30.0), 0.0);
+            let y = run_root_y(d, 2.0, frames);
+            assert!(
+                y < 1e-3,
+                "baked run root_y {y} (gait {:?}, frames {frames})",
+                cfg.gait.map(|g| g.enabled)
+            );
+        }
+    }
+}
+
+#[test]
+fn non_baked_run_clip_with_gait_on_gets_no_root_y_kick() {
+    let on = bundled_gait_on();
+    for frames in [false, true] {
+        let mut d = driver(&on, false);
+        if frames {
+            d.set_frame_footfalls(true);
+        }
+        assert!(d.gait_active());
+        assert_eq!(d.footfall_root_y(30.0), 0.0);
+        let y = run_root_y(d, 2.0, frames);
+        assert!(y < 1e-3, "gait run root_y {y} (frames {frames})");
+    }
+    // ...the vertical step comes from the gait hip bob instead.
+    let mut d = driver(&on, false);
+    d.set_motion(bundled_run(&on));
+    let (_, _, bob, _, _) = walk_for(&mut d, 2.0);
+    assert!(bob > 2.0, "hip bob {bob}");
+}
+
+#[test]
+fn non_baked_run_clip_with_gait_off_keeps_the_run_bob() {
+    let cfg = PhysicsConfig::bundled();
+    let d = driver(&cfg, false);
+    assert!(!d.gait_active() && !d.gait_suppressed());
+    assert_eq!(d.footfall_root_y(30.0), 30.0);
+    for frames in [false, true] {
+        let y = run_root_y(driver(&cfg, false), 2.0, frames);
+        assert!(y > 0.5, "run footfall root_y bob {y} (frames {frames})");
+    }
 }

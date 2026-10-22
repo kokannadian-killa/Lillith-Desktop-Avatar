@@ -57,7 +57,13 @@ pub struct BehaviorConfig {
     pub left_repeat_s: f32,
     /// Pause between wander walks, `[min, max]` s.
     pub wander_every_s: (f32, f32),
+    /// Glide speed for walks whose clip has no `root_motion`. Walk clips
+    /// with root motion set their own pace (see `walk_root_motion`).
     pub wander_speed_px_s: f32,
+    /// Move the window by the walk clip's measured root motion (the overlay
+    /// feeds [`Brain::root_motion`]) so the planted foot stays put on the
+    /// desktop, instead of gliding at `wander_speed_px_s`.
+    pub walk_root_motion: bool,
     /// Shortest walk worth taking (px).
     pub wander_min_step_px: f32,
     /// Events at or above this priority wake her up.
@@ -65,6 +71,48 @@ pub struct BehaviorConfig {
     /// Idle life: breathing, blinks, idle transitions/gestures, idle-take
     /// switching (`[behavior.idle]`).
     pub idle: crate::idle::IdleConfig,
+    /// Window-bottom margin (px, like `[overlay] margin_bottom`) of the
+    /// floor she falls to when the KWin bridge has not reported the usable
+    /// area (no bridge, or before its first snapshot).
+    pub floor_offset_px: i32,
+    /// Falling after a drop and perching on windows (`[behavior.gravity]`).
+    pub gravity: GravityConfig,
+}
+
+/// `[behavior.gravity]`: after a drag-release she falls (holding the
+/// `drag_held` pose), bounces softly and lands on the floor or, with the
+/// KWin bridge, on the top edge of the window under her.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GravityConfig {
+    /// Gravity (px/s², +down). `0` turns falling off: she stays where dropped.
+    pub g_px_s2: f32,
+    /// Terminal fall speed (px/s).
+    pub max_fall_speed: f32,
+    /// Landing bounce: fraction of the impact speed she rebounds with
+    /// (`0` = no bounce, clamped to 0..0.9). Bounces slower than ~60 px/s
+    /// settle instead.
+    pub bounce: f32,
+    /// Land on window tops (needs the `kwin/lillith-bridge` script); off =
+    /// always the floor.
+    pub perch_enabled: bool,
+    /// Pause between sits while perched, `[min, max]` s.
+    pub sit_every_s: (f32, f32),
+    /// How long a sit on a window edge lasts, `[min, max]` s.
+    pub sit_for_s: (f32, f32),
+}
+
+impl Default for GravityConfig {
+    fn default() -> Self {
+        Self {
+            g_px_s2: 2600.0,
+            max_fall_speed: 2200.0,
+            bounce: 0.22,
+            perch_enabled: true,
+            sit_every_s: (8.0, 20.0),
+            sit_for_s: (20.0, 45.0),
+        }
+    }
 }
 
 impl Default for BehaviorConfig {
@@ -77,11 +125,14 @@ impl Default for BehaviorConfig {
             asleep_after_s: 900.0,
             pose_cycle_s: 45.0,
             left_repeat_s: 4.0,
-            wander_every_s: (60.0, 120.0),
-            wander_speed_px_s: 60.0,
+            wander_every_s: (20.0, 45.0),
+            wander_speed_px_s: 45.0,
+            walk_root_motion: true,
             wander_min_step_px: 120.0,
             event_wake_priority: 80,
             idle: crate::idle::IdleConfig::default(),
+            floor_offset_px: 48,
+            gravity: GravityConfig::default(),
         }
     }
 }
@@ -280,6 +331,10 @@ pub struct Brain {
     x: f32,
     area: Option<(f32, f32)>,
     muted: bool,
+    /// The overlay drives walks by root motion right now.
+    root_motion: bool,
+    /// Last clip picked from each `[rule_clip_pools]` entry (no repeats).
+    last_pool_pick: BTreeMap<String, String>,
     out: Vec<Action>,
 }
 
@@ -316,6 +371,8 @@ impl Brain {
             x: 0.0,
             area: None,
             muted: false,
+            root_motion: false,
+            last_pool_pick: BTreeMap::new(),
             out: Vec::new(),
         }
     }
@@ -360,6 +417,13 @@ impl Brain {
     pub fn config(&self) -> &BehaviorConfig {
         &self.cfg
     }
+    /// Wander walking speed (screen px/s), e.g. matched to the walk clip's
+    /// foot-locked `move_speed_px_s` so her boots don't slide.
+    pub fn set_walk_speed(&mut self, px_s: f32) {
+        if px_s.is_finite() && px_s > 0.0 {
+            self.cfg.wander_speed_px_s = px_s;
+        }
+    }
 
     // ── Setup from the overlay ───────────────────────────────────────────
 
@@ -371,6 +435,67 @@ impl Brain {
     /// Current x (after a drop or at start-up).
     pub fn set_position(&mut self, x: f32) {
         self.x = x;
+    }
+
+    /// She lost her footing (her window moved/closed under her): like a
+    /// drag start without the poke reaction: walks stop, the drag pose
+    /// (`input.drag`) plays while she falls. [`Input::DragEnd`] lands her.
+    pub fn begin_fall(&mut self) -> Vec<Action> {
+        self.phase = Phase::Dragged;
+        if let Some(clip) = self.resolve("input.drag") {
+            self.out.push(Action::SetBase { clip });
+        }
+        self.take()
+    }
+
+    /// The overlay reports whether the drawn walk has root motion. While on
+    /// (and `walk_root_motion` is set) walks advance only through
+    /// [`Brain::root_motion`], not at `wander_speed_px_s`.
+    pub fn set_root_motion(&mut self, on: bool) {
+        self.root_motion = on && self.cfg.walk_root_motion;
+    }
+
+    /// Ground the walk animation covered this tick (screen px, signed,
+    /// +x = right). While walking she advances by it (never past the
+    /// target, which ends the walk); right after a stop it carries the last
+    /// steps of the walk-out, clamped to the wander area.
+    pub fn root_motion(&mut self, dx: f32) -> Vec<Action> {
+        if dx == 0.0 || !self.root_motion {
+            return self.take();
+        }
+        match self.phase {
+            Phase::Walking { target, .. } => {
+                let d = target - self.x;
+                if dx.signum() != d.signum() || dx.abs() >= d.abs() {
+                    self.x = target;
+                    self.phase = Phase::Idle;
+                    self.out.push(Action::MoveTo {
+                        left: self.x.round() as i32,
+                    });
+                    self.out.push(Action::Stand);
+                    self.schedule_wander();
+                } else {
+                    self.x += dx;
+                    self.out.push(Action::MoveTo {
+                        left: self.x.round() as i32,
+                    });
+                }
+            }
+            Phase::Idle => {
+                let mut x = self.x + dx;
+                if let Some((lo, hi)) = self.area {
+                    x = x.clamp(lo, hi);
+                }
+                if x != self.x {
+                    self.x = x;
+                    self.out.push(Action::MoveTo {
+                        left: self.x.round() as i32,
+                    });
+                }
+            }
+            _ => {}
+        }
+        self.take()
     }
 
     pub fn set_mode(&mut self, mode: MoveMode) -> Vec<Action> {
@@ -485,7 +610,8 @@ impl Brain {
         }
 
         // Walking.
-        if let Phase::Walking { target, .. } = self.phase {
+        // (With root motion on, the overlay advances her via `root_motion`.)
+        if let (Phase::Walking { target, .. }, false) = (self.phase, self.root_motion) {
             let step = self.cfg.wander_speed_px_s * dt;
             let d = target - self.x;
             if d.abs() <= step {
@@ -544,6 +670,26 @@ impl Brain {
         }
         let pose = &self.rules.find(event)?.pose;
         self.has(pose).then(|| pose.clone())
+    }
+
+    /// A random loaded clip from the event's `[rule_clip_pools]` entry,
+    /// never the one picked last time for that event.
+    fn resolve_pool(&mut self, event: &str) -> Option<String> {
+        let pool: Vec<String> = self
+            .rules
+            .clip_pool(event)
+            .iter()
+            .filter(|c| self.has(c))
+            .cloned()
+            .collect();
+        let last = self
+            .last_pool_pick
+            .get(event)
+            .and_then(|l| pool.iter().position(|c| c == l));
+        let i = crate::bag::pick_no_repeat(&mut self.rng, pool.len(), last)?;
+        let clip = pool[i].clone();
+        self.last_pool_pick.insert(event.to_string(), clip.clone());
+        Some(clip)
     }
 
     /// Clip for a key-map pose: the clip itself, else the clip of the first
@@ -635,7 +781,7 @@ impl Brain {
             self.cooldowns
                 .insert(event.to_string(), self.t + rule.cooldown_s);
         }
-        if let Some(clip) = self.resolve(event) {
+        if let Some(clip) = self.resolve_pool(event).or_else(|| self.resolve(event)) {
             self.out.push(Action::React {
                 clip,
                 priority: priority.unwrap_or(rule.priority),
@@ -1054,10 +1200,12 @@ mod tests {
             Some(d.gestures.secret_window_s as f64)
         );
         assert_eq!(crate::config::Config::default().pose_cycle_s, None);
-        // Calm defaults: long pose cycle, slow wander, she stays put.
+        // Defaults: long pose cycle, calm but regular wandering (Ko: she
+        // walks left and right on her own between idle poses).
         assert_eq!(d.pose_cycle_s, 45.0);
-        assert_eq!(d.wander_every_s, (60.0, 120.0));
-        assert_eq!(crate::config::Config::default().mode, MoveMode::Stay);
+        assert_eq!(d.wander_every_s, (20.0, 45.0));
+        assert_eq!(d.wander_speed_px_s, 45.0);
+        assert_eq!(crate::config::Config::default().mode, MoveMode::Wander);
     }
 
     #[test]
@@ -1230,6 +1378,44 @@ mod tests {
     }
 
     #[test]
+    fn hover_and_click_pick_flirty_pool_clips_without_repeats() {
+        let mut clips: Vec<String> = CLIPS.iter().map(|s| s.to_string()).collect();
+        for c in [
+            "hip_pop_wink",
+            "blow_kiss",
+            "lean_tease",
+            "cheeky_tongue_wink",
+        ] {
+            clips.push(c.to_string());
+        }
+        let mut b = Brain::new(
+            BehaviorConfig {
+                sleepy_after_s: 1e6,
+                asleep_after_s: 2e6,
+                ..BehaviorConfig::default()
+            },
+            MoveMode::Stay,
+            RuleSet::bundled(),
+            clips,
+            11,
+        );
+        let mut seen = Vec::new();
+        for _ in 0..12 {
+            let a = b.input(Input::Hover(true));
+            let r: Vec<String> = reacts(&a).into_iter().map(String::from).collect();
+            assert_eq!(r.len(), 1, "{r:?}");
+            assert!(["hip_pop_wink", "blow_kiss", "lean_tease"].contains(&&*r[0]));
+            seen.push(r[0].clone());
+            b.input(Input::Hover(false));
+            run(&mut b, 3.5, false);
+        }
+        for w in seen.windows(2) {
+            assert_ne!(w[0], w[1], "{seen:?}");
+        }
+        assert!(seen.iter().collect::<std::collections::BTreeSet<_>>().len() >= 2);
+    }
+
+    #[test]
     fn drag_sets_pose_and_drop_stands() {
         let mut b = brain();
         let a = b.input(Input::DragStart);
@@ -1239,6 +1425,17 @@ mod tests {
         }));
         // Clicks during a drag (other buttons) do nothing visible.
         assert!(reacts(&click(&mut b, Button::Middle)).is_empty());
+        let a = b.input(Input::DragEnd { left: 333 });
+        assert!(a.contains(&Action::Stand), "{a:?}");
+        // Losing her footing: drag pose, no walking, until she lands.
+        let a = b.begin_fall();
+        assert_eq!(
+            a,
+            [Action::SetBase {
+                clip: "drag_held".into()
+            }]
+        );
+        assert_eq!(b.phase(), Phase::Dragged);
         let a = b.input(Input::DragEnd { left: 333 });
         assert_eq!(b.phase(), Phase::Idle);
         assert!(a.contains(&Action::Stand));
@@ -1354,6 +1551,7 @@ mod tests {
                 asleep_after_s: 2e6,
                 pose_cycle_s: 1e6,
                 wander_every_s: (20.0, 45.0),
+                wander_speed_px_s: 60.0,
                 mischief: MischiefConfig {
                     boredom_s: 0.0,
                     ..MischiefConfig::default()

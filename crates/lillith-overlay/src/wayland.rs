@@ -15,12 +15,21 @@
 //!   (`zwlr_layer_surface_v1.get_popup`) at the pointer, showing
 //!   [`crate::menu_popup`], with an explicit popup grab, so the compositor
 //!   closes it on a click anywhere else (`popup_done`) and gives it the
-//!   keyboard (Esc / arrows / Enter).
+//!   keyboard (Esc / arrows / Enter). If the compositor never configures
+//!   the popup within [`POPUP_CONFIGURE_TIMEOUT`] (or `xdg_wm_base` is
+//!   missing, or `LILLITH_MENU=layer`), the menu is shown as its own
+//!   layer surface (Overlay layer, keyboard `OnDemand`) at the pointer.
+//! - Buttons delivered to her surface are trusted as "on her": the
+//!   compositor only delivers them inside the input region, so they are
+//!   not hit-tested a second time (the logged `mask_hit` is diagnostic).
 
 use crate::drag::{Placement, Release};
 use crate::menu_popup::MenuKey;
 use crate::pixels::rgba_to_argb8888_le;
 use crate::run::{period, Controller, OverlayError, OverlayOptions, KEEP_ON_SCREEN};
+use crate::wl_geom::{
+    alpha_stats, menu_layer_margins, popup_timed_out, size_mismatch, POPUP_CONFIGURE_TIMEOUT,
+};
 use lillith_core::interaction::Button;
 use lillith_core::state::Key;
 use smithay_client_toolkit::{
@@ -73,16 +82,54 @@ pub use wayland_client;
 pub const NAMESPACE: &str = "lillith";
 
 /// The open right-click menu surface.
-struct MenuSurface {
-    popup: Popup,
-    configured: bool,
+enum MenuSurface {
+    /// `xdg_popup` on her layer surface (preferred: compositor grab).
+    Popup {
+        popup: Popup,
+        configured: bool,
+        opened: Instant,
+    },
+    /// Fallback: a separate Overlay layer surface at the pointer.
+    Layer {
+        layer: LayerSurface,
+        configured: bool,
+    },
+}
+
+impl MenuSurface {
+    fn wl_surface(&self) -> &wl_surface::WlSurface {
+        match self {
+            MenuSurface::Popup { popup, .. } => popup.wl_surface(),
+            MenuSurface::Layer { layer, .. } => layer.wl_surface(),
+        }
+    }
+    fn configured(&self) -> bool {
+        match self {
+            MenuSurface::Popup { configured, .. } | MenuSurface::Layer { configured, .. } => {
+                *configured
+            }
+        }
+    }
+    fn kind(&self) -> &'static str {
+        match self {
+            MenuSurface::Popup { .. } => "xdg_popup",
+            MenuSurface::Layer { .. } => "layer-surface",
+        }
+    }
 }
 
 struct App {
     registry: RegistryState,
     /// `xdg_wm_base` for the menu popup (`None`: the menu only logs).
     xdg: Option<XdgShell>,
+    layer_shell: LayerShell,
     menu: Option<MenuSurface>,
+    /// The popup path failed once: use the layer-surface menu from now on.
+    menu_use_layer: bool,
+    /// Last integer output scale the compositor reported for her surface.
+    output_scale: i32,
+    /// The first frame's transparency self-check was logged.
+    alpha_logged: bool,
     seat: Option<wl_seat::WlSeat>,
     /// Serial + surface-local position of the last button press on her
     /// (the popup grab needs the serial).
@@ -143,6 +190,9 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
     layer.set_keyboard_interactivity(KeyboardInteractivity::OnDemand);
     layer.set_size(w, h);
     layer.set_margin(0, 0, ctl.placement.bottom, ctl.placement.left);
+    // Buffers are drawn at 1 buffer px per surface px; say so explicitly
+    // (KWin scales the surface for HiDPI outputs).
+    layer.wl_surface().set_buffer_scale(1);
     // Never declare any part of the surface opaque: the compositor must
     // blend every pixel with its alpha (transparent background).
     layer.wl_surface().set_opaque_region(None);
@@ -166,14 +216,19 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
     handle
         .insert_source(Timer::from_duration(frame), move |_, _, app: &mut App| {
             app.on_timer();
-            TimeoutAction::ToDuration(frame)
+            // The rate can change (custom avatars redraw more often).
+            TimeoutAction::ToDuration(period(app.ctl.render_hz()))
         })
         .map_err(|e| OverlayError::Wayland(format!("timer: {e}")))?;
 
     let mut app = App {
         registry: RegistryState::new(&globals),
         xdg,
+        layer_shell,
         menu: None,
+        menu_use_layer: std::env::var("LILLITH_MENU").is_ok_and(|v| v == "layer"),
+        output_scale: 1,
+        alpha_logged: false,
         seat: None,
         last_press: None,
         qh: qh.clone(),
@@ -250,25 +305,35 @@ impl App {
             self.signal.stop();
             return;
         }
+        self.apply_resize();
+        if let Some(on_top) = self.ctl.take_level() {
+            self.layer.set_layer(if on_top {
+                Layer::Overlay
+            } else {
+                Layer::Bottom
+            });
+            self.layer.commit();
+        }
         if let Some(p) = self.ctl.take_move() {
             if !self.ctl.drag.active() {
                 self.pending = Some(p);
             }
         }
-        self.apply_resize();
         self.sync_menu();
         if self.configured && (self.pixels_dirty || self.mask_dirty || self.pending.is_some()) {
             self.draw();
         }
     }
 
-    /// Resizes the layer surface after a menu Size ▸ pick.
+    /// Resizes the layer surface when the stage changed size (Resize,
+    /// peek, speech area). Anchored bottom|left: the feet stay put.
     fn apply_resize(&mut self) {
         if !self.ctl.take_resized() {
             return;
         }
         let (w, h) = self.ctl.stage.size();
         self.layer.set_size(w, h);
+        self.pending.get_or_insert(self.ctl.placement);
         if let Err(e) = self.ctl.stage.render() {
             tracing::warn!("render after resize: {e}");
         }
@@ -280,7 +345,16 @@ impl App {
     fn sync_menu(&mut self) {
         if self.ctl.take_menu_opened() {
             self.menu = None;
-            match self.open_menu() {
+            let first = if self.menu_use_layer {
+                self.open_menu_layer()
+            } else {
+                self.open_menu().or_else(|e| {
+                    tracing::warn!("menu popup: xdg_popup failed ({e}); using a layer surface");
+                    self.menu_use_layer = true;
+                    self.open_menu_layer()
+                })
+            };
+            match first {
                 Ok(m) => self.menu = Some(m),
                 Err(e) => {
                     tracing::warn!("menu popup: {e}");
@@ -289,12 +363,75 @@ impl App {
             }
         }
         if self.ctl.menu().is_none() {
-            if self.menu.take().is_some() {
-                tracing::debug!("menu popup destroyed");
+            if let Some(m) = self.menu.take() {
+                tracing::info!(kind = m.kind(), "menu closed");
             }
             return;
         }
+        let stalled = matches!(
+            &self.menu,
+            Some(MenuSurface::Popup { configured, opened, .. })
+                if popup_timed_out(opened.elapsed(), *configured)
+        );
+        if stalled {
+            tracing::warn!(
+                timeout_ms = POPUP_CONFIGURE_TIMEOUT.as_millis() as u64,
+                "menu popup: xdg_popup never configured; showing the menu as a layer surface"
+            );
+            self.menu = None;
+            self.menu_use_layer = true;
+            match self.open_menu_layer() {
+                Ok(m) => self.menu = Some(m),
+                Err(e) => {
+                    tracing::warn!("menu layer surface: {e}");
+                    self.ctl.close_menu();
+                    return;
+                }
+            }
+        }
         self.draw_menu();
+    }
+
+    /// Fallback menu: its own Overlay layer surface with its top-left at
+    /// the pointer (no compositor grab: it closes on a pick, Esc, a click
+    /// on her, or when it loses keyboard focus).
+    fn open_menu_layer(&mut self) -> Result<MenuSurface, String> {
+        let (w, h) = self.ctl.menu().map(|m| m.size()).ok_or("no menu")?;
+        let at = self.last_press.map(|p| p.1).unwrap_or((0.0, 0.0));
+        let (left, bottom) = menu_layer_margins(
+            self.ctl.placement,
+            self.ctl.stage.size(),
+            at,
+            (w, h),
+            self.output_size(),
+        );
+        let surface = self.compositor.create_surface(&self.qh);
+        let layer = self.layer_shell.create_layer_surface(
+            &self.qh,
+            surface,
+            Layer::Overlay,
+            Some("lillith-menu"),
+            None,
+        );
+        layer.set_anchor(Anchor::BOTTOM | Anchor::LEFT);
+        layer.set_exclusive_zone(-1);
+        layer.set_keyboard_interactivity(KeyboardInteractivity::OnDemand);
+        layer.set_size(w, h);
+        layer.set_margin(0, 0, bottom, left);
+        layer.wl_surface().set_buffer_scale(1);
+        layer.wl_surface().set_opaque_region(None);
+        layer.commit();
+        tracing::info!(
+            at = ?at,
+            size = ?(w, h),
+            left,
+            bottom,
+            "wayland menu popup created (layer-surface fallback, Overlay layer)"
+        );
+        Ok(MenuSurface::Layer {
+            layer,
+            configured: false,
+        })
     }
 
     fn open_menu(&mut self) -> Result<MenuSurface, String> {
@@ -318,16 +455,29 @@ impl App {
         self.layer.get_popup(popup.xdg_popup());
         // Explicit grab: the compositor dismisses it on outside clicks and
         // gives it keyboard focus.
-        match (&self.seat, self.last_press) {
-            (Some(seat), Some((serial, _))) => popup.xdg_popup().grab(seat, serial),
-            _ => tracing::debug!("menu popup without grab (no press serial)"),
-        }
+        let serial = match (&self.seat, self.last_press) {
+            (Some(seat), Some((serial, _))) => {
+                popup.xdg_popup().grab(seat, serial);
+                Some(serial)
+            }
+            _ => {
+                tracing::warn!("menu popup without grab (no seat or press serial)");
+                None
+            }
+        };
+        popup.wl_surface().set_buffer_scale(1);
         popup.wl_surface().set_opaque_region(None);
         popup.wl_surface().commit();
-        tracing::info!(at = ?at, size = ?(w, h), "wayland menu popup (xdg_popup on the layer surface)");
-        Ok(MenuSurface {
+        tracing::info!(
+            at = ?at,
+            size = ?(w, h),
+            grab_serial = ?serial,
+            "wayland menu popup created (xdg_popup on the layer surface); waiting for configure"
+        );
+        Ok(MenuSurface::Popup {
             popup,
             configured: false,
+            opened: Instant::now(),
         })
     }
 
@@ -335,10 +485,10 @@ impl App {
         let Some(m) = self.menu.as_ref() else {
             return;
         };
-        if !m.configured {
+        if !m.configured() {
             return;
         }
-        let surface = m.popup.wl_surface().clone();
+        let surface = m.wl_surface().clone();
         let region = self.ctl.menu().map(|m| m.region()).unwrap_or_default();
         let Some(pm) = self.ctl.render_menu() else {
             return;
@@ -390,6 +540,21 @@ impl App {
             ) {
                 Ok((buffer, canvas)) => {
                     rgba_to_argb8888_le(self.ctl.stage.canvas().data(), canvas, self.ctl.opacity);
+                    if !self.alpha_logged {
+                        self.alpha_logged = true;
+                        let st = alpha_stats(canvas, w, h);
+                        tracing::info!(
+                            size = ?(w, h),
+                            clear = st.clear,
+                            partial = st.partial,
+                            opaque = st.opaque,
+                            bad_premul = st.bad_premul,
+                            corners = ?st.corners,
+                            opacity = self.ctl.opacity,
+                            output_scale = self.output_scale,
+                            "transparency self-check of the first buffer (corners should be 0)"
+                        );
+                    }
                     surface.damage_buffer(0, 0, w as i32, h as i32);
                     if let Err(e) = buffer.attach_to(&surface) {
                         tracing::warn!("attach: {e}");
@@ -417,7 +582,18 @@ impl App {
             self.layer.set_margin(0, 0, p.bottom, p.left);
             self.ctl.placement = p;
         }
+        // Never opaque (cheap; protects against any stale state).
+        surface.set_opaque_region(None);
         self.layer.commit();
+    }
+
+    /// Closes the menu (no popup grab on the layer-surface fallback).
+    fn dismiss_menu(&mut self, why: &str) {
+        if self.menu.is_some() {
+            tracing::info!(why, "menu dismissed");
+            self.ctl.close_menu();
+            self.sync_menu();
+        }
     }
 
     fn set_cursor(&self, icon: CursorIcon) {
@@ -435,8 +611,14 @@ impl CompositorHandler for App {
         _: &wl_surface::WlSurface,
         factor: i32,
     ) {
-        // TODO(M6): render at `factor` × and set_buffer_scale for HiDPI.
-        tracing::debug!(factor, "output scale changed");
+        // Buffers stay at scale 1 (KWin upscales them on HiDPI outputs);
+        // logged so a black box / offset clicks can be tied to the scale.
+        // TODO(M6): render at `factor` × with set_buffer_scale for crisp HiDPI.
+        self.output_scale = factor;
+        tracing::info!(
+            factor,
+            "output scale for her surface (buffers stay at scale 1)"
+        );
     }
     fn transform_changed(
         &mut self,
@@ -484,16 +666,41 @@ impl LayerShellHandler for App {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        _: &LayerSurface,
-        _: LayerSurfaceConfigure,
+        layer: &LayerSurface,
+        cfg: LayerSurfaceConfigure,
         _: u32,
     ) {
-        // We asked for a fixed size and keep it whatever the compositor says.
+        // The fallback menu surface.
+        if let Some(MenuSurface::Layer {
+            layer: ml,
+            configured,
+        }) = self.menu.as_mut()
+        {
+            if ml.wl_surface() == layer.wl_surface() {
+                tracing::info!(size = ?cfg.new_size, "menu layer surface configured");
+                *configured = true;
+                self.ctl.invalidate_menu();
+                self.draw_menu();
+                return;
+            }
+        }
+        if layer.wl_surface() != self.layer.wl_surface() {
+            return;
+        }
+        let want = self.ctl.stage.size();
+        if let Some(got) = size_mismatch(want, cfg.new_size) {
+            // A buffer smaller than the configured surface can leave the
+            // rest undefined (black on some compositors): ask again.
+            tracing::warn!(requested = ?want, configured = ?got, "layer configure size differs from her buffer; re-requesting");
+            self.layer.set_size(want.0, want.1);
+            self.layer.commit();
+        }
         if !self.configured {
+            tracing::info!(size = ?cfg.new_size, "layer surface configured");
             self.configured = true;
             let argb = self.shm.formats().contains(&wl_shm::Format::Argb8888);
             if argb {
-                tracing::debug!(formats = ?self.shm.formats(), "wl_shm formats");
+                tracing::info!(formats = ?self.shm.formats(), "wl_shm formats");
             } else {
                 tracing::warn!(formats = ?self.shm.formats(), "compositor did not advertise wl_shm ARGB8888; transparency may fail");
             }
@@ -575,7 +782,7 @@ impl PointerHandler for App {
             let on_menu = self
                 .menu
                 .as_ref()
-                .is_some_and(|m| &ev.surface == m.popup.wl_surface());
+                .is_some_and(|m| &ev.surface == m.wl_surface());
             if on_menu {
                 match ev.kind {
                     PointerEventKind::Enter { .. } => {
@@ -592,17 +799,34 @@ impl PointerHandler for App {
                         if button == BTN_LEFT || button == BTN_RIGHT =>
                     {
                         let hit = self.ctl.menu_click(ev.position);
-                        tracing::debug!(?hit, "menu click");
+                        tracing::info!(?hit, pos = ?ev.position, "menu click");
                     }
                     _ => {}
                 }
                 continue;
             }
             if &ev.surface != self.layer.wl_surface() {
+                tracing::debug!(kind = ?ev.kind, "pointer event on an unknown surface");
                 continue;
             }
-            if let PointerEventKind::Press { serial, .. } = ev.kind {
+            if let PointerEventKind::Press { serial, button, .. } = ev.kind {
                 self.last_press = Some((serial, ev.position));
+                tracing::info!(
+                    button = button_name(button),
+                    code = format_args!("{button:#x}"),
+                    pos = ?ev.position,
+                    mask_hit = self.ctl.stage.hit(ev.position.0, ev.position.1),
+                    serial,
+                    "pointer press on her surface"
+                );
+            }
+            if let PointerEventKind::Release { button, .. } = ev.kind {
+                tracing::info!(
+                    button = button_name(button),
+                    pos = ?ev.position,
+                    dragging = self.ctl.drag.dragging(),
+                    "pointer release on her surface"
+                );
             }
             match ev.kind {
                 PointerEventKind::Enter { .. } => {
@@ -615,9 +839,9 @@ impl PointerHandler for App {
                     }
                 }
                 PointerEventKind::Press { button, .. } if button == BTN_LEFT => {
-                    if self.ctl.press(ev.position, ev.position, true) {
-                        self.set_cursor(CursorIcon::Grabbing);
-                    }
+                    // Delivered inside her input region: it is on her.
+                    self.ctl.press_trusted(ev.position, true);
+                    self.set_cursor(CursorIcon::Grabbing);
                 }
                 PointerEventKind::Press { button, .. }
                     if button == BTN_RIGHT || button == BTN_MIDDLE =>
@@ -627,7 +851,7 @@ impl PointerHandler for App {
                     } else {
                         Button::Middle
                     };
-                    self.ctl.button(b, ev.position);
+                    self.ctl.button_trusted(b);
                 }
                 PointerEventKind::Motion { .. } => {
                     if let Some(p) = self.ctl.motion(ev.position) {
@@ -641,7 +865,9 @@ impl PointerHandler for App {
                         self.ctl.placement = p;
                         self.layer.commit();
                     }
-                    if !matches!(self.ctl.release(), Release::None) {
+                    let r = self.ctl.release();
+                    tracing::info!(release = ?r, "click classification");
+                    if !matches!(r, Release::None) {
                         self.set_cursor(CursorIcon::Grab);
                     }
                 }
@@ -653,6 +879,16 @@ impl PointerHandler for App {
         if self.ctl.quit_requested() {
             self.signal.stop();
         }
+    }
+}
+
+/// Human-readable evdev button name for the logs.
+fn button_name(code: u32) -> &'static str {
+    match code {
+        BTN_LEFT => "left",
+        BTN_RIGHT => "right",
+        BTN_MIDDLE => "middle",
+        _ => "other",
     }
 }
 
@@ -673,9 +909,16 @@ impl KeyboardHandler for App {
         _: &Connection,
         _: &QueueHandle<Self>,
         _: &wl_keyboard::WlKeyboard,
-        _: &wl_surface::WlSurface,
+        surface: &wl_surface::WlSurface,
         _: u32,
     ) {
+        // The layer-surface menu has no popup grab: losing focus (a click
+        // elsewhere) dismisses it.
+        let layer_menu =
+            matches!(&self.menu, Some(m @ MenuSurface::Layer { .. }) if m.wl_surface() == surface);
+        if layer_menu {
+            self.dismiss_menu("menu lost keyboard focus");
+        }
     }
     fn press_key(
         &mut self,
@@ -750,9 +993,18 @@ impl PopupHandler for App {
         popup: &Popup,
         _: PopupConfigure,
     ) {
-        if let Some(m) = self.menu.as_mut() {
-            if m.popup.wl_surface() == popup.wl_surface() {
-                m.configured = true;
+        if let Some(MenuSurface::Popup {
+            popup: p,
+            configured,
+            opened,
+        }) = self.menu.as_mut()
+        {
+            if p.wl_surface() == popup.wl_surface() {
+                tracing::info!(
+                    after_ms = opened.elapsed().as_millis() as u64,
+                    "wayland menu popup configured"
+                );
+                *configured = true;
                 self.ctl.invalidate_menu();
                 self.draw_menu();
             }
@@ -764,8 +1016,9 @@ impl PopupHandler for App {
         if self
             .menu
             .as_ref()
-            .is_some_and(|m| m.popup.wl_surface() == popup.wl_surface())
+            .is_some_and(|m| m.wl_surface() == popup.wl_surface())
         {
+            tracing::info!("menu popup dismissed by the compositor (popup_done)");
             self.menu = None;
             self.ctl.close_menu();
         }

@@ -4,10 +4,15 @@
 //!
 //! - **breathing**: a [`Breath`] wave, period re-picked each cycle in 3.5–4.5 s;
 //! - **blink** every 4–6 s;
-//! - **idle transition** every 25–40 s (calm default; was 8–12 s), lasting
-//!   1.2–2 s, picked from the transition clips that actually exist
-//!   (hip_sway, lean_forward, shoulder_roll, …);
-//! - **random idle reaction** every 45–90 s (was 12–26 s).
+//! - **idle transition** every 8–15 s, lasting 1.2–2 s, picked from the
+//!   transition clips that actually exist (hip_sway, idle_flirt_hip_lean,
+//!   shoulder_shimmy, …);
+//! - **random idle reaction** every 15–30 s (idle_flirt_*, hip_pop_wink,
+//!   lean_tease, blow_kiss, hair_flip, …).
+//!
+//! Both pools are weighted [`ShuffleBag`]s: the seductive clips come up
+//! about three times as often as the neutral ones, and the same clip never
+//! plays twice in a row.
 //!
 //! All of it is configurable in `[behavior.idle]` of config.toml.
 //!
@@ -16,6 +21,7 @@
 //! as she is idle again. Blinks keep their rhythm but are only emitted when
 //! idle.
 
+use crate::bag::ShuffleBag;
 use crate::rng::Rng;
 use crate::spring::Breath;
 use serde::{Deserialize, Serialize};
@@ -37,7 +43,19 @@ pub struct IdleConfig {
     pub reaction_every_s: Range,
     /// Minimum time on one idle take (`variant_of:idle` clips) before the
     /// animator may switch to another at a loop end. 0 = every loop.
+    /// With [`Self::variant_play_once`] it is the time spent on the clean
+    /// base (idle, walk_*, sit_swing) between two variant passes.
     pub variant_hold_s: f32,
+    /// `true` (default): a `variant_of:<base>` clip plays once and hands
+    /// back to its base clip, which then loops for `variant_hold_s` before
+    /// the next variant; covers every tagged base (idle, walk_right/left,
+    /// sit_swing). `false`: the old behaviour, idle only, where one idle
+    /// variant loops for the whole hold and the clean idle is never drawn.
+    pub variant_play_once: bool,
+    /// Like `variant_hold_s` but for the walk bases (walk_left/right):
+    /// how long she walks the plain gait before a sultry take (saunter,
+    /// sassy, strut) plays. Short, so walks look sultry almost at once.
+    pub walk_variant_hold_s: f32,
 }
 
 impl Default for IdleConfig {
@@ -45,10 +63,12 @@ impl Default for IdleConfig {
         Self {
             breath_period_s: (3.5, 4.5),
             blink_every_s: (4.0, 6.0),
-            transition_every_s: (25.0, 40.0),
+            transition_every_s: (8.0, 15.0),
             transition_len_s: (1.2, 2.0),
-            reaction_every_s: (45.0, 90.0),
-            variant_hold_s: 30.0,
+            reaction_every_s: (15.0, 30.0),
+            variant_hold_s: 12.0,
+            variant_play_once: true,
+            walk_variant_hold_s: 1.0,
         }
     }
 }
@@ -67,12 +87,83 @@ impl IdleConfig {
     }
 }
 
-/// Default idle-transition clips, in preference order (physics refs A–D).
-pub const DEFAULT_TRANSITIONS: &[&str] = &["hip_sway", "lean_forward", "shoulder_roll"];
+/// Default idle-transition clips (short loops played for 1.2–2 s) with
+/// their shuffle-bag weight: sultry sways 3, neutral ones 1.
+pub const WEIGHTED_TRANSITIONS: &[(&str, u32)] = &[
+    ("hip_sway", 3),
+    ("idle_flirt_hip_lean", 3),
+    ("idle_flirt_hands_behind_sway", 3),
+    ("shoulder_shimmy", 3),
+    ("sway_dance", 2),
+    ("idle_flirt_tail_curl", 3),
+    ("lean_forward", 1),
+    ("shoulder_roll", 1),
+];
 
-/// Default random idle reactions (gestures that read well unprompted).
-pub const DEFAULT_IDLE_REACTIONS: &[&str] =
-    &["tail_wag", "think", "nod", "wave", "shrug", "knife_tap"];
+/// Default random idle reactions (played once) with weights: the
+/// seductive takes 3, the playful neutral ones 1.
+pub const WEIGHTED_IDLE_REACTIONS: &[(&str, u32)] = &[
+    ("idle_flirt_lip_bite", 3),
+    ("idle_flirt_glove_adjust", 3),
+    ("idle_flirt_stretch", 3),
+    ("idle_flirt_pigtail_twirl", 3),
+    ("idle_flirt_look_away", 3),
+    ("idle_flirt_foot_tap", 3),
+    ("hip_pop_wink", 3),
+    ("lean_tease", 3),
+    ("tail_tease", 3),
+    ("blow_kiss", 3),
+    ("stretch_arch", 3),
+    ("hair_flip", 3),
+    ("hair_twirl", 3),
+    ("cheeky_tongue_wink", 2),
+    ("idle_flirt_shy_giggle", 2),
+    ("idle_tail_fidget", 1),
+    ("idle_nail_check", 1),
+    ("tail_wag", 1),
+    ("nod", 1),
+    ("wave", 1),
+];
+
+/// Names of [`WEIGHTED_TRANSITIONS`].
+pub const DEFAULT_TRANSITIONS: &[&str] = &[
+    "hip_sway",
+    "idle_flirt_hip_lean",
+    "idle_flirt_hands_behind_sway",
+    "shoulder_shimmy",
+    "sway_dance",
+    "idle_flirt_tail_curl",
+    "lean_forward",
+    "shoulder_roll",
+];
+
+/// Names of [`WEIGHTED_IDLE_REACTIONS`].
+pub const DEFAULT_IDLE_REACTIONS: &[&str] = &[
+    "idle_flirt_lip_bite",
+    "idle_flirt_glove_adjust",
+    "idle_flirt_stretch",
+    "idle_flirt_pigtail_twirl",
+    "idle_flirt_look_away",
+    "idle_flirt_foot_tap",
+    "hip_pop_wink",
+    "lean_tease",
+    "tail_tease",
+    "blow_kiss",
+    "stretch_arch",
+    "hair_flip",
+    "hair_twirl",
+    "cheeky_tongue_wink",
+    "idle_flirt_shy_giggle",
+    "idle_tail_fidget",
+    "idle_nail_check",
+    "tail_wag",
+    "nod",
+    "wave",
+];
+
+fn weight_of(table: &[(&str, u32)], name: &str) -> u32 {
+    table.iter().find(|(n, _)| *n == name).map_or(1, |e| e.1)
+}
 
 /// Something the idle scheduler wants the animator to do now.
 #[derive(Debug, Clone, PartialEq)]
@@ -97,10 +188,11 @@ pub struct IdleLife {
     breath: Breath,
     transitions: Vec<String>,
     reactions: Vec<String>,
+    transition_bag: ShuffleBag,
+    reaction_bag: ShuffleBag,
     next_blink: f32,
     next_transition: f32,
     next_reaction: f32,
-    last_transition: Option<usize>,
     busy: bool,
     time: f32,
 }
@@ -119,16 +211,27 @@ impl IdleLife {
         let next_blink = rng.range(cfg.blink_every_s.0, cfg.blink_every_s.1);
         let next_transition = rng.range(cfg.transition_every_s.0, cfg.transition_every_s.1);
         let next_reaction = rng.range(cfg.reaction_every_s.0, cfg.reaction_every_s.1);
+        let transition_bag = ShuffleBag::new(
+            transitions
+                .iter()
+                .map(|n| (n.clone(), weight_of(WEIGHTED_TRANSITIONS, n))),
+        );
+        let reaction_bag = ShuffleBag::new(
+            reactions
+                .iter()
+                .map(|n| (n.clone(), weight_of(WEIGHTED_IDLE_REACTIONS, n))),
+        );
         Self {
             cfg,
             rng,
             breath,
             transitions,
             reactions,
+            transition_bag,
+            reaction_bag,
             next_blink,
             next_transition,
             next_reaction,
-            last_transition: None,
             busy: false,
             time: 0.0,
         }
@@ -211,31 +314,30 @@ impl IdleLife {
             return cues;
         }
 
-        if self.next_transition <= 0.0 && !self.transitions.is_empty() {
-            let mut i = self.rng.index(self.transitions.len());
-            // Don't repeat the same transition twice in a row.
-            if self.transitions.len() > 1 && Some(i) == self.last_transition {
-                i = (i + 1) % self.transitions.len();
-            }
-            self.last_transition = Some(i);
+        if self.next_transition <= 0.0 && !self.transition_bag.is_empty() {
+            // Weighted shuffle bag: never the same transition twice in a row.
+            let clip = self
+                .transition_bag
+                .next(&mut self.rng)
+                .unwrap_or_default()
+                .to_string();
             let duration_s = self
                 .rng
                 .range(self.cfg.transition_len_s.0, self.cfg.transition_len_s.1);
-            cues.push(IdleCue::Transition {
-                clip: self.transitions[i].clone(),
-                duration_s,
-            });
+            cues.push(IdleCue::Transition { clip, duration_s });
             self.next_transition = duration_s
                 + self
                     .rng
                     .range(self.cfg.transition_every_s.0, self.cfg.transition_every_s.1);
             // Keep idle reactions from landing on top of a transition.
             self.next_reaction = self.next_reaction.max(duration_s + 0.5);
-        } else if self.next_reaction <= 0.0 && !self.reactions.is_empty() {
-            let i = self.rng.index(self.reactions.len());
-            cues.push(IdleCue::Reaction {
-                clip: self.reactions[i].clone(),
-            });
+        } else if self.next_reaction <= 0.0 && !self.reaction_bag.is_empty() {
+            let clip = self
+                .reaction_bag
+                .next(&mut self.rng)
+                .unwrap_or_default()
+                .to_string();
+            cues.push(IdleCue::Reaction { clip });
             self.next_reaction = self
                 .rng
                 .range(self.cfg.reaction_every_s.0, self.cfg.reaction_every_s.1);
@@ -366,11 +468,25 @@ mod tests {
     }
 
     #[test]
-    fn calm_defaults_mostly_stand_and_breathe() {
+    fn variant_play_once_defaults_true_and_parses() {
+        assert!(IdleConfig::default().variant_play_once);
+        assert!(IdleConfig::lively().variant_play_once);
+        // Missing key in [behavior.idle] keeps the default.
+        let c: IdleConfig = toml::from_str("variant_hold_s = 12.0").unwrap();
+        assert!(c.variant_play_once);
+        assert_eq!(c.variant_hold_s, 12.0);
+        let c: IdleConfig = toml::from_str("variant_play_once = false").unwrap();
+        assert!(!c.variant_play_once);
+        assert_eq!(c.variant_hold_s, 12.0);
+    }
+
+    #[test]
+    fn lively_flirty_defaults_rotate_without_repeats() {
         let d = IdleConfig::default();
-        assert_eq!(d.transition_every_s, (25.0, 40.0));
-        assert_eq!(d.reaction_every_s, (45.0, 90.0));
-        assert_eq!(d.variant_hold_s, 30.0);
+        assert_eq!(d.transition_every_s, (8.0, 15.0));
+        assert_eq!(d.reaction_every_s, (15.0, 30.0));
+        assert_eq!(d.variant_hold_s, 12.0);
+        assert!(d.variant_play_once);
         // Breathing and blinks keep their subtle rhythm.
         assert_eq!(d.breath_period_s, (3.5, 4.5));
         assert_eq!(d.blink_every_s, (4.0, 6.0));
@@ -383,15 +499,65 @@ mod tests {
                 .count();
             let blinks = cues.len() - moves;
             assert!(blinks >= 29, "seed {seed}: {blinks} blinks");
-            // 3 min: ≤ 180/25 transitions + ≤ 180/45 gestures, ≥ 1 of something.
-            assert!((1..=11).contains(&moves), "seed {seed}: {moves} moves");
+            // 3 min: transitions every 8–15 s (+len) and gestures every
+            // 15–30 s, interleaved: plenty of variety, never frantic.
+            assert!((10..=32).contains(&moves), "seed {seed}: {moves} moves");
             let first = cues
                 .iter()
                 .find(|(_, c)| !matches!(c, IdleCue::Blink))
                 .map(|(t, _)| *t)
                 .unwrap();
-            assert!(first >= 24.9, "seed {seed}: first move at {first}");
+            assert!(first >= 7.9, "seed {seed}: first move at {first}");
+            // No clip twice in a row, per kind and overall.
+            let clips: Vec<&str> = cues
+                .iter()
+                .filter_map(|(_, c)| match c {
+                    IdleCue::Transition { clip, .. } | IdleCue::Reaction { clip } => {
+                        Some(clip.as_str())
+                    }
+                    IdleCue::Blink => None,
+                })
+                .collect();
+            for w in clips.windows(2) {
+                assert_ne!(w[0], w[1], "seed {seed}: {clips:?}");
+            }
         }
+    }
+
+    #[test]
+    fn reactions_never_repeat_immediately_and_favour_flirty_clips() {
+        let mut l = IdleLife::with_available(IdleConfig::lively(), 77, |_| true);
+        let rs: Vec<String> = run(&mut l, 3600.0)
+            .into_iter()
+            .filter_map(|(_, c)| match c {
+                IdleCue::Reaction { clip } => Some(clip),
+                _ => None,
+            })
+            .collect();
+        assert!(rs.len() > 60, "{} reactions", rs.len());
+        for w in rs.windows(2) {
+            assert_ne!(w[0], w[1], "immediate repeat");
+        }
+        let flirty = rs
+            .iter()
+            .filter(|c| {
+                c.starts_with("idle_flirt_")
+                    || [
+                        "hip_pop_wink",
+                        "lean_tease",
+                        "tail_tease",
+                        "blow_kiss",
+                        "stretch_arch",
+                        "hair_flip",
+                        "hair_twirl",
+                        "cheeky_tongue_wink",
+                    ]
+                    .contains(&c.as_str())
+            })
+            .count();
+        assert!(flirty * 10 >= rs.len() * 7, "{flirty}/{} flirty", rs.len());
+        // The foot tap is in the pool.
+        assert!(rs.iter().any(|c| c == "idle_flirt_foot_tap"));
     }
 
     #[test]

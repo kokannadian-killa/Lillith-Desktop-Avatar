@@ -417,7 +417,11 @@ impl App {
             .with_transparent(true)
             .with_decorations(false)
             .with_resizable(false)
-            .with_window_level(WindowLevel::AlwaysOnTop)
+            .with_window_level(if self.ctl.always_on_top {
+                WindowLevel::AlwaysOnTop
+            } else {
+                WindowLevel::Normal
+            })
             .with_x11_window_type(vec![WindowType::Utility])
             .with_inner_size(PhysicalSize::new(w, h))
             .with_position(PhysicalPosition::new(monitor.0 + x, monitor.1 + y));
@@ -553,7 +557,8 @@ impl App {
         self.ctl.placement = p;
     }
 
-    /// Resizes her window after a menu Size ▸ pick (bottom-left stays put).
+    /// Resizes her window when the stage changed size (Resize, peek,
+    /// speech area); the bottom-left stays put.
     fn apply_resize(&mut self) {
         if !self.ctl.take_resized() {
             return;
@@ -570,10 +575,12 @@ impl App {
         if let Err(e) = self.ctl.stage.render() {
             tracing::warn!("render after resize: {e}");
         }
-        let p = self.ctl.placement;
+        // Bottom-based placement: the feet stay put (peek moves too).
+        let p = self.ctl.take_move().unwrap_or(self.ctl.placement);
         self.move_to(p);
         self.pixels_dirty = true;
         self.mask_dirty = true;
+        tracing::info!(size = ?(w, h), "overlay resized");
     }
 
     /// Shows / hides / redraws the menu window to match the controller.
@@ -924,6 +931,17 @@ impl App {
                 }
                 Err(e) => return self.fail(el, e),
             }
+            self.apply_resize();
+            if let Some(on_top) = self.ctl.take_level() {
+                if let Some(l) = &self.live {
+                    l.window.set_window_level(if on_top {
+                        WindowLevel::AlwaysOnTop
+                    } else {
+                        WindowLevel::Normal
+                    });
+                }
+            }
+            self.frame = period(self.ctl.render_hz());
             if let Some(p) = self.ctl.take_move() {
                 if !self.ctl.drag.active() {
                     self.move_to(p);

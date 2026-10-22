@@ -1,0 +1,250 @@
+{
+  "name": "pose_hacking",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "pose_hacking_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.53,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/pose_hacking/pose_hacking_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 47,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1,
+    621.1
+  ],
+  "horn_fix": {
+    "ref_horn_px": 587,
+    "ref_hue_median": 268.9,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      0.4,
+      -0.6,
+      1.2,
+      0.6,
+      1.1,
+      2.3,
+      2.2,
+      0.9,
+      1.1,
+      1.1,
+      1.8,
+      0.3,
+      1.6,
+      1.9,
+      0.7,
+      0.9,
+      1.0,
+      0.9,
+      -0.3,
+      0.5,
+      0.6,
+      0.9,
+      0.6
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      144,
+      281,
+      18,
+      392
+    ],
+    [
+      143,
+      282,
+      18,
+      392
+    ],
+    [
+      142,
+      282,
+      19,
+      392
+    ],
+    [
+      136,
+      275,
+      23,
+      392
+    ],
+    [
+      128,
+      271,
+      27,
+      392
+    ],
+    [
+      128,
+      271,
+      26,
+      392
+    ],
+    [
+      142,
+      278,
+      22,
+      392
+    ],
+    [
+      152,
+      280,
+      19,
+      392
+    ],
+    [
+      147,
+      274,
+      21,
+      392
+    ],
+    [
+      137,
+      271,
+      26,
+      392
+    ],
+    [
+      128,
+      271,
+      27,
+      392
+    ],
+    [
+      135,
+      271,
+      24,
+      392
+    ],
+    [
+      149,
+      280,
+      20,
+      392
+    ],
+    [
+      151,
+      277,
+      20,
+      392
+    ],
+    [
+      145,
+      271,
+      24,
+      392
+    ],
+    [
+      130,
+      271,
+      28,
+      392
+    ],
+    [
+      125,
+      271,
+      27,
+      392
+    ],
+    [
+      135,
+      272,
+      22,
+      392
+    ],
+    [
+      147,
+      278,
+      20,
+      392
+    ],
+    [
+      149,
+      277,
+      19,
+      392
+    ],
+    [
+      148,
+      280,
+      18,
+      392
+    ],
+    [
+      145,
+      281,
+      18,
+      392
+    ],
+    [
+      144,
+      281,
+      18,
+      392
+    ],
+    [
+      144,
+      281,
+      18,
+      392
+    ]
+  ]
+}

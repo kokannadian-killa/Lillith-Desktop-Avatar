@@ -41,7 +41,9 @@ pub enum Value {
     Str(String),
     Array(Vec<Value>),
     /// An array that was too long to keep, or a skipped oversized string.
-    Skipped { len: u64 },
+    Skipped {
+        len: u64,
+    },
 }
 
 impl Value {
@@ -99,7 +101,10 @@ impl GgufHeader {
 /// True if `path` starts with the GGUF magic (cheap sniff, 4 bytes).
 pub fn is_gguf(path: &Path) -> bool {
     let mut m = [0u8; 4];
-    File::open(path).and_then(|mut f| f.read_exact(&mut m)).is_ok() && m == GGUF_MAGIC
+    File::open(path)
+        .and_then(|mut f| f.read_exact(&mut m))
+        .is_ok()
+        && m == GGUF_MAGIC
 }
 
 /// Reads the header of the GGUF file at `path`.
@@ -137,7 +142,11 @@ pub fn read_header_from<R: Read + Seek>(r: R, len: u64) -> Result<GgufHeader, Gg
         let v = p.value(ty, true)?;
         metadata.insert(key, v);
     }
-    Ok(GgufHeader { version, tensor_count, metadata })
+    Ok(GgufHeader {
+        version,
+        tensor_count,
+        metadata,
+    })
 }
 
 struct Parser<R> {
@@ -160,7 +169,11 @@ impl<R: Read + Seek> Parser<R> {
     }
     /// Counts / lengths are u32 in GGUF v1, u64 afterwards.
     fn count(&mut self) -> Result<u64, GgufError> {
-        if self.v1 { Ok(self.u32()? as u64) } else { self.u64() }
+        if self.v1 {
+            Ok(self.u32()? as u64)
+        } else {
+            self.u64()
+        }
     }
     fn skip(&mut self, n: u64) -> Result<(), GgufError> {
         let pos = self.r.stream_position()?;
@@ -410,7 +423,10 @@ pub(crate) mod tests {
         assert_eq!(h.name(), Some("Dolphin 3.0 Llama 3.2 3B"));
         assert_eq!(h.context_length(), Some(131072));
         assert_eq!(h.file_type().and_then(file_type_name), Some("Q4_K_M"));
-        assert_eq!(h.metadata["tokenizer.ggml.tokens"], Value::Skipped { len: 5000 });
+        assert_eq!(
+            h.metadata["tokenizer.ggml.tokens"],
+            Value::Skipped { len: 5000 }
+        );
         assert_eq!(h.get_u64("after.big.arrays"), Some(7));
         assert!(h.chat_template().unwrap().contains("<|im_start|>"));
     }
@@ -427,10 +443,22 @@ pub(crate) mod tests {
 
     #[test]
     fn quant_names_from_filenames() {
-        assert_eq!(quant_from_filename("dolphin3.0-llama3.2-3b-q4_k_m.gguf").as_deref(), Some("Q4_K_M"));
-        assert_eq!(quant_from_filename("Qwen2.5-0.5B-Instruct-Q8_0.gguf").as_deref(), Some("Q8_0"));
-        assert_eq!(quant_from_filename("phi-3-mini-4k-instruct-IQ4_XS.gguf").as_deref(), Some("IQ4_XS"));
-        assert_eq!(quant_from_filename("model-f16.gguf").as_deref(), Some("F16"));
+        assert_eq!(
+            quant_from_filename("dolphin3.0-llama3.2-3b-q4_k_m.gguf").as_deref(),
+            Some("Q4_K_M")
+        );
+        assert_eq!(
+            quant_from_filename("Qwen2.5-0.5B-Instruct-Q8_0.gguf").as_deref(),
+            Some("Q8_0")
+        );
+        assert_eq!(
+            quant_from_filename("phi-3-mini-4k-instruct-IQ4_XS.gguf").as_deref(),
+            Some("IQ4_XS")
+        );
+        assert_eq!(
+            quant_from_filename("model-f16.gguf").as_deref(),
+            Some("F16")
+        );
         assert_eq!(quant_from_filename("model.gguf"), None);
     }
 }

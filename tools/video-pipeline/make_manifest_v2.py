@@ -11,6 +11,12 @@ V2 = paths.V2
 anims = []
 # v1 allure / idle_variant flags (the importer turns them into tags; the app's pose cycle picks these clips by name)
 V1 = {a['name']: a for a in json.load(open(os.path.join(paths.V1, 'manifest.json')))['animations']}
+# batch 13: alternative takes of a base clip -> tag variant_of:<base>. The engine (lillith-anim Animator)
+# only cycles variant_of:<idle base> today; walk/sit variants are tagged for a future picker.
+VARIANT_OF = {'walk_sassy_right': 'walk_right', 'walk_skip_right': 'walk_right', 'walk_saunter_right': 'walk_right',
+              'walk_sassy_left': 'walk_left', 'walk_skip_left': 'walk_left', 'walk_saunter_left': 'walk_left',
+              'sit_bored_chin': 'sit_swing', 'sit_cross_legged_bob': 'sit_swing', 'sit_heel_kick': 'sit_swing', 'sit_stretch_yawn': 'sit_swing',
+              'idle_bored_sigh': 'idle', 'idle_nail_check': 'idle', 'idle_tail_fidget': 'idle', 'idle_yawn_stretch': 'idle'}
 # v1 names that are near-duplicates of another v2 clip: same sheet, own name (docs/VIDEO_PIPELINE.md)
 ALIASES = {'finger_wag_tease': 'lean_tease', 'hands_behind_head_pose': 'idle_flirt_stretch', 'bounce_giggle': 'idle_flirt_shy_giggle'}
 def entry(name, folder, j, extra_tags=()):
@@ -32,7 +38,8 @@ for d in sorted(glob.glob(f'{V2}/*/')):
         if f == 'idle_a':
             a = entry('idle', f, j); a['alias_of'] = 'idle_a'; anims.append(a)
         continue
-    e = entry(f, f, j)
+    e = entry(f, f, j, [f'variant_of:{VARIANT_OF[f]}'] if f in VARIANT_OF else [])
+    if VARIANT_OF.get(f) == 'idle': e['idle_variant'] = True
     if f.startswith('blend_'):
         sf = j.get('source_frames', {})
         fr, to = j.get('from_clip', 'wake'), j.get('to_clip', 'sleep')

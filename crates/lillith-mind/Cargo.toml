@@ -11,6 +11,9 @@ publish.workspace = true
 
 [dependencies]
 lillith-core.workspace = true
+# Shared loopback-only URL validator (LocalUrl): the chat must never talk
+# to anything but this computer.
+lillith-setup.workspace = true
 rusqlite.workspace = true
 regex.workspace = true
 reqwest.workspace = true
@@ -19,3 +22,7 @@ serde_json.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+futures-util.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "io-util", "rt", "macros"] }

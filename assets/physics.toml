@@ -1,4 +1,6 @@
 # >>> COPY of /workspace/lillith/physics-lab/physics.toml (authoritative; bundled by lillith-core physics_config.rs). Re-copy, don't fork. <<<
+# >>> ONE deliberate difference: [gait] enabled = false (the canonical v2 walk/strut/run clips are baked-motion video
+# >>> takes; procedural gait would double the leg/arm motion). Keep that line when re-copying. <<<
 # =============================================================================
 # Lillith jiggle-physics config  (physics.toml, schema_version 1)
 # AUTHORITATIVE COPY: /workspace/lillith/physics-lab/physics.toml
@@ -57,21 +59,24 @@ damping = 11.0
 max_velocity = 2.0
 max_offset = 0.2
 [springs.chest]
-stiffness = 65.0
-damping = 9.5
+# motion review 2026-10-19: 65/9.5 (zeta 0.59, Playful 0.50) read as jelly with a slow tail. Now zeta 0.76
+# neutral / 0.65 Playful: one clean bounce, then stops. README-SP default was 65/9.5.
+stiffness = 90.0
+damping = 14.5
 max_velocity = 120.0
 max_offset = 12.0
 [springs.pigtails]
-stiffness = 32.0
-damping = 6.5
+# motion review: 32/6.5 (zeta 0.57, Playful 0.49) smeared through 3-4 swings. Now zeta 0.75 / 0.64 Playful.
+stiffness = 40.0
+damping = 9.5
 max_velocity = 160.0
 max_offset = 20.0
 
 # --- Gains (README-SP config.ini): applied inside Physics::impulse.
 [gains]
 jiggle = 0.6          # root_x, root_y, angle, scale  (keep 0.50-0.75 per README-SP tips)
-chest_bounce = 1.0    # chest
-pigtail_sway = 0.9    # pigtails
+chest_bounce = 1.3    # chest   (README-SP 1.0; x1.3 restores light-tap peaks after the stiffer/damped chest spring)
+pigtail_sway = 1.05   # pigtails (README-SP 0.9; restores peaks after the stiffer/damped pigtail spring)
 
 # --- Breathing (phys_breathing.txt, phys_bikini_top_jiggle.txt, README-SP).
 [breathing]
@@ -82,24 +87,71 @@ hold = 0.10
 exhale = 0.41
 settle = 0.13
 shape = "eased"                 # "eased" (piecewise smoothstep, value in [-1,1]) or "sine" (repo Breath::value)
-chest_amplitude_px = -0.6       # chest target = amp * value  (p2p 1.2 px; preview pass 2: 2.4 px p2p ate most of the 3 px visual cap and read as heaving). NEGATIVE: +chest = down (render convention), so inhale lifts the chest. Repo AnimatorConfig.breath_chest = +1.2 (sign differs, preview pass 2)
-scale_amplitude = 0.006         # scale target = 1 + amp * value ; repo AnimatorConfig.breath_scale = 0.006
+chest_amplitude_px = -0.35       # chest target = amp * value  (p2p 1.2 px; preview pass 2: 2.4 px p2p ate most of the 3 px visual cap and read as heaving). NEGATIVE: +chest = down (render convention), so inhale lifts the chest. Repo AnimatorConfig.breath_chest = +1.2 (sign differs, preview pass 2)
+scale_amplitude = 0.003         # scale target = 1 + amp * value. Motion review: 0.006 as a whole-sprite stretch read as heavy panting / bobbing; halved AND the renderer now maps scale to a LOCAL torso breath (chest expand + <=0.5 px head lift, feet 0 px). Repo breath_scale = 0.006
 # Exhale->settle micro-bounce on the top: 0.3-0.5 cm => ~0.45 px peak.
-exhale_bounce_chest = 7.5       # chest impulse at settle start
+exhale_bounce_chest = 3.0       # chest impulse at settle start
 # Shoulders rise 3-5 mm on inhale / drop on exhale => soft pigtail ripple.
-inhale_pigtails = 4.0           # pigtails impulse at inhale start
-exhale_pigtails = -6.0          # pigtails impulse at exhale start ("secondary wave")
+inhale_pigtails = 2.0           # pigtails impulse at inhale start
+exhale_pigtails = -3.0          # pigtails impulse at exhale start ("secondary wave")
 
 # --- Walk / run footfalls (PLAN §3.1 layer 1; lillith-anim animator.rs footfall_for).
 [walk]
 footfalls_per_cycle = 2
-walk_footfall = { root_y = 10.0, chest = 22.0, pigtails = 18.0 }   # == repo footfall_for("walk*")
+walk_footfall = { root_y = 0.0, chest = 15.0, pigtails = 16.0 }   # repo footfall_for("walk*") = 10/22/18. chest 20 -> 15 and root_y 4 -> 0 (Ko 2026-10-20): the engine [gait] hip bob now owns the vertical step motion, so a root_y kick would double it
 run_footfall  = { root_y = 30.0, chest = 45.0, pigtails = 35.0 }   # == repo footfall_for("run*")
 alternate_pigtails = true       # pigtail kick sign alternates L/R foot (side-to-side sway)
-start_tip_angle = 0.25          # angle impulse on walk start (sign = direction), negated on stop
-stop_chest = 20.0               # chest impulse when stopping (momentum)
-demo_speed_px_s = 60.0          # harness walk speed
-demo_cycle_s = 1.1667           # canonical walk_right: 14 frames @ 12 fps (assets/generated/manifest.toml); run_right 10 @ 12 = 0.833 s
+start_tip_angle = 0.08          # angle impulse on walk start (sign = direction), negated on stop
+stop_chest = 6.0                # chest impulse when stopping (momentum). Motion review: 20 + the old walk momentum = rubbery explosion on the walk->idle snap; now gentle
+demo_speed_px_s = 40.0          # harness walk speed (was 60; scaled with the slower cadence)
+demo_cycle_s = 1.75             # USER REQUEST (slow the walk so steps read): walk_right 14 frames played at 8 fps (was 12 fps = 1.167 s) -> 1.75 s / 2 steps = 0.875 s per step, ~69 steps/min. Clip player: walk_left/right playback fps 8 ([render].walk_clip_fps)
+
+# --- GAIT (Ko 2026-10-20: "the jiggle physics and arms also move when someone walks so add it to the
+# dynamic engine"). The driver owns a gait phase while walking (0 = RIGHT heel strike, 0.5 = LEFT), a
+# procedural hip bob, spring-driven arm swing (counter to the same-side leg) with forearm lag, a small
+# shoulder counter-twist, and per-step jiggle (two heel strikes per cycle, alternating L/R bias).
+# Cadence comes from Motion::Walking.cycle_s (= [walk].demo_cycle_s 1.75 s -> 0.875 s/step).
+# Frame outputs: gait_phase, left/right_leg_phase, left/right_leg_fwd, gait_amp, hip_bob_px,
+# left/right_arm_deg, left/right_forearm_deg, torso_twist_deg, heel_strike. See SPEC 16 / DRIVER_DESIGN v3.
+[gait]
+enabled = false                 # BUNDLED DEFAULT OFF (lab: on). true = engine gait drives walk clips whose manifest
+                                #   disable_springs does NOT name "gait"; the canonical v2 walk/strut/run clips do, so stay suppressed
+duty = 0.6                      # == [render.gait].duty: 60% stance, 10% double support twice per cycle
+start_ramp_s = 0.45             # stride weight ramps in AFTER the turn-in (motion review: matches the stop ramp; was 0.3)
+stop_ramp_s = 0.45              # ... and out after Motion::Idle: legs close, arms swing down, springs settle
+hip_bob_down_px = 0.7           # matches the rig's measured reach-limited bob (+0.7 at double support ...
+hip_bob_up_px = 3.9             # ... -3.9 at mid-stance); vertical travel ~4.6 px = ~1.9 cm (real walking 4-5 cm at full size, toned down for a desktop pet)
+arm_amplitude_deg = 18.0        # upper-arm swing +-18 deg about the shoulder (relaxed walk ~ +-15..25 deg shoulder flexion/extension)
+arm_spring = { stiffness = 150.0, damping = 17.0, max_velocity = 400.0 }      # deg; w 12.2 rad/s, zeta 0.69: follows the 0.57 Hz gait with ~0.1 s trail, settles in ~0.5 s with one small overshoot
+forearm_spring = { stiffness = 70.0, damping = 9.5, max_velocity = 500.0 }    # deg; motion review "forearms too straight": softer (zeta 0.57, was 90/12.5) -> more follow-through at swing reversal
+forearm_follow = 1.0            # forearm chases the upper-arm angle
+forearm_flex_deg = 10.0          # elbow bend target (x gait_amp): 0 at back swing -> 5 at neutral -> 10 deg at full forward (continuous, review "arms stiff")
+torso_twist_deg = 1.5           # shoulder counter-rotation amplitude (small: side view)
+twist_spring = { stiffness = 80.0, damping = 13.0, max_velocity = 60.0 }      # zeta 0.73
+bob_inertia_chest = 0.6         # chest velocity += -0.8 * hip-bob accel * dt (inertia: hips rise -> chest lags down)
+bob_inertia_tail_y = 0.6
+step_tail_x = 35.0              # tail_tip_x kick per heel strike, alternating sign (px/s)
+step_tail_y = 25.0              # tail_tip_y kick per heel strike (+ = droops on impact)
+step_twist = 12.0               # deg/s twist kick per heel strike, alternating (right strike -> right shoulder back)
+# view turn (motion review: she popped front-idle <-> side-walk in one frame)
+elbow_min_deg = 0.0             # joint stop: forearm lag never hyperextends the elbow (review: -7 deg seen before)
+turn_in_s = 0.36                # walk start: turn front -> side over 0.36 s (turn_progress 0 -> 1), then the stride ramps in
+turn_out_s = 0.36               # walk stop: stride ramps out (stop_ramp_s), then turn side -> front over 0.36 s
+turn_cut_lo = 0.25              # HARD CUTS (review: crossfade ghosted): turn_progress < 0.25 front idle drawing,
+turn_cut_hi = 0.75              #   0.25-0.75 the 3/4 drawing (held 0.348 x 0.36 = 0.125 s), >= 0.75 side stance
+turn_chest = 2.5                # settle kick at EACH cut (2 per turn): small weight shift, not an explosion
+turn_pigtails = 3.0             # hair swings opposite the turn at each cut (sign: -facing turning in, +facing turning out)
+tail_sway_px = 7.0              # tail: gait-locked side-to-side sway target at the tip (px), one swing per cycle, x gait_amp
+tail_sway_phase = 0.0           #   phase vs the right heel strike (the tail spring adds ~0.1 s trail behind the hips)
+tail_figure8_walk = 0.3         #   idle figure-8 shrinks to 30% at full stride (the gait sway owns the tail)
+
+# --- Clip / pose boundaries (motion review fix 3). A swap between pose families (side walk <-> front idle)
+# is NOT a physics impulse: bleed off the springs' momentum at the boundary, then only the gentle
+# stop/start kicks above fire. Driver: on_clip_boundary() (auto on locomotion start/stop).
+[clip_boundary]
+velocity_keep = 0.15            # spring velocities x0.15
+offset_keep = 0.4               # offsets from target x0.4
+on_locomotion_change = true
 
 # --- Pigtails (phys_pigtail_top.bin.txt, phys_bikini_top_jiggle.txt master prompt).
 [pigtails]
@@ -391,8 +443,7 @@ fx = ["tattoo_flare_light"]
 # Knife tap (phys_knife_tap.txt, phys_pigtail_top, phys_bikini_top_jiggle): light tap = single jiggle 1-2 cm.
 [impulse_recipes.knife_tap]
 impulses = [
-  { channel = "angle", strength = 0.2, signed = true },      # 2-3 cm upper-body sway -> ~0.55 deg whole sprite, head ~3-4 px (preview: 1.0 threw the head ~20 px)
-  { channel = "root_x", strength = 25.0, signed = true },    # upper-body side sway 2-3 cm
+  { channel = "angle", strength = 0.06, signed = true },     # motion review: tiny upper-body (planted) sway only, head <~1.5 px. root_x kick REMOVED (was 25: whole body slid sideways)
   { channel = "chest", strength = 29.0, delay_s = 0.12 },     # ~1.8 px + echo ~0.2 => ~2.0 px neutral (1-2 cm)
   { channel = "pigtails", strength = -49.0, delay_s = 0.05, signed = true },  # ~4 px peak neutral (3-6 cm); negative = trails the sway
 ]
@@ -400,9 +451,7 @@ fx = ["tail_flick_light", "horn_burst", "tattoo_flare_light", "particles", "tong
 # Press-stab (0.3 s dwell): crisp double jiggle + pigtail double bounce.
 [impulse_recipes.knife_tap_strong]
 impulses = [
-  { channel = "angle", strength = 0.35, signed = true },     # ~0.9 deg, head ~6-7 px (was 1.6: ~4 deg / 25 px, read as being shoved)
-  { channel = "root_x", strength = 35.0, signed = true },
-  { channel = "root_y", strength = 20.0 },                    # leans into the press
+  { channel = "angle", strength = 0.1, signed = true },      # motion review: planted upper-body sway only (was 0.35). root_x 35 and root_y 20 kicks REMOVED: the whole body shoved sideways on the stab
   { channel = "chest", strength = 48.0, delay_s = 0.12, double_ratio = 0.6 },   # 2nd jiggle ~42% of 1st (0.5 gave 35%: too faint once re-timed to 0.40 s) ; ~3.0 px + pigtail echo ~0.4 => ~3.4 px neutral (3 cm)
   { channel = "pigtails", strength = -76.0, delay_s = 0.05, signed = true, double_ratio = 0.6 },  # ~6.2 px neutral (5-6 cm); trails the sway; 2nd bounce ~44% (0.5 -> 37% after re-time)
 ]
@@ -445,8 +494,7 @@ fx = ["eyes_widen"]
 # Stab (window.closed / click): sharp forward stab.
 [impulse_recipes.stab]
 impulses = [
-  { channel = "root_x", strength = 60.0, signed = true },
-  { channel = "angle", strength = 0.6, signed = true },      # = high tier (was 1.2: ~3 deg / 17 px head throw)
+  { channel = "angle", strength = 0.15, signed = true },     # motion review: root_x 60 kick REMOVED (body slid out of place); angle 0.6 -> 0.15 (planted upper-body only)
   { channel = "chest", strength = 45.0, delay_s = 0.12, double_ratio = 0.5 },
   { channel = "pigtails", strength = -65.0, delay_s = 0.05, signed = true },  # trails the stab
 ]
@@ -458,7 +506,7 @@ fx = ["tail_flick_strong", "horn_burst", "tattoo_flare_strong", "particles"]
 default = "medium"
 # Kick lands on the clip's impact frame, not on clip start (knife_tap.json impact_frame 4 @ 10 fps = 0.4 s).
 impact_delay_s = { knife_tap = 0.4 }
-exact = { knife_tap = "knife_tap", dance = "high", tada_celebrate = "happy_hop", spell_orb_cast = "high", beam_cast = "high", wake = "high", event_cpu_busy = "high", event_error = "high", event_net_lost = "high", event_screenshot = "high", event_firewall_block = "high", event_input_click_double = "high", event_window_close = "stab", event_battery_low = "high", event_ram_high = "high", hip_sway = "none", lean_forward = "none", shoulder_roll = "none", soft_reset = "none", think = "low", nod = "low", blink_wink = "none", idle = "none", sleep = "sleepy_sigh", sit_swing = "low", event_loading = "low", event_incognito = "low", drag_held = "none", idle_flirt_hip_lean = "low", idle_flirt_pigtail_twirl = "low", idle_flirt_hands_behind_sway = "low", idle_flirt_stretch = "low", idle_flirt_glove_adjust = "low", idle_flirt_tail_curl = "low", idle_flirt_lip_bite = "low", idle_flirt_shy_giggle = "low", idle_flirt_foot_tap = "low", idle_flirt_look_away = "low" }  # drag kicks come from set_motion(Dragged) / [drag]; idle_flirt_* mannerisms (slow 5-8 fps holds) get a gentle start
+exact = { knife_tap = "knife_tap", dance = "high", tada_celebrate = "happy_hop", spell_orb_cast = "high", beam_cast = "high", wake = "high", event_cpu_busy = "high", event_error = "high", event_net_lost = "high", event_screenshot = "high", event_firewall_block = "high", event_input_click_double = "high", event_window_close = "stab", event_battery_low = "high", event_ram_high = "high", hip_sway = "none", lean_forward = "none", shoulder_roll = "none", soft_reset = "none", think = "low", nod = "low", blink_wink = "none", idle = "none", sleep = "sleepy_sigh", sit_swing = "low", event_loading = "low", event_incognito = "low", drag_held = "none" }  # drag kicks come from set_motion(Dragged) / [drag]
 # Idle-transition clips get their spring sequence from [idle_transitions] instead of a kick ("none").
 locomotion_prefixes = ["walk", "run"]   # footfalls from [walk], no start kick beyond start_tip_angle
 
@@ -640,6 +688,7 @@ bg = [128, 128, 128]
 output_scale = 2                 # MP4 upscale for viewing (GIF stays 1x)
 planted = true                   # root_x/root_y/hip act above the feet only (feet stay on baseline 392)
 plant_ramp = "hip"               # displacement weight 0 at baseline -> 1 at hip_point.y and above
+plant_knee_frac = 0.45           # motion review: weight is exactly 0 from the soles up to 45% of the way to the hip (boots + shins locked), then ramps to 1 at the hip
 angle_pivot = "feet"
 angle_planted = true            # rotation fades in with the plant weight (0 at soles -> 1 at hip): rigid tilt lifted one sole ~1 px             # rotate/scale about feet anchor [200,392]
 angle_visual_scale = 1.0         # multiplier on the angle channel for the whole-sprite lean
@@ -647,6 +696,15 @@ chest_visual_cap_px = 3.0        # soft cap (tanh) == [chest].render_visual_cap_
 chest_center_dy = -12.0          # chest_point is the underbust gem; cups sit ~12 px higher
 chest_sigma = [18.0, 13.0]       # gaussian sx, sy (px)
 chest_squash = 0.35              # extra vertical squash/stretch inside the chest blob, per px of offset
+# motion review fix 1: the scale channel is NO LONGER a whole-sprite scale about the feet (that bobbed the
+# entire figure with every breath). It renders as a LOCAL torso breath; legs/feet get exactly 0 px.
+scale_mode = "torso"             # "torso" (local) | "global" (old whole-sprite scale about the feet anchor)
+breath_chest_expand = 6.0        # radial chest-blob expansion = (scale-1) * this (fraction): 0.003 -> 1.8% (~0.3 px at the cups)
+breath_head_lift_px = 150.0      # shoulders/head lift = (scale-1) * this px: 0.003 -> 0.45 px; 0 below the chest
+breath_lift_from_dy = 10.0       # lift weight 0 at chest_point.y + this ...
+breath_lift_ramp_px = 45.0       # ... ramping to 1 this many px higher (shoulders and up)
+walk_clip_fps = 8.0              # USER REQUEST: walk_left/right play at 8 fps (clip ships 12) -> 1.75 s cycle, steps read clearly
+hud_y = 18                       # HUD column in the left margin (it sat on the baseline and hid the foot-plant check)
 pigtail_sigma_x = 14.0          # outboard half-width (px)
 pigtail_sigma_inboard = 5.0     # toward the face: tight so the head/eyes never warp
 pigtail_tie_dy = -28.0           # ribbon tie relative to the pigtail point: weight 0 here ...
@@ -654,8 +712,8 @@ pigtail_full_dy = 15.0           # ... ramps to 1 here ...
 pigtail_fade_dy = 40.0           # ... and fades out by here
 pigtail_gain = 1.0
 pigtail_cap_px = 8.0
-pigtail_tip_lag_s = 0.08         # strand lag: tips use the pigtail trace delayed by this
-pigtail_tip_mix = 0.4
+pigtail_tip_lag_s = 0.05         # strand lag: tips use the pigtail trace delayed by this
+pigtail_tip_mix = 0.25          # motion review: 0.4 smeared the hair tips (crisp-stop fix)
 pigtail_left_sign = 1.0         # both pigtails sway the same lateral direction (body-driven sway). [attachments] sign -1 (proposal) = mirrored spread/close flap; set -1.0 here to get that look
 tail_sigma = 11.0
 tail_gain = 0.35                 # clip already bakes ~3 px tail curl
@@ -663,6 +721,103 @@ tail_cap_px = 7.0
 # Clips that ship without frame_points fall back to the idle anchors; per-clip fixes measured in the preview:
 [render.anchor_overrides.event_cpu_busy]
 tail_tip_point = [251, 168]     # facepalm pose curls the tail up; idle's [263, 250] missed the spade entirely
+# --- USER FEEDBACK 2026-10-19 ("the walk is only moving her right leg" / "it needs to alternate - one leg
+# forward then back as the other leg goes forward then back"). The walk preview is now a procedural
+# two-leg RIG built from walk_right_00 (see physics-lab/gait.py, SPEC section 15). Canvas px, +y down.
+[render.gait]
+enabled = true
+source_frame = 0                 # walk_right_00 = contact pose with the cleanest near/far leg separation
+cycle_s = 1.75                   # == [walk].demo_cycle_s: 2 steps, 0.875 s per step (~8 fps clip cadence)
+duty = 0.6                       # stance fraction per leg -> 10% double support twice per cycle
+stride_px = 50.0                 # ankle travels +-stride around its stance centre while planted
+center_dx = 1.0                  # each leg's stance is centred this many px ahead of its OWN hip joint (hips are 14 px apart on the drawing; per-leg centring keeps both steps the same length and the hip bob even)
+ground_y = 392.0                 # baseline: planted boot soles sit exactly here
+lift_px = 18.0                   # swing-foot clearance at mid-swing (knee flexes via IK)
+heel_off = 0.22                  # last 22% of stance: heel rises about the planted toe
+toeoff_pitch_deg = 18.0          # boot pitch at toe-off (+ = heel up)
+swing_pitch_deg = 8.0            # extra toe-down mid-swing
+strike_pitch_deg = -5.0          # toe-up at heel strike, settles flat over strike_settle of stance
+strike_settle = 0.12
+bob_frac = 0.55                  # hip rise toward the stance leg's straight-knee height (0 = flat hips, knee does it all)
+twirl_r_in = 6.0                 # thigh rotation ramps in from r_in to r_out px from the hip joint (no tear at the hip)
+twirl_r_out = 42.0
+thigh_past_knee = 5.0            # segment overlaps that hide the knee/boot seams
+shin_above_knee = 4.0
+boot_above_ankle = 12.0
+far_darken = 0.80                # far (left) leg rgb multiplier = depth cue so the alternation reads
+far_dark_ramp = [236.0, 262.0]   # darkening ramps in down the far thigh
+# walk_root_gain REMOVED (Ko 2026-10-20): the engine now owns the hip bob ([gait]) and the walk footfall no longer
+# kicks root_y, so the spring root/angle channels render at full strength during the walk.
+twist_px_per_deg = 1.2           # engine torso_twist_deg -> px of shoulder shift (side view shows the counter-twist as the shoulders moving fwd/back)
+twist_torso_share = 0.5          # torso layer gets half the shift; near shoulder/arm pivot gets the full shift, far gets -0.5
+waist_y = 195.0                  # twist shear weight 0 at the waist ...
+shoulder_y = 118.0               # ... 1 at the shoulders
+ground_marks = true              # scrolling ground dashes at the planted-foot speed (in-place walk reads as planted, not skating)
+# segmentation of walk_right_00 (measured from alpha rows; see SPEC 15)
+hip_cut_y = 212.0                # shorts hem: everything above is the upper-body layer
+split_line = [213.0, 222.0]      # near/far boundary x at hip_cut_y and at split_gap_from (fused thigh band)
+split_gap_from = 258.0           # below this, split = middle of the gap between the two legs
+far_min_y_for_x = 254.0          # above this y, far-leg pixels must have x >= far_min_x (keeps hand/tail out)
+far_min_x = 186.0
+near_max_x = 262.0                # ... and near-leg pixels x <= near_max_x (the near hand hangs at x 284-300, y 190-222)
+turn_mid_frame = "blend_idle_to_walk_right/frames/blend_idle_to_walk_right_01.png"  # 3/4 view for the engine turn (soles re-seated on the baseline)
+underlap_px = 6                  # hip seam: leg layers start 6 px above the cut, under T (kills the hairline at hip_cut_y)
+split_soft_px = 3.0              # hip seam: near/far feathered across 3 px in the fused thigh band (no hard cut edge)
+glute_follow = 0.5               # hip seam: the buttock layer B is skinned: one copy per thigh rotates with 50% of that thigh angle, union
+glute_ramp = [212, 250]          # ... weight 0 at the waistband -> 1 at y 250
+buttock_fade = [228.0, 242.0]    # static far-buttock layer feathers out over this y range
+# ARMS (Ko 2026-10-20). Cut from walk_right_00 and driven by the engine's left/right_arm_deg (+ = forward)
+# and left/right_forearm_deg (relative to the upper arm). rest_* = the angles the arm has on the drawing.
+[render.gait.arms.near]          # her RIGHT arm (shoulder tattoo), in front of the torso; swung BACK on frame 00
+polygon = [[178,128],[214,128],[214,146],[199,150],[190,175],[184,190],[183,200],[183,212],[178,226],[176,231],[171,238],[160,246],[156,246],[156,212],[162,196],[165,170],[172,150]]   # hugs the sleeve/cuff/hand: the tail strand runs just right of it
+# the tail passes BEHIND the cuff and hand: repaint that hidden strand on the torso layer so the tail stays
+# connected when the arm swings away (polyline px, width, colour sampled from the visible tail)
+tail_behind = [[186,194],[183,200],[181,212],[179.5,226],[178.5,231],[176,238],[173,244]]
+tail_behind_width = 2.4
+tail_color_at = [177, 234]   # solid tail pixel (alpha 0.9)
+shoulder = [203.0, 118.0]
+elbow = [184.0, 163.0]
+# CALIBRATION: walk_right_00 is a contact pose, so its arms are drawn at the swing EXTREMES. The engine angle
+# that renders the drawing undeformed is the extreme: near/right arm = full back, far/left arm = full forward.
+# (Measured on the drawing: right upper arm -23 deg, forearm +8 rel; left upper arm ~+26, forearm ~+16 rel.)
+rest_upper_deg = -18.0           # == -[gait].arm_amplitude_deg
+rest_forearm_deg = 5.6          # engine forearm (rel) at the back extreme
+twirl_r_in = 10.0                # rotation ramps in 10..35 px from the shoulder: the deltoid/tattoo stays on the torso
+twirl_r_out = 35.0
+twist_share = 1.0
+[render.gait.arms.far]           # her LEFT arm: shoulder hidden behind the torso, forearm + hand visible in front of the belly
+polygon = [[245,160],[262,160],[300,192],[314,212],[308,234],[282,234],[262,206],[245,190]]
+min_x = 245.0                    # belly front edge (x <= 244) stays on the torso
+shoulder = [226.0, 116.0]
+elbow = [252.0, 170.0]
+rest_upper_deg = 18.0            # == +[gait].arm_amplitude_deg
+rest_forearm_deg = 5.8           # engine forearm (rel) at the forward extreme
+twirl_r_in = 45.0                # the visible part starts ~55 px from the hidden shoulder: ramp so it stays tucked under the chest
+twirl_r_out = 80.0
+twist_share = -0.5
+[render.gait.tail]
+# TAIL BEND for the walk rig (review 8/10: "tail stays mostly static/curled while walking"). The tail is cut from T
+# along this centreline (walk_right_00 canvas px: base behind the shorts -> behind the hand -> loop -> spade) and bent
+# by the engine tail tip offset: displacement(s) = gain * (tail_tip_x, tail_tip_y) * s^bend_power, s = 0 base .. 1 tip.
+centerline = [[206,188],[197,190],[188,193],[183,200],[181,212],[179.5,226],[178.5,231],[176,238],[173,244],[166,249],[158,251],[150,250],[142,246],[136,239],[132,230],[131,220],[132,211],[136,204],[143,199],[150,196],[157,193]]
+width = 3.5                      # half-width of the tail strand mask (px)
+spade_width = 10.0               # half-width over the spade (incl. its lower barb)
+spade_from_s = 0.80              # arclength fraction where the spade starts
+max_x = 207                      # never cut body pixels right of this
+bend_power = 1.7                 # base fixed, tip moves most
+gain = 1.0                       # engine px -> tip px (the idle-clip gaussian uses tail_gain 0.35; the rig bends the real tail)
+cap_px = 14.0                    # tip displacement cap
+
+[render.gait.near]               # her RIGHT leg (near side, fishnet garter): joints measured on walk_right_00
+hip = [226.0, 214.0]
+knee = [254.0, 295.0]
+ankle = [280.0, 362.0]
+rest_pitch_deg = 0.0             # boot is flat on the baseline in the source frame
+[render.gait.far]                # her LEFT leg (far side)
+hip = [212.0, 216.0]
+knee = [181.0, 295.0]
+ankle = [150.0, 358.0]
+rest_pitch_deg = 21.8            # source boot is in toe-off (heel 16 px up over 40 px)
 # --- Attachment points: RECONCILED with assets/generated/spring_proposal.json
 # (schema lillith.spring_proposal/1, landed 2026-10-19 11:22 MDT). Names, coordinates and the channel map
 # are THEIRS; every spring/gain number in this file is OURS (their channel numbers matched ours exactly).

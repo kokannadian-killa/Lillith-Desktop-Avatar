@@ -18,7 +18,10 @@
 //! torso-twist springs, two alternating jiggle kicks per cycle, a timed view
 //! turn with hard cuts (front / 3/4 / side) and a gait-locked tail sway. Read
 //! them from [`Overlay::gait`] / [`PhysicsDriver::gait`] ([`GaitPose`]).
-//! Without `[gait]` all of it is off and walking behaves exactly as before.
+//! Without `[gait]`, or with `[gait] enabled = false` (the bundled file),
+//! all of it is off and walking behaves exactly as before. While the drawn
+//! clip bakes its own walk ([`PhysicsDriver::set_gait_suppressed`], manifest
+//! `disable_springs = ["gait"]`) it is off too.
 
 use crate::config::Springs as UserSprings;
 use crate::mood::Mood;
@@ -278,7 +281,14 @@ pub struct PhysicsDriver {
     facing: f32,
     walk_phase: f32,
     foot: u32,
-    // gait (only active with a [gait] table)
+    /// Footfalls come from the clip player ([`PhysicsDriver::on_footfall`]
+    /// on the art's contact frames) instead of fixed cycle phases.
+    frame_footfalls: bool,
+    // gait (only active with a [gait] table that is enabled)
+    /// Runtime switch, starts as `[gait].enabled` ([`Self::set_gait_enabled`]).
+    gait_switch: bool,
+    /// The drawn clip bakes its own gait ([`Self::set_gait_suppressed`]).
+    gait_suppressed: bool,
     gait_cycle: f32,
     gait_lin: f32,
     arm_l: Spring,
@@ -414,6 +424,9 @@ impl PhysicsDriver {
             facing: 1.0,
             walk_phase: 0.0,
             foot: 0,
+            frame_footfalls: false,
+            gait_switch: cfg.active_gait().is_some(),
+            gait_suppressed: false,
             gait_cycle,
             gait_lin: 0.0,
             arm_l,
@@ -486,6 +499,17 @@ impl PhysicsDriver {
     pub fn physics(&self) -> &Physics {
         &self.physics
     }
+    /// Re-applies the user's `[springs]` (Settings, live): stiffness,
+    /// damping (mood multipliers stay on top) and the three gains.
+    pub fn set_user_springs(&mut self, u: &UserSprings) {
+        let mut cfg = (*self.cfg).clone();
+        cfg.apply_user_springs(u);
+        self.cfg = Arc::new(cfg);
+        self.apply_mood_params();
+        self.physics
+            .set_gains(u.jiggle_gain, u.chest_bounce_gain, u.pigtail_sway_gain);
+    }
+
     pub fn physics_mut(&mut self) -> &mut Physics {
         &mut self.physics
     }
@@ -562,13 +586,19 @@ impl PhysicsDriver {
         self.apply_mood_params();
     }
 
+    /// `true`: locomotion footfalls are fed frame-accurately by the clip
+    /// player through [`PhysicsDriver::on_footfall`]; the cycle-derived ones
+    /// (fixed phases 0 and 1/2 of the cycle) are skipped.
+    pub fn set_frame_footfalls(&mut self, on: bool) {
+        self.frame_footfalls = on;
+    }
+
     pub fn set_motion(&mut self, m: Motion) {
         let was = self.motion.locomotion();
         let now = m.locomotion();
         // With timed turns the boundary fires at each view cut instead (substep).
         let turning = self
-            .cfg
-            .gait
+            .live_gait()
             .is_some_and(|g| g.turn_in_s > 0.0 || g.turn_out_s > 0.0);
         if self.cfg.clip_boundary.on_locomotion_change && was.is_some() != now.is_some() && !turning
         {
@@ -581,7 +611,7 @@ impl PhysicsDriver {
                 self.schedule(Target::Ch(Channel::Angle), a, 0.0);
                 // With [gait], a walk restarted while the stride is still
                 // ramping out keeps its phase (no foot jump).
-                if self.cfg.gait.is_none() || self.gait_lin <= 0.0 {
+                if self.live_gait().is_none() || self.gait_lin <= 0.0 {
                     self.walk_phase = 0.0;
                     self.foot = 0;
                 }
@@ -627,9 +657,104 @@ impl PhysicsDriver {
         }
     }
 
-    /// `true` if physics.toml has a `[gait]` table (engine gait on).
+    /// `true` if engine gait is on: physics.toml has a `[gait]` table, its
+    /// `enabled` is not false (the bundled file ships `false`) and
+    /// [`Self::set_gait_enabled`] has not switched it off. Clips that bake
+    /// their own walk can still suppress it ([`Self::gait_active`]).
     pub fn gait_enabled(&self) -> bool {
-        self.cfg.gait.is_some()
+        self.gait_switch && self.cfg.gait.is_some()
+    }
+
+    /// Runtime gait switch (needs a `[gait]` table; no-op without one).
+    /// Turning it off parks the gait state like a baked clip does.
+    pub fn set_gait_enabled(&mut self, on: bool) {
+        let was = self.live_gait().is_some();
+        self.gait_switch = on;
+        self.gait_changed(was);
+    }
+
+    /// The drawn clip already bakes the walk (legs, arms, hip bob, tail):
+    /// the animator calls this from the clip's manifest `disable_springs`
+    /// (`"gait"`, [`crate::spring::SpringMask::GAIT_GROUP`]), the same way
+    /// baked-jiggle clips switch spring channels off. While suppressed the
+    /// engine gait does not run: every [`GaitPose`] output except the view
+    /// (instant swap by `Motion`) reads rest, no gait twist / tail / bob
+    /// inertia, and footfalls use the plain `[walk]` kicks (whose walk
+    /// `root_y` is 0 in the bundled file, so no extra bob on baked frames).
+    pub fn set_gait_suppressed(&mut self, on: bool) {
+        if on == self.gait_suppressed {
+            return;
+        }
+        let was = self.live_gait().is_some();
+        self.gait_suppressed = on;
+        self.gait_changed(was);
+    }
+
+    /// Live gait switched off -> park it; switched on -> take over without a
+    /// pop (a walk in progress already shows the side view: start turned and
+    /// let the stride ramp in).
+    fn gait_changed(&mut self, was: bool) {
+        if was != self.live_gait().is_some() {
+            self.park_gait();
+        }
+    }
+
+    /// The `root_y` a footfall recipe may kick right now: 0 while the drawn
+    /// clip bakes its own gait ([`Self::set_gait_suppressed`], whether or not
+    /// `[gait]` is enabled) or while the engine gait is driving (its hip bob
+    /// supplies the vertical step); `recipe_root_y` otherwise (gait off on an
+    /// engine-clean clip: unchanged behaviour).
+    pub fn footfall_root_y(&self, recipe_root_y: f32) -> f32 {
+        if self.gait_suppressed || self.live_gait().is_some() {
+            0.0
+        } else {
+            recipe_root_y
+        }
+    }
+
+    /// `true` while the drawn clip suppresses the engine gait.
+    pub fn gait_suppressed(&self) -> bool {
+        self.gait_suppressed
+    }
+
+    /// `true` if the engine gait is driving right now (enabled and not
+    /// suppressed by a baked-gait clip).
+    pub fn gait_active(&self) -> bool {
+        self.live_gait().is_some()
+    }
+
+    /// `[gait]` if it is enabled and not suppressed.
+    fn live_gait(&self) -> Option<Gait> {
+        if self.gait_switch && !self.gait_suppressed {
+            self.cfg.gait
+        } else {
+            None
+        }
+    }
+
+    /// Gait off (or on) mid-flight: stride, arms, twist and tail sway back to
+    /// rest; the view is whatever `Motion` says (side while walking).
+    fn park_gait(&mut self) {
+        self.gait_lin = 0.0;
+        self.turn_lin = if self.motion.locomotion().is_some() {
+            1.0
+        } else {
+            0.0
+        };
+        self.turn_dir = 0;
+        self.heel_strike = 0;
+        for s in [
+            &mut self.arm_l,
+            &mut self.arm_r,
+            &mut self.fore_l,
+            &mut self.fore_r,
+            &mut self.twist,
+        ] {
+            s.target = 0.0;
+            s.position = 0.0;
+            s.velocity = 0.0;
+        }
+        self.tail_x.target = 0.0;
     }
 
     /// Stride weight 0..1 (smoothstep of the linear ramp; 0 without `[gait]`).
@@ -645,8 +770,8 @@ impl PhysicsDriver {
 
     /// Gait outputs for this frame (also in [`Overlay::gait`]).
     pub fn gait(&self) -> GaitPose {
-        let Some(g) = self.cfg.gait.as_ref() else {
-            // No [gait]: instant view swap by Motion, nothing else moves.
+        let Some(g) = self.live_gait() else {
+            // No (live) [gait]: instant view swap by Motion, nothing else moves.
             let p = if self.motion.locomotion().is_some() {
                 1.0
             } else {
@@ -679,7 +804,7 @@ impl PhysicsDriver {
             heel_strike: self.heel_strike,
             turn_progress: turn,
             turn_dir: self.turn_dir,
-            turn_view: turn_view_of(turn, g),
+            turn_view: turn_view_of(turn, &g),
             tail_sway_px: self.tail_x.target,
         }
     }
@@ -758,8 +883,16 @@ impl PhysicsDriver {
         } else {
             1.0
         };
-        let Some(g) = self.cfg.gait else {
-            self.schedule(Target::Ch(Channel::RootY), f.root_y, 0.0);
+        // The footfall's root_y bob is dropped when something else already
+        // supplies the vertical step: the drawn clip bakes its own walk
+        // (`disable_springs = ["gait"]`, the video already bobs) or the engine
+        // gait is driving (its hip_bob_px is the bob). Otherwise a run clip's
+        // root_y kick would double it. See `Self::footfall_root_y`.
+        let root_y = self.footfall_root_y(f.root_y);
+        let Some(g) = self.live_gait() else {
+            if root_y != 0.0 {
+                self.schedule(Target::Ch(Channel::RootY), root_y, 0.0);
+            }
             self.schedule(Target::Ch(Channel::Chest), f.chest, 0.0);
             self.schedule(
                 Target::Ch(Channel::Pigtail),
@@ -772,9 +905,7 @@ impl PhysicsDriver {
         // before the legs move), plus tail droop / alternating flick and an
         // alternating torso counter-twist (right strike -> right shoulder back).
         let k = self.gait_amp();
-        if f.root_y != 0.0 {
-            self.schedule(Target::Ch(Channel::RootY), f.root_y * k, 0.0);
-        }
+        debug_assert_eq!(root_y, 0.0, "live gait owns the vertical step");
         self.schedule(Target::Ch(Channel::Chest), f.chest * k, 0.0);
         self.schedule(
             Target::Ch(Channel::Pigtail),
@@ -824,8 +955,8 @@ impl PhysicsDriver {
             * (g(x) + c.heartbeat.dub_ratio * g(x - c.heartbeat.dub_delay_s));
         let w = std::f32::consts::TAU * self.tail_phase;
         // The idle figure-8 gives way to the gait-locked sway while walking.
-        let f8 = c
-            .gait
+        let f8 = self
+            .live_gait()
             .map_or(1.0, |g| 1.0 - self.gait_amp() * (1.0 - g.tail_figure8_walk));
         let tail_amp =
             m.tail_amplitude * (1.0 + c.mischief.tail_amplitude_boost * self.mischief) * f8;
@@ -1125,7 +1256,7 @@ impl PhysicsDriver {
         let vx = match self.motion {
             Motion::Dragged { vx } => vx,
             // With [gait] the hair's walking trail eases in/out with the stride.
-            _ if self.cfg.gait.is_some() => self.gait_vx * self.gait_amp(),
+            _ if self.live_gait().is_some() => self.gait_vx * self.gait_amp(),
             m => m.locomotion().map(|l| l.0).unwrap_or(0.0),
         };
         let drag_angle = match self.motion {
@@ -1258,7 +1389,11 @@ impl PhysicsDriver {
             let first = loco.is_some() && self.walk_phase == 0.0 && self.foot == 0;
             let before = (self.walk_phase * n).floor();
             self.walk_phase += h / self.gait_cycle;
-            if loco.is_some() && ((self.walk_phase * n).floor() > before || first) {
+            // Frame-accurate footfalls (contact frames) replace the phase ones.
+            if loco.is_some()
+                && !self.frame_footfalls
+                && ((self.walk_phase * n).floor() > before || first)
+            {
                 // integer phase = RIGHT heel strike (foot 1), half = LEFT (foot 0)
                 let idx = (self.walk_phase * n).floor() as i64;
                 let foot = if idx.rem_euclid(2) == 0 { 1 } else { 0 };
@@ -1402,15 +1537,16 @@ impl PhysicsDriver {
         }
         self.step_transition(h);
 
-        if let Some(g) = c.gait {
+        if let Some(g) = self.live_gait() {
             self.step_gait(&c, g, h);
         } else if let Some((_, cycle, _)) = self.motion.locomotion() {
             // locomotion footfalls (cycle-derived)
             let n = c.walk.footfalls_per_cycle.max(1) as f32;
             let before = (self.walk_phase * n).floor();
             self.walk_phase += h / cycle.max(0.05);
-            if (self.walk_phase * n).floor() > before
-                || (self.walk_phase <= h / cycle && self.foot == 0)
+            if !self.frame_footfalls
+                && ((self.walk_phase * n).floor() > before
+                    || (self.walk_phase <= h / cycle && self.foot == 0))
             {
                 let foot = self.foot;
                 self.foot += 1;
@@ -1454,7 +1590,7 @@ impl PhysicsDriver {
         self.tail_y.advance(h, hz);
         self.horn.target = self.physics.angle.position * c.horn.tilt_follow;
         self.horn.advance(h, hz);
-        if let Some(g) = c.gait {
+        if let Some(g) = self.live_gait() {
             self.arm_l.advance(h, hz);
             self.arm_r.advance(h, hz);
             self.fore_l.advance(h, hz);
@@ -1570,6 +1706,7 @@ mod tests {
 
     const ROOT_X: usize = 0;
     const ROOT_Y: usize = 1;
+    const ANGLE: usize = 2;
     const CHEST: usize = 4;
     const PIG: usize = 5;
 
@@ -1579,7 +1716,19 @@ mod tests {
         let reference = Physics::default();
         for c in Channel::ALL {
             let (a, b) = (d.physics().spring(c), reference.spring(c));
-            assert_eq!(a.params, b.params, "{c:?}");
+            match c {
+                // physics-lab motion-review retune (zeta ~0.75) beats the
+                // README-SP defaults; an untouched config.toml keeps it.
+                Channel::Chest => assert_eq!(
+                    (a.params.stiffness, a.params.damping),
+                    (90.0, 14.5),
+                    "{c:?}"
+                ),
+                Channel::Pigtail => {
+                    assert_eq!((a.params.stiffness, a.params.damping), (40.0, 9.5), "{c:?}")
+                }
+                _ => assert_eq!(a.params, b.params, "{c:?}"),
+            }
             assert_eq!(a.max_velocity, b.max_velocity, "{c:?}");
             assert_eq!(a.max_offset, b.max_offset, "{c:?}");
         }
@@ -1596,7 +1745,18 @@ mod tests {
         let chest = peak(&r, CHEST);
         assert!((1.2..=2.6).contains(&chest), "light tap chest peak {chest}");
         assert!(peak(&r, PIG) > 2.5, "pigtails swing: {}", peak(&r, PIG));
-        assert!(peak(&r, ROOT_X) > 0.5, "upper-body sway");
+        // Motion review: the tap sways the planted upper body (angle) only;
+        // the old root_x kick slid her whole body sideways.
+        assert!(
+            peak(&r, ANGLE) > 0.001,
+            "upper-body sway {}",
+            peak(&r, ANGLE)
+        );
+        assert!(
+            peak(&r, ROOT_X) < 0.5,
+            "planted, no slide {}",
+            peak(&r, ROOT_X)
+        );
         // Nothing left after ~3 s.
         let tail = r
             .iter()
@@ -1706,7 +1866,8 @@ mod tests {
             hi = hi.max(s);
         }
         assert!(
-            (0.008..=0.016).contains(&(hi - lo)),
+            // physics-lab retune: scale_amplitude 0.006 -> 0.003 (lab test range)
+            (0.004..=0.008).contains(&(hi - lo)),
             "scale p2p {}",
             hi - lo
         );
