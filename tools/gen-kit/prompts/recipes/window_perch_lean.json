@@ -1,0 +1,19 @@
+{
+ "mode": "loop",
+ "take_s": 6,
+ "video_fps": 24,
+ "start": 1,
+ "stop": 143,
+ "step": 2,
+ "fps": 12,
+ "scale": 0.54,
+ "anchor_x": 200,
+ "center": "fixed",
+ "finalize": "keyframed",
+ "seated": false,
+ "peak_at_s": 3.0,
+ "peak_pose": "standing beside an invisible window edge, one elbow resting high on the invisible ledge at shoulder height, hip popped out to the side, chest turned three-quarters toward the viewer and pushed forward, free hand on her hip",
+ "expression": "lazy, confident smirk and slow-blinking bedroom eyes",
+ "motion": "She leans her weight into the invisible ledge, slowly sliding her hip out and rolling her chest toward the viewer; a soft, natural bounce follows the lean; her free hand slides down to her hip, a slow wink, then she eases back to the start pose. The ledge itself is never drawn.",
+ "name": "window_perch_lean"
+}

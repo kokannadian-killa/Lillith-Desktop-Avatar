@@ -1,0 +1,9 @@
+# KEYFRAME STILL  (GenerateImage, aspect 16:9, reference_image_paths = [BASE STILL])
+# Fill {PEAK_POSE} and {EXPRESSION} from the recipe (make_clip.py --prompts <recipe> does it for you).
+Same character, same outfit, same art style, same scale and same camera as the reference image; only the pose and expression change.
+{CHARACTER_LOCK}
+Pose: {PEAK_POSE}.
+Expression: {EXPRESSION}. Confident, flirty, seductive pin-up attitude.
+Framing: full body, centred, the same size as the reference; clear space above the horn tips and below the boots; nothing touches the image edges. Chest-forward three-quarter-to-front angle so the deep neckline and cleavage read clearly; the outfit fully covers her, glossy and opaque.
+Background: flat pure white (#FFFFFF), no floor, no shadow, no props, no gradient.
+{AVOID}
