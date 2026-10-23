@@ -23,6 +23,7 @@ use lillith_core::menu::{
 };
 use lillith_core::rules::RuleSet;
 use lillith_core::state::{Action, BehaviorConfig, Brain, Input, Key, Phase};
+use lillith_core::tease::{fit_peak, keep_on_screen, Tease, TeaseCue, TeasePhase, TeasePlan};
 use lillith_core::Event;
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
@@ -207,7 +208,29 @@ pub struct Controller {
     pub gravity: Gravity,
     /// Window stack to use instead of the KWin bridge's (tests, sims).
     desktop_override: Option<Desktop>,
+    /// "Come closer" tease scheduler (`[behavior.tease]`).
+    pub tease: Tease,
+    /// The running tease: its clips, her normal scale and the window
+    /// centre x it grows around.
+    tease_run: Option<TeaseRun>,
 }
+
+/// State of a running "come closer" tease in the overlay.
+#[derive(Debug, Clone, PartialEq)]
+struct TeaseRun {
+    plan: TeasePlan,
+    /// Her normal scale (restored exactly at the end).
+    base_scale: f32,
+    /// Window centre x (px) she grows / shrinks around.
+    center_x: i32,
+}
+
+/// Reaction priority of the tease beat (above the pose cycle and pranks,
+/// below real events).
+pub const TEASE_PRIORITY: u8 = 30;
+
+/// Smallest scale change (fraction) worth a window resize mid-tease.
+const TEASE_SCALE_STEP: f32 = 0.002;
 
 impl Controller {
     pub fn new(opts: &OverlayOptions) -> Result<Self, OverlayError> {
@@ -298,6 +321,8 @@ impl Controller {
                 opts.animator.seed,
             ),
             desktop_override: None,
+            tease: Tease::new(opts.behavior.tease.clone(), opts.animator.seed),
+            tease_run: None,
         }
         .with_click_through(opts.click_through)
     }
@@ -374,6 +399,7 @@ impl Controller {
         if self.peek.is_some() {
             return;
         }
+        self.cancel_tease();
         self.peek = Some(Peek {
             scale: self.stage.scale(),
             placement: self.placement,
@@ -409,6 +435,7 @@ impl Controller {
         match cmd {
             Command::Pose(clip) => {
                 self.restore();
+                self.retreat_tease();
                 self.showoff.clear();
                 let anim = self.stage.animator_mut();
                 if anim.has_clip(&clip) {
@@ -423,6 +450,7 @@ impl Controller {
             }
             Command::ShowOff => {
                 self.restore();
+                self.retreat_tease();
                 let seq = lillith_anim::catalog::show_off(
                     self.stage.animator().manifest(),
                     self.seed ^ (self.clock * 1000.0) as u64,
@@ -437,6 +465,7 @@ impl Controller {
             }
             Command::Minimize => self.minimize(),
             Command::Scale { scale, save } => {
+                self.cancel_tease();
                 self.peek = None;
                 self.set_scale(scale, save);
             }
@@ -508,7 +537,9 @@ impl Controller {
             self.level = Some(cfg.always_on_top);
         }
         self.avatar_cfg = cfg.avatar.clone();
+        self.tease.set_config(cfg.behavior.tease.clone());
         if self.peek.is_none() && cfg.scale > 0.0 {
+            self.cancel_tease();
             self.set_scale(cfg.overlay_scale(), false);
         }
         // Avatar choice / strength / anchors may have changed too.
@@ -858,7 +889,8 @@ impl Controller {
         let busy = anim.overlay_clip().is_some()
             || anim.queued() > 0
             || self.talk.active()
-            || self.gravity.sitting();
+            || self.gravity.sitting()
+            || self.tease.active();
         let actions = self.brain.tick(dt, busy);
         self.apply(actions);
         self.talk.tick(dt, self.stage.animator_mut());
@@ -885,7 +917,183 @@ impl Controller {
         self.brain
             .set_root_motion(anim.base_has_root_motion() || anim.stopping());
         self.gravity_tick(dt);
+        self.tease_tick(dt);
         Ok(changed)
+    }
+
+    // ---- "come closer" tease ----
+
+    /// Her normal scale (the tease's base while one runs).
+    pub fn normal_scale(&self) -> f32 {
+        self.tease_run
+            .as_ref()
+            .map_or(self.stage.scale(), |r| r.base_scale)
+    }
+
+    /// `true` while she is idle on her own, so tease time may count.
+    fn tease_calm(&self) -> bool {
+        let anim = self.stage.animator();
+        self.brain.phase() == Phase::Idle
+            && !self.brain.drowsy()
+            && !self.brain.hovering()
+            && !self.hovered
+            && anim.overlay_clip().is_none()
+            && anim.queued() == 0
+            && !anim.stopping()
+            && !anim.base_has_root_motion()
+            && !self.talk.active()
+            && self.showoff.is_empty()
+            && self.peek.is_none()
+            && !self.drag.active()
+            && self.menu.is_none()
+            && !self.gravity.sitting()
+            && !matches!(self.gravity.mode, Mode::Held | Mode::Falling(_))
+            && self.stage.avatar_id().is_none()
+    }
+
+    /// Advances the tease: schedules it, switches its clips per phase and
+    /// eases the window scale.
+    fn tease_tick(&mut self, dt: f32) {
+        let calm = self.tease_calm();
+        match self.tease.tick(dt, calm) {
+            Some(TeaseCue::Due) => self.start_tease(),
+            Some(TeaseCue::Phase(p)) => self.tease_phase(p),
+            Some(TeaseCue::Done) => {
+                self.finish_tease();
+                return;
+            }
+            None => {}
+        }
+        if let Some(run) = &self.tease_run {
+            let target = run.base_scale * self.tease.factor();
+            let diff = (target - self.stage.scale()).abs();
+            // Small steps are batched while easing; at the peak it lands exactly.
+            let held = matches!(
+                self.tease.phase(),
+                Some(TeasePhase::Beat | TeasePhase::Pause)
+            );
+            if diff >= TEASE_SCALE_STEP * run.base_scale || (held && diff > 0.0) {
+                self.apply_tease_scale(target);
+            }
+        }
+    }
+
+    /// Starts a tease now if the clips exist and there is room to grow.
+    fn start_tease(&mut self) {
+        let anim = self.stage.animator();
+        let Some(plan) = self.tease.config().plan(|n| anim.has_clip(n)) else {
+            tracing::debug!("tease: no beat clip in this set; skipped");
+            self.tease.postpone();
+            return;
+        };
+        let beat_s = anim
+            .manifest()
+            .clips
+            .get(&plan.beat)
+            .map_or(0.0, |c| c.duration_s());
+        let base_scale = self.stage.scale();
+        let size = self.stage.size();
+        let cur = self.pending_move.unwrap_or(self.placement);
+        let peak = fit_peak(
+            self.tease.config().peak_scale,
+            size,
+            self.screen,
+            cur.bottom,
+        );
+        if peak <= 1.0 + 1e-3 {
+            tracing::debug!("tease: no room to grow; skipped");
+            self.tease.postpone();
+            return;
+        }
+        tracing::info!(?plan, peak, base_scale, "tease: come closer");
+        self.tease_run = Some(TeaseRun {
+            plan,
+            base_scale,
+            center_x: cur.left + size.0 as i32 / 2,
+        });
+        self.tease.begin(peak, beat_s);
+        self.tease_phase(TeasePhase::Approach);
+    }
+
+    /// Clips for a tease phase.
+    fn tease_phase(&mut self, phase: TeasePhase) {
+        let Some(run) = self.tease_run.clone() else {
+            return;
+        };
+        tracing::debug!(?phase, "tease phase");
+        let anim = self.stage.animator_mut();
+        let base = match phase {
+            TeasePhase::Approach | TeasePhase::Retreat => run.plan.approach.as_deref(),
+            TeasePhase::Beat => {
+                // The beat plays once over the plain idle.
+                anim.stand();
+                if let Err(e) = anim.react(&run.plan.beat, TEASE_PRIORITY) {
+                    tracing::debug!("tease beat {}: {e}", run.plan.beat);
+                }
+                return;
+            }
+            TeasePhase::Pause => run.plan.pause.as_deref(),
+        };
+        match base {
+            Some(clip) => {
+                let _ = anim.set_base(clip, false);
+            }
+            None => anim.stand(),
+        }
+    }
+
+    /// The tease is over: back on the idle, exactly at her normal size.
+    fn finish_tease(&mut self) {
+        let Some(run) = self.tease_run.take() else {
+            return;
+        };
+        self.stage.animator_mut().stand();
+        self.apply_tease_scale_around(run.base_scale, run.center_x);
+        tracing::debug!(scale = run.base_scale, "tease: done");
+    }
+
+    /// Ends a tease at once (drag, resize, minimize): her normal size now.
+    pub fn cancel_tease(&mut self) {
+        if self.tease.cancel() {
+            self.finish_tease();
+        }
+    }
+
+    /// A click / pose while teasing: she backs off smoothly.
+    pub fn retreat_tease(&mut self) {
+        if let Some(TeaseCue::Phase(p)) = self.tease.retreat_now() {
+            self.tease_phase(p);
+        }
+    }
+
+    fn apply_tease_scale(&mut self, scale: f32) {
+        let Some(cx) = self.tease_run.as_ref().map(|r| r.center_x) else {
+            return;
+        };
+        self.apply_tease_scale_around(scale, cx);
+    }
+
+    /// Resizes her to `scale` without saving it, keeping the window centred
+    /// on `center_x`, her feet on the same line and the window on screen.
+    fn apply_tease_scale_around(&mut self, scale: f32, center_x: i32) {
+        if (self.stage.scale() - scale).abs() > f32::EPSILON {
+            if let Err(e) = self.stage.set_scale(scale) {
+                tracing::warn!("tease resize: {e}");
+                return;
+            }
+            self.resized = true;
+        }
+        let w = self.stage.size().0;
+        let mut left = center_x - w as i32 / 2;
+        if let Some((sw, _)) = self.screen {
+            left = keep_on_screen(left, w, sw);
+        }
+        let cur = self.pending_move.unwrap_or(self.placement);
+        if left != cur.left {
+            self.pending_move = Some(Placement { left, ..cur });
+        }
+        self.brain.set_position(left as f32);
+        self.apply_area();
     }
 
     /// Asks the app to open the chat bubble next to her.
@@ -1149,6 +1357,7 @@ impl Controller {
         }
         self.last_drag_x = Some((now, p.left));
         if !was {
+            self.cancel_tease();
             self.gravity.mode = Mode::Held;
             self.click_gate.cancel();
             let a = self.brain.input(Input::DragStart);
@@ -1182,6 +1391,7 @@ impl Controller {
                 self.persist(p);
             }
             Release::Click => {
+                self.retreat_tease();
                 tracing::info!(
                     chat_on_click = self.chat_on_click && self.chat.is_some(),
                     "left click on her (click, not drag)"
@@ -1217,7 +1427,7 @@ impl Controller {
     /// Everything the menu shows: brain state plus poses (from the
     /// animation set), avatars and chat availability.
     pub fn menu_state(&self, page: Option<MenuPage>) -> MenuState {
-        let scale = self.peek.map_or(self.stage.scale(), |p| p.scale);
+        let scale = self.peek.map_or(self.normal_scale(), |p| p.scale);
         let m = self.stage.animator().manifest();
         let poses = lillith_anim::catalog::grouped(m)
             .into_iter()
@@ -1597,6 +1807,172 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             dir,
             lillith_anim::atlas::Manifest::from_toml_str(&toml).unwrap(),
         )
+    }
+
+    /// Controller with the tease clips, due after 5 s of calm idle.
+    fn tease_controller(tag: &str) -> (std::path::PathBuf, Controller) {
+        let frames = r#"page = "idle.png"
+fps = 8.0
+frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+"#;
+        let mut extra = String::new();
+        for c in ["tease_closeup", "hip_sway", "blink_wink"] {
+            extra.push_str(&format!("[clips.{c}]\n{frames}\n"));
+        }
+        let (dir, mut c) = m3_controller_with(tag, MoveMode::Stay, &extra);
+        c.tease = Tease::new(
+            lillith_core::tease::TeaseConfig {
+                every_s: (5.0, 5.0),
+                approach_clips: vec!["hip_sway".into()],
+                ..Default::default()
+            },
+            1,
+        );
+        (dir, c)
+    }
+
+    #[test]
+    fn tease_comes_closer_then_back_to_exactly_her_size() {
+        let (dir, mut c) = tease_controller("tease_seq");
+        let dt = 1.0 / 30.0;
+        let base = c.stage.scale();
+        let size0 = c.stage.size();
+        let center0 = c.placement.left + size0.0 as i32 / 2;
+        // Calm idle until it is due.
+        let mut ticks = 0;
+        while !c.tease.active() {
+            c.tick(dt).unwrap();
+            ticks += 1;
+            assert!(ticks < 6 * 30, "tease never started");
+        }
+        assert_eq!(c.tease.phase(), Some(TeasePhase::Approach));
+        assert_eq!(
+            c.stage.animator().base(),
+            "hip_sway",
+            "sways up to the viewer"
+        );
+        let mut phases = vec![TeasePhase::Approach];
+        let mut scales = vec![c.stage.scale()];
+        let mut beat_played = false;
+        let mut pause_base = String::new();
+        for _ in 0..(14.0 / dt) as usize {
+            if let Some(m) = c.take_move() {
+                c.placement = m;
+            }
+            c.tick(dt).unwrap();
+            scales.push(c.stage.scale());
+            let anim = c.stage.animator();
+            match c.tease.phase() {
+                Some(p) if phases.last() != Some(&p) => phases.push(p),
+                _ => {}
+            }
+            if c.tease.phase() == Some(TeasePhase::Beat)
+                && anim.overlay_clip() == Some("tease_closeup")
+            {
+                beat_played = true;
+            }
+            if c.tease.phase() == Some(TeasePhase::Pause) {
+                pause_base = anim.base().to_string();
+            }
+            if !c.tease.active() {
+                break;
+            }
+        }
+        assert_eq!(
+            phases,
+            [
+                TeasePhase::Approach,
+                TeasePhase::Beat,
+                TeasePhase::Pause,
+                TeasePhase::Retreat
+            ]
+        );
+        assert!(beat_played, "tease_closeup played at the peak");
+        assert_eq!(pause_base, "blink_wink", "held smile / wink");
+        assert!(!c.tease.active(), "tease finished");
+        let peak = scales.iter().cloned().fold(0.0, f32::max);
+        assert!((peak - base * 1.6).abs() < 1e-3, "{peak}");
+        // Smooth: no big jumps between frames.
+        for w in scales.windows(2) {
+            assert!((w[1] - w[0]).abs() < 0.02 * base, "{} -> {}", w[0], w[1]);
+        }
+        // Exactly back to her size, on the idle, centred where she was.
+        assert_eq!(c.stage.scale(), base);
+        assert_eq!(c.stage.size(), size0);
+        assert_eq!(c.stage.animator().base(), "idle");
+        if let Some(m) = c.take_move() {
+            c.placement = m;
+        }
+        assert_eq!(c.placement.left + size0.0 as i32 / 2, center0);
+        // Nothing was saved and the menu shows her normal size.
+        assert!(!dir.join("cfg/config.toml").exists());
+        assert_eq!(c.normal_scale(), base);
+    }
+
+    #[test]
+    fn tease_click_backs_off_and_drag_cancels() {
+        let (_dir, mut c) = tease_controller("tease_cancel");
+        let dt = 1.0 / 30.0;
+        let base = c.stage.scale();
+        while !c.tease.active() {
+            c.tick(dt).unwrap();
+        }
+        for _ in 0..45 {
+            c.tick(dt).unwrap();
+        }
+        let mid = c.stage.scale();
+        assert!(mid > base, "{mid}");
+        assert!(
+            (c.normal_scale() - base).abs() < 1e-6,
+            "menu shows her size"
+        );
+        // A click: smooth retreat from where she is.
+        c.retreat_tease();
+        assert_eq!(c.tease.phase(), Some(TeasePhase::Retreat));
+        let mut prev = c.stage.scale();
+        while c.tease.active() {
+            c.tick(dt).unwrap();
+            assert!(c.stage.scale() <= prev + 1e-6);
+            prev = c.stage.scale();
+        }
+        assert_eq!(c.stage.scale(), base);
+        // Next tease, then a drag: straight back to her size.
+        c.tease = Tease::new(
+            lillith_core::tease::TeaseConfig {
+                every_s: (1.0, 1.0),
+                ..Default::default()
+            },
+            2,
+        );
+        while !c.tease.active() {
+            c.tick(dt).unwrap();
+        }
+        for _ in 0..45 {
+            c.tick(dt).unwrap();
+        }
+        assert!(c.stage.scale() > base);
+        c.press_trusted((40.0, 40.0), true);
+        assert!(c.motion((300.0, 300.0)).is_some());
+        assert!(!c.tease.active());
+        assert_eq!(c.stage.scale(), base);
+    }
+
+    #[test]
+    fn tease_skipped_without_its_clips() {
+        let (_dir, mut c) = m3_controller("tease_none", MoveMode::Stay);
+        c.tease = Tease::new(
+            lillith_core::tease::TeaseConfig {
+                every_s: (1.0, 1.0),
+                ..Default::default()
+            },
+            1,
+        );
+        let base = c.stage.scale();
+        for _ in 0..90 {
+            c.tick(1.0 / 30.0).unwrap();
+            assert!(!c.tease.active());
+        }
+        assert_eq!(c.stage.scale(), base);
     }
 
     #[test]
