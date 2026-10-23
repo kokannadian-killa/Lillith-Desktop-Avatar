@@ -405,5 +405,25 @@
       21,
       392
     ]
-  ]
+  ],
+  "video": {
+    "file": "beam_cast.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 25,
+    "fps": 8.0,
+    "bytes": 338493,
+    "quality": {
+      "edge_mae": 2.041,
+      "edge_p99": 16.0,
+      "halo_dark": 0.053,
+      "halo_light": -0.13,
+      "alpha_mae": 0.0739
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

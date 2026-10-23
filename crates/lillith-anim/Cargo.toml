@@ -20,3 +20,4 @@ tiny-skia.workspace = true
 glam.workspace = true
 ab_glyph.workspace = true
 epaint_default_fonts.workspace = true
+tracing.workspace = true

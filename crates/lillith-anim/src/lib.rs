@@ -11,6 +11,7 @@
 //! - [`gestures`]: procedural gestures ported from `aether_animator.py`
 //!   (easing/tweens become spring targets and impulses).
 //! - [`talk`]: token-driven lip-flap for the `talk_loop` clip (chat replies).
+//! - [`video`]: alpha-packed MP4 clip source (local ffmpeg, LRU cache, PNG fallback).
 //! - [`particles`]: cyan/magenta/purple/gold/red particle bursts (TODO, M9).
 //!
 //! Frames are composited on the CPU with `tiny-skia` into a [`Canvas`].
@@ -27,6 +28,7 @@ pub mod preview;
 pub mod render;
 pub mod talk;
 pub mod text;
+pub mod video;
 
 /// CPU render target shared with the overlay (premultiplied RGBA).
 pub type Canvas = tiny_skia::Pixmap;

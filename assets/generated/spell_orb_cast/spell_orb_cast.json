@@ -282,5 +282,25 @@
       22,
       392
     ]
-  ]
+  ],
+  "video": {
+    "file": "spell_orb_cast.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 25,
+    "fps": 8.0,
+    "bytes": 402134,
+    "quality": {
+      "edge_mae": 2.499,
+      "edge_p99": 20.74,
+      "halo_dark": 0.054,
+      "halo_light": -0.169,
+      "alpha_mae": 0.0703
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

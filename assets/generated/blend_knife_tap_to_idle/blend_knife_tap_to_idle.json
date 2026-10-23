@@ -99,5 +99,25 @@
       19,
       392
     ]
-  ]
+  ],
+  "video": {
+    "file": "blend_knife_tap_to_idle.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 6,
+    "fps": 10.0,
+    "bytes": 102841,
+    "quality": {
+      "edge_mae": 2.224,
+      "edge_p99": 15.0,
+      "halo_dark": 0.079,
+      "halo_light": -0.231,
+      "alpha_mae": 0.0866
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

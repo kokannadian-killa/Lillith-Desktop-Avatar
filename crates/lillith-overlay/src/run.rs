@@ -1381,6 +1381,17 @@ impl Controller {
             avg_render_us = (self.stage.render_time().as_micros() as u64) / n,
             "overlay stats"
         );
+        let (v, pending) = self.stage.video_stats();
+        tracing::info!(
+            video_decodes = v.decodes,
+            video_resident_clips = v.resident_clips,
+            video_resident_mb = v.resident_bytes >> 20,
+            video_evictions = v.evictions,
+            video_failures = v.failures,
+            video_pending_renders = pending,
+            png_pages_mb = self.stage.page_bytes() >> 20,
+            "pose video stats"
+        );
     }
 
     /// Saves `p` to `[overlay]` in config.toml (logs, never fails the app).
