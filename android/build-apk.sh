@@ -39,6 +39,8 @@ OUT="${OUT:-$CARGO_TARGET_DIR/apk}"
 JAVAC="${JAVA_HOME:+$JAVA_HOME/bin/}javac"
 KEYTOOL="${JAVA_HOME:+$JAVA_HOME/bin/}keytool"
 LLVM="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+# d8/apksigner are shell wrappers that exec `java` from PATH.
+[ -n "${JAVA_HOME:-}" ] && export PATH="$JAVA_HOME/bin:$PATH"
 
 for f in "$NDK" "$BT/aapt2" "$BT/d8" "$BT/zipalign" "$BT/apksigner" "$PLATFORM_JAR" "$CMAKE_BIN/cmake"; do
   [ -e "$f" ] || { echo "missing: $f (see android/INSTALL-android.md)" >&2; exit 1; }
