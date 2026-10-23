@@ -141,6 +141,22 @@ impl VoiceConfig {
     }
 }
 
+/// Persists the "Speak out loud (speakers)" switch as `[voice] enabled`
+/// in `path` (other keys kept; creates the file if missing).
+pub fn save_enabled(path: &Path, on: bool) -> Result<(), lillith_core::config::ConfigError> {
+    lillith_core::config::update_config(path, |t| {
+        let entry = t
+            .entry("voice")
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !entry.is_table() {
+            *entry = toml::Value::Table(toml::Table::new());
+        }
+        if let Some(v) = entry.as_table_mut() {
+            v.insert("enabled".into(), toml::Value::Boolean(on));
+        }
+    })
+}
+
 /// `~/x` → `$HOME/x`.
 pub fn expand_home(p: &Path) -> PathBuf {
     match (p.strip_prefix("~"), std::env::var_os("HOME")) {
@@ -207,6 +223,30 @@ mod tests {
         let c = VoiceConfig::from_config_toml("[voice]\nrate = 9.0\nvolume = -1.0\nqueue = 0\n")
             .unwrap();
         assert_eq!((c.rate, c.volume, c.queue), (2.0, 0.0, 1));
+    }
+
+    #[test]
+    fn save_enabled_round_trips_and_keeps_other_keys() {
+        let dir = std::env::temp_dir().join(format!("lillith-voice-save-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("config.toml");
+        save_enabled(&path, false).unwrap();
+        assert!(
+            !VoiceConfig::load(&path).unwrap().enabled,
+            "creates the file"
+        );
+        std::fs::write(
+            &path,
+            "scale = 0.6\n[voice]\nengine = \"espeak-ng\"\nenabled = false\n",
+        )
+        .unwrap();
+        save_enabled(&path, true).unwrap();
+        let c = VoiceConfig::load(&path).unwrap();
+        assert!(c.enabled);
+        assert_eq!(c.engine, EngineChoice::EspeakNg);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("scale = 0.6"), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -709,12 +709,54 @@ fn start_monitor(
 }
 
 /// Feeds every overlay action batch to the voice (`Say` speaks, `Muted`
-/// mutes). `Voice::on_actions` only queues; the worker thread speaks.
-struct VoiceSink(lillith_voice::Voice);
+/// mutes), reads finished chat replies aloud, and owns the live "Speak out
+/// loud (speakers)" switch (`[voice] enabled`). Everything only queues; the
+/// worker thread speaks.
+struct VoiceSink {
+    voice: lillith_voice::Voice,
+    /// Where `[voice] enabled` is persisted (`None`: runtime only).
+    config: Option<std::path::PathBuf>,
+}
 
 impl lillith_overlay::ActionSink for VoiceSink {
     fn on_actions(&mut self, actions: &[lillith_core::state::Action]) {
-        self.0.on_actions(actions);
+        self.voice.on_actions(actions);
+    }
+
+    fn on_chat_reply(&mut self, reply: &str) {
+        // Speakers off / muted / no engine: silently skipped (text shows).
+        if let Err(why) = self.voice.say_reply(reply) {
+            tracing::debug!(?why, "chat reply not spoken");
+        }
+    }
+
+    fn speaker(&self) -> Option<bool> {
+        Some(self.voice.enabled())
+    }
+
+    fn set_speaker(&mut self, on: bool) {
+        self.voice.set_enabled(on);
+        if on && !self.voice.has_engine() {
+            tracing::warn!(
+                "speakers on, but no TTS engine is installed (piper / espeak-ng / spd-say)"
+            );
+        }
+        if let Some(path) = &self.config {
+            if let Err(e) = lillith_voice::config::save_enabled(path, on) {
+                tracing::warn!("could not save [voice] enabled to {}: {e}", path.display());
+            }
+        }
+    }
+
+    fn config_changed(&mut self, path: &std::path::Path) {
+        match lillith_voice::VoiceConfig::load(path) {
+            Ok(v) if v.enabled != self.voice.enabled() => {
+                tracing::info!(on = v.enabled, "speak out loud (speakers), from settings");
+                self.voice.set_enabled(v.enabled);
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!("[voice]: {e}"),
+        }
     }
 }
 
@@ -878,7 +920,10 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         chat: launcher.as_ref().map(chat::Launcher::hook),
         // `[voice] mute` also mutes SFX (one flag, like the menu toggle).
         muted: opts.muted || voice.muted(),
-        sink: Some(lillith_overlay::SinkHandle::new(VoiceSink(voice))),
+        sink: Some(lillith_overlay::SinkHandle::new(VoiceSink {
+            voice,
+            config: config_path.clone(),
+        })),
         ..opts
     };
     drop(tx);

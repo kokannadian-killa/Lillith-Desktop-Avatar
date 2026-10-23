@@ -55,6 +55,9 @@ pub fn apply(state: &mut MenuState, a: MenuAction) {
         MenuAction::SetMode(m) => state.mode = m,
         MenuAction::SetMood(m) => state.mood = m,
         MenuAction::ToggleMute => state.muted = !state.muted,
+        MenuAction::ToggleSpeaker => {
+            state.extras.speaker = Some(!state.extras.speaker.unwrap_or(true));
+        }
         MenuAction::ToggleMonitor => state.monitor_paused = !state.monitor_paused,
         // Local mirror only (radio state): the overlay owns size and
         // persists it itself.
@@ -110,6 +113,11 @@ pub fn persist(store: &mut ConfigStore, state: &MenuState, a: MenuAction) -> Per
             if store.get_bool(&["voice", "mute"]).is_some() {
                 store.set_bool(&["voice", "mute"], state.muted);
             }
+            Persisted::Staged
+        }
+        MenuAction::ToggleSpeaker => {
+            // Read by lillith-voice (`VoiceConfig`), not core's Config.
+            store.set_bool(&["voice", "enabled"], state.extras.speaker.unwrap_or(true));
             Persisted::Staged
         }
         MenuAction::ToggleMonitor => {
@@ -183,7 +191,16 @@ pub fn extras_for(poses: Vec<PoseGroup>, avatars: Option<&AvatarStore>) -> MenuE
         avatars,
         avatar,
         chat: true,
+        speaker: None,
     }
+}
+
+/// "Speak out loud (speakers)" from `[voice] enabled` (legacy top-level
+/// `voice_enabled`; default on).
+pub fn speaker_from_store(s: &ConfigStore) -> bool {
+    s.get_bool(&["voice", "enabled"])
+        .or_else(|| s.get_bool(&["voice_enabled"]))
+        .unwrap_or(true)
 }
 
 /// What goes on the wire for a pick: poses and recent avatars **by name**
@@ -253,6 +270,7 @@ mod tests {
             avatars: vec![("mug".into(), "Mug".into())],
             avatar: None,
             chat: true,
+            speaker: Some(true),
         }
     }
 
@@ -442,5 +460,35 @@ mod tests {
         let back = state_from_store(&ConfigStore::load(&p));
         assert_eq!(back.mode, MoveMode::Follow);
         assert!(back.muted && back.monitor_paused);
+    }
+
+    #[test]
+    fn speaker_toggle_persists_to_voice_enabled() {
+        let p = std::env::temp_dir().join(format!(
+            "lillith-settings-speaker-{}.toml",
+            std::process::id()
+        ));
+        std::fs::write(&p, "[voice]\nmute = false\n").unwrap();
+        let mut store = ConfigStore::load(&p);
+        assert!(speaker_from_store(&store), "default on");
+        let mut st = state_from_store(&store);
+        st.extras.speaker = Some(speaker_from_store(&store));
+        apply(&mut st, MenuAction::ToggleSpeaker);
+        assert_eq!(st.extras.speaker, Some(false));
+        assert_eq!(
+            persist(&mut store, &st, MenuAction::ToggleSpeaker),
+            Persisted::Staged
+        );
+        store.save().unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        let doc: toml_edit::DocumentMut = text.parse().unwrap();
+        assert_eq!(doc["voice"]["enabled"].as_bool(), Some(false), "{text}");
+        assert_eq!(
+            doc["voice"]["mute"].as_bool(),
+            Some(false),
+            "mute untouched"
+        );
+        assert!(!speaker_from_store(&ConfigStore::load(&p)));
+        let _ = std::fs::remove_file(&p);
     }
 }
