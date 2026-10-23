@@ -1,0 +1,27 @@
+[package]
+name = "lillith-android"
+description = "Android shell glue for Lillith: the desktop brain + animator + clips driven over JNI by the overlay service in android/app."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+# cdylib = liblillith_android.so inside the APK; rlib so the Linux gate
+# builds and tests the platform-neutral engine.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+lillith-core.workspace = true
+lillith-anim.workspace = true
+lillith-setup.workspace = true
+tiny-skia.workspace = true
+
+[dev-dependencies]
+image.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni-sys = "0.3"
