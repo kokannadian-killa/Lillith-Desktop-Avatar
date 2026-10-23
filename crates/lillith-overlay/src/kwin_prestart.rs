@@ -981,13 +981,20 @@ mod tests {
         bus.loaded = Err(BusError::Unavailable("no bus".into()));
         let r = run_check(&mut bus, &mut rc, Some(&dir), WindowRole::Dock, BUDGET);
         assert!(r.notice.is_none(), "{:?}", r.notice);
-        assert!(matches!(&r.actions[..], [Action::Fine { .. }]), "{:?}", r.actions);
+        assert!(
+            matches!(&r.actions[..], [Action::Fine { .. }]),
+            "{:?}",
+            r.actions
+        );
         // Normal window, no D-Bus to unload: told once, not every start.
         let r = run_check(&mut bus, &mut rc, Some(&dir), WindowRole::Normal, BUDGET);
         assert!(r.notice.as_deref().unwrap().contains("Better Blur DX"));
         let r = run_check(&mut bus, &mut rc, Some(&dir), WindowRole::Normal, BUDGET);
         assert!(r.notice.is_none(), "only once");
-        assert!(matches!(&r.actions[..], [Action::Failed { .. }]), "still logged");
+        assert!(
+            matches!(&r.actions[..], [Action::Failed { .. }]),
+            "still logged"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
