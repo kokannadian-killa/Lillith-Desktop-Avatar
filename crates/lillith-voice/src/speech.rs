@@ -19,7 +19,7 @@
 //!   cooldown, longer limit than banter lines).
 
 use crate::config::VoiceConfig;
-use crate::engine::{detect, Engine, Playback, SpeakOpts};
+use crate::engine::{Engine, Playback, SpeakOpts};
 use crate::lines::{DefaultLines, LineSource};
 use lillith_core::state::Action;
 use lillith_core::{Event, Mood};
@@ -188,8 +188,23 @@ impl Voice {
     /// Detects the engine for `cfg` (logs the choice once) with the
     /// [`DefaultLines`] table.
     pub fn from_config(cfg: VoiceConfig) -> Self {
-        let d = detect(&cfg);
-        if d.engine.is_real() {
+        Self::from_config_with(cfg, &crate::engine::which)
+    }
+
+    fn from_config_with(
+        cfg: VoiceConfig,
+        lookup: &dyn Fn(&str) -> Option<std::path::PathBuf>,
+    ) -> Self {
+        // Probe even when the speakers are off so the live toggle can switch
+        // them on later without a restart; `enabled` stays as configured.
+        let probe = VoiceConfig {
+            enabled: true,
+            ..cfg.clone()
+        };
+        let d = crate::engine::detect_with(&probe, lookup);
+        if d.engine.is_real() && !cfg.enabled {
+            tracing::info!("voice: {} (speakers off until toggled on)", d.reason);
+        } else if d.engine.is_real() {
             tracing::info!("voice: {}", d.reason);
         } else {
             tracing::info!("voice off: {}", d.reason);
@@ -611,6 +626,20 @@ mod tests {
         v.say("yes", Urgency::Normal).unwrap();
         wait_until(|| v.stats().spoken == 1);
         assert_eq!(*m.started.lock().unwrap(), ["yes"]);
+    }
+
+    #[test]
+    fn speakers_off_in_config_still_finds_the_engine_for_the_live_toggle() {
+        let c = VoiceConfig {
+            enabled: false,
+            engine: crate::config::EngineChoice::EspeakNg,
+            ..cfg()
+        };
+        let lookup = |b: &str| (b == "espeak-ng").then(|| std::path::PathBuf::from("/x/espeak-ng"));
+        let mut v = Voice::from_config_with(c, &lookup);
+        assert!(v.has_engine() && !v.enabled() && !v.is_active());
+        v.set_enabled(true);
+        assert!(v.is_active());
     }
 
     #[test]
