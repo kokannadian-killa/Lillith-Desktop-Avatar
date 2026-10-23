@@ -1,4 +1,5 @@
 //! `lillith-settings [CONFIG_PATH] [options]` — Lillith's settings window.
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 use lillith_settings_gui::{run_with, Options};
 use std::path::PathBuf;

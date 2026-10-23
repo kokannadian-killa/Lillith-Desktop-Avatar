@@ -62,7 +62,12 @@ impl Default for SettingsWindow {
 pub fn default_program() -> PathBuf {
     std::env::current_exe()
         .ok()
-        .and_then(|exe| Some(exe.parent()?.join(SETTINGS_BIN)))
+        .and_then(|exe| {
+            Some(
+                exe.parent()?
+                    .join(format!("{SETTINGS_BIN}{}", std::env::consts::EXE_SUFFIX)),
+            )
+        })
         .filter(|p| p.is_file())
         .unwrap_or_else(|| PathBuf::from(SETTINGS_BIN))
 }
@@ -108,6 +113,7 @@ impl SettingsWindow {
             let m = std::path::absolute(m).unwrap_or_else(|_| m.to_path_buf());
             cmd.env(MANIFEST_ENV, m);
         }
+        #[cfg(unix)]
         {
             // Own process group: a Ctrl-C meant for the overlay's terminal
             // does not close the window, and it outlives the overlay.

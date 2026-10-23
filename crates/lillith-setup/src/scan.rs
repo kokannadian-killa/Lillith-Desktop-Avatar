@@ -499,7 +499,20 @@ pub struct Recommendation {
     pub reasons: Vec<String>,
 }
 
+/// Total RAM from `/proc/meminfo` (Windows: `GlobalMemoryStatusEx`), if readable.
+#[cfg(windows)]
+pub fn total_ram_bytes() -> Option<u64> {
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    // SAFETY: plain out-struct with its size set, as the API requires.
+    unsafe {
+        let mut m: MEMORYSTATUSEX = std::mem::zeroed();
+        m.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+        (GlobalMemoryStatusEx(&mut m) != 0).then_some(m.ullTotalPhys)
+    }
+}
+
 /// Total RAM from `/proc/meminfo`, if readable.
+#[cfg(not(windows))]
 pub fn total_ram_bytes() -> Option<u64> {
     let s = std::fs::read_to_string("/proc/meminfo").ok()?;
     let line = s.lines().find(|l| l.starts_with("MemTotal:"))?;

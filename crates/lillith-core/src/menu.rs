@@ -894,8 +894,13 @@ pub fn parse_pick(line: &str) -> Option<MenuPick> {
 
 /// `xdg-open <path>` (not spawned here; the overlay spawns it off the
 /// render path, e.g. `cmd.spawn()` and forget).
+/// On Windows it is Notepad (always present; config.toml has no default
+/// handler there).
 pub fn open_settings_command(path: &Path) -> std::process::Command {
+    #[cfg(not(windows))]
     let mut c = std::process::Command::new("xdg-open");
+    #[cfg(windows)]
+    let mut c = std::process::Command::new("notepad.exe");
     c.arg(path)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

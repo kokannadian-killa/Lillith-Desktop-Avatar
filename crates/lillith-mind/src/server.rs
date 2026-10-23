@@ -120,6 +120,12 @@ impl LlamaServer {
             }
             let _ = dir;
         }
+        // Windows: no console window for the server.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
         let child = cmd.spawn()?;
         Ok(Self {
             child: Some(child),

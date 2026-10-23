@@ -89,6 +89,8 @@ pub enum OverlayError {
     Wayland(String),
     #[error("x11: {0}")]
     X11(String),
+    #[error("win32: {0}")]
+    Win32(String),
 }
 
 /// Everything the overlay needs from the app.
@@ -1443,6 +1445,13 @@ pub fn run(backend: Backend, opts: OverlayOptions) -> Result<(), OverlayError> {
         display = std::env::var("DISPLAY").unwrap_or_default(),
         "overlay backend selected"
     );
+    // Windows has one backend whatever `--backend` says.
+    #[cfg(windows)]
+    {
+        let _ = backend;
+        crate::win32::run(&opts)
+    }
+    #[cfg(not(windows))]
     match backend {
         Backend::Wayland => match run_wayland(&opts) {
             Err(OverlayError::WaylandUnavailable(why)) if !opts.forced => {
@@ -1456,6 +1465,7 @@ pub fn run(backend: Backend, opts: OverlayOptions) -> Result<(), OverlayError> {
     }
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn run_wayland(opts: &OverlayOptions) -> Result<(), OverlayError> {
     #[cfg(feature = "wayland")]
     {
@@ -1468,6 +1478,7 @@ fn run_wayland(opts: &OverlayOptions) -> Result<(), OverlayError> {
     }
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn run_x11(opts: &OverlayOptions) -> Result<(), OverlayError> {
     #[cfg(feature = "x11")]
     {

@@ -2,18 +2,38 @@
 
 use std::path::{Path, PathBuf};
 
-/// `$HOME`, if set and non-empty.
+/// `$HOME`, if set and non-empty (Windows: `%USERPROFILE%` when `HOME`
+/// is unset).
 pub fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .filter(|h| !h.is_empty())
-        .map(PathBuf::from)
+    let var = |k: &str| std::env::var_os(k).filter(|h| !h.is_empty());
+    let h = var("HOME");
+    #[cfg(windows)]
+    let h = h.or_else(|| var("USERPROFILE"));
+    h.map(PathBuf::from)
 }
 
+#[cfg(not(windows))]
 fn xdg(var: &str, fallback: &str) -> Option<PathBuf> {
     match std::env::var_os(var) {
         Some(v) if !v.is_empty() && Path::new(&v).is_absolute() => Some(PathBuf::from(v)),
         _ => home_dir().map(|h| h.join(fallback)),
     }
+}
+
+/// Windows: the XDG variables still win when set (absolute), else the
+/// Known Folder environment variables (`%APPDATA%` for config,
+/// `%LOCALAPPDATA%` for data and cache).
+#[cfg(windows)]
+fn xdg(var: &str, _fallback: &str) -> Option<PathBuf> {
+    let abs = |k: &str| {
+        std::env::var_os(k)
+            .filter(|v| !v.is_empty() && Path::new(v).is_absolute())
+            .map(PathBuf::from)
+    };
+    abs(var).or_else(|| match var {
+        "XDG_CONFIG_HOME" => abs("APPDATA"),
+        _ => abs("LOCALAPPDATA").or_else(|| abs("APPDATA")),
+    })
 }
 
 /// `$XDG_CONFIG_HOME`, else `~/.config`.

@@ -480,13 +480,21 @@ impl Config {
         toml::from_str(s)
     }
 
-    /// `$XDG_CONFIG_HOME/lillith/config.toml`, else `~/.config/lillith/config.toml`.
+    /// `$XDG_CONFIG_HOME/lillith/config.toml`, else `~/.config/lillith/config.toml`
+    /// (Windows: `%APPDATA%\lillith\config.toml`).
     pub fn default_path() -> Option<PathBuf> {
         let base = std::env::var_os("XDG_CONFIG_HOME")
             .filter(|v| !v.is_empty())
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-        Some(base.join("lillith/config.toml"))
+            .map(PathBuf::from);
+        #[cfg(windows)]
+        let base = base.or_else(|| {
+            std::env::var_os("APPDATA")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+        });
+        let base =
+            base.or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+        Some(base.join("lillith").join("config.toml"))
     }
 
     /// Loads `path`; a missing file gives the defaults.
