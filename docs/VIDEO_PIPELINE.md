@@ -141,7 +141,8 @@ PNG sheet stays the fallback and the bounds-check reference.
 - **Repo size:** the per-frame `frames/` PNGs were byte-for-byte copies of the sheet cells (verified
   on all 2690 frames) and nothing read them, so they are no longer committed. They stay in the build
   dir. `assets/generated/` went from 381 MiB (sheets 185 + frames 195) to about 246 MiB
-  (sheets 205 incl. the 8 new poses + MP4s 33.5). Dropping the sheets as well would save another
+  (sheets 205 incl. the 8 new poses + MP4s 33.5). The two `_long` clips add 26 MiB, for 268 MiB
+  in total (sheets 229 + MP4s 36.7). Dropping the sheets as well would save another
   205 MiB, but it would lose the ffmpeg-free fallback and the `--check` reference, so they stay.
 - **Measured** (8-core box, release build):
   - `cargo run --release -p lillith-anim --example video_bench` over 143 clip videos (3060 frames):
