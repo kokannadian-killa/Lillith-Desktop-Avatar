@@ -1,17 +1,21 @@
 ; Lillith for Windows: NSIS installer (built by windows/build.sh).
 ;
 ;   makensis -DVERSION=0.0.1 -DSTAGE=<staged folder> -DOUTFILE=<setup.exe>
-;            -DICON=windows/lillith.ico windows/installer.nsi
+;            -DICON=windows/lillith.ico -DICONS_NSH=<icons.nsh> windows/installer.nsi
 ;
 ; Per-user install (no admin): %LOCALAPPDATA%\Programs\Lillith. Start menu
 ; shortcuts, a desktop shortcut (on by default, untickable), an optional
 ; sign-in (autostart) shortcut, a first-run
 ; "Lily's brain" page that points config.toml at a GGUF + llama-server.exe
-; already on this PC (runs `lillith.exe setup`), and an uninstaller.
+; already on this PC (runs `lillith.exe setup`), an "App icon" page (the 15
+; icons in icons\*.ico; shortcuts point at the chosen one; Lillith Settings >
+; Icon changes it later), and an uninstaller.
 ; Nothing is downloaded, ever: no models, no runtimes, no update checks.
 ;
 ; Silent:  Lillith-setup.exe /S [/GGUF=C:\models\x.gguf] [/LLAMASERVER=C:\llama.cpp\llama-server.exe]
-;          [/AUTOSTART] [/NODESKTOP] [/D=C:\path\to\Lillith]   (/D must be last)
+;          [/AUTOSTART] [/NODESKTOP] [/ICON=<id>] [/D=C:\path\to\Lillith]   (/D must be last)
+;          /ICON= takes an id from branding/icons.toml (e.g. glitch); default:
+;          keep the configured icon (new installs: phantomcore-red).
 ;          The desktop shortcut is created by default (also with /S); /NODESKTOP skips it.
 
 ; 64-bit installer (Lillith is x64-only; also runs under 64-bit-only Wine).
@@ -30,6 +34,9 @@ SetCompressor /SOLID lzma
 !endif
 !ifndef ICON
   !define ICON "lillith.ico"
+!endif
+!ifndef ICONS_NSH
+  !error "pass -DICONS_NSH=<icons.nsh> (windows/build.sh generates it)"
 !endif
 
 !define APP      "Lillith"
@@ -61,6 +68,11 @@ Var Gguf
 Var Server
 Var hGguf
 Var hServer
+Var IconId     ; chosen icon id, "" = keep the configured one
+Var IconName
+Var hIcon
+
+!include "${ICONS_NSH}"
 
 !define MUI_ICON   "${ICON}"
 !define MUI_UNICON "${ICON}"
@@ -73,6 +85,7 @@ Var hServer
 !insertmacro MUI_PAGE_LICENSE "${STAGE}/LICENSE.txt"
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
+Page custom IconPage IconLeave
 !insertmacro MUI_PAGE_INSTFILES
 Page custom BrainPage BrainLeave
 !define MUI_FINISHPAGE_RUN "$INSTDIR\lillith.exe"
@@ -116,6 +129,17 @@ Function RunSetup
   DetailPrint "$2"
 FunctionEnd
 
+; $R9 = the shortcut icon: icons\<chosen>.ico, else the default's.
+Function ShortcutIcon
+  StrCpy $R9 "$INSTDIR\icons\${ICON_DEFAULT}.ico"
+  ${If} $IconId != ""
+    StrCpy $R9 "$INSTDIR\icons\$IconId.ico"
+  ${EndIf}
+  ${IfNot} ${FileExists} "$R9"
+    StrCpy $R9 "$INSTDIR\lillith.ico"
+  ${EndIf}
+FunctionEnd
+
 ; Pre-fills llama-server.exe from the folders Lillith also searches.
 Function GuessServer
   ${If} $Server != ""
@@ -138,6 +162,7 @@ Section "Lillith (required)" SecMain
   SetOutPath "$INSTDIR"
   ; Replace the art cleanly on upgrade (only our own folder).
   RMDir /r "$INSTDIR\assets"
+  RMDir /r "$INSTDIR\icons"
   File /r "${STAGE}/*"
   WriteUninstaller "$INSTDIR\${UNINST}"
 
@@ -156,8 +181,9 @@ Section "Lillith (required)" SecMain
   WriteRegDWORD HKCU "${REG_UNINST}" "EstimatedSize" "$0"
 
   CreateDirectory "$SMPROGRAMS\Lillith"
-  CreateShortcut "$SMPROGRAMS\Lillith\Lillith.lnk" "$INSTDIR\lillith.exe" "" "$INSTDIR\lillith.ico" 0 SW_SHOWNORMAL "" "Start Lillith"
-  CreateShortcut "$SMPROGRAMS\Lillith\Lillith Settings.lnk" "$INSTDIR\lillith-settings.exe" "" "$INSTDIR\lillith.ico" 0 SW_SHOWNORMAL "" "Lillith's settings and local-model setup"
+  Call ShortcutIcon
+  CreateShortcut "$SMPROGRAMS\Lillith\Lillith.lnk" "$INSTDIR\lillith.exe" "" "$R9" 0 SW_SHOWNORMAL "" "Start Lillith"
+  CreateShortcut "$SMPROGRAMS\Lillith\Lillith Settings.lnk" "$INSTDIR\lillith-settings.exe" "" "$R9" 0 SW_SHOWNORMAL "" "Lillith's settings and local-model setup"
   CreateShortcut "$SMPROGRAMS\Lillith\Uninstall Lillith.lnk" "$INSTDIR\${UNINST}"
   ; Optional shortcuts are re-created below only if still ticked.
   Delete "$SMSTARTUP\Lillith.lnk"
@@ -165,11 +191,26 @@ Section "Lillith (required)" SecMain
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
-  CreateShortcut "$DESKTOP\Lillith.lnk" "$INSTDIR\lillith.exe" "" "$INSTDIR\lillith.ico"
+  Call ShortcutIcon
+  CreateShortcut "$DESKTOP\Lillith.lnk" "$INSTDIR\lillith.exe" "" "$R9"
 SectionEnd
 
 Section /o "Start Lillith when I sign in" SecAutostart
-  CreateShortcut "$SMSTARTUP\Lillith.lnk" "$INSTDIR\lillith.exe" "" "$INSTDIR\lillith.ico"
+  Call ShortcutIcon
+  CreateShortcut "$SMSTARTUP\Lillith.lnk" "$INSTDIR\lillith.exe" "" "$R9"
+SectionEnd
+
+; App icon: a picked one is saved to config.toml; otherwise the configured
+; icon (an earlier pick, or the default) is re-applied to the shortcuts.
+Section "-AppIcon"
+  ${If} $IconId != ""
+    DetailPrint "App icon: $IconName"
+    nsExec::ExecToLog '"$INSTDIR\lillith.exe" icon $IconId --no-apply'
+    Pop $0
+  ${Else}
+    nsExec::ExecToLog '"$INSTDIR\lillith.exe" icon --reapply'
+    Pop $0
+  ${EndIf}
 SectionEnd
 
 ; Silent installs: /GGUF= and /LLAMASERVER= replace the brain page.
@@ -199,6 +240,17 @@ Function .onInit
   ${IfNot} ${Errors}
     !insertmacro UnselectSection ${SecDesktop}
   ${EndIf}
+  ClearErrors
+  ${GetOptions} $R0 "/ICON=" $IconId
+  ${If} ${Errors}
+    StrCpy $IconId ""
+  ${EndIf}
+  ${If} $IconId != ""
+    Call IconNameOfId
+    ${If} $IconName == ""
+      StrCpy $IconId ""   ; unknown id: keep the configured icon
+    ${EndIf}
+  ${EndIf}
 FunctionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
@@ -206,6 +258,39 @@ FunctionEnd
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A Lillith shortcut on the desktop."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAutostart} "Start Lillith automatically when you sign in to Windows."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
+
+; ── icon page ─────────────────────────────────────────────────────────
+
+!define KEEP_ICON "Keep the current icon (new installs: Phantomcore Red)"
+
+Function IconPage
+  !insertmacro MUI_HEADER_TEXT "App icon" "Pick the icon for Lillith's shortcuts."
+  nsDialogs::Create 1018
+  Pop $0
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+  ${NSD_CreateLabel} 0 0 100% 24u "Lillith comes with 15 icons. The Start menu and desktop shortcuts use the one you pick. You can change it any time in Lillith Settings > Icon (or right-click her > Icon...)."
+  Pop $0
+  ${NSD_CreateDropList} 0 30u 70% 160u ""
+  Pop $hIcon
+  ${NSD_CB_AddString} $hIcon "${KEEP_ICON}"
+  !insertmacro FillIconList $hIcon
+  ${If} $IconName != ""
+    ${NSD_CB_SelectString} $hIcon "$IconName"
+  ${Else}
+    ${NSD_CB_SelectString} $hIcon "${KEEP_ICON}"
+  ${EndIf}
+  nsDialogs::Show
+FunctionEnd
+
+Function IconLeave
+  ${NSD_GetText} $hIcon $IconName
+  ${If} $IconName == "${KEEP_ICON}"
+    StrCpy $IconName ""
+  ${EndIf}
+  Call IconIdOfName
+FunctionEnd
 
 ; ── first-run page: local model ───────────────────────────────────────
 
@@ -296,6 +381,7 @@ Section "Uninstall"
   Delete "$INSTDIR\lillith.exe"
   Delete "$INSTDIR\lillith-settings.exe"
   Delete "$INSTDIR\lillith.ico"
+  RMDir /r "$INSTDIR\icons"
   Delete "$INSTDIR\INSTALL-windows.txt"
   Delete "$INSTDIR\LICENSE.txt"
   Delete "$INSTDIR\LICENSE-ASSETS.txt"

@@ -21,6 +21,7 @@
 //! [ ] Pause system monitor
 //! ─────────────
 //! Settings…       (lillith-settings window; xdg-open config.toml fallback)
+//! Icon…           (lillith-settings ▸ Icon: pick the app icon)
 //! Reset position
 //! About Lillith
 //! ─────────────
@@ -162,6 +163,8 @@ pub enum MenuAction {
     ImportAvatar,
     /// The `lillith-settings` window (xdg-open config.toml fallback).
     OpenSettings,
+    /// The `lillith-settings` window on its Icon tab (app icon picker).
+    ChooseIcon,
     ResetPosition,
     About,
     /// "Close": quit Lillith.
@@ -486,6 +489,7 @@ pub fn build_menu(s: &MenuState) -> Menu {
         MenuAction::OpenSettings,
         Check::None,
     ));
+    items.push(MenuItem::leaf("Icon…", MenuAction::ChooseIcon, Check::None));
     items.push(MenuItem::leaf(
         "Reset position",
         MenuAction::ResetPosition,
@@ -569,6 +573,8 @@ pub enum MenuEffect {
     SetAvatar(Option<String>),
     /// Start a custom-image import (Settings ▸ Avatar).
     ImportAvatar,
+    /// Open the settings window on its Icon tab.
+    ChooseIcon,
     /// Re-open the menu at this Poses page (`None` = the main menu).
     OpenPage(Option<MenuPage>),
 }
@@ -635,6 +641,7 @@ pub fn on_menu_action(action: MenuAction, brain: &mut Brain, state: &MenuState) 
         MenuAction::OpenSettings => out.effects.push(MenuEffect::OpenSettings(
             crate::config::Config::default_path(),
         )),
+        MenuAction::ChooseIcon => out.effects.push(MenuEffect::ChooseIcon),
         MenuAction::ResetPosition => out
             .effects
             .push(MenuEffect::ResetPosition(OverlayPos::default())),
@@ -712,6 +719,7 @@ pub mod wire {
     /// Avatar ▸ Custom image… (import a new avatar).
     pub const AVATAR_IMPORT: &str = "avatar_import";
     pub const OPEN_SETTINGS: &str = "open_settings";
+    pub const CHOOSE_ICON: &str = "choose_icon";
     pub const RESET_POSITION: &str = "reset_position";
     pub const ABOUT: &str = "about";
     /// "Close": quit Lillith.
@@ -783,6 +791,7 @@ pub fn action_line(a: MenuAction) -> String {
         }
         MenuAction::ImportAvatar => (AVATAR_IMPORT, None),
         MenuAction::OpenSettings => (OPEN_SETTINGS, None),
+        MenuAction::ChooseIcon => (CHOOSE_ICON, None),
         MenuAction::ResetPosition => (RESET_POSITION, None),
         MenuAction::About => (ABOUT, None),
         MenuAction::Quit => (QUIT, None),
@@ -866,6 +875,7 @@ pub fn parse_action_line(line: &str) -> Option<MenuAction> {
         AVATAR_INDEX => MenuAction::Avatar(u8::try_from(num(v)?).ok().filter(|n| *n > 0)?),
         AVATAR_IMPORT => MenuAction::ImportAvatar,
         OPEN_SETTINGS => MenuAction::OpenSettings,
+        CHOOSE_ICON => MenuAction::ChooseIcon,
         RESET_POSITION => MenuAction::ResetPosition,
         ABOUT => MenuAction::About,
         QUIT => MenuAction::Quit,
@@ -1009,6 +1019,7 @@ mod tests {
                 Some("Pause system monitor"),
                 None,
                 Some("Settings…"),
+                Some("Icon…"),
                 Some("Reset position"),
                 Some("About Lillith"),
                 None,
@@ -1016,8 +1027,8 @@ mod tests {
             ]
         );
         // Chat, avatar (Lillith + Custom), resize (5 + 2), minimize, mode,
-        // mood, mute/monitor, settings/reset/about, close.
-        assert_eq!(m.leaves().len(), 1 + 2 + 7 + 1 + 3 + 5 + 2 + 3 + 1);
+        // mood, mute/monitor, settings/icon/reset/about, close.
+        assert_eq!(m.leaves().len(), 1 + 2 + 7 + 1 + 3 + 5 + 2 + 4 + 1);
         let moods: Vec<String> = radios(&m, "Mood").into_iter().map(|r| r.0).collect();
         assert_eq!(
             moods,
@@ -1262,6 +1273,8 @@ mod tests {
         );
         let o = on_menu_action(MenuAction::OpenSettings, &mut b, &s);
         assert!(matches!(&o.effects[..], [MenuEffect::OpenSettings(_)]));
+        let o = on_menu_action(MenuAction::ChooseIcon, &mut b, &s);
+        assert_eq!(o.effects, [MenuEffect::ChooseIcon]);
         let o = on_menu_action(MenuAction::About, &mut b, &s);
         assert!(matches!(&o.effects[..], [MenuEffect::ShowAbout(t)] if t.contains("Lillith")));
         let o = on_menu_action(MenuAction::Quit, &mut b, &s);
@@ -1299,7 +1312,7 @@ mod tests {
                 }
             }
         }
-        let cases: [(MenuAction, &str); 14] = [
+        let cases: [(MenuAction, &str); 15] = [
             (MenuAction::ShowOff, r#"{"menu_action":"show_off"}"#),
             (MenuAction::Chat, r#"{"menu_action":"chat"}"#),
             (MenuAction::Minimize, r#"{"menu_action":"minimize"}"#),
@@ -1343,6 +1356,7 @@ mod tests {
                 MenuAction::OpenSettings,
                 r#"{"menu_action":"open_settings"}"#,
             ),
+            (MenuAction::ChooseIcon, r#"{"menu_action":"choose_icon"}"#),
             (MenuAction::Quit, r#"{"menu_action":"quit"}"#),
         ];
         for (a, l) in cases {

@@ -54,9 +54,18 @@ package() {
   # Found through $XDG_DATA_DIRS (/usr/share/lillith/generated/manifest.toml).
   python3 linux/stage-assets.py assets/generated "$pkgdir/usr/share/lillith/generated"
   install -Dm644 linux/lillith.desktop "$pkgdir/usr/share/applications/lillith.desktop"
-  local s
-  for s in 16 24 32 48 64 128 256 512; do
-    install -Dm644 "branding/png/lillith-$s.png" "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/lillith.png"
+  # The icon set (found through $XDG_DATA_DIRS: /usr/share/lillith/icons);
+  # hicolor gets the default. A user's pick (Settings > Icon, `lillith icon`)
+  # goes to ~/.local/share/icons/hicolor, which wins over /usr/share.
+  local s id def
+  def="$(sed -n 's/^default = "\(.*\)"$/\1/p' branding/icons.toml)"
+  while read -r id; do
+    for s in 16 24 32 48 64 128 256; do
+      install -Dm644 "branding/icons/$id/lillith-$s.png" "$pkgdir/usr/share/lillith/icons/$id/lillith-$s.png"
+    done
+  done < <(sed -n 's/^id = "\(.*\)"$/\1/p' branding/icons.toml)
+  for s in 16 24 32 48 64 128 256; do
+    install -Dm644 "branding/icons/$def/lillith-$s.png" "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/lillith.png"
   done
   install -Dm644 kwin/lillith-bridge/metadata.json "$pkgdir/usr/share/kwin/scripts/lillith-bridge/metadata.json"
   install -Dm644 kwin/lillith-bridge/contents/code/main.js "$pkgdir/usr/share/kwin/scripts/lillith-bridge/contents/code/main.js"

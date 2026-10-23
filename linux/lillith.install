@@ -8,6 +8,7 @@ post_install() {
         kwriteconfig6 --file kwinrc --group Plugins --key lillith-bridgeEnabled true
         qdbus6 org.kde.KWin /KWin reconfigure
     - Desktop icon / autostart: Lillith Settings > Window, or ./linux/install.sh
+    - App icon: Lillith Settings > Icon, or: lillith icon --list / lillith icon <id>
 MSG
 }
 

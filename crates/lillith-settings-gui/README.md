@@ -11,7 +11,9 @@ cargo run -p lillith-settings-gui -- --step pick-model
 Tabs (registry in `src/tabs/mod.rs`, trait `SettingsTab`): Companion (generated
 from `lillith_core::menu::build_menu`, 1:1 with the right-click menu), Motion,
 Chat / Brain (first-run wizard: Avatar ✔ › Runtime › Pick model › Persona ›
-Test & save, on `lillith-setup`), Avatar, Voice, About, Sealed I–III (empty
+Test & save, on `lillith-setup`), Avatar, Icon (pick the app icon from
+`branding/icons.toml`; saves `icon = "<id>"` and updates the menu entry /
+shortcuts), Voice, About, Sealed I–II (empty
 add-in slots; `TabRegistry::unseal` fills one).
 
 Persistence: everything goes to `config.toml`. Non-`[llm]` keys are staged in

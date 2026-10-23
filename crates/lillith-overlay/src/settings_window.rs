@@ -101,10 +101,24 @@ impl SettingsWindow {
     /// or the XDG data dir and may find nothing). `None` leaves the
     /// child's environment alone.
     pub fn open(&mut self, config: &Path, manifest: Option<&Path>) -> Launch {
+        self.open_tab(config, manifest, None)
+    }
+
+    /// [`Self::open`] on tab `tab` (`--tab icon`). An already open window
+    /// stays on its tab.
+    pub fn open_tab(
+        &mut self,
+        config: &Path,
+        manifest: Option<&Path>,
+        tab: Option<&str>,
+    ) -> Launch {
         if self.running() {
             return Launch::AlreadyRunning;
         }
         let mut cmd = Command::new(&self.program);
+        if let Some(t) = tab {
+            cmd.arg("--tab").arg(t);
+        }
         cmd.arg(config)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -141,7 +155,9 @@ impl SettingsWindow {
                     }
                     match parse_pick(line) {
                         // The window is already open; ignore re-entry.
-                        Some(MenuPick::Action(MenuAction::OpenSettings)) => {}
+                        Some(MenuPick::Action(
+                            MenuAction::OpenSettings | MenuAction::ChooseIcon,
+                        )) => {}
                         Some(a) => {
                             if tx.send(a).is_err() {
                                 break;

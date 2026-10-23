@@ -216,6 +216,18 @@ lillith preview --all --out preview        # contact sheet for every clip
 lillith panel                              # egui window, Poses tab = clip browser
 lillith settings                           # interim window: avatar import/anchors, jiggle/speed/chat (right-click ▸ Settings… opens lillith-settings)
 lillith settings --section avatar --import ~/Pictures/me.png
+lillith icon --list                        # the 15 app icons (* = current)
+lillith icon glitch                        # save icon = "glitch" + update the menu entry / shortcuts
+```
+
+The app icon can also be picked in **Settings ▸ Icon** (right-click her ▸
+**Icon…**). On Linux it rewrites `~/.local/share/icons/hicolor/*/apps/lillith.png`
+(the `Icon=lillith` theme icon) and refreshes the icon caches; on Windows it
+re-points the Start-menu / Desktop shortcuts at `icons\<id>.ico` (the icon
+inside `lillith.exe` stays Phantomcore Red); on Android the setup screen has
+its own picker.
+
+```fish
 ```
 
 Right-click her for the menu (poses, chat, avatar, resize, minimize,
@@ -240,6 +252,7 @@ baked_jiggle = false   # true: use the baked _jiggle clip variants when present
 always_on_top = true
 click_through = false  # true: only her head takes clicks
 autostart = false      # true: writes ~/.config/autostart/lillith.desktop
+icon = "phantomcore-red"  # app icon (menu entry, desktop/Start-menu shortcuts); ids: `lillith icon --list`
 muted = false
 
 [anim]

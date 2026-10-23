@@ -1115,11 +1115,23 @@ impl Controller {
     /// "Settings…": the separate `lillith-settings <config.toml>` window
     /// (scaffold's launcher); `xdg-open config.toml` if it can't start.
     fn open_settings_window(&mut self, default: Option<PathBuf>) {
+        self.open_settings_at(default, None);
+    }
+
+    /// The settings window on tab `tab` (e.g. `icon`).
+    fn open_settings_tab(&mut self, tab: Option<&str>) {
+        self.open_settings_at(lillith_core::config::Config::default_path(), tab);
+    }
+
+    fn open_settings_at(&mut self, default: Option<PathBuf>, tab: Option<&str>) {
         let Some(path) = self.settings_path.clone().or(default) else {
             tracing::warn!("open settings: no config path (no $HOME?)");
             return;
         };
-        match self.settings.open(&path, Some(&self.manifest_path)) {
+        match self
+            .settings
+            .open_tab(&path, Some(&self.manifest_path), tab)
+        {
             Launch::Spawned => tracing::info!(
                 program = %self.settings.program().display(),
                 path = %path.display(),
@@ -1350,6 +1362,7 @@ impl Controller {
             MenuEffect::ImportAvatar => self.command(Command::Settings),
             MenuEffect::OpenPage(page) => self.open_menu_page(page),
             MenuEffect::OpenSettings(default) => self.open_settings_window(default),
+            MenuEffect::ChooseIcon => self.open_settings_tab(Some("icon")),
             MenuEffect::ResetPosition(pos) => {
                 let p = Placement::from_config(&pos);
                 self.brain.set_position(p.left as f32);

@@ -8,6 +8,7 @@
 #   ~/.local/bin/lillith, ~/.local/bin/lillith-settings
 #   ~/.local/share/lillith/generated/          her animation set (found automatically)
 #   ~/.local/share/applications/lillith.desktop + icons (hicolor, Icon=lillith)
+#   ~/.local/share/lillith/icons/<id>/         the whole icon set (Settings > Icon)
 #   a desktop shortcut, optional autostart, the KWin bridge (Plasma 6)
 #   ~/.config/lillith/config.toml              via `lillith setup` (local model)
 #
@@ -31,14 +32,16 @@ CONFIG_FILE="$CONFIG_DIR/config.toml"
 APP_FILE="$DATA_HOME/applications/lillith.desktop"
 AUTOSTART_FILE="$CONFIG_HOME/autostart/lillith.desktop"
 ICON_BASE="$DATA_HOME/icons/hicolor"
-ICON_SIZES=(16 24 32 48 64 128 256 512)
+ICON_SIZES=(16 24 32 48 64 128 256)
+ICONS_DIR="$DATA_DIR/icons"          # the icon set (lillith finds it here)
+ICONS_TOML="$ROOT/branding/icons.toml"
 KWIN_ID="lillith-bridge"
 MARK="X-Lillith-Installer=linux/install.sh"
 
 # ── options ─────────────────────────────────────────────────────────
-YES=0 UNINSTALL=0 SKIP_DEPS=0 SKIP_BUILD=0 PURGE=0
+YES=0 UNINSTALL=0 SKIP_DEPS=0 SKIP_BUILD=0 PURGE=0 LIST_ICONS=0
 ASSETS="" GGUF="" LLAMA="" CTX=""
-AUTOSTART="" DESKTOP_SHORTCUT="" KWIN="" START=""
+AUTOSTART="" DESKTOP_SHORTCUT="" KWIN="" START="" ICON=""
 
 usage() {
   cat <<'USAGE'
@@ -62,6 +65,11 @@ Usage: ./linux/install.sh [options]
       --autostart / --no-autostart          start with the desktop session (default: no)
       --desktop-shortcut / --no-desktop-shortcut   icon on the desktop (default: yes)
       --no-kwin          don't install/enable the KWin bridge script
+      --icon ID          app icon (menu entry, desktop shortcut); saved as
+                         icon = "ID" in config.toml. Default: the configured
+                         one, else phantomcore-red. --list-icons shows the ids.
+                         Change it later in Settings > Icon or: lillith icon ID
+      --list-icons       print the icon ids and exit
       --start / --no-start                  start Lillith at the end (asked; --yes: no)
 
   Environment: CARGO_TARGET_DIR (build dir, default ./target),
@@ -89,6 +97,9 @@ while [[ $# -gt 0 ]]; do
     --desktop-shortcut) DESKTOP_SHORTCUT=1 ;;
     --no-desktop-shortcut) DESKTOP_SHORTCUT=0 ;;
     --no-kwin) KWIN=0 ;;
+    --icon) ICON="${2:?--icon needs an id (see --list-icons)}"; shift ;;
+    --icon=*) ICON="${1#*=}" ;;
+    --list-icons) LIST_ICONS=1 ;;
     --start) START=1 ;;
     --no-start) START=0 ;;
     -h|--help) usage; exit 0 ;;
@@ -156,6 +167,16 @@ refresh_menus() {
   if have gtk-update-icon-cache; then gtk-update-icon-cache -q -t "$ICON_BASE" >/dev/null 2>&1 || true; fi
   if have kbuildsycoca6; then kbuildsycoca6 --noincremental >/dev/null 2>&1 || true; fi
 }
+# icon_ids: the ids in branding/icons.toml, in order.
+icon_ids() { sed -n 's/^id = "\(.*\)"$/\1/p' "$ICONS_TOML"; }
+icon_default() { sed -n 's/^default = "\(.*\)"$/\1/p' "$ICONS_TOML" | head -n 1; }
+is_icon() { icon_ids | grep -qxF -- "$1"; }
+# configured_icon: top-level `icon = "..."` of config.toml (before any [table]).
+configured_icon() {
+  [[ -f $CONFIG_FILE ]] || return 0
+  awk '/^[[:space:]]*\[/ { exit }
+       /^[[:space:]]*icon[[:space:]]*=/ { sub(/^[^=]*=[[:space:]]*"/, ""); sub(/".*$/, ""); print; exit }' "$CONFIG_FILE"
+}
 desktop_dir() {
   local d=""
   have xdg-user-dir && d="$(xdg-user-dir DESKTOP 2>/dev/null || true)"
@@ -163,6 +184,24 @@ desktop_dir() {
   if [[ -z $d || $d == "$HOME" || $d == "$HOME/" ]]; then d="$HOME/Desktop"; fi
   printf '%s' "$d"
 }
+
+# ── icon choice ─────────────────────────────────────────────────────
+[[ -f $ICONS_TOML ]] || { echo "missing $ICONS_TOML (run from a full checkout)" >&2; exit 1; }
+if [[ $LIST_ICONS == 1 ]]; then
+  def="$(icon_default)"
+  while read -r id; do
+    if [[ $id == "$def" ]]; then echo "$id (default)"; else echo "$id"; fi
+  done < <(icon_ids)
+  exit 0
+fi
+ICON_SAVE=0
+if [[ -n $ICON ]]; then
+  is_icon "$ICON" || { echo "unknown icon '$ICON'; ids: $(icon_ids | tr '\n' ' ')" >&2; exit 2; }
+  ICON_SAVE=1
+else
+  ICON="$(configured_icon)"
+  is_icon "${ICON:-}" || ICON="$(icon_default)"
+fi
 
 # ════════════════════════════════════════════════════════════════════
 # Uninstall
@@ -181,7 +220,8 @@ if [[ $UNINSTALL == 1 ]]; then
   fi
   DESK="$(desktop_dir)/lillith.desktop"
   if [[ -f $DESK ]] && grep -q "^$MARK" "$DESK"; then rm -f -- "$DESK" && ok "removed $DESK"; fi
-  for s in "${ICON_SIZES[@]}"; do rm -f -- "$ICON_BASE/${s}x${s}/apps/lillith.png"; done
+  for s in "${ICON_SIZES[@]}" 512; do rm -f -- "$ICON_BASE/${s}x${s}/apps/lillith.png"; done
+  if [[ -d $ICONS_DIR ]]; then rm -rf -- "$ICONS_DIR"; fi
   ok "removed icons"
   if [[ -d $ASSET_DIR ]]; then rm -rf -- "$ASSET_DIR" && ok "removed $ASSET_DIR"; fi
   if have kpackagetool6 && kpackagetool6 --type=KWin/Script --show "$KWIN_ID" >/dev/null 2>&1; then
@@ -332,11 +372,25 @@ fi
 # No env var or config key needed: Lillith looks in
 # $XDG_DATA_HOME/lillith/generated/manifest.toml by itself.
 
+# The whole icon set (PNGs only; the .ico files are for Windows), so
+# Settings > Icon / `lillith icon` can switch without the checkout.
+if [[ -d $ICONS_DIR ]]; then rm -rf -- "$ICONS_DIR"; fi
+n_icons=0
+while read -r id; do
+  for s in "${ICON_SIZES[@]}"; do
+    src="$ROOT/branding/icons/$id/lillith-$s.png"
+    [[ -f $src ]] && install -Dm644 "$src" "$ICONS_DIR/$id/lillith-$s.png"
+  done
+  n_icons=$((n_icons + 1))
+done < <(icon_ids)
+ok "$n_icons icons -> $ICONS_DIR"
+# The menu / desktop icon: hicolor `lillith` = the chosen icon.
 for s in "${ICON_SIZES[@]}"; do
-  src="$ROOT/branding/png/lillith-$s.png"
+  src="$ICONS_DIR/$ICON/lillith-$s.png"
   [[ -f $src ]] && install -Dm644 "$src" "$ICON_BASE/${s}x${s}/apps/lillith.png"
 done
-ok "icons -> $ICON_BASE/<size>/apps/lillith.png"
+rm -f -- "$ICON_BASE/512x512/apps/lillith.png"   # older installs shipped 512 px
+ok "icon '$ICON' -> $ICON_BASE/<size>/apps/lillith.png"
 
 # desktop_entry [extra Desktop Entry lines...]
 desktop_entry() {
@@ -494,6 +548,13 @@ else
     warn "lillith setup failed; Lillith still runs, just without chat. Retry: lillith ${SETUP_ARGS[*]}"
   fi
 fi
+if [[ $ICON_SAVE == 1 ]]; then
+  if "$LILLITH" --config "$CONFIG_FILE" icon "$ICON" --no-apply >/dev/null 2>&1; then
+    ok "icon = \"$ICON\" saved to $CONFIG_FILE"
+  else
+    warn "couldn't save the icon choice; run: lillith icon $ICON"
+  fi
+fi
 if [[ -f $CONFIG_FILE ]]; then
   # Keep the Settings checkbox in step with the autostart entry.
   want=$([[ $AUTOSTART == 1 ]] && echo true || echo false)
@@ -531,6 +592,7 @@ step "Done."
 cat <<DONE
   Start:      Lillith in the app menu, the desktop icon, or 'lillith'
   Settings:   right-click her > Settings, or 'lillith-settings'
+  Icon:       right-click her > Icon…, or 'lillith icon --list' / 'lillith icon ID'
   Model:      lillith setup --gguf FILE.gguf --llama-server /usr/bin/llama-server
   Uninstall:  ./linux/uninstall.sh   (keeps GGUF models; asks about settings)
 DONE

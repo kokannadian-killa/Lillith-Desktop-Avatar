@@ -65,6 +65,11 @@ impl CompanionTab {
         let persisted = model::persist(&mut shared.store, &self.state, a);
         let mut send = true;
         match a {
+            MenuAction::ChooseIcon => {
+                // we are the settings window: go to the Icon tab
+                send = false;
+                shared.goto_tab = Some("icon".into());
+            }
             MenuAction::OpenSettings => {
                 // we *are* the settings window: open the raw file instead
                 send = false;

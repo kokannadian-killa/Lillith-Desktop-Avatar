@@ -1,28 +1,43 @@
 #!/usr/bin/env python3
-"""Lillith's one icon, for every platform.
+"""Lillith's icon set: every icon, for every platform.
 
-The master is branding/icon-1024.png (transparent RGBA, her head and upper
-body). Everything else is generated from it:
+branding/icons.toml lists the icons (id, display name, files); the default
+is `phantomcore-red`. Each icon lives in branding/icons/<id>/:
 
-    branding/png/lillith-<N>.png         N = 16 24 32 48 64 128 256 512
-    windows/lillith.ico                  16-256, embedded in both .exe files
-    android/app/res/mipmap-*/ic_launcher.png        legacy launcher icon
-    android/app/res/mipmap-*/ic_launcher_round.png  round launcher icon
-    android/app/res/mipmap-*/ic_launcher_foreground.png  adaptive foreground
-    android/app/res/mipmap-anydpi-v26/ic_launcher{,_round}.xml + values/ic_launcher_colors.xml
+    icon-1024.png                 master (transparent outside the rounded square)
+    lillith-<N>.png               N = 16 24 32 48 64 128 256 (Linux hicolor, picker thumbnails)
+    <id>.ico                      16-256 (Windows shortcuts)
 
-Small sizes (<= 32 px) use a tighter head crop, so she still reads at 16 px.
+Platform outputs of the set:
 
-Usage (from anywhere; needs Pillow):
-    python3 branding/make-icons.py                # regenerate everything from the master
-    python3 branding/make-icons.py --from-video   # re-cut the master first (ffmpeg, numpy, scipy)
-    python3 branding/make-icons.py --check        # fail if any generated file is missing
+    windows/lillith.ico                        the default icon, embedded in both .exe files
+    android/app/res/mipmap-xxxhdpi/ic_launcher_foreground.png   default adaptive foreground
+    android/app/res/mipmap-xxxhdpi/ic_icon_<id>_fg.png          one per icon (activity-alias)
+    android/app/res/mipmap-anydpi-v26/ic_launcher{,_round}.xml, ic_icon_<id>.xml
+    android/app/res/values/ic_launcher_colors.xml
+    android/app/AndroidManifest.xml            activity-alias block between the ICON-ALIASES markers
+    android/app/src/com/kokannadian/lillith/IconSet.java   ids + names for the picker
 
---from-video takes frame 0 of assets/source/video/idle/idle_v2_a.mp4 (the
-canonical v2 idle, 1280x720 on white), keys out the white background and crops
-a square of her head and upper body. The art files are only read, never changed.
+minSdk is 26, so adaptive icons (anydpi-v26) are all Android ever reads; one
+xxxhdpi foreground per icon is enough (the launcher scales it down).
+
+Usage (needs Pillow; numpy + scipy for --from-sources / --from-video;
+pngquant is used when installed to keep the repo small):
+
+    python3 branding/make-icons.py                       # regenerate everything from the masters
+    python3 branding/make-icons.py --from-sources DIR    # re-cut the masters from DIR/NN-<id>.jpg
+    python3 branding/make-icons.py --from-video          # re-cut the Classic master from the idle clip
+    python3 branding/make-icons.py --sheet PNG           # also write a contact sheet (256 + 32 px)
+    python3 branding/make-icons.py --check               # fail if any generated file is missing
+
+--from-sources takes Ko's 1024x1024 JPGs (a rounded-square icon drawn on
+black): it finds the rounded square (corner flood fill from black), crops it,
+and makes everything outside it transparent with a clean anti-aliased
+rounded-rect mask (detected corner radius, at least 18%).
 """
 import argparse
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -32,26 +47,117 @@ from PIL import Image, ImageDraw, ImageFilter
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-MASTER = HERE / "icon-1024.png"
-PNG_DIR = HERE / "png"
-SIZES = [16, 24, 32, 48, 64, 128, 256, 512]
-ICO = ROOT / "windows" / "lillith.ico"
+ICONS = HERE / "icons"
+TOML = HERE / "icons.toml"
+SIZES = [16, 24, 32, 48, 64, 128, 256]
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
-RES = ROOT / "android" / "app" / "res"
-# density: (launcher px, adaptive layer px = 108 dp)
-DENSITIES = {
-    "mdpi": (48, 108),
-    "hdpi": (72, 162),
-    "xhdpi": (96, 216),
-    "xxhdpi": (144, 324),
-    "xxxhdpi": (192, 432),
-}
-BADGE = (42, 22, 51, 255)  # deep plum, round / adaptive backdrop
-BADGE_HEX = "#FF2A1633"
+WIN_ICO = ROOT / "windows" / "lillith.ico"
+ANDROID = ROOT / "android" / "app"
+RES = ANDROID / "res"
+MANIFEST = ANDROID / "AndroidManifest.xml"
+ICONSET_JAVA = ANDROID / "src" / "com" / "kokannadian" / "lillith" / "IconSet.java"
+FG_PX = 432  # 108 dp at xxxhdpi
+FG_ART = 80 / 108  # art size inside the adaptive canvas (the launcher masks ~66 dp)
+BG_HEX = "#FF000000"  # the art is drawn on black
 
+DEFAULT = "phantomcore-red"
+# (id, display name, source stem in --from-sources; None = not from a JPG)
+SET = [
+    ("neon-portrait", "Neon Portrait", "01-neon-portrait"),
+    ("wink-chibi", "Wink Chibi", "02-wink-chibi"),
+    ("phantomcore-red", "Phantomcore Red", "03-phantomcore-red"),
+    ("demonos-green-chibi", "DemonOS Green Chibi", "04-demonos-green-chibi"),
+    ("neon-sign", "Neon Sign", "05-neon-sign"),
+    ("demonos-emblem", "DemonOS Emblem", "06-demonos-emblem"),
+    ("hooded-phantom", "Hooded Phantom", "07-hooded-phantom"),
+    ("green-hologram", "Green Hologram", "08-green-hologram"),
+    ("chibi-perched", "Chibi Perched", "09-chibi-perched"),
+    ("kiss-skullframe", "Kiss Skullframe", "10-kiss-skullframe"),
+    ("winged-sigil", "Winged Sigil", "11-winged-sigil"),
+    ("pixel-chibi", "Pixel Chibi", "12-pixel-chibi"),
+    ("glitch", "Glitch", "13-glitch"),
+    ("chibi-terminal", "Chibi Terminal", "14-chibi-terminal"),
+    ("classic", "Classic", None),
+]
+
+# Classic: frame 0 of the canonical idle clip (1280x720 on white).
 VIDEO = ROOT / "assets" / "source" / "video" / "idle" / "idle_v2_a.mp4"
-# Square crop of the 1280x720 frame: centre x, top y, side (head + upper body).
-CROP = (646, 4, 212)
+CROP = (646, 4, 212)  # centre x, top y, side
+
+
+def master(icon_id: str) -> Path:
+    return ICONS / icon_id / "icon-1024.png"
+
+
+def java_id(icon_id: str) -> str:
+    return icon_id.replace("-", "_")
+
+
+# --------------------------------------------------------------------------
+# masters
+# --------------------------------------------------------------------------
+
+
+def detect_rounded_square(rgb):
+    """(left, top, right, bottom) insets and corner radius (px) of the
+    rounded square in a black-backed 1024 image."""
+    import numpy as np
+    from scipy import ndimage
+
+    a = ndimage.uniform_filter(rgb.max(axis=2).astype(float), 3)
+    lab, _ = ndimage.label(a < 10)
+    n = a.shape[0]
+    corners = {lab[0, 0], lab[0, -1], lab[-1, 0], lab[-1, -1]} - {0}
+    out = np.isin(lab, list(corners))
+    band = slice(n * 3 // 8, n * 5 // 8)
+
+    def inset(m):
+        firsts = [np.argmax(~row) if (~row).any() else n for row in m]
+        return int(np.median(firsts))
+
+    ins = (inset(out[band, :]), inset(out[:, band].T),
+           inset(out[band, ::-1]), inset(out[::-1, band].T))
+    L, T, R, B = ins
+    radii = []
+    for fy, fx, iy, ix in [(0, 0, T, L), (0, 1, T, R), (1, 0, B, L), (1, 1, B, R)]:
+        o = out[::-1 if fy else 1, ::-1 if fx else 1]
+        k = 0
+        while k < n // 2 and o[k, k]:
+            k += 1
+        radii.append((k - min(iy, ix)) / (1 - 0.70711))
+    return ins, float(np.median(radii))
+
+
+def rounded_mask(side: int, radius: float, inset: float = 2.0) -> Image.Image:
+    """Anti-aliased rounded-rect alpha (4x supersampled, ~1.5 px soft edge)."""
+    ss = 4
+    m = Image.new("L", (side * ss, side * ss), 0)
+    i = inset * ss
+    ImageDraw.Draw(m).rounded_rectangle(
+        (i, i, side * ss - 1 - i, side * ss - 1 - i), radius=radius * ss, fill=255
+    )
+    return m.resize((side, side), Image.LANCZOS).filter(ImageFilter.GaussianBlur(0.6))
+
+
+def master_from_jpg(src: Path, dst: Path) -> str:
+    import numpy as np
+
+    im = Image.open(src).convert("RGB")
+    if im.size != (1024, 1024):
+        im = im.resize((1024, 1024), Image.LANCZOS)
+    (L, T, R, B), r = detect_rounded_square(np.asarray(im))
+    box = (L, T, 1024 - R, 1024 - B)
+    side = (box[2] - box[0] + box[3] - box[1]) / 2
+    crop = im.crop(box).resize((1024, 1024), Image.LANCZOS)
+    r = r * 1024 / side
+    # Full-bleed art (no black corners found) gets the standard 18 %;
+    # otherwise a hair more than detected so no black arc is left.
+    radius = 0.18 * 1024 if r < 0.12 * 1024 else min(max(r * 1.02 + 4, 0.18 * 1024), 0.27 * 1024)
+    out = crop.convert("RGBA")
+    out.putalpha(rounded_mask(1024, radius))
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    out.save(dst)
+    return f"box {box} radius {radius / 1024:.1%}"
 
 
 def master_from_video() -> None:
@@ -71,8 +177,6 @@ def master_from_video() -> None:
     lab, n = ndimage.label(white)
     sizes = ndimage.sum(white, lab, range(1, n + 1))
     border = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
-    # Background = white touching the border, plus enclosed white pockets
-    # (between twin-tails and neck); eye highlights are tiny and stay.
     keep = [i + 1 for i, s in enumerate(sizes) if s > 40 or (i + 1) in border]
     bg = np.isin(lab, keep)
     fg = ~bg
@@ -84,108 +188,280 @@ def master_from_video() -> None:
     cut = Image.fromarray(np.dstack([rgb, a * 255]).astype("uint8"), "RGBA")
     cx, top, side = CROP
     sq = cut.crop((cx - side // 2, top, cx + side // 2, top + side))
-    sq = sq.resize((1024, 1024), Image.LANCZOS)
-    sq.save(MASTER, optimize=True)
-    print(f"wrote {MASTER.relative_to(ROOT)}")
+    master("classic").parent.mkdir(parents=True, exist_ok=True)
+    sq.resize((1024, 1024), Image.LANCZOS).save(master("classic"))
+    print("wrote", master("classic").relative_to(ROOT))
 
 
-def head_crop(img: Image.Image) -> Image.Image:
-    """Tighter square for tiny sizes: horns to chin, twin-tails trimmed."""
-    s = img.width
-    side = int(s * 0.74)
-    left = (s - side) // 2
-    return img.crop((left, 0, left + side, side))
+# --------------------------------------------------------------------------
+# renders
+# --------------------------------------------------------------------------
 
 
-def render(master: Image.Image, px: int) -> Image.Image:
-    src = head_crop(master) if px <= 32 else master
+def render(icon_id: str, m: Image.Image, px: int) -> Image.Image:
+    src = m
+    if icon_id == "classic" and px <= 32:
+        # tighter head crop so the cut-out character still reads at 16 px
+        side = int(m.width * 0.74)
+        left = (m.width - side) // 2
+        src = m.crop((left, 0, left + side, side))
     out = src.resize((px, px), Image.LANCZOS)
     if px <= 48:
         out = out.filter(ImageFilter.UnsharpMask(radius=0.6, percent=60, threshold=1))
     return out
 
 
-def badge(master: Image.Image, px: int, inset: float) -> Image.Image:
-    """Her icon on a plum circle (round launcher icon)."""
-    big = px * 4
-    bg = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    ImageDraw.Draw(bg).ellipse((0, 0, big - 1, big - 1), fill=BADGE)
-    inner = int(big * inset)
-    art = master.resize((inner, inner), Image.LANCZOS)
-    mask = Image.new("L", (big, big), 0)
-    ImageDraw.Draw(mask).ellipse((0, 0, big - 1, big - 1), fill=255)
-    layer = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    layer.alpha_composite(art, ((big - inner) // 2, big - inner))
-    bg.paste(Image.alpha_composite(bg, layer), (0, 0), mask)
-    return bg.resize((px, px), Image.LANCZOS)
-
-
-def foreground(master: Image.Image, px: int) -> Image.Image:
-    """Adaptive-icon foreground: 108 dp canvas, art in the 72 dp middle."""
-    out = Image.new("RGBA", (px, px), (0, 0, 0, 0))
-    inner = round(px * 72 / 108)
-    art = master.resize((inner, inner), Image.LANCZOS)
-    out.alpha_composite(art, ((px - inner) // 2, (px - inner) // 2 + px // 20))
+def foreground(m: Image.Image) -> Image.Image:
+    """Adaptive-icon foreground: 108 dp canvas, art centred at 80 dp."""
+    out = Image.new("RGBA", (FG_PX, FG_PX), (0, 0, 0, 0))
+    inner = round(FG_PX * FG_ART)
+    out.alpha_composite(m.resize((inner, inner), Image.LANCZOS), ((FG_PX - inner) // 2,) * 2)
     return out
 
 
-ADAPTIVE = """<?xml version="1.0" encoding="utf-8"?>
+def adaptive(fg: str, bg: str) -> str:
+    return f"""<?xml version="1.0" encoding="utf-8"?>
 <!-- Generated by branding/make-icons.py: do not edit by hand. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background" />
-    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <background android:drawable="@color/{bg}" />
+    <foreground android:drawable="@mipmap/{fg}" />
 </adaptive-icon>
 """
 
-COLORS = f"""<?xml version="1.0" encoding="utf-8"?>
-<!-- Generated by branding/make-icons.py: do not edit by hand. -->
-<resources>
-    <color name="ic_launcher_background">{BADGE_HEX}</color>
-</resources>
-"""
+
+def save_png(img: Image.Image, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path, optimize=True)
+
+
+def squeeze(paths: list[Path]) -> None:
+    """pngquant (lossy palette, dithered) when available: ~3-4x smaller."""
+    exe = shutil.which("pngquant")
+    if not exe:
+        print("note: pngquant not found; PNGs are only zlib-optimised")
+        return
+    for p in paths:
+        w = Image.open(p).width
+        # tiny sizes stay lossless: there the palette costs detail, not bytes
+        if w < 32:
+            continue
+        # busy neon art needs a lower floor at 1024 to fit 256 colours
+        q = "50-92" if w >= 1024 else "65-95"
+        subprocess.run(
+            [exe, f"--quality={q}", "--speed=1", "--strip", "--skip-if-larger",
+             "--force", "--ext", ".png", str(p)],
+            check=False,
+        )
+
+
+def write_ico(pngs: list[Path], dst: Path) -> None:
+    """.ico with PNG-compressed entries (Windows Vista+), from the already
+    squeezed size PNGs, so it costs about what the PNGs cost."""
+    import struct
+
+    import io
+
+    blobs, dims = [], []
+    for p in pngs:
+        # Entries are stored as 32-bit RGBA PNGs (some Windows builds reject
+        # palette PNGs inside an .ico); the colours are the squeezed ones.
+        im = Image.open(p).convert("RGBA")
+        buf = io.BytesIO()
+        im.save(buf, "PNG", optimize=True)
+        blobs.append(buf.getvalue())
+        dims.append(im.size)
+    out = struct.pack("<HHH", 0, 1, len(blobs))
+    off = 6 + 16 * len(blobs)
+    for (w, h), b in zip(dims, blobs):
+        out += struct.pack("<BBBBHHII", w % 256, h % 256, 0, 0, 1, 32, len(b), off)
+        off += len(b)
+    dst.write_bytes(out + b"".join(blobs))
+
+
+def write_toml() -> None:
+    lines = [
+        "# Lillith's icon set. Generated by branding/make-icons.py (edit SET there).",
+        "# Paths are relative to this file. `default` is used when config.toml has",
+        "# no `icon` key or names an unknown id.",
+        "",
+        f'default = "{DEFAULT}"',
+        f"sizes = [{', '.join(map(str, SIZES))}]",
+        "",
+    ]
+    for icon_id, name, _ in SET:
+        lines += [
+            "[[icon]]",
+            f'id = "{icon_id}"',
+            f'name = "{name}"',
+            f'master = "icons/{icon_id}/icon-1024.png"',
+            f'png = "icons/{icon_id}/lillith-{{size}}.png"',
+            f'ico = "icons/{icon_id}/{icon_id}.ico"',
+            f'android = "@mipmap/ic_icon_{java_id(icon_id)}"',
+            "",
+        ]
+    TOML.write_text("\n".join(lines))
+
+
+ALIAS_BEGIN = "<!-- ICON-ALIASES:BEGIN (generated by branding/make-icons.py) -->"
+ALIAS_END = "<!-- ICON-ALIASES:END -->"
+
+
+def write_android(fgs: dict[str, Image.Image]) -> list[Path]:
+    pngs = []
+    d = RES / "mipmap-xxxhdpi"
+    anyd = RES / "mipmap-anydpi-v26"
+    anyd.mkdir(parents=True, exist_ok=True)
+    for icon_id, fg in fgs.items():
+        j = java_id(icon_id)
+        p = d / f"ic_icon_{j}_fg.png"
+        save_png(fg, p)
+        pngs.append(p)
+        (anyd / f"ic_icon_{j}.xml").write_text(adaptive(f"ic_icon_{j}_fg", "ic_icon_background"))
+    p = d / "ic_launcher_foreground.png"
+    save_png(fgs[DEFAULT], p)
+    pngs.append(p)
+    for n in ("ic_launcher", "ic_launcher_round"):
+        (anyd / f"{n}.xml").write_text(adaptive("ic_launcher_foreground", "ic_launcher_background"))
+    (RES / "values" / "ic_launcher_colors.xml").write_text(
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<!-- Generated by branding/make-icons.py: do not edit by hand. -->\n"
+        "<resources>\n"
+        f'    <color name="ic_launcher_background">{BG_HEX}</color>\n'
+        f'    <color name="ic_icon_background">{BG_HEX}</color>\n'
+        "</resources>\n"
+    )
+    # activity-alias per icon (the launcher entry); the default one enabled
+    aliases = []
+    for icon_id, name, _ in SET:
+        j = java_id(icon_id)
+        on = "true" if icon_id == DEFAULT else "false"
+        aliases.append(
+            f"""        <activity-alias
+            android:name=".Icon_{j}"
+            android:targetActivity=".SetupActivity"
+            android:label="Lillith"
+            android:icon="@mipmap/ic_icon_{j}"
+            android:roundIcon="@mipmap/ic_icon_{j}"
+            android:enabled="{on}"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>"""
+        )
+    block = f"        {ALIAS_BEGIN}\n" + "\n".join(aliases) + f"\n        {ALIAS_END}"
+    text = MANIFEST.read_text()
+    pat = re.compile(r"[ \t]*" + re.escape(ALIAS_BEGIN) + r".*?" + re.escape(ALIAS_END), re.S)
+    if not pat.search(text):
+        sys.exit(f"{MANIFEST}: missing the {ALIAS_BEGIN} / {ALIAS_END} markers")
+    MANIFEST.write_text(pat.sub(lambda _: block, text))
+    ids = ",\n        ".join(f'"{i}"' for i, _, _ in SET)
+    names = ",\n        ".join(f'"{n}"' for _, n, _ in SET)
+    ICONSET_JAVA.write_text(f"""// Generated by branding/make-icons.py: do not edit by hand.
+package com.kokannadian.lillith;
+
+/** Lillith's launcher icons: one activity-alias {{@code .Icon_<id>}} each. */
+final class IconSet {{
+    private IconSet() {{}}
+
+    static final String DEFAULT = "{DEFAULT}";
+
+    static final String[] IDS = {{
+        {ids}
+    }};
+
+    static final String[] NAMES = {{
+        {names}
+    }};
+
+    /** activity-alias class name for an icon id. */
+    static String alias(String pkg, String id) {{
+        return pkg + ".Icon_" + id.replace('-', '_');
+    }}
+
+    /** mipmap resource name of an icon (adaptive xml). */
+    static String mipmap(String id) {{
+        return "ic_icon_" + id.replace('-', '_');
+    }}
+}}
+""")
+    return pngs
 
 
 def outputs() -> list[Path]:
-    out = [PNG_DIR / f"lillith-{s}.png" for s in SIZES] + [ICO]
-    for d in DENSITIES:
-        for n in ("ic_launcher", "ic_launcher_round", "ic_launcher_foreground"):
-            out.append(RES / f"mipmap-{d}" / f"{n}.png")
-    out += [
-        RES / "mipmap-anydpi-v26" / "ic_launcher.xml",
-        RES / "mipmap-anydpi-v26" / "ic_launcher_round.xml",
-        RES / "values" / "ic_launcher_colors.xml",
-    ]
+    out = [TOML, WIN_ICO, MANIFEST, ICONSET_JAVA, RES / "values" / "ic_launcher_colors.xml",
+           RES / "mipmap-xxxhdpi" / "ic_launcher_foreground.png",
+           RES / "mipmap-anydpi-v26" / "ic_launcher.xml",
+           RES / "mipmap-anydpi-v26" / "ic_launcher_round.xml"]
+    for icon_id, _, _ in SET:
+        d = ICONS / icon_id
+        out += [d / "icon-1024.png", d / f"{icon_id}.ico"]
+        out += [d / f"lillith-{s}.png" for s in SIZES]
+        out += [RES / "mipmap-xxxhdpi" / f"ic_icon_{java_id(icon_id)}_fg.png",
+                RES / "mipmap-anydpi-v26" / f"ic_icon_{java_id(icon_id)}.xml"]
     return out
 
 
-def generate() -> None:
-    master = Image.open(MASTER).convert("RGBA")
-    if master.size != (1024, 1024):
-        sys.exit(f"{MASTER} must be 1024x1024, is {master.size}")
-    PNG_DIR.mkdir(parents=True, exist_ok=True)
-    for s in SIZES:
-        render(master, s).save(PNG_DIR / f"lillith-{s}.png", optimize=True)
-    # .ico: Pillow writes one PNG/BMP entry per size from the largest frame,
-    # so hand it the hand-tuned small renders via append_images.
-    frames = [render(master, s) for s in ICO_SIZES]
-    frames[-1].save(ICO, sizes=[(s, s) for s in ICO_SIZES], append_images=frames[:-1])
-    for d, (px, fg_px) in DENSITIES.items():
-        dd = RES / f"mipmap-{d}"
-        dd.mkdir(parents=True, exist_ok=True)
-        render(master, px).save(dd / "ic_launcher.png", optimize=True)
-        badge(master, px, 0.92).save(dd / "ic_launcher_round.png", optimize=True)
-        foreground(master, fg_px).save(dd / "ic_launcher_foreground.png", optimize=True)
-    any_dir = RES / "mipmap-anydpi-v26"
-    any_dir.mkdir(parents=True, exist_ok=True)
-    (any_dir / "ic_launcher.xml").write_text(ADAPTIVE)
-    (any_dir / "ic_launcher_round.xml").write_text(ADAPTIVE)
-    (RES / "values" / "ic_launcher_colors.xml").write_text(COLORS)
-    print(f"wrote {len(outputs())} files from {MASTER.relative_to(ROOT)}")
+def generate(squeeze_masters: bool) -> None:
+    pngs = []
+    fgs = {}
+    for icon_id, _, _ in SET:
+        mp = master(icon_id)
+        m = Image.open(mp).convert("RGBA")
+        if m.size != (1024, 1024):
+            sys.exit(f"{mp} must be 1024x1024, is {m.size}")
+        d = ICONS / icon_id
+        for s in SIZES:
+            save_png(render(icon_id, m, s), d / f"lillith-{s}.png")
+            pngs.append(d / f"lillith-{s}.png")
+        fgs[icon_id] = foreground(m)
+        if squeeze_masters:
+            pngs.append(mp)
+    pngs += write_android(fgs)
+    write_toml()
+    squeeze(pngs)
+    for icon_id, _, _ in SET:
+        d = ICONS / icon_id
+        write_ico([d / f"lillith-{s}.png" for s in ICO_SIZES], d / f"{icon_id}.ico")
+    shutil.copyfile(ICONS / DEFAULT / f"{DEFAULT}.ico", WIN_ICO)
+    print(f"wrote {len(outputs())} files for {len(SET)} icons (default {DEFAULT})")
+
+
+def sheet(path: Path) -> None:
+    """Contact sheet: each icon at 256 and 32 px (x1 and x4), dark + light."""
+    cols, cw, ch = 5, 300, 400
+    rows = (len(SET) + cols - 1) // cols
+    img = Image.new("RGBA", (cols * cw, rows * ch), (24, 18, 28, 255))
+    dr = ImageDraw.Draw(img)
+    for i, (icon_id, name, _) in enumerate(SET):
+        x, y = (i % cols) * cw, (i // cols) * ch
+        if i % 2:
+            dr.rectangle((x, y, x + cw - 1, y + ch - 1), fill=(32, 24, 38, 255))
+        d = ICONS / icon_id
+        big = Image.open(d / "lillith-256.png").convert("RGBA")
+        img.alpha_composite(big, (x + 22, y + 14))
+        small = Image.open(d / "lillith-32.png").convert("RGBA")
+        img.alpha_composite(small, (x + 22, y + 290))
+        img.alpha_composite(small.resize((128, 128), Image.NEAREST).crop((0, 0, 128, 64)),
+                            (x + 70, y + 290))
+        light = Image.new("RGBA", (40, 40), (236, 236, 236, 255))
+        light.alpha_composite(small, (4, 4))
+        img.alpha_composite(light, (x + 18, y + 330))
+        label = name + (" (default)" if icon_id == DEFAULT else "")
+        dr.text((x + 70, y + 362), label, fill=(240, 220, 240, 255))
+        dr.text((x + 70, y + 376), icon_id, fill=(160, 140, 170, 255))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.convert("RGB").save(path)
+    print("wrote", path)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--from-video", action="store_true", help="re-cut the master first")
+    ap.add_argument("--from-sources", type=Path, metavar="DIR",
+                    help="re-cut the masters from DIR/NN-<id>.jpg first")
+    ap.add_argument("--from-video", action="store_true", help="re-cut the Classic master first")
+    ap.add_argument("--sheet", type=Path, metavar="PNG", help="also write a contact sheet")
     ap.add_argument("--check", action="store_true", help="only verify the outputs exist")
     a = ap.parse_args()
     if a.check:
@@ -193,9 +469,19 @@ def main() -> int:
         for p in missing:
             print(f"missing: {p.relative_to(ROOT)}", file=sys.stderr)
         return 1 if missing else 0
+    if a.from_sources:
+        for icon_id, _, stem in SET:
+            if stem is None:
+                continue
+            src = a.from_sources / f"{stem}.jpg"
+            if not src.is_file():
+                sys.exit(f"missing source {src}")
+            print(f"{icon_id}: {master_from_jpg(src, master(icon_id))}")
     if a.from_video:
         master_from_video()
-    generate()
+    generate(squeeze_masters=bool(a.from_sources or a.from_video))
+    if a.sheet:
+        sheet(a.sheet)
     return 0
 
 

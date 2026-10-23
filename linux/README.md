@@ -27,7 +27,9 @@ in place. `./linux/install.sh --yes` takes every default without asking.
 3. **Builds** `cargo build --release --locked -p lillith -p lillith-settings-gui`.
 4. **Installs** the binaries to `~/.local/bin`, the art to
    `~/.local/share/lillith/generated` (found automatically, so you don't need
-   `LILLITH_MANIFEST`), the icon to the hicolor theme, and a menu entry.
+   `LILLITH_MANIFEST`), the icon set to `~/.local/share/lillith/icons`, the
+   chosen icon (`--icon ID`, else `icon` in config.toml, else Phantomcore Red)
+   to the hicolor theme, and a menu entry.
 5. **Desktop shortcut** (default yes) in your desktop folder (`xdg-user-dir
    DESKTOP`), marked trusted. **Autostart** (default no).
 6. **KWin bridge** (window perching) via `kpackagetool6` + `kwriteconfig6`.
@@ -84,6 +86,22 @@ git lfs install; git lfs pull
 
 This removes the binaries, art, icons, menu entry, desktop shortcut, autostart
 entry and KWin script. It never touches your `.gguf` models or `llama-server`.
+
+## App icon
+
+Lillith ships 15 icons (`branding/icons.toml`; default `phantomcore-red`,
+plus `classic`, the old idle-frame icon). Pick one in **Settings ▸ Icon**
+(right-click her ▸ **Icon…**), or:
+
+```fish
+lillith icon --list             # ids, * = current
+lillith icon glitch             # saves icon = "glitch" and updates the menu entry + desktop shortcut
+./linux/install.sh --icon glitch   # same, at install time
+```
+
+Switching rewrites `~/.local/share/icons/hicolor/<N>x<N>/apps/lillith.png`,
+touches the `.desktop` files and runs `gtk-update-icon-cache` /
+`kbuildsycoca6` when present. Some docks cache icons until you log out.
 
 ## Privacy
 

@@ -723,9 +723,9 @@ mod tests {
         }
         assert!(seen.iter().all(|&s| s), "{seen:?}");
         // Collapsed (no poses): 4 headers (Avatar, Resize, Mode, Mood) +
-        // 8 top leaves (Chat, Minimize, Mute, Pause, Settings, Reset,
+        // 9 top leaves (Chat, Minimize, Mute, Pause, Settings, Icon, Reset,
         // About, Close) + 3 separators.
-        assert_eq!(rows_of(&p.menu, None).len(), 15);
+        assert_eq!(rows_of(&p.menu, None).len(), 16);
         assert!(p.size().1 >= p.content_height());
     }
 

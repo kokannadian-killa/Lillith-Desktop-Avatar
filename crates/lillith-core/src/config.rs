@@ -385,6 +385,10 @@ pub struct Config {
     pub click_through: bool,
     /// Start Lillith with the desktop session (XDG autostart entry).
     pub autostart: bool,
+    /// App icon (id from `branding/icons.toml`, e.g. `phantomcore-red`,
+    /// `classic`): menu entry, desktop shortcut, Windows shortcuts. Settings
+    /// ▸ Icon or `lillith icon <id>` change it; unknown ids mean the default.
+    pub icon: String,
     pub avatar: AvatarConfig,
     pub muted: bool,
     pub voice_enabled: bool,
@@ -421,6 +425,7 @@ impl Default for Config {
             always_on_top: true,
             click_through: false,
             autostart: false,
+            icon: crate::icons::DEFAULT_ICON.into(),
             avatar: AvatarConfig::default(),
             muted: false,
             voice_enabled: true,
@@ -457,6 +462,11 @@ impl Config {
         } else {
             JiggleMode::Springs
         })
+    }
+
+    /// The configured icon, or the default when `icon` is unknown.
+    pub fn icon_info(&self) -> &'static crate::icons::IconInfo {
+        crate::icons::resolve(Some(&self.icon))
     }
 
     /// Writes the whole config to `path` (atomically), keeping unknown
@@ -537,6 +547,13 @@ pub fn save_scale(path: &Path, scale: f32) -> Result<(), ConfigError> {
     })
 }
 
+/// Writes the top-level `icon` of `path`, keeping the other keys.
+pub fn save_icon(path: &Path, id: &str) -> Result<(), ConfigError> {
+    update_config(path, |t| {
+        t.insert("icon".into(), toml::Value::String(id.to_string()));
+    })
+}
+
 /// Read-modify-write of the config file as a TOML table (atomic rename;
 /// creates the file and directory; comments are not kept).
 pub fn update_config(path: &Path, f: impl FnOnce(&mut toml::Table)) -> Result<(), ConfigError> {
@@ -592,6 +609,29 @@ pub fn set_autostart(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn icon_key_parses_defaults_and_saves() {
+        assert_eq!(Config::default().icon, "phantomcore-red");
+        let c = Config::from_toml_str("scale = 0.75\n").unwrap();
+        assert_eq!(c.icon, crate::icons::DEFAULT_ICON);
+        let c = Config::from_toml_str("icon = \"glitch\"\n[chat]\nenabled = true\n").unwrap();
+        assert_eq!(c.icon, "glitch");
+        assert_eq!(c.icon_info().name, "Glitch");
+        let c = Config::from_toml_str("icon = \"no-such-icon\"\n").unwrap();
+        assert_eq!(c.icon_info().id, crate::icons::DEFAULT_ICON);
+        assert!(Config::from_toml_str("icon = 3\n").is_err());
+        // the settings template carries the key
+        assert!(crate::menu::settings_template().contains("icon = \"phantomcore-red\""));
+        let dir = std::env::temp_dir().join(format!("lillith-cfg-icon-{}", std::process::id()));
+        let p = dir.join("config.toml");
+        save_scale(&p, 0.75).unwrap();
+        save_icon(&p, "classic").unwrap();
+        let back = Config::load(&p).unwrap();
+        assert_eq!(back.icon, "classic");
+        assert_eq!(back.scale, 0.75);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn scale_one_means_the_055_default() {

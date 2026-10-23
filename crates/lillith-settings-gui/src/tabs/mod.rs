@@ -6,6 +6,7 @@ pub mod about;
 pub mod avatar;
 pub mod brain;
 pub mod companion;
+pub mod icon;
 pub mod knobs;
 pub mod sealed;
 
@@ -86,16 +87,17 @@ pub struct TabRegistry {
 }
 
 impl TabRegistry {
-    /// Companion, Motion, Chat / Brain, Avatar, Voice, About, Sealed I–III.
+    /// Companion, Motion, Chat / Brain, Avatar, Icon, Voice, About, Sealed I–II.
     pub fn with_defaults(shared: &Shared) -> Self {
         let mut r = Self::default();
         r.register(Box::new(companion::CompanionTab::new(shared)));
         r.register(Box::new(knobs::KnobTab::motion()));
         r.register(Box::new(brain::BrainTab::new(&shared.config_path)));
         r.register(Box::new(avatar::AvatarTab::new(&shared.config_path)));
+        r.register(Box::new(icon::IconTab::new()));
         r.register(Box::new(knobs::KnobTab::voice()));
         r.register(Box::new(about::AboutTab));
-        for n in 1..=3 {
+        for n in 1..=2 {
             r.register(Box::new(sealed::SealedTab::new(n)));
         }
         r
@@ -169,16 +171,16 @@ pub(crate) mod tests {
                 "motion",
                 "brain",
                 "avatar",
+                "icon",
                 "voice",
                 "about",
                 "sealed-1",
-                "sealed-2",
-                "sealed-3"
+                "sealed-2"
             ]
         );
-        assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 3);
-        r.unseal(Box::new(Dummy));
-        assert_eq!(r.index_of("dummy"), Some(6));
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 2);
+        r.unseal(Box::new(Dummy));
+        assert_eq!(r.index_of("dummy"), Some(7));
+        assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 1);
     }
 }

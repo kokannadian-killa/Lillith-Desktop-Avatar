@@ -5,6 +5,11 @@
 # mode = "wander"        # wander (default) | stay | follow
 # scale = 0.55           # Small 0.45 / Normal 0.55 / Large 0.75 (the menu saves this)
 # muted = false          # mutes SFX and voice
+# icon = "phantomcore-red"  # app icon: menu entry + desktop / Start-menu shortcuts.
+#                         # Settings > Icon, right-click > Icon…, or `lillith icon ID`.
+#                         # ids: neon-portrait wink-chibi phantomcore-red demonos-green-chibi
+#                         #   neon-sign demonos-emblem hooded-phantom green-hologram chibi-perched
+#                         #   kiss-skullframe winged-sigil pixel-chibi glitch chibi-terminal classic
 
 # Voice (text-to-speech, offline). Needs piper, espeak-ng or spd-say on PATH;
 # with none installed she stays silent. See INSTALL.md / HANDOFF for engines.
