@@ -66,7 +66,7 @@ fi
   -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM="android-$API" \
   -DCMAKE_BUILD_TYPE=Release -DLLAMA_CPP_DIR="$LLAMA_CPP_DIR" >/dev/null
-"$CMAKE_BIN/ninja" -C "$OUT/build-llm" lillith_llm
+"$CMAKE_BIN/ninja" -j "${NINJA_JOBS:-2}" -C "$OUT/build-llm" lillith_llm
 cp "$OUT/build-llm/liblillith_llm.so" "$STAGE/lib/arm64-v8a/"
 "$LLVM/llvm-strip" --strip-unneeded "$STAGE/lib/arm64-v8a/liblillith_llm.so"
 
