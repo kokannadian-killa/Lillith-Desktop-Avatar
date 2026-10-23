@@ -4720,6 +4720,34 @@
    ],
    "allure": true,
    "video": "kneel_hands_on_thighs_long/kneel_hands_on_thighs_long.mp4"
+  },
+  {
+   "name": "wall_lean_invisible_long",
+   "frame_count": 180,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "wall_lean_invisible_long/",
+   "sheet": "wall_lean_invisible_long/wall_lean_invisible_long_sheet.png",
+   "manifest": "wall_lean_invisible_long/wall_lean_invisible_long.json",
+   "preview": "wall_lean_invisible_long/wall_lean_invisible_long_preview.gif",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "wall_lean_invisible_long/wall_lean_invisible_long.mp4"
   }
  ]
 }

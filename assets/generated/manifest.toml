@@ -27850,6 +27850,1284 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.wall_lean_invisible_long]
+page = "wall_lean_invisible_long/wall_lean_invisible_long_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.54
+tags = ["canonical", "facing:front", "baked_motion", "allure"]
+jiggle_baked = true
+disable_springs = ["chest", "pigtails", "hip"]
+video = "wall_lean_invisible_long/wall_lean_invisible_long.mp4"
+
+[clips.wall_lean_invisible_long.frame_points]
+chest_point = [[203, 138], [205, 138], [205, 138], [207, 138], [209, 138], [211, 138], [214, 138], [215, 137], [217, 135], [218, 133], [219, 130], [220, 127], [221, 126], [222, 124], [223, 124], [223, 123], [223, 123], [222, 123], [221, 123], [219, 124], [218, 124], [216, 125], [215, 125], [214, 125], [213, 125], [212, 125], [212, 125], [211, 125], [211, 125], [211, 125], [211, 125], [211, 125], [212, 124], [212, 124], [212, 124], [213, 124], [213, 123], [214, 123], [214, 123], [215, 124], [215, 125], [215, 125], [215, 126], [215, 126], [216, 127], [216, 126], [216, 127], [215, 128], [215, 128], [215, 127], [215, 126], [215, 126], [214, 126], [214, 125], [213, 124], [213, 124], [213, 124], [213, 124], [213, 123], [213, 123], [213, 125], [214, 125], [214, 124], [215, 124], [215, 125], [216, 126], [216, 126], [217, 127], [217, 128], [218, 128], [218, 128], [218, 129], [218, 129], [218, 130], [218, 129], [218, 129], [218, 129], [217, 130], [217, 129], [216, 129], [215, 128], [215, 127], [214, 126], [214, 126], [213, 126], [213, 125], [212, 125], [212, 125], [212, 125], [213, 125], [213, 125], [213, 125], [214, 126], [214, 126], [215, 127], [216, 128], [216, 128], [217, 129], [217, 129], [217, 129], [217, 129], [218, 129], [218, 129], [218, 129], [218, 129], [217, 129], [217, 129], [217, 128], [216, 128], [216, 127], [215, 127], [214, 126], [213, 126], [212, 126], [212, 126], [211, 126], [211, 126], [210, 126], [210, 126], [210, 126], [210, 125], [210, 125], [211, 124], [211, 124], [212, 125], [213, 124], [214, 124], [214, 123], [215, 122], [216, 123], [216, 124], [217, 126], [217, 126], [218, 126], [218, 124], [218, 124], [218, 125], [218, 125], [217, 126], [217, 126], [216, 125], [216, 125], [215, 125], [215, 125], [214, 125], [213, 125], [213, 125], [212, 125], [212, 125], [211, 126], [211, 126], [211, 126], [210, 125], [210, 125], [210, 125], [210, 126], [210, 126], [210, 126], [210, 126], [210, 126], [209, 125], [209, 125], [210, 126], [211, 128], [212, 130], [213, 132], [215, 135], [215, 136], [215, 137], [215, 137], [215, 138], [214, 138], [214, 138], [213, 138], [212, 138], [211, 138], [210, 138], [208, 138], [207, 138], [205, 138]]
+hip_point = [[200, 194], [200, 194], [201, 194], [203, 194], [205, 194], [207, 194], [210, 194], [211, 195], [212, 196], [213, 196], [214, 195], [215, 194], [214, 192], [213, 192], [213, 192], [212, 192], [211, 192], [210, 192], [209, 192], [207, 192], [205, 192], [204, 193], [203, 194], [202, 194], [202, 194], [202, 194], [202, 194], [201, 194], [201, 194], [201, 194], [201, 193], [200, 193], [200, 193], [200, 193], [200, 193], [200, 193], [199, 193], [200, 193], [200, 193], [200, 193], [200, 193], [199, 193], [199, 193], [199, 194], [199, 194], [199, 194], [198, 194], [198, 194], [198, 194], [198, 194], [198, 194], [198, 194], [198, 193], [198, 193], [198, 192], [198, 192], [198, 192], [199, 192], [199, 193], [199, 193], [199, 193], [199, 193], [199, 193], [199, 193], [199, 194], [199, 194], [199, 194], [199, 194], [198, 194], [198, 194], [198, 194], [198, 194], [198, 194], [198, 193], [198, 193], [198, 193], [198, 194], [198, 194], [198, 195], [198, 194], [197, 194], [197, 193], [197, 192], [197, 192], [197, 192], [197, 192], [197, 192], [197, 192], [197, 192], [197, 192], [197, 192], [197, 192], [197, 192], [197, 193], [198, 193], [198, 194], [198, 194], [198, 193], [198, 193], [198, 193], [198, 193], [197, 193], [197, 193], [197, 193], [197, 193], [197, 194], [198, 194], [198, 194], [198, 194], [197, 193], [197, 193], [197, 193], [197, 193], [197, 194], [197, 194], [198, 194], [198, 193], [198, 193], [198, 193], [199, 193], [199, 193], [199, 194], [200, 194], [200, 193], [200, 193], [200, 193], [200, 192], [200, 193], [200, 193], [200, 193], [200, 193], [200, 193], [200, 192], [200, 193], [200, 193], [200, 194], [200, 193], [200, 193], [200, 193], [200, 194], [199, 193], [200, 193], [200, 193], [199, 193], [200, 193], [200, 193], [200, 193], [200, 194], [200, 193], [200, 193], [200, 193], [200, 193], [200, 193], [200, 193], [200, 193], [200, 193], [200, 193], [200, 192], [200, 192], [201, 192], [201, 191], [202, 191], [204, 191], [206, 192], [208, 192], [209, 193], [211, 193], [212, 193], [213, 193], [214, 193], [214, 194], [214, 194], [214, 195], [213, 194], [211, 194], [209, 194], [207, 195], [205, 195], [203, 195], [202, 195]]
+pigtail_left_point = [[170, 69], [168, 68], [169, 68], [170, 68], [172, 68], [173, 69], [175, 69], [176, 71], [177, 72], [178, 74], [178, 73], [179, 72], [181, 70], [181, 69], [179, 70], [176, 73], [174, 75], [173, 75], [172, 75], [170, 75], [168, 75], [167, 76], [166, 77], [165, 77], [165, 77], [165, 77], [165, 77], [164, 77], [164, 77], [164, 77], [164, 76], [163, 76], [163, 76], [163, 76], [163, 76], [163, 76], [162, 76], [163, 76], [163, 76], [163, 76], [163, 76], [162, 76], [162, 76], [162, 77], [162, 77], [162, 77], [161, 77], [161, 77], [161, 77], [161, 77], [161, 77], [161, 77], [161, 76], [161, 76], [161, 75], [161, 75], [161, 75], [162, 75], [162, 76], [162, 76], [162, 76], [162, 76], [167, 72], [167, 72], [167, 73], [162, 77], [162, 77], [162, 77], [161, 77], [161, 77], [161, 77], [161, 77], [161, 77], [161, 76], [161, 76], [161, 76], [161, 77], [161, 77], [161, 78], [161, 77], [160, 77], [160, 76], [160, 75], [160, 75], [160, 75], [160, 75], [160, 75], [160, 75], [160, 75], [160, 75], [160, 75], [160, 75], [160, 75], [160, 76], [161, 76], [161, 77], [161, 77], [161, 76], [161, 76], [163, 75], [165, 74], [168, 73], [168, 74], [166, 75], [166, 76], [166, 76], [165, 76], [165, 76], [162, 76], [162, 76], [160, 76], [160, 76], [160, 76], [160, 77], [160, 77], [161, 77], [161, 76], [161, 76], [161, 76], [162, 76], [162, 76], [162, 77], [163, 77], [163, 76], [163, 76], [163, 76], [163, 75], [163, 76], [164, 75], [168, 73], [171, 72], [173, 71], [173, 70], [174, 69], [173, 69], [174, 68], [175, 68], [174, 68], [175, 68], [170, 71], [169, 74], [165, 76], [166, 73], [164, 73], [164, 73], [163, 76], [163, 76], [163, 77], [163, 76], [163, 76], [163, 76], [163, 76], [163, 76], [163, 76], [163, 76], [165, 76], [167, 73], [167, 73], [167, 73], [165, 75], [169, 72], [168, 72], [170, 72], [171, 75], [174, 75], [177, 73], [179, 72], [179, 73], [179, 75], [179, 78], [180, 78], [181, 79], [180, 78], [180, 77], [180, 73], [180, 71], [178, 71], [174, 74], [173, 73], [170, 71]]
+pigtail_right_point = [[234, 72], [233, 72], [235, 72], [235, 71], [237, 71], [238, 71], [240, 73], [240, 73], [242, 74], [245, 76], [248, 76], [251, 76], [250, 74], [249, 74], [249, 74], [248, 74], [247, 74], [246, 74], [245, 74], [243, 74], [241, 74], [240, 75], [239, 76], [238, 76], [238, 76], [238, 76], [238, 76], [237, 76], [237, 76], [237, 76], [237, 75], [236, 75], [236, 75], [236, 75], [236, 75], [236, 75], [235, 75], [236, 75], [236, 75], [236, 75], [236, 75], [235, 75], [235, 75], [235, 76], [235, 76], [235, 76], [234, 76], [234, 76], [235, 66], [236, 56], [240, 47], [244, 49], [249, 51], [253, 54], [248, 62], [242, 69], [234, 74], [235, 74], [235, 75], [235, 75], [235, 75], [235, 75], [235, 75], [235, 75], [235, 76], [235, 76], [235, 76], [235, 76], [234, 76], [234, 76], [234, 76], [234, 76], [234, 76], [234, 75], [234, 75], [234, 75], [234, 76], [234, 76], [234, 77], [234, 76], [233, 76], [236, 65], [242, 55], [249, 47], [253, 51], [255, 56], [249, 64], [241, 70], [233, 74], [233, 74], [233, 74], [233, 74], [233, 74], [233, 75], [234, 75], [234, 76], [234, 76], [234, 75], [234, 75], [234, 75], [234, 75], [233, 75], [233, 75], [233, 75], [233, 75], [233, 76], [234, 76], [234, 76], [234, 76], [233, 75], [233, 75], [238, 68], [241, 59], [246, 52], [246, 53], [248, 56], [250, 59], [251, 62], [254, 67], [249, 71], [243, 75], [235, 76], [236, 76], [236, 75], [236, 75], [236, 75], [236, 74], [236, 75], [236, 75], [236, 75], [236, 75], [236, 75], [236, 74], [236, 75], [236, 75], [236, 76], [236, 75], [236, 75], [236, 75], [236, 76], [235, 75], [236, 75], [236, 75], [235, 75], [236, 75], [236, 75], [236, 75], [236, 76], [236, 75], [236, 75], [236, 75], [236, 75], [236, 75], [236, 75], [236, 75], [236, 75], [236, 75], [236, 74], [239, 69], [242, 63], [245, 57], [246, 57], [246, 57], [246, 58], [246, 61], [246, 65], [245, 69], [244, 71], [243, 72], [242, 72], [242, 72], [242, 72], [242, 72], [242, 73], [242, 72], [241, 72], [241, 72], [240, 72], [238, 72], [236, 71]]
+tail_tip_point = [[262, 164], [262, 164], [263, 164], [265, 164], [267, 164], [269, 164], [272, 164], [273, 165], [274, 166], [275, 166], [276, 165], [277, 164], [276, 162], [275, 162], [275, 162], [274, 162], [273, 162], [272, 162], [271, 162], [269, 162], [267, 162], [266, 163], [265, 164], [264, 164], [264, 164], [264, 164], [264, 164], [263, 164], [263, 164], [263, 164], [263, 163], [262, 163], [262, 163], [262, 163], [262, 163], [262, 163], [261, 163], [262, 163], [262, 163], [262, 163], [262, 163], [261, 163], [261, 163], [261, 164], [261, 164], [261, 164], [260, 164], [260, 164], [260, 164], [260, 164], [260, 164], [260, 164], [260, 163], [260, 163], [260, 162], [260, 162], [260, 162], [261, 162], [261, 163], [261, 163], [261, 163], [261, 163], [261, 163], [261, 163], [261, 164], [261, 164], [261, 164], [261, 164], [260, 164], [260, 164], [260, 164], [260, 164], [260, 164], [260, 163], [260, 163], [260, 163], [260, 164], [260, 164], [260, 165], [260, 164], [259, 164], [259, 163], [259, 162], [259, 162], [259, 162], [259, 162], [259, 162], [259, 162], [259, 162], [259, 162], [259, 162], [259, 162], [259, 162], [259, 163], [260, 163], [260, 164], [260, 164], [260, 163], [260, 163], [260, 163], [260, 163], [259, 163], [259, 163], [259, 163], [259, 163], [259, 164], [260, 164], [260, 164], [260, 164], [259, 163], [259, 163], [259, 163], [259, 163], [259, 164], [259, 164], [260, 164], [260, 163], [260, 163], [260, 163], [261, 163], [261, 163], [261, 164], [262, 164], [262, 163], [262, 163], [262, 163], [262, 162], [262, 163], [262, 163], [262, 163], [262, 163], [262, 163], [262, 162], [262, 163], [262, 163], [262, 164], [262, 163], [262, 163], [262, 163], [262, 164], [261, 163], [262, 163], [262, 163], [261, 163], [262, 163], [262, 163], [262, 163], [262, 164], [262, 163], [262, 163], [262, 163], [262, 163], [262, 163], [262, 163], [262, 163], [262, 163], [262, 163], [262, 162], [262, 162], [263, 162], [263, 161], [264, 161], [266, 161], [268, 162], [270, 162], [271, 163], [273, 163], [274, 163], [275, 163], [276, 163], [276, 164], [276, 164], [276, 165], [275, 164], [273, 164], [271, 164], [269, 165], [267, 165], [265, 165], [264, 165]]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 9600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 10000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 10400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 10800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 11200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 11600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 12000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 12400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 12800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 13200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 13600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 14000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 14400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 14800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 15200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 15600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 16000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 16400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 16800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 17200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 17600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 18000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 18800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 19200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 19600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 20000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 20400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 20800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 21200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 21600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 22000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 22400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 22800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 23200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 23600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 24000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 24400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 24800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 25200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 25600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 26000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 26400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 26800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 27200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 27600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 28000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 28400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 28800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 29200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 29600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 30000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 30400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 30800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 31200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 31600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 32000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 32400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 32800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 33200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 33600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 34000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 34400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 34800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 35200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 35600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 36000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 36400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 36800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 37200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 37600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 38000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 38400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 38800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 39200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 39600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 40000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 40400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 40800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 41200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 41600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 42000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 42400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 42800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 43200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 43600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 44000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 44400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 44800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 45200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 45600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 46000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 46400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 46800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 47200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 47600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 48000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 48400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 48800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 49200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 49600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 50000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 50400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 50800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 51200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 51600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 52000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 52400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 52800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 53200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 53600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 54000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 54400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 54800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 55200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 55600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 56000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 56400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 56800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 57200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 57600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 58000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 58400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 58800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 59200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 59600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 60000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 60400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 60800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 61200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 61600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 62000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 62400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 62800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 63200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 63600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 64000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 64400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 64800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 65200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 65600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 66000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 66400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 66800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 67200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 67600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 68000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 68400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 68800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 69200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 69600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 70000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 70400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 70800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 71200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wall_lean_invisible_long.frames]]
+x = 71600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.wave]
 page = "wave/wave_sheet.png"
 fps = 12.0
