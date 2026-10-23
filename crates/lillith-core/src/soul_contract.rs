@@ -296,6 +296,15 @@ impl PendingAction {
     /// any textual output (for reads and shell). The caller must have already
     /// vetted the path/command against the allowlist.
     fn execute(&self) -> std::io::Result<(Option<PathBuf>, Option<String>)> {
+        self.execute_with(None)
+    }
+
+    /// [`execute`](Self::execute); project build/run output also goes to
+    /// `sink` line by line while the command runs.
+    fn execute_with(
+        &self,
+        sink: Option<crate::build::LineSink<'_>>,
+    ) -> std::io::Result<(Option<PathBuf>, Option<String>)> {
         match self {
             PendingAction::WriteSkill { path, body } | PendingAction::WriteFile { path, body } => {
                 atomic_write(path, body.as_bytes())?;
@@ -357,12 +366,20 @@ impl PendingAction {
                 Some(dir.clone()),
                 Some(crate::build::scaffold(dir, *language, template)?),
             )),
-            PendingAction::BuildProject { dir, language } => {
-                Ok((None, Some(crate::build::build(dir, *language)?)))
-            }
-            PendingAction::RunProject { dir, language } => {
-                Ok((None, Some(crate::build::run(dir, *language)?)))
-            }
+            PendingAction::BuildProject { dir, language } => Ok((
+                None,
+                Some(match sink {
+                    Some(s) => crate::build::build_streaming(dir, *language, s)?,
+                    None => crate::build::build(dir, *language)?,
+                }),
+            )),
+            PendingAction::RunProject { dir, language } => Ok((
+                None,
+                Some(match sink {
+                    Some(s) => crate::build::run_streaming(dir, *language, s)?,
+                    None => crate::build::run(dir, *language)?,
+                }),
+            )),
         }
     }
 }
@@ -589,6 +606,25 @@ impl SoulContract {
     /// A deletion is refused with [`ContractError::NeedsSignature`] and stays
     /// pending: it only runs through [`sign_deletion`](Self::sign_deletion).
     pub fn confirm(&mut self, id: RequestId) -> Result<Confirmed, ContractError> {
+        self.confirm_impl(id, None)
+    }
+
+    /// [`confirm`](Self::confirm), streaming a project build/run's output
+    /// lines to `sink` while it runs (other actions ignore `sink`). Same gate
+    /// and the same `CONFIRM` audit line as `confirm`.
+    pub fn confirm_streaming(
+        &mut self,
+        id: RequestId,
+        sink: crate::build::LineSink<'_>,
+    ) -> Result<Confirmed, ContractError> {
+        self.confirm_impl(id, Some(sink))
+    }
+
+    fn confirm_impl(
+        &mut self,
+        id: RequestId,
+        sink: Option<crate::build::LineSink<'_>>,
+    ) -> Result<Confirmed, ContractError> {
         match self.pending.iter().find(|(i, _)| *i == id) {
             Some((_, PendingAction::DeletePaths { .. })) => {
                 return Err(ContractError::NeedsSignature(id))
@@ -599,7 +635,7 @@ impl SoulContract {
             _ => {}
         }
         let action = self.take(id)?;
-        let res = action.execute();
+        let res = action.execute_with(sink);
         self.log_command("CONFIRM", &action, &res);
         let (path, output) = res?;
         self.audit("CONFIRM", &action);

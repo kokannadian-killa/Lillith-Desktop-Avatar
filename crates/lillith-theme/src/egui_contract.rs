@@ -33,6 +33,16 @@ use egui::{
     Stroke, StrokeKind, Vec2,
 };
 
+/// Who asked for the action; picks the summary wording.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Initiator {
+    /// Lillith proposed it (chat tools, skills): "She wants to …".
+    #[default]
+    Her,
+    /// Ko started it himself (e.g. a Build tab button): "You asked to …".
+    You,
+}
+
 /// What the popup shows. Mirrors `lillith_core::soul_contract::ContractPrompt`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ContractView<'a> {
@@ -46,6 +56,46 @@ pub struct ContractView<'a> {
     pub detail: Option<&'a str>,
     /// Something is still running: Yes is shown but disabled.
     pub busy: bool,
+    /// Who asked for it (default: Lillith).
+    pub initiator: Initiator,
+}
+
+/// The sentence under the heading: "She wants to …." when Lillith proposed
+/// the action, "You asked to …." when Ko started it himself.
+pub fn summary_line(view: &ContractView<'_>) -> String {
+    let what = lower_first(view.summary);
+    match view.initiator {
+        Initiator::Her => format!("She wants to {what}."),
+        Initiator::You => format!("You asked to {what}."),
+    }
+}
+
+/// Clear space between the horn tips and the top of the plate's inner
+/// frame (logical px).
+pub const SKULL_TOP_GAP: f32 = 6.0;
+
+/// How far the drawn skull reaches above and below its centre at size `s`:
+/// `(up, down)`, measured from the real horn outline (tips included) and the
+/// jaw, so the header can be laid out without the horns hitting the frame.
+fn skull_extent(s: f32) -> (f32, f32) {
+    let k = crate::geom::skull([0.0, 0.0], s);
+    let mut top = k.cranium.0[1] - k.cranium.1;
+    for h in &k.horns {
+        for q in crate::geom::tapered_quads(h, k.horn_width, 0.5) {
+            for pt in q {
+                top = top.min(pt[1]);
+            }
+        }
+    }
+    (-top, k.jaw[3])
+}
+
+/// Header block for a skull of size `s`: `(centre offset from the inner
+/// top, total height down to where the title starts)`.
+fn skull_header(s: f32) -> (f32, f32) {
+    let (up, down) = skull_extent(s);
+    let centre = SKULL_TOP_GAP + up;
+    (centre, centre + down + 0.07 * s + 6.0)
 }
 
 /// The click (or `Esc`) the popup saw this frame.
@@ -168,7 +218,8 @@ fn plate(
     let painter = ui.painter().clone();
 
     // --- measure ---------------------------------------------------------
-    let skull_s = if narrow { 40.0 } else { 52.0 };
+    let skull_s = if narrow { 36.0 } else { 46.0 };
+    let (skull_c, skull_h) = skull_header(skull_s);
     let head = painter.layout_no_wrap("SOUL CONTRACT".into(), f.head.clone(), c32(pal::TEXT));
     let label = painter.layout_no_wrap(
         if view.title.is_empty() {
@@ -179,12 +230,7 @@ fn plate(
         f.label.clone(),
         c32(pal::EMBER_CORE),
     );
-    let summary = painter.layout(
-        format!("She wants to {}.", lower_first(view.summary)),
-        f.body.clone(),
-        c32(pal::TEXT),
-        inner_w,
-    );
+    let summary = painter.layout(summary_line(view), f.body.clone(), c32(pal::TEXT), inner_w);
     let target = view
         .target
         .filter(|s| !s.is_empty())
@@ -204,7 +250,7 @@ fn plate(
         inner_w,
     );
     let btn_h = if narrow { 30.0 } else { 34.0 };
-    let mut h = frame_t + 10.0 + skull_s * 1.05 + 6.0 + head.size().y + 8.0 + 14.0 + 10.0;
+    let mut h = frame_t + skull_h + head.size().y + 8.0 + 14.0 + 10.0;
     h += summary.size().y + 8.0;
     if let Some(g) = &target {
         h += g.size().y + 8.0;
@@ -261,8 +307,8 @@ fn plate(
 
     // --- header: forge-lit horned skull ---------------------------------------
     let cx = rect.center().x;
-    let mut y = inner.top() + 10.0;
-    let sc = Pos2::new(cx, y + skull_s * 0.55);
+    let mut y = inner.top();
+    let sc = Pos2::new(cx, y + skull_c);
     glow_blob(
         &p,
         sc + Vec2::new(0.0, skull_s * 0.1),
@@ -278,7 +324,7 @@ fn plate(
         skull_s,
         pal::EMBER.lerp(pal::EMBER_CORE, flick * 0.6),
     );
-    y += skull_s * 1.05 + 6.0;
+    y += skull_h;
 
     // title with a crimson neon bleed
     let hp = Pos2::new(cx - head.size().x / 2.0, y);
@@ -400,7 +446,8 @@ fn plate(
     }
 }
 
-/// "Write skill …" → "write skill …" so it reads after "She wants to".
+/// "Write skill …" → "write skill …" so it reads after "She wants to" /
+/// "You asked to".
 fn lower_first(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
@@ -582,6 +629,46 @@ mod tests {
             target: Some("/tmp/x.txt"),
             detail: Some("hello\nworld"),
             busy: false,
+            initiator: Initiator::Her,
+        }
+    }
+
+    #[test]
+    fn summary_wording_follows_who_asked() {
+        let her = view();
+        assert_eq!(
+            summary_line(&her),
+            "She wants to write file /tmp/x.txt (5 bytes)."
+        );
+        let you = ContractView {
+            initiator: Initiator::You,
+            ..view()
+        };
+        assert_eq!(
+            summary_line(&you),
+            "You asked to write file /tmp/x.txt (5 bytes)."
+        );
+        assert_eq!(ContractView::default().initiator, Initiator::Her);
+    }
+
+    #[test]
+    fn horn_tips_clear_the_top_of_the_plate() {
+        for s in [36.0, 46.0] {
+            let (centre, height) = skull_header(s);
+            let k = crate::geom::skull([0.0, centre], s);
+            for h in &k.horns {
+                for q in crate::geom::tapered_quads(h, k.horn_width, 0.5) {
+                    for pt in q {
+                        assert!(
+                            pt[1] >= SKULL_TOP_GAP - 0.01,
+                            "size {s}: horn reaches y={} (gap {SKULL_TOP_GAP})",
+                            pt[1]
+                        );
+                    }
+                }
+            }
+            // The title starts below the jaw.
+            assert!(height > centre + k.jaw[3] - centre);
         }
     }
 
