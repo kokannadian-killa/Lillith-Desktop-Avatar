@@ -14,6 +14,7 @@
 //! - [`physics_driver`]: [`physics_driver::PhysicsDriver`], which turns clips/events/motion/mood
 //!   into spring impulses and targets, plus the procedural tail/horn overlay.
 //! - [`idle`]: idle-life scheduler (blink, idle transitions, idle reactions).
+//! - [`tease`]: the "come closer" tease (scale envelope + scheduler).
 //! - [`rng`]: tiny seedable PRNG so idle timing is deterministic in tests.
 //! - [`rules`]: the data-driven event → reaction table (`assets/rules.toml`).
 //! - [`desktop`]: z-ordered window model from the KWin bridge and the pure
@@ -40,6 +41,7 @@ pub mod rules;
 pub mod soul_contract;
 pub mod spring;
 pub mod state;
+pub mod tease;
 
 pub use command::Command;
 pub use event::Event;

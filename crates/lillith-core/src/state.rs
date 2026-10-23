@@ -28,6 +28,7 @@
 //! her (proximity) or `user.returned` wakes her with the `wake` clip. While
 //! asleep she sleeps through events below `event_wake_priority`.
 
+use crate::bag::ShuffleBag;
 use crate::config::MoveMode;
 use crate::event::Event;
 use crate::interaction::{Button, Gesture, GestureConfig, Gestures};
@@ -66,6 +67,12 @@ pub struct BehaviorConfig {
     pub walk_root_motion: bool,
     /// Shortest walk worth taking (px).
     pub wander_min_step_px: f32,
+    /// Chance (0..=1) that she strikes an idle pose shortly after a wander
+    /// walk ends (`wander_pose_delay_s` later) instead of waiting for the
+    /// next pose cycle: more variety while she roams.
+    pub wander_pose_chance: f32,
+    /// Delay (s) from arriving to that pose.
+    pub wander_pose_delay_s: f32,
     /// Events at or above this priority wake her up.
     pub event_wake_priority: u8,
     /// Idle life: breathing, blinks, idle transitions/gestures, idle-take
@@ -77,6 +84,8 @@ pub struct BehaviorConfig {
     pub floor_offset_px: i32,
     /// Falling after a drop and perching on windows (`[behavior.gravity]`).
     pub gravity: GravityConfig,
+    /// "Come closer" tease every few minutes of idle (`[behavior.tease]`).
+    pub tease: crate::tease::TeaseConfig,
 }
 
 /// `[behavior.gravity]`: after a drag-release she falls (holding the
@@ -129,10 +138,13 @@ impl Default for BehaviorConfig {
             wander_speed_px_s: 45.0,
             walk_root_motion: true,
             wander_min_step_px: 120.0,
+            wander_pose_chance: 0.35,
+            wander_pose_delay_s: 1.5,
             event_wake_priority: 80,
             idle: crate::idle::IdleConfig::default(),
             floor_offset_px: 48,
             gravity: GravityConfig::default(),
+            tease: crate::tease::TeaseConfig::default(),
         }
     }
 }
@@ -326,7 +338,10 @@ pub struct Brain {
     cooldowns: BTreeMap<String, f32>,
     last_knife: Option<f32>,
     next_cycle: f32,
-    cycle_idx: usize,
+    /// Weighted no-repeat bag for the pose cycle, and the mood it was
+    /// built for (rebuilt when the mood changes).
+    cycle_bag: ShuffleBag,
+    cycle_mood: Option<Mood>,
     next_wander: f32,
     x: f32,
     area: Option<(f32, f32)>,
@@ -366,7 +381,8 @@ impl Brain {
             last_activity: 0.0,
             cooldowns: BTreeMap::new(),
             last_knife: None,
-            cycle_idx: 0,
+            cycle_bag: ShuffleBag::default(),
+            cycle_mood: None,
             next_wander,
             x: 0.0,
             area: None,
@@ -474,6 +490,7 @@ impl Brain {
                     });
                     self.out.push(Action::Stand);
                     self.schedule_wander();
+                    self.arrived();
                 } else {
                     self.x += dx;
                     self.out.push(Action::MoveTo {
@@ -622,6 +639,7 @@ impl Brain {
                 });
                 self.out.push(Action::Stand);
                 self.schedule_wander();
+                self.arrived();
             } else {
                 self.x += step * d.signum();
                 self.out.push(Action::MoveTo {
@@ -1082,18 +1100,44 @@ impl Brain {
         self.schedule_wander();
     }
 
-    fn cycle_pose(&mut self) {
-        self.next_cycle = self.t + self.cfg.pose_cycle_s;
-        let variants: Vec<&str> = cycle_variants(self.mood.mood())
-            .iter()
-            .copied()
-            .filter(|c| self.has(c))
-            .collect();
-        if variants.is_empty() {
+    /// A wander walk just ended: now and then she strikes a pose soon
+    /// after arriving (`wander_pose_chance`).
+    fn arrived(&mut self) {
+        let chance = self.cfg.wander_pose_chance;
+        if chance.is_finite() && chance > 0.0 && self.rng.next_f32() < chance {
+            let at = self.t + self.cfg.wander_pose_delay_s.max(0.0);
+            self.next_cycle = self.next_cycle.min(at);
+        }
+    }
+
+    /// Rebuilds the pose-cycle bag when the mood changed: the mood's
+    /// variants that exist, flirty ones weighted by `[behavior.idle]
+    /// flirt_weight`, never repeating the last pick across the rebuild.
+    fn sync_cycle_bag(&mut self) {
+        let mood = self.mood.mood();
+        if self.cycle_mood == Some(mood) {
             return;
         }
-        let clip = variants[self.cycle_idx % variants.len()].to_string();
-        self.cycle_idx += 1;
+        let fw = self.cfg.idle.flirt_weight;
+        let entries: Vec<(String, u32)> = cycle_variants(mood)
+            .iter()
+            .filter(|c| self.clips.contains(**c))
+            .map(|c| (c.to_string(), crate::idle::flirt_weight_of(c, fw)))
+            .collect();
+        let last = self.cycle_bag.last().map(str::to_string);
+        self.cycle_bag = ShuffleBag::new(entries);
+        if let Some(l) = last {
+            self.cycle_bag.set_last(&l);
+        }
+        self.cycle_mood = Some(mood);
+    }
+
+    fn cycle_pose(&mut self) {
+        self.next_cycle = self.t + self.cfg.pose_cycle_s;
+        self.sync_cycle_bag();
+        let Some(clip) = self.cycle_bag.next(&mut self.rng).map(str::to_string) else {
+            return;
+        };
         self.out.push(Action::React { clip, priority: 0 });
         self.sfx("soft");
     }
@@ -1531,9 +1575,16 @@ mod tests {
         for w in times.windows(2) {
             assert!((w[1] - w[0] - 16.0).abs() < 0.15);
         }
-        assert_eq!(
-            clips,
-            ["hip_sway", "tail_wag", "lean_forward", "shoulder_roll"]
+        // Weighted shuffle bag over the mood's variants: no immediate
+        // repeats, only clips of the current mood that exist.
+        for w in clips.windows(2) {
+            assert_ne!(w[0], w[1], "{clips:?}");
+        }
+        assert!(
+            clips
+                .iter()
+                .all(|c| cycle_variants(b.mood()).contains(&c.as_str()) && b.has(c)),
+            "{clips:?}"
         );
         // Busy holds it back; an interaction pushes it back.
         assert!(reacts(&run(&mut b, 20.0, true)).is_empty());
@@ -1600,6 +1651,116 @@ mod tests {
             .all(|a| !matches!(a, Action::Walk { .. } | Action::MoveTo { .. })));
         let a = b.set_mode(MoveMode::Wander);
         assert_eq!(a, [Action::ModeChanged(MoveMode::Wander)]);
+    }
+
+    fn calm_cfg() -> BehaviorConfig {
+        BehaviorConfig {
+            sleepy_after_s: 1e6,
+            asleep_after_s: 2e6,
+            mischief: MischiefConfig {
+                boredom_s: 0.0,
+                ..MischiefConfig::default()
+            },
+            ..BehaviorConfig::default()
+        }
+    }
+
+    /// Pose-cycle picks over `secs` with every Playful variant available.
+    fn cycle_picks(flirt_weight: u32, secs: f32) -> Vec<String> {
+        let mut cfg = calm_cfg();
+        cfg.pose_cycle_s = 1.0;
+        cfg.idle.flirt_weight = flirt_weight;
+        let clips = CLIPS
+            .iter()
+            .chain(cycle_variants(Mood::Playful))
+            .map(|s| s.to_string());
+        let mut b = Brain::new(cfg, MoveMode::Stay, RuleSet::bundled(), clips, 11);
+        let picks: Vec<String> = run(&mut b, secs, false)
+            .into_iter()
+            .filter_map(|a| match a {
+                Action::React { clip, priority: 0 } => Some(clip),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(b.mood(), Mood::Playful);
+        picks
+    }
+
+    #[test]
+    fn pose_cycle_is_weighted_flirty_and_never_repeats() {
+        let flirty_share = |picks: &[String]| {
+            picks.iter().filter(|c| crate::idle::is_flirty(c)).count() as f32 / picks.len() as f32
+        };
+        let flat = cycle_picks(1, 2000.0);
+        let default = cycle_picks(crate::idle::DEFAULT_FLIRT_WEIGHT, 2000.0);
+        let high = cycle_picks(8, 2000.0);
+        for picks in [&flat, &default, &high] {
+            assert!(picks.len() > 1500, "{}", picks.len());
+            for w in picks.windows(2) {
+                assert_ne!(w[0], w[1], "immediate repeat");
+            }
+        }
+        // Every Playful variant still comes up (variety), flirty ones more.
+        for v in cycle_variants(Mood::Playful) {
+            assert!(default.iter().any(|c| c == v), "{v} never picked");
+        }
+        let (f, d, h) = (
+            flirty_share(&flat),
+            flirty_share(&default),
+            flirty_share(&high),
+        );
+        assert!(f < d && d < h, "{f} {d} {h}");
+        // Playful: 11 flirty of 16 → 11·3 / (11·3 + 5) ≈ 87 % at weight 3.
+        assert!(d > 0.8, "{d}");
+    }
+
+    /// First pose-cycle react within `secs` of a wander walk ending.
+    fn pose_after_arrival(chance: f32, secs: f32) -> Option<f32> {
+        let mut cfg = calm_cfg();
+        cfg.pose_cycle_s = 1e6;
+        cfg.wander_every_s = (5.0, 5.0);
+        cfg.wander_speed_px_s = 600.0;
+        cfg.wander_pose_chance = chance;
+        cfg.wander_pose_delay_s = 1.5;
+        let mut b = brain_with(cfg, MoveMode::Wander);
+        b.set_area(0.0, 1500.0);
+        b.set_position(700.0);
+        // Run until the first walk ends.
+        let mut walked = false;
+        for _ in 0..200 {
+            let a = b.tick(0.1, false);
+            walked |= a.iter().any(|a| matches!(a, Action::Walk { .. }));
+            if walked && a.contains(&Action::Stand) {
+                let t0 = b.time();
+                for _ in 0..(secs * 10.0) as usize {
+                    let a = b.tick(0.1, false);
+                    if a.iter()
+                        .any(|a| matches!(a, Action::React { priority: 0, .. }))
+                    {
+                        return Some(b.time() - t0);
+                    }
+                }
+                return None;
+            }
+        }
+        panic!("no walk ended");
+    }
+
+    #[test]
+    fn wander_arrival_can_strike_a_pose() {
+        let dt = pose_after_arrival(1.0, 5.0).expect("posed after arriving");
+        assert!((1.4..=1.7).contains(&dt), "{dt}");
+        assert_eq!(pose_after_arrival(0.0, 5.0), None);
+        assert_eq!(BehaviorConfig::default().wander_pose_chance, 0.35);
+    }
+
+    #[test]
+    fn tease_config_lives_under_behavior() {
+        let c: BehaviorConfig =
+            toml::from_str("[tease]\nenabled = false\npeak_scale = 1.3\n").unwrap();
+        assert!(!c.tease.enabled);
+        assert_eq!(c.tease.peak_scale, 1.3);
+        assert_eq!(c.tease.beat_clips[0], "tease_closeup");
     }
 
     #[test]

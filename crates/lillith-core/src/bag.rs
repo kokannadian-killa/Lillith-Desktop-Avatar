@@ -60,6 +60,19 @@ impl ShuffleBag {
             .map_or(0, |e| e.1)
     }
 
+    /// The previous pick (`None` before the first).
+    pub fn last(&self) -> Option<&str> {
+        self.last.map(|i| self.entries[i].0.as_str())
+    }
+
+    /// Treats `name` as the previous pick (so the next one differs), e.g.
+    /// when a pool is rebuilt; unknown names are ignored.
+    pub fn set_last(&mut self, name: &str) {
+        if let Some(i) = self.entries.iter().position(|(n, _)| n == name) {
+            self.last = Some(i);
+        }
+    }
+
     fn refill(&mut self, rng: &mut Rng) {
         let mut b: Vec<usize> = Vec::new();
         for (i, (_, w)) in self.entries.iter().enumerate() {
@@ -168,6 +181,20 @@ mod tests {
         assert_eq!(one.next(&mut rng), Some("only"));
         let mut none = ShuffleBag::default();
         assert_eq!(none.next(&mut rng), None);
+    }
+
+    #[test]
+    fn set_last_carries_over_to_a_rebuilt_pool() {
+        let mut rng = Rng::new(9);
+        let mut b = ShuffleBag::uniform(["a".to_string(), "b".to_string()]);
+        assert_eq!(b.last(), None);
+        b.set_last("zzz");
+        assert_eq!(b.last(), None, "unknown names are ignored");
+        for _ in 0..50 {
+            b.set_last("a");
+            assert_eq!(b.next(&mut rng), Some("b"));
+            assert_eq!(b.last(), Some("b"));
+        }
     }
 
     #[test]
