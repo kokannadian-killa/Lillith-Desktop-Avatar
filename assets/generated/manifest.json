@@ -4692,6 +4692,34 @@
    ],
    "allure": true,
    "video": "arch_back_over_shoulder_long/arch_back_over_shoulder_long.mp4"
+  },
+  {
+   "name": "kneel_hands_on_thighs_long",
+   "frame_count": 180,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "kneel_hands_on_thighs_long/",
+   "sheet": "kneel_hands_on_thighs_long/kneel_hands_on_thighs_long_sheet.png",
+   "manifest": "kneel_hands_on_thighs_long/kneel_hands_on_thighs_long.json",
+   "preview": "kneel_hands_on_thighs_long/kneel_hands_on_thighs_long_preview.gif",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "kneel_hands_on_thighs_long/kneel_hands_on_thighs_long.mp4"
   }
  ]
 }

@@ -44,6 +44,7 @@ const ALLURE: &[&str] = &[
     // 15 s variants: same moves with a ~10 s living peak hold.
     "body_roll_slow_long",
     "arch_back_over_shoulder_long",
+    "kneel_hands_on_thighs_long",
 ];
 const FUN: &[&str] = &[
     "dance",
@@ -158,6 +159,7 @@ mod tests {
         assert_eq!(category_of("bend_forward_wink"), 0);
         assert_eq!(category_of("body_roll_slow_long"), 0);
         assert_eq!(category_of("arch_back_over_shoulder_long"), 0);
+        assert_eq!(category_of("kneel_hands_on_thighs_long"), 0);
         assert_eq!(category_of("idle"), 1);
         assert_eq!(category_of("wave"), 2);
         assert_eq!(category_of("twirl"), 3);
