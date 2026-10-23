@@ -161,3 +161,15 @@ PNG sheet stays the fallback and the bounds-check reference.
   `kneel_hands_on_thighs`, `wall_lean_invisible`, `blow_kiss_hip_pop`, `hair_lift_stretch`,
   `slow_turn_spin_tease` and `bend_forward_wink`. They ship as sheet + JSON + MP4, without a preview GIF or a
   `frames/` dir.
+- **`*_long` variants:**
+  - Each `_long` variant is a 15 s take with a ~10 s living peak hold: 180 frames at 12 fps, loop,
+    with chest, pigtail and hip jiggle baked into the pixels. The importer tags these
+    `disable_springs`, so the engine springs stay off.
+  - `body_roll_slow_long` is registered and appears in *Flirty / Allure*. Its MP4 is 1.4 MiB and the
+    sheet is 12 MiB.
+  - Decoded, a 180-frame clip takes about 110 MB of the 192 MB video cache. Two long clips playing
+    back to back evict each other. Each re-decode streams in the background, about 1 s for 180
+    frames with the first frame after about 65 ms, so playback does not stall.
+  - The other `_long` takes in `generated_v2` (the rest of the bold set) are registered with the
+    same command once their matte and finalize steps are done:
+    `new_pose.py <clip>_long --from copy --allure --tag baked_motion`.
