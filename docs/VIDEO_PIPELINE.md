@@ -138,9 +138,14 @@ PNG sheet stays the fallback and the bounds-check reference.
     re-encodes from the sheet and prints the quality metrics.
   - It also writes a `video` block (metrics, size) into `<clip>.json` and sets the entry's `video`.
   - Unchanged clips are skipped unless you pass `--force`.
+- **Repo size:** the per-frame `frames/` PNGs were byte-for-byte copies of the sheet cells (verified
+  on all 2690 frames) and nothing read them, so they are no longer committed. They stay in the build
+  dir. `assets/generated/` went from 381 MiB (sheets 185 + frames 195) to about 246 MiB
+  (sheets 205 incl. the 8 new poses + MP4s 33.5). Dropping the sheets as well would save another
+  205 MiB, but it would lose the ffmpeg-free fallback and the `--check` reference, so they stay.
 - **New pose in one command:** `tools/video-pipeline/new_pose.py`. See `tools/video-pipeline/README_MP4.md`.
 - **Bold allure poses:** 8 poses come from `generated_v2` (approved), each 36 frames, 12 fps, loop, and
   are listed in `catalog.rs` *Flirty / Allure*: `body_roll_slow`, `arch_back_over_shoulder`,
   `kneel_hands_on_thighs`, `wall_lean_invisible`, `blow_kiss_hip_pop`, `hair_lift_stretch`,
-  `slow_turn_spin_tease` and `bend_forward_wink`. They ship as sheet + JSON + preview + MP4, without a
+  `slow_turn_spin_tease` and `bend_forward_wink`. They ship as sheet + JSON + MP4, without a preview GIF or a
   `frames/` dir.

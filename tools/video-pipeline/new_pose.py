@@ -14,7 +14,7 @@ Steps (each one is a separate tool you can also run by hand):
   finalize  keyframed: finalize_keyframed_loop.py (zoom-creep fix + baseline snap)
             matte:     take the matte_v2 output as is
             build:     keep the build_clip output (skip matte; quick drafts)
-  copy      <clip>.json, sheet, preview -> <repo>/assets/generated/<clip>/
+  copy      <clip>.json + sheet -> <repo>/assets/generated/<clip>/ (preview gif and frames/ stay in $LILLITH_V2)
   register  add / update the assets/generated/manifest.json entry
   pack      pack_mp4.py: sheet -> <clip>.mp4 (colour | alpha, crf 16) + halo metrics,
             sets entry.video
@@ -118,10 +118,10 @@ def main():
             if not dry:
                 shutil.copytree(m, v2, dirs_exist_ok=True)
     if 'copy' in steps:
-        print(f'+ copy {v2}/{{json,sheet,preview}} -> {dst}')
+        print(f'+ copy {v2}/{{json,sheet}} -> {dst}')
         if not dry:
             os.makedirs(dst, exist_ok=True)
-            for f in (f'{c}.json', f'{c}_sheet.png', f'{c}_preview.gif'):
+            for f in (f'{c}.json', f'{c}_sheet.png'):
                 if os.path.exists(os.path.join(v2, f)):
                     shutil.copy2(os.path.join(v2, f), os.path.join(dst, f))
     if 'register' in steps:
@@ -134,7 +134,7 @@ def main():
         run(['cargo', 'run', '-q', '-p', 'import-manifest', '--', '--input', 'assets/generated/manifest.json',
              '--tag', 'canonical', '--check'], dry, cwd=a.repo)
     if not dry:
-        print(f'\ndone: {c}. Review {dst}/{c}_preview.gif, then commit assets/generated/{c}/ + manifest.*'
+        print(f'\ndone: {c}. Review {v2}/{c}_preview.gif, then commit assets/generated/{c}/ + manifest.*'
               + ('' if a.allure else '\n(not an allure pose: add it to a catalog.rs list if the menu category matters)'))
 
 
