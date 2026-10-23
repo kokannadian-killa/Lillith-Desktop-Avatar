@@ -58,6 +58,8 @@ Physical contact beats (hand on chest/neckline) need their own pinned keyframe o
 - Cells: frames 1..143 **step 2 → 72 frames at 12 fps** = real-time 6 s loop (shipped allure clips are
   12 fps, 36 frames from 3 s takes; 6 s gives the slower, sultrier read Ko wants).
 - Long holds: a 12-15 s take with two keyframes (peak at ~4 s and ~10 s) → `_long` variant (180 frames).
+- Low RAM (busy box: build_clip was OOM-killed at 71 cells): `--step 3 --fps 8` gives 48 cells for the
+  same 6 s at the same real-time pace.
 - Never raise fps or step to "fix" length: the checks fail any clip that plays faster than its source.
 
 ## 5. Background for clean removal

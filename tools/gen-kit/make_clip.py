@@ -168,7 +168,7 @@ def cmd_build(a):
     stop = min(a.stop or r['stop'], nf - 1)  # last frame == first frame for loops -> dropped
     fin = 'build' if a.draft else r['finalize']
     cmd = [sys.executable, os.path.join(PIPE, 'new_pose.py'), clip, '--video', a.video, '--take', a.take,
-           '--start', str(a.start or r['start']), '--stop', str(stop), '--step', str(r['step']), '--fps', str(r['fps']),
+           '--start', str(a.start or r['start']), '--stop', str(stop), '--step', str(a.step or r['step']), '--fps', str(a.fps or r['fps']),
            '--mode', r['mode'], '--scale', str(r['scale']), '--anchor-x', str(r['anchor_x']), '--center', r['center'],
            '--finalize', fin, '--to', 'finalize', '--allure'] + [f'--build-arg={x}' for x in r.get('build_args', [])]
     print('+', ' '.join(cmd), flush=True)
@@ -195,6 +195,8 @@ def main():
     b.add_argument('--clip'); b.add_argument('--take', default='a'); b.add_argument('--draft', action='store_true',
                    help='skip matte_v2 (fast white-key draft)')
     b.add_argument('--start', type=int); b.add_argument('--stop', type=int)
+    b.add_argument('--step', type=int, help='override recipe step (3 + --fps 8 = lighter 6 s loop, same real-time pace)')
+    b.add_argument('--fps', type=float)
     c = sp.add_parser('check'); c.add_argument('dir'); c.add_argument('--seated', action='store_true', default=None)
     a = ap.parse_args()
     if a.cmd == 'list':
