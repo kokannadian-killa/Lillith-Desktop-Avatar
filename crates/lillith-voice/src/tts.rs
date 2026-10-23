@@ -27,6 +27,12 @@ impl Engine {
 /// Speaks `text` with the first engine that works. Returns the engine used,
 /// or `None` (silent) if none is installed.
 pub async fn speak(text: &str) -> Option<Engine> {
+    // Never read emoji / emoticons aloud; nothing speakable → silent.
+    let spoken = crate::speech_text::speech_text(text);
+    if spoken.is_empty() {
+        return None;
+    }
+    let text = spoken.as_str();
     for &engine in CHAIN {
         let status = match engine {
             // TODO(M8): piper needs a voice model and pipes raw audio to a player.

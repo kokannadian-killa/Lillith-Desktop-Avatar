@@ -11,6 +11,8 @@
 //! - `speech` (feature `voice`): [`Voice`], the handle the app owns: cooldown
 //!   gate, bounded drop-oldest queue, interrupt, runtime mute, and one speech
 //!   worker thread (never the render thread).
+//! - [`speech_text`]: strips emoji, emoticons, `:shortcodes:`, kaomoji and
+//!   `*actions*` from a typed line before any engine speaks it.
 //! - [`tts`]: the older async fallback chain (kept for the CLI).
 //! - [`stt`]: push-to-talk, `pw-record`/`arecord` 5 s → `whisper-cli`;
 //!   later `whisper-rs` + `cpal`.
@@ -34,6 +36,7 @@ pub mod lines;
 pub mod sfx;
 #[cfg(feature = "voice")]
 pub mod speech;
+pub mod speech_text;
 pub mod stt;
 pub mod tts;
 
@@ -41,3 +44,4 @@ pub use config::{EngineChoice, PlayerChoice, VoiceConfig};
 pub use lines::{DefaultLines, LineSource, NoLines};
 #[cfg(feature = "voice")]
 pub use speech::{Dropped, Gate, Stats, Urgency, Voice};
+pub use speech_text::speech_text;
