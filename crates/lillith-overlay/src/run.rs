@@ -45,6 +45,18 @@ pub const MAX_EVENTS_PER_TICK: usize = 16;
 /// the work and return.
 pub trait ActionSink {
     fn on_actions(&mut self, actions: &[Action]);
+    /// A finished chat reply (`chat.end` detail): read it aloud when the
+    /// speakers are on. Same contract: queue and return.
+    fn on_chat_reply(&mut self, _reply: &str) {}
+    /// "Speak out loud (speakers)" state; `None` = no voice (the menu item
+    /// is left out).
+    fn speaker(&self) -> Option<bool> {
+        None
+    }
+    /// Turns the speakers on/off now (and persists it).
+    fn set_speaker(&mut self, _on: bool) {}
+    /// config.toml changed (Settings saved): re-read what applies live.
+    fn config_changed(&mut self, _path: &std::path::Path) {}
 }
 
 /// Shared [`ActionSink`] handle (cloneable so the Wayland → X11 fallback
@@ -509,10 +521,10 @@ impl Controller {
 
     /// Re-reads config.toml and applies what can change live.
     pub fn reload_config(&mut self) {
-        let Some(path) = &self.config_path else {
+        let Some(path) = self.config_path.clone() else {
             return;
         };
-        let cfg = match Config::load(path) {
+        let cfg = match Config::load(&path) {
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!("settings: {}: {e}", path.display());
@@ -520,6 +532,16 @@ impl Controller {
             }
         };
         self.apply_config(&cfg);
+        if let Some(sink) = &self.sink {
+            if let Ok(mut s) = sink.0.lock() {
+                s.config_changed(&path);
+            }
+        }
+    }
+
+    /// "Speak out loud (speakers)" state from the voice sink.
+    pub fn speaker(&self) -> Option<bool> {
+        self.sink.as_ref()?.0.lock().ok()?.speaker()
     }
 
     /// Applies a config live (Settings).
@@ -1231,7 +1253,12 @@ impl Controller {
                         bottom: self.placement.bottom,
                     });
                 }
-                Action::Say(line) => tracing::info!("💬 {line}"),
+                Action::Say(line) => {
+                    tracing::info!("💬 {line}");
+                    // Banter shows in her speech bubble too (a chat reply
+                    // in progress keeps the bubble).
+                    self.talk.show_line(&line);
+                }
                 Action::Sfx(cue) => tracing::debug!(cue, "sfx (audio lands with lillith-voice)"),
                 Action::MoodChanged(m) => tracing::info!(mood = ?m, "mood"),
                 Action::ContextMenu => self.open_menu(),
@@ -1335,11 +1362,27 @@ impl Controller {
         if ev.name.starts_with("chat.") {
             self.talk
                 .event(&ev.name, ev.detail.as_deref(), self.stage.animator_mut());
+            if ev.name == crate::chat::CHAT_END {
+                self.speak_reply(ev.detail.as_deref());
+            }
             return;
         }
         tracing::debug!(event = %ev.name, detail = ?ev.detail, "event");
         let a = self.brain.event(ev);
         self.apply(a);
+    }
+
+    /// Hands a finished chat reply to the voice (it decides whether the
+    /// speakers are on; text in the bubbles is unaffected).
+    fn speak_reply(&mut self, reply: Option<&str>) {
+        let Some(reply) = reply.map(str::trim).filter(|r| !r.is_empty()) else {
+            return;
+        };
+        if let Some(sink) = &self.sink {
+            if let Ok(mut s) = sink.0.lock() {
+                s.on_chat_reply(reply);
+            }
+        }
     }
 
     /// Applies pending [`EventFeed`] events (at most [`MAX_EVENTS_PER_TICK`]).
@@ -1537,6 +1580,7 @@ impl Controller {
             avatars,
             avatar: self.stage.avatar_id().map(str::to_string),
             chat: self.chat.is_some(),
+            speaker: self.speaker(),
         })
     }
 
@@ -1638,6 +1682,14 @@ impl Controller {
             // Avatar import lives in the settings window (its Avatar tab).
             MenuEffect::ImportAvatar => self.command(Command::Settings),
             MenuEffect::OpenPage(page) => self.open_menu_page(page),
+            MenuEffect::SetSpeaker(on) => {
+                tracing::info!(on, "speak out loud (speakers)");
+                if let Some(sink) = &self.sink {
+                    if let Ok(mut s) = sink.0.lock() {
+                        s.set_speaker(on);
+                    }
+                }
+            }
             MenuEffect::OpenSettings(default) => self.open_settings_window(default),
             MenuEffect::ChooseIcon => self.open_settings_tab(Some("icon")),
             MenuEffect::ResetPosition(pos) => {
@@ -2449,6 +2501,99 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         let got = seen.lock().unwrap().clone();
         assert_eq!(&got[..2], &[Action::Say("hi".into()), Action::Muted(true)]);
         assert!(got.len() >= 2);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A voice-like sink: records replies, speaker switch and reloads.
+    #[derive(Default, Clone)]
+    struct Spk {
+        replies: Arc<Mutex<Vec<String>>>,
+        on: Arc<Mutex<bool>>,
+        reloads: Arc<Mutex<u32>>,
+    }
+    impl ActionSink for Spk {
+        fn on_actions(&mut self, _: &[Action]) {}
+        fn on_chat_reply(&mut self, reply: &str) {
+            if *self.on.lock().unwrap() {
+                self.replies.lock().unwrap().push(reply.to_string());
+            }
+        }
+        fn speaker(&self) -> Option<bool> {
+            Some(*self.on.lock().unwrap())
+        }
+        fn set_speaker(&mut self, on: bool) {
+            *self.on.lock().unwrap() = on;
+        }
+        fn config_changed(&mut self, _: &std::path::Path) {
+            *self.reloads.lock().unwrap() += 1;
+        }
+    }
+
+    #[test]
+    fn chat_reply_reaches_the_voice_and_speaker_toggle_is_live() {
+        let (dir, mut c) = m3_controller("speaker", MoveMode::Stay);
+        let spk = Spk::default();
+        *spk.on.lock().unwrap() = true;
+        c.sink = Some(SinkHandle::new(spk.clone()));
+        // Without a voice the item is left out; with one it shows its state.
+        assert_eq!(c.menu_state(None).extras.speaker, Some(true));
+        c.event(&Event::new(crate::chat::CHAT_START));
+        c.event(&Event::with_detail(crate::chat::CHAT_TOKEN, "Hey you~ "));
+        c.event(&Event::with_detail(
+            crate::chat::CHAT_END,
+            "Hey you~ miss me?",
+        ));
+        assert_eq!(*spk.replies.lock().unwrap(), ["Hey you~ miss me?"]);
+        // Errors / empty ends are not spoken.
+        c.event(&Event::with_detail(crate::chat::CHAT_ERROR, "boom"));
+        c.event(&Event::with_detail(crate::chat::CHAT_END, "  "));
+        assert_eq!(spk.replies.lock().unwrap().len(), 1);
+        // Right-click ▸ Speak out loud: off, live; the text still shows.
+        c.menu_pick(MenuAction::ToggleSpeaker);
+        assert!(!*spk.on.lock().unwrap());
+        assert_eq!(c.menu_state(None).extras.speaker, Some(false));
+        c.event(&Event::new(crate::chat::CHAT_START));
+        c.event(&Event::with_detail(crate::chat::CHAT_END, "Quiet now"));
+        assert_eq!(spk.replies.lock().unwrap().len(), 1, "speakers off");
+        assert_eq!(c.talk.speech.as_ref().unwrap().text, "Quiet now");
+        c.menu_pick(MenuAction::ToggleSpeaker);
+        assert!(*spk.on.lock().unwrap());
+        // Settings save → reload_config → the voice re-reads [voice].
+        let cfg_path = dir.join("cfg/config.toml");
+        std::fs::create_dir_all(cfg_path.parent().unwrap()).unwrap();
+        std::fs::write(&cfg_path, "[voice]\nenabled = false\n").unwrap();
+        c.config_path = Some(cfg_path);
+        c.reload_config();
+        assert_eq!(*spk.reloads.lock().unwrap(), 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn banter_lines_show_in_the_speech_bubble() {
+        let (dir, mut c) = m3_controller("banter_bubble", MoveMode::Stay);
+        assert_eq!(c.menu_state(None).extras.speaker, None, "no voice wired");
+        c.apply(vec![Action::Say("Miss me, Ko?".into())]);
+        assert_eq!(c.talk.speech.as_ref().unwrap().text, "Miss me, Ko?");
+        assert!(!c.talk.active(), "no lip-flap for a one-off line");
+        // A chat reply takes the bubble and is not replaced by banter.
+        c.event(&Event::new(crate::chat::CHAT_START));
+        c.event(&Event::with_detail(crate::chat::CHAT_TOKEN, "Reply"));
+        c.apply(vec![Action::Say("Banter".into())]);
+        assert_eq!(c.talk.speech.as_ref().unwrap().text, "Reply");
+        c.event(&Event::with_detail(crate::chat::CHAT_END, "Reply!"));
+        c.apply(vec![Action::Say("Banter".into())]);
+        assert_eq!(c.talk.speech.as_ref().unwrap().text, "Reply!");
+        // Once the reply faded, banter shows again; then fades on its own.
+        for _ in 0..200 {
+            c.tick(0.05).unwrap();
+        }
+        assert!(c.talk.speech.is_none());
+        c.apply(vec![Action::Say("Banter".into())]);
+        assert_eq!(c.talk.speech.as_ref().unwrap().text, "Banter");
+        for _ in 0..200 {
+            c.tick(0.05).unwrap();
+        }
+        assert!(c.talk.speech.is_none());
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -234,6 +234,8 @@ pub struct Talk {
     took_base: bool,
     /// Mouth shape this frame (drives a custom avatar's talk bob).
     pub mouth_now: Option<Mouth>,
+    /// `speech` is a one-off line ([`Talk::show_line`]), not a chat reply.
+    one_off: bool,
 }
 
 impl Talk {
@@ -281,6 +283,7 @@ impl Talk {
                 self.finish_pending = false;
                 self.since_event = 0.0;
                 self.speech = Some(Speech::default());
+                self.one_off = false;
                 self.replies = self.replies.wrapping_add(1);
                 let flirty_turn = self.replies % 2 == 0;
                 let pick = [
@@ -337,6 +340,24 @@ impl Talk {
             CHAT_OPENED => {}
             _ => return false,
         }
+        true
+    }
+
+    /// Shows a one-off line (banter, About) in the speech bubble: revealed
+    /// at the speaking pace, held, faded; no lip-flap. Ignored while a chat
+    /// reply streams or is still on screen. Returns `true` if shown.
+    pub fn show_line(&mut self, line: &str) -> bool {
+        let line = line.trim();
+        let reply_on_screen = self.speech.is_some() && !self.one_off;
+        if line.is_empty() || self.streaming || self.finish_pending || reply_on_screen {
+            return false;
+        }
+        self.one_off = true;
+        self.speech = Some(Speech {
+            text: line.to_string(),
+            done: true,
+            ..Speech::default()
+        });
         true
     }
 

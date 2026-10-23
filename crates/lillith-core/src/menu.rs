@@ -17,6 +17,7 @@
 //! ─────────────
 //! Mode            ▸ (•) Stay  ( ) Wander  ( ) Follow
 //! Mood            ▸ (•) Playful ( ) Happy ( ) Mischievous ( ) Alert ( ) Sleepy
+//! [x] Speak out loud (speakers)   (only when a voice is wired)
 //! [ ] Mute voice
 //! [ ] Pause system monitor
 //! ─────────────
@@ -133,6 +134,9 @@ pub fn mode_label(m: MoveMode) -> &'static str {
     }
 }
 
+/// Menu / settings label of [`MenuAction::ToggleSpeaker`].
+pub const SPEAKER_LABEL: &str = "Speak out loud (speakers)";
+
 /// What a leaf does when picked.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MenuAction {
@@ -140,6 +144,9 @@ pub enum MenuAction {
     SetMood(Mood),
     /// Mute / unmute (voice and SFX).
     ToggleMute,
+    /// "Speak out loud (speakers)": TTS on/off (`[voice] enabled`, live).
+    /// Text (speech bubble, chat) shows either way.
+    ToggleSpeaker,
     /// Pause / resume the system-monitor event feed.
     ToggleMonitor,
     SetSize(Size),
@@ -198,6 +205,9 @@ pub struct MenuExtras {
     pub avatar: Option<String>,
     /// The chat bubble is available.
     pub chat: bool,
+    /// "Speak out loud (speakers)" state (`None` = no voice wired: the item
+    /// is left out).
+    pub speaker: Option<bool>,
 }
 
 impl MenuExtras {
@@ -473,6 +483,13 @@ pub fn build_menu(s: &MenuState) -> Menu {
             })
             .collect(),
     });
+    if let Some(on) = s.extras.speaker {
+        items.push(MenuItem::leaf(
+            SPEAKER_LABEL,
+            MenuAction::ToggleSpeaker,
+            Check::Checkbox(on),
+        ));
+    }
     items.push(MenuItem::leaf(
         "Mute voice",
         MenuAction::ToggleMute,
@@ -577,6 +594,8 @@ pub enum MenuEffect {
     ChooseIcon,
     /// Re-open the menu at this Poses page (`None` = the main menu).
     OpenPage(Option<MenuPage>),
+    /// Turn TTS on the speakers on/off now and persist `[voice] enabled`.
+    SetSpeaker(bool),
 }
 
 /// What to do after a pick.
@@ -605,6 +624,11 @@ pub fn on_menu_action(action: MenuAction, brain: &mut Brain, state: &MenuState) 
         MenuAction::ToggleMonitor => out
             .effects
             .push(MenuEffect::SetMonitorPaused(!state.monitor_paused)),
+        MenuAction::ToggleSpeaker => {
+            // The settings window has no voice state: it always offers "on".
+            let on = state.extras.speaker.unwrap_or(false);
+            out.effects.push(MenuEffect::SetSpeaker(!on));
+        }
         MenuAction::SetSize(z) => {
             if (z.scale() - state.scale).abs() > 1e-4 {
                 out.effects.push(MenuEffect::SetScale(z.scale()));
@@ -691,6 +715,8 @@ pub mod wire {
     /// `value`: `playful` | `happy` | `mischievous` | `alert` | `sleepy`.
     pub const SET_MOOD: &str = "set_mood";
     pub const TOGGLE_MUTE: &str = "toggle_mute";
+    /// "Speak out loud (speakers)" on/off.
+    pub const TOGGLE_SPEAKER: &str = "toggle_speaker";
     pub const TOGGLE_MONITOR: &str = "toggle_monitor";
     /// Resize preset. `value`: `small` | `normal` | `large` | `xl` | `xxl`.
     pub const SET_SIZE: &str = "set_size";
@@ -766,6 +792,7 @@ pub fn action_line(a: MenuAction) -> String {
         MenuAction::SetMode(m) => (SET_MODE, Some(mode_key(m))),
         MenuAction::SetMood(m) => (SET_MOOD, Some(mood_key(m))),
         MenuAction::ToggleMute => (TOGGLE_MUTE, None),
+        MenuAction::ToggleSpeaker => (TOGGLE_SPEAKER, None),
         MenuAction::ToggleMonitor => (TOGGLE_MONITOR, None),
         MenuAction::SetSize(z) => (SET_SIZE, Some(size_key(z))),
         MenuAction::ScaleStep(n) => {
@@ -856,6 +883,7 @@ pub fn parse_action_line(line: &str) -> Option<MenuAction> {
         SET_MODE => MenuAction::SetMode(*MODES.iter().find(|m| Some(mode_key(**m)) == v)?),
         SET_MOOD => MenuAction::SetMood(*MOODS.iter().find(|m| Some(mood_key(**m)) == v)?),
         TOGGLE_MUTE => MenuAction::ToggleMute,
+        TOGGLE_SPEAKER => MenuAction::ToggleSpeaker,
         TOGGLE_MONITOR => MenuAction::ToggleMonitor,
         SET_SIZE => MenuAction::SetSize(*Size::ALL.iter().find(|s| Some(size_key(**s)) == v)?),
         SCALE_STEP => MenuAction::ScaleStep(i8::try_from(num(v)?).ok().filter(|n| *n != 0)?),
@@ -1061,6 +1089,7 @@ mod tests {
             avatars: vec![("mug".into(), "mug".into())],
             avatar: Some("mug".into()),
             chat: true,
+            speaker: Some(true),
         }
     }
 
@@ -1256,6 +1285,29 @@ mod tests {
         };
         let o = on_menu_action(MenuAction::ToggleMonitor, &mut b, &paused);
         assert_eq!(o.effects, [MenuEffect::SetMonitorPaused(false)]);
+
+        // Speakers: only offered when the overlay reports a voice.
+        assert_eq!(build_menu(&s).find(MenuAction::ToggleSpeaker), None);
+        let spk = s.clone().with_extras(MenuExtras {
+            speaker: Some(true),
+            ..MenuExtras::default()
+        });
+        assert_eq!(
+            build_menu(&spk).check_of(MenuAction::ToggleSpeaker),
+            Some(Check::Checkbox(true))
+        );
+        let o = on_menu_action(MenuAction::ToggleSpeaker, &mut b, &spk);
+        assert_eq!(o.effects, [MenuEffect::SetSpeaker(false)]);
+        assert!(o.actions.is_empty(), "brain mute untouched");
+        let off = s.clone().with_extras(MenuExtras {
+            speaker: Some(false),
+            ..MenuExtras::default()
+        });
+        let o = on_menu_action(MenuAction::ToggleSpeaker, &mut b, &off);
+        assert_eq!(o.effects, [MenuEffect::SetSpeaker(true)]);
+        let l = action_line(MenuAction::ToggleSpeaker);
+        assert_eq!(l, r#"{"menu_action":"toggle_speaker"}"#);
+        assert_eq!(parse_action_line(&l), Some(MenuAction::ToggleSpeaker));
 
         let o = on_menu_action(MenuAction::SetSize(Size::Large), &mut b, &s);
         assert_eq!(o.effects, [MenuEffect::SetScale(0.75)]);
