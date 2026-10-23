@@ -127,7 +127,14 @@ fn tree_reason(p: &Path, data_dir: Option<&Path>) -> Option<String> {
 
 /// `path` if free, else `name (2).ext`, `name (3).ext`, … (never overwrites).
 pub fn unique_dest(path: &Path) -> PathBuf {
-    if std::fs::symlink_metadata(path).is_err() {
+    unique_dest_with(path, |_| false)
+}
+
+/// [`unique_dest`] that also avoids every path `taken` says is spoken for
+/// (earlier steps of the same plan).
+pub fn unique_dest_with(path: &Path, taken: impl Fn(&Path) -> bool) -> PathBuf {
+    let free = |p: &Path| std::fs::symlink_metadata(p).is_err() && !taken(p);
+    if free(path) {
         return path.to_path_buf();
     }
     let parent = path.parent().map(Path::to_path_buf).unwrap_or_default();
@@ -142,7 +149,7 @@ pub fn unique_dest(path: &Path) -> PathBuf {
     };
     for n in 2.. {
         let cand = parent.join(format!("{stem} ({n}){ext}"));
-        if std::fs::symlink_metadata(&cand).is_err() {
+        if free(&cand) {
             return cand;
         }
     }
@@ -166,7 +173,7 @@ fn resolve_dest(from: &Path, to: &Path) -> PathBuf {
     unique_dest(&target)
 }
 
-fn same_file(a: &Path, b: &Path) -> bool {
+pub(crate) fn same_file(a: &Path, b: &Path) -> bool {
     match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
         (Ok(x), Ok(y)) => x == y,
         _ => false,
@@ -235,21 +242,26 @@ pub fn execute(
         }
     }
     if !report.done.is_empty() {
-        std::fs::create_dir_all(journal_dir)?;
-        let file = new_batch_file(journal_dir);
-        let mut body = String::new();
-        for e in &report.done {
-            body.push_str(&format!(
-                "{}\t{}\t{}\n",
-                e.op,
-                esc(&e.from.to_string_lossy()),
-                esc(&e.to.to_string_lossy())
-            ));
-        }
-        std::fs::write(&file, body)?;
-        report.journal = Some(file);
+        report.journal = Some(write_batch(journal_dir, &report.done)?);
     }
     Ok(report)
+}
+
+/// Writes one undo batch (`op<TAB>from<TAB>to` per line) and returns its file.
+pub fn write_batch(journal_dir: &Path, entries: &[JournalEntry]) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(journal_dir)?;
+    let file = new_batch_file(journal_dir);
+    let mut body = String::new();
+    for e in entries {
+        body.push_str(&format!(
+            "{}\t{}\t{}\n",
+            e.op,
+            esc(&e.from.to_string_lossy()),
+            esc(&e.to.to_string_lossy())
+        ));
+    }
+    std::fs::write(&file, body)?;
+    Ok(file)
 }
 
 fn new_batch_file(dir: &Path) -> PathBuf {
@@ -286,7 +298,7 @@ fn unesc(s: &str) -> String {
     out
 }
 
-fn run_op(op: &OrganizeOp) -> std::io::Result<Option<JournalEntry>> {
+pub(crate) fn run_op(op: &OrganizeOp) -> std::io::Result<Option<JournalEntry>> {
     match op {
         OrganizeOp::Mkdir { path } => {
             if path.is_dir() {
@@ -351,7 +363,7 @@ fn run_op(op: &OrganizeOp) -> std::io::Result<Option<JournalEntry>> {
 /// Renames `from` → `dest` (which must not exist). Across drives a file is
 /// copied then the original removed; a folder across drives is refused (copy
 /// it instead), so a move can never half-delete a tree.
-fn move_no_clobber(from: &Path, dest: &Path) -> std::io::Result<()> {
+pub(crate) fn move_no_clobber(from: &Path, dest: &Path) -> std::io::Result<()> {
     if std::fs::symlink_metadata(dest).is_ok() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
@@ -379,7 +391,7 @@ pub(crate) fn is_cross_device(e: &std::io::Error) -> bool {
 }
 
 /// Copies a file / symlink / folder to `dest` (which must not exist).
-fn copy_tree(from: &Path, dest: &Path) -> std::io::Result<()> {
+pub(crate) fn copy_tree(from: &Path, dest: &Path) -> std::io::Result<()> {
     if std::fs::symlink_metadata(dest).is_ok() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
@@ -478,6 +490,26 @@ pub fn undo_last_in(journal_dir: &Path, trash: &Path) -> std::io::Result<UndoRep
     let Some(file) = batches(journal_dir).into_iter().next() else {
         return Ok(UndoReport::default());
     };
+    undo_batch_in(&file, trash)
+}
+
+/// What undoing `file` would do, one line per step (newest first).
+pub fn undo_preview(file: &Path) -> std::io::Result<Vec<String>> {
+    Ok(read_batch(file)?
+        .iter()
+        .rev()
+        .map(|e| match e.op.as_str() {
+            "move" => format!("move back {} → {}", e.to.display(), e.from.display()),
+            "copy" => format!("send copy {} to the Trash", e.to.display()),
+            "mkdir" => format!("remove folder {} if empty", e.to.display()),
+            o => format!("{o} {}", e.to.display()),
+        })
+        .collect())
+}
+
+/// Undoes one batch file (see [`undo_last_in`]).
+pub fn undo_batch_in(file: &Path, trash: &Path) -> std::io::Result<UndoReport> {
+    let file = file.to_path_buf();
     let entries = read_batch(&file)?;
     let mut rep = UndoReport {
         batch: Some(file.clone()),

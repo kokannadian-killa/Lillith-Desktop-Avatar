@@ -165,6 +165,7 @@ impl KnobTab {
                         Knob { path: &["overlay", "margin_left"], label: "From left", help: "Distance from the left screen edge", kind: Kind::Int { min: 0, max: 8000, unit: "px", default: 80 } },
                         Knob { path: &["overlay", "margin_bottom"], label: "From bottom", help: "Distance from the bottom screen edge", kind: Kind::Int { min: 0, max: 5000, unit: "px", default: 48 } },
                         Knob { path: &["overlay", "output"], label: "Monitor", help: "Output name, e.g. eDP-1 (empty = compositor's choice)", kind: Kind::Text { hint: "eDP-1" } },
+                        Knob { path: &["overlay", "auto_fix_kwin"], label: "KDE blur guard", help: "Before she appears, keep KWin force-blur effects off her so she never shows as a dark box (undo: lillith fix-kwin --revert)", kind: Kind::Bool { default: |c| c.overlay.auto_fix_kwin } },
                     ],
                 },
             ],
@@ -185,7 +186,7 @@ impl KnobTab {
             id: "access",
             title: "Access",
             rune: 7,
-            intro: "What Lillith may do on this computer. All local; nothing leaves the machine. Deleting always needs your signature on a Soul Contract that lists every file and folder — there is no switch to skip it. Changes apply to the next chat.",
+            intro: "What Lillith may do on this computer. All local; nothing leaves the machine. Every change, launch and command is shown as a Soul Contract plan you approve all of, pick from, or decline; deleting also needs your signature. There is no switch to skip it. Changes apply to the next chat.",
             groups: vec![
                 Group {
                     title: "HANDS · FILES & PROGRAMS",
@@ -195,14 +196,8 @@ impl KnobTab {
                         b(&["mind", "access", "files"], "Your files", "Browse, read and search home and mounted drives (secrets stay hidden)", |c| c.mind.access.files),
                         b(&["mind", "access", "organize"], "Organize", "Move, rename, copy, make folders, sort. Never overwrites; undo with `lillith undo-organize`", |c| c.mind.access.organize),
                         b(&["mind", "access", "programs"], "Programs", "See installed apps and open them (with files)", |c| c.mind.access.programs),
-                        b(&["mind", "access", "commands"], "Commands", "Run commands for a task; anything risky asks you first", |c| c.mind.access.commands),
-                        b(&["mind", "allow_shell"], "Raw shell", "Let her propose raw shell scripts (always asks)", |c| c.mind.allow_shell),
-                        Knob {
-                            path: &["mind", "access", "preview_over"],
-                            label: "Ask above",
-                            help: "Organize batches bigger than this show the plan first",
-                            kind: Kind::Int { min: 0, max: 10000, unit: "steps", default: 10 },
-                        },
+                        b(&["mind", "access", "commands"], "Commands", "Run commands for a task; every command is a plan step you approve", |c| c.mind.access.commands),
+                        b(&["mind", "allow_shell"], "Raw shell", "Let her propose raw shell scripts (a risky plan step)", |c| c.mind.allow_shell),
                         Knob {
                             path: &["mind", "access", "command_timeout_s"],
                             label: "Command limit",

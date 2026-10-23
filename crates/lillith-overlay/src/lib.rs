@@ -35,6 +35,7 @@ pub mod drag;
 pub mod gravity;
 pub mod input_region;
 pub mod kde_effects;
+pub mod kwin_prestart;
 pub mod menu_popup;
 pub mod pixels;
 pub mod relic;

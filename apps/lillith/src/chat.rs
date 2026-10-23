@@ -325,11 +325,19 @@ pub async fn cli_chat(
             session = session.with_history_file(p);
         }
     }
-    if let Some(note) = session.import_desktop_skills() {
-        println!("[skills] {note}");
+    if let Some(d) = lillith_core::config::data_dir() {
+        for note in lillith_core::notes::take(&d) {
+            println!("[lillith] {note}");
+        }
     }
+    let skills_note = session.import_desktop_skills();
     match message {
         Some(m) => {
+            if let Some(note) = skills_note {
+                // One-shot mode can't review; drop the plan, copy nothing.
+                let _ = session.take_pending();
+                println!("[skills] {note} — not done (run `lillith chat` or `lillith import-skills` to review).");
+            }
             if let Outcome::Fallback { .. } = ask(&mut session, m).await {
                 anyhow::bail!("no reply from {}", cfg.endpoint);
             }
@@ -347,6 +355,11 @@ pub async fn cli_chat(
         }
         None => {
             let stdin = std::io::stdin();
+            if let Some(note) = skills_note {
+                println!("[skills] {note}");
+                // Review it now; the answer is not sent to her.
+                let _ = offer_pending(&mut session, &stdin)?;
+            }
             loop {
                 print!("you: ");
                 let _ = std::io::stdout().flush();
@@ -391,6 +404,14 @@ fn offer_pending(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<Op
         return Ok(session.take_tool_feedback());
     };
     let mut contract = session.soul_contract();
+    if matches!(action, PendingAction::Plan { .. }) {
+        let id = contract.request(action.clone());
+        let res = review_plan_on_console(&mut contract, id, stdin)?;
+        return Ok(Some(ChatSession::answer_feedback(
+            &action,
+            res.as_deref().map_err(|e| e.as_str()),
+        )));
+    }
     if matches!(action, PendingAction::DeletePaths { .. }) {
         let id = contract.request(action.clone());
         let res = sign_on_console(&mut contract, id, stdin)?;
@@ -438,6 +459,112 @@ fn offer_pending(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<Op
         &action,
         res.as_deref().map_err(|e| e.as_str()),
     )))
+}
+
+/// The console plan review: print every numbered item in full, then Ko
+/// types `all`, a selection like `1,3-5`, or `none` (empty also declines).
+/// If the selection includes deletes, he picks Trash/permanent and types the
+/// phrase. If the disk changed, the new plan is shown and he is asked again.
+pub(crate) fn review_plan_on_console(
+    contract: &mut SoulContract,
+    id: RequestId,
+    stdin: &std::io::Stdin,
+) -> Result<Result<String, String>> {
+    let mut input = stdin.lock();
+    review_plan(contract, id, &mut input, &mut std::io::stdout())
+}
+
+/// [`review_plan_on_console`] over any reader / writer (tested).
+pub(crate) fn review_plan(
+    contract: &mut SoulContract,
+    mut id: RequestId,
+    input: &mut dyn BufRead,
+    out: &mut dyn Write,
+) -> Result<Result<String, String>> {
+    use lillith_core::access::plan::{parse_selection, PlanApproval};
+    loop {
+        let Some(plan) = contract.plan(id).cloned() else {
+            return Ok(Err("the request vanished".into()));
+        };
+        writeln!(
+            out,
+            "[soul contract] REVIEW THE PLAN — nothing has happened yet:"
+        )?;
+        writeln!(out, "{}", plan.listing())?;
+        write!(
+            out,
+            "Approve which? `all`, numbers like `1,3-5`, or `none`: "
+        )?;
+        out.flush()?;
+        let mut line = String::new();
+        input.read_line(&mut line)?;
+        let selected = match parse_selection(&line, plan.len()) {
+            Ok(Some(s)) if !s.is_empty() => s,
+            Ok(_) => {
+                contract.deny(id)?;
+                writeln!(out, "[soul contract] declined; nothing changed.")?;
+                return Ok(Err("Ko declined the whole plan".into()));
+            }
+            Err(e) => {
+                writeln!(out, "[soul contract] {e}; declined, nothing changed.")?;
+                contract.deny(id)?;
+                return Ok(Err("Ko declined the whole plan".into()));
+            }
+        };
+        let approval = PlanApproval::subset(&plan, selected.iter().copied());
+        let mut signature = None;
+        if let Some(manifest) = plan.deletion_manifest(&selected) {
+            writeln!(
+                out,
+                "The approved items include deleting:\n{}",
+                manifest.listing()
+            )?;
+            write!(out, "Where to? [T]rash (default) / type `permanent` to erase for good / `n` cancels everything: ")?;
+            out.flush()?;
+            let mut mode = String::new();
+            input.read_line(&mut mode)?;
+            let mode = match mode.trim().to_ascii_lowercase().as_str() {
+                "" | "t" | "trash" => DeleteMode::Trash,
+                "permanent" => DeleteMode::Permanent,
+                _ => {
+                    contract.deny(id)?;
+                    writeln!(out, "[soul contract] cancelled; nothing changed.")?;
+                    return Ok(Err("Ko cancelled the plan".into()));
+                }
+            };
+            write!(out, "To sign, type exactly: {}\n> ", manifest.phrase())?;
+            out.flush()?;
+            let mut typed = String::new();
+            input.read_line(&mut typed)?;
+            match DeletionSignature::sign(&manifest, &typed, mode) {
+                Ok(sig) => signature = Some(sig),
+                Err(_) => {
+                    contract.deny(id)?;
+                    writeln!(out, "[soul contract] not signed; nothing changed.")?;
+                    return Ok(Err("Ko did not sign, so nothing ran".into()));
+                }
+            }
+        }
+        match contract.approve_plan(id, approval, signature) {
+            Ok(done) => {
+                let text = done.output.unwrap_or_default();
+                writeln!(out, "{text}")?;
+                return Ok(Ok(text));
+            }
+            Err(ContractError::Changed { new_id }) => {
+                writeln!(
+                    out,
+                    "[soul contract] things changed on disk since the plan; here is the new one."
+                )?;
+                id = new_id;
+            }
+            Err(e) => {
+                writeln!(out, "[soul contract] {e}")?;
+                let _ = contract.deny(id);
+                return Ok(Err(e.to_string()));
+            }
+        }
+    }
 }
 
 /// A deletion on the console: print EVERY file and folder (full paths,
@@ -558,5 +685,52 @@ mod tests {
         for n in ["", "n", "no", "/contract no", "yep", "/contract", "sure"] {
             assert!(!is_yes(n), "{n:?}");
         }
+    }
+
+    #[test]
+    fn console_plan_review_runs_only_the_chosen_items_or_nothing() {
+        use lillith_core::access::plan::{ChangePlan, PlanRequest};
+        let dir = std::env::temp_dir().join(format!("lillith-console-plan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let reqs = || {
+            vec![
+                PlanRequest::Mkdir {
+                    path: dir.join("A"),
+                },
+                PlanRequest::Write {
+                    path: dir.join("b.txt"),
+                    body: "b".into(),
+                    skill: false,
+                },
+                PlanRequest::Mkdir {
+                    path: dir.join("C"),
+                },
+            ]
+        };
+        // `none` declines: nothing written.
+        let mut sc = SoulContract::new(None);
+        let id = sc.request(PendingAction::Plan {
+            plan: ChangePlan::build(reqs(), None, None).unwrap(),
+        });
+        let mut out = Vec::new();
+        let r = review_plan(&mut sc, id, &mut "none\n".as_bytes(), &mut out).unwrap();
+        assert!(r.is_err());
+        let shown = String::from_utf8(out).unwrap();
+        assert!(
+            shown.contains("REVIEW THE PLAN") && shown.contains("b.txt"),
+            "{shown}"
+        );
+        assert!(!dir.join("A").exists() && !dir.join("b.txt").exists());
+        // `1,3` runs just those.
+        let id = sc.request(PendingAction::Plan {
+            plan: ChangePlan::build(reqs(), None, None).unwrap(),
+        });
+        let mut out = Vec::new();
+        let r = review_plan(&mut sc, id, &mut "1,3\n".as_bytes(), &mut out).unwrap();
+        assert!(r.is_ok(), "{r:?}");
+        assert!(dir.join("A").is_dir() && dir.join("C").is_dir());
+        assert!(!dir.join("b.txt").exists(), "item 2 was not chosen");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

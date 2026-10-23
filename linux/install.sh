@@ -591,25 +591,25 @@ if [[ -f $CONFIG_FILE ]]; then
   sed -i -E "s/^autostart = (true|false)\$/autostart = $want/" "$CONFIG_FILE"
 fi
 
-# Her skills: a `skills` / `lillith-skills` folder on your desktop is COPIED
-# into her skills folder (never overwrites hers, never touches the original;
-# she also does this at every start, see [mind.access] import_desktop_skills).
+# Her skills: a `skills` / `lillith-skills` folder on your desktop can be
+# COPIED into her skills folder. You review the exact plan first (every copy,
+# its destination, any "(from desktop)" rename) and approve all, some, or
+# none. Hers are never overwritten and the original is never touched. She
+# also proposes this at start ([mind.access] import_desktop_skills).
 desk="$(desktop_dir)"
 skills_src=""
 for n in skills Skills lillith-skills Lillith-skills lillith_skills "Lillith Skills" lily-skills; do
   if [[ -d $desk/$n ]]; then skills_src="$desk/$n"; break; fi
 done
 if [[ -n $skills_src ]]; then
-  if "$LILLITH" --config "$CONFIG_FILE" import-skills --help >/dev/null 2>&1; then
-    if RUST_LOG=warn "$LILLITH" --config "$CONFIG_FILE" import-skills --from "$skills_src" | sed 's/^/  /'; then
-      ok "skills imported from $skills_src"
+  if [[ -t 0 && -t 1 ]]; then
+    if RUST_LOG=warn "$LILLITH" --config "$CONFIG_FILE" import-skills --from "$skills_src"; then
+      ok "skills import reviewed ($skills_src)"
     else
-      warn "couldn't import $skills_src; she'll try again when she starts"
+      warn "couldn't review $skills_src; she'll propose it when she starts"
     fi
   else
-    mkdir -p "$DATA_DIR/skills"
-    # -n: never overwrite a skill she already has.
-    cp -Rn -- "$skills_src/." "$DATA_DIR/skills/" && ok "skills copied from $skills_src to $DATA_DIR/skills"
+    ok "found $skills_src; she'll show you the import plan when you chat (or run: lillith import-skills)"
   fi
 fi
 

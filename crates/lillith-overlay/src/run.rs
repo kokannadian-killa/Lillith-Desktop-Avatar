@@ -1695,6 +1695,7 @@ impl Controller {
             margin_left: p.left,
             margin_bottom: p.bottom,
             output: self.output.clone(),
+            ..OverlayPos::default()
         };
         match save_overlay(path, &pos) {
             Ok(()) => {
@@ -1823,6 +1824,7 @@ mod tests {
                 margin_left: 100,
                 margin_bottom: 50,
                 output: None,
+                ..OverlayPos::default()
             },
             config_path: Some(cfg_path.clone()),
             forced: false,
@@ -2163,6 +2165,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
                 margin_left: 100,
                 margin_bottom: 50,
                 output: None,
+                ..OverlayPos::default()
             },
             config_path: None,
             forced: false,
@@ -2639,6 +2642,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
                 margin_left: 100,
                 margin_bottom: 50,
                 output: None,
+                ..OverlayPos::default()
             },
             config_path: None,
             forced: false,

@@ -50,6 +50,7 @@ fn main() {
             margin_left: 0,
             margin_bottom: 0,
             output: None,
+            ..OverlayPos::default()
         },
         config_path: None,
         forced: false,

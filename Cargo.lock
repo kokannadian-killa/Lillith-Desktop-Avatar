@@ -2467,6 +2467,7 @@ dependencies = [
  "lillith-anim",
  "lillith-core",
  "lillith-theme",
+ "regex",
  "smithay-client-toolkit 0.19.2",
  "softbuffer",
  "thiserror 2.0.21",

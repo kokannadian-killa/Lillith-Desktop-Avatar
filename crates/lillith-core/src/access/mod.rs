@@ -20,6 +20,7 @@ pub mod commands;
 pub mod deletion;
 pub mod find;
 pub mod organize;
+pub mod plan;
 pub mod programs;
 pub mod skill_import;
 

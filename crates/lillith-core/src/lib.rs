@@ -36,6 +36,7 @@ pub mod idle;
 pub mod interaction;
 pub mod menu;
 pub mod mood;
+pub mod notes;
 pub mod physics_config;
 pub mod physics_driver;
 pub mod rng;

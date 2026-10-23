@@ -17,6 +17,7 @@
 //! The model asks for a tool with a fenced ` ```tool ` block; see
 //! [`parse_tool_request`] for the exact format.
 
+use lillith_core::access::plan::{ChangePlan, PlanRequest};
 use lillith_core::access::{self, commands::CommandClass, organize, programs};
 use lillith_core::config::{expand_tilde, AccessConfig, MindConfig};
 use lillith_core::soul_contract::PendingAction;
@@ -101,9 +102,10 @@ impl ToolRequest {
 pub enum Planned {
     /// A read she may run now (via `SoulContract::run_now`): no popup, audited.
     Read(PendingAction),
-    /// A mutation that must wait for a Soul Contract Yes (a
-    /// [`PendingAction::DeletePaths`] waits for a signature instead).
-    Confirm(PendingAction),
+    /// Steps that change something or run a program. They are collected
+    /// (with the rest of the reply's requests) into one Soul Contract plan
+    /// Ko reviews; nothing runs before he approves.
+    Change(Vec<PlanRequest>),
     /// Answered on the spot (installed apps, skill list, an import report…).
     Info(String),
 }
@@ -266,7 +268,7 @@ impl MindTools {
 
     /// Confines a request to the allowlist and turns it into a [`Planned`]
     /// action. Reads come back as [`Planned::Read`] (run now, no popup);
-    /// writes and shell runs as [`Planned::Confirm`] (need a Yes).
+    /// changes and program runs as [`Planned::Change`] (one reviewed plan).
     pub fn plan(&self, req: ToolRequest) -> Result<Planned, ToolError> {
         match req {
             ToolRequest::List { path } => {
@@ -290,7 +292,12 @@ impl MindTools {
             }
             ToolRequest::Write { path, body } => {
                 let p = self.vet(&path)?;
-                Ok(Planned::Confirm(PendingAction::WriteFile { path: p, body }))
+                let skill = self.skills_dir.as_ref().is_some_and(|d| p.starts_with(d));
+                Ok(Planned::Change(vec![PlanRequest::Write {
+                    path: p,
+                    body,
+                    skill,
+                }]))
             }
             ToolRequest::Shell { command } => {
                 if !self.allow.allow_shell {
@@ -302,7 +309,12 @@ impl MindTools {
                 if let CommandClass::Removal(r) = access::commands::classify(&command, &[]) {
                     return Err(ToolError::Refused(r));
                 }
-                Ok(Planned::Confirm(PendingAction::RunShell { command }))
+                Ok(Planned::Change(vec![PlanRequest::Command {
+                    command,
+                    cwd: None,
+                    timeout_s: self.access.command_timeout_s.max(1),
+                    shell: true,
+                }]))
             }
             ToolRequest::Locate { path, pattern } => {
                 let p = self.vet(&path)?;
@@ -377,9 +389,10 @@ impl MindTools {
                 let j = self
                     .journal_dir()
                     .ok_or_else(|| ToolError::NotFound("no data folder for the journal".into()))?;
-                let rep = organize::undo_last(&j)
-                    .map_err(|e| ToolError::Refused(format!("undo failed: {e}")))?;
-                Ok(Planned::Info(rep.text()))
+                match organize::batches(&j).into_iter().next() {
+                    Some(batch) => Ok(Planned::Change(vec![PlanRequest::Undo { batch }])),
+                    None => Ok(Planned::Info("nothing to undo".into())),
+                }
             }
             ToolRequest::Delete { paths } => {
                 if paths.is_empty() {
@@ -389,9 +402,14 @@ impl MindTools {
                 for p in &paths {
                     vetted.push(self.vet_existing(p)?);
                 }
-                let manifest = access::deletion::DeletionManifest::build(&vetted, self.data_dir())
+                access::deletion::DeletionManifest::build(&vetted, self.data_dir())
                     .map_err(|e| ToolError::Refused(e.to_string()))?;
-                Ok(Planned::Confirm(PendingAction::DeletePaths { manifest }))
+                Ok(Planned::Change(
+                    vetted
+                        .into_iter()
+                        .map(|path| PlanRequest::Delete { path })
+                        .collect(),
+                ))
             }
             ToolRequest::Open { app, files } => {
                 self.need(self.access.programs, "programs")?;
@@ -405,15 +423,18 @@ impl MindTools {
                 }
                 let apps = programs::desktop_apps();
                 if let Some(a) = programs::find_app(&apps, app) {
-                    return Ok(Planned::Read(PendingAction::Launch {
+                    return Ok(Planned::Change(vec![PlanRequest::Launch {
                         argv: programs::launch_argv(a, &fs),
                         app: Some(a.id.clone()),
-                    }));
+                    }]));
                 }
                 if programs::which(app).is_some() {
                     let mut argv = vec![app.to_string()];
                     argv.extend(fs.iter().map(|f| f.display().to_string()));
-                    return Ok(Planned::Confirm(PendingAction::Launch { argv, app: None }));
+                    return Ok(Planned::Change(vec![PlanRequest::Launch {
+                        argv,
+                        app: None,
+                    }]));
                 }
                 Err(ToolError::NotFound(format!(
                     "{app} isn't installed (no app entry, not on PATH)"
@@ -433,17 +454,18 @@ impl MindTools {
                 if command.is_empty() {
                     return Err(ToolError::Empty);
                 }
-                let class = access::commands::classify(&command, &self.allow.deny);
-                let action = PendingAction::RunCommand {
+                if let CommandClass::Removal(r) =
+                    access::commands::classify(&command, &self.allow.deny)
+                {
+                    return Err(ToolError::Refused(r));
+                }
+                // Every command — read-only or not — is a plan item.
+                Ok(Planned::Change(vec![PlanRequest::Command {
                     command,
                     cwd: None,
                     timeout_s: self.access.command_timeout_s.max(1),
-                };
-                match class {
-                    CommandClass::Removal(r) => Err(ToolError::Refused(r)),
-                    CommandClass::Safe => Ok(Planned::Read(action)),
-                    CommandClass::NeedsApproval(_) => Ok(Planned::Confirm(action)),
-                }
+                    shell: false,
+                }]))
             }
             ToolRequest::ListSkills => {
                 let dir = self.skills()?;
@@ -460,7 +482,6 @@ impl MindTools {
             }
             ToolRequest::ImportSkills { from } => {
                 let dir = self.skills()?;
-                let log = self.data_dir().map(|d| d.join("skills-import.log"));
                 let sources = match from {
                     Some(f) => vec![normalize(Path::new(&f))],
                     None => access::skill_import::find_desktop_skills(),
@@ -471,14 +492,32 @@ impl MindTools {
                             .into(),
                     ));
                 }
-                let mut out = Vec::new();
+                let mut reqs = Vec::new();
+                let mut notes = Vec::new();
                 for src in sources {
-                    match access::skill_import::import(&src, &dir, log.as_deref()) {
-                        Ok(r) => out.push(r.text()),
-                        Err(e) => out.push(format!("{}: {e}", src.display())),
+                    match access::skill_import::plan_import(&src, &dir) {
+                        Ok(p) => {
+                            if !p.unchanged.is_empty() {
+                                notes.push(format!(
+                                    "{}: {} already in my skills",
+                                    src.display(),
+                                    p.unchanged.len()
+                                ));
+                            }
+                            reqs.extend(p.copies.into_iter().map(|c| PlanRequest::SkillCopy {
+                                from: c.src,
+                                to: c.dest,
+                                conflict_with: c.conflict_with,
+                            }));
+                        }
+                        Err(e) => notes.push(format!("{}: {e}", src.display())),
                     }
                 }
-                Ok(Planned::Info(out.join("\n")))
+                if reqs.is_empty() {
+                    notes.push("nothing new to import".into());
+                    return Ok(Planned::Info(notes.join("\n")));
+                }
+                Ok(Planned::Change(reqs))
             }
         }
     }
@@ -498,27 +537,29 @@ impl MindTools {
             .ok_or_else(|| ToolError::NotFound("no skills folder configured".into()))
     }
 
-    /// Vets an organize batch and files it: small batches run now, bigger ones
-    /// show the plan and wait for a Yes.
+    /// Vets organize steps and turns them into plan items (always reviewed).
     fn organize(&self, ops: Vec<organize::OrganizeOp>) -> Result<Planned, ToolError> {
         self.need(self.access.organize, "organize")?;
         let plan = organize::OrganizePlan { ops };
         if let Some(r) = plan.refusal(self.data_dir()) {
             return Err(ToolError::Refused(r));
         }
-        let journal = self
-            .journal_dir()
-            .ok_or_else(|| ToolError::NotFound("no data folder for the undo journal".into()))?;
-        let action = PendingAction::Organize {
-            plan,
-            journal,
-            preview_over: self.access.preview_over,
-        };
-        Ok(if action.needs_confirmation() {
-            Planned::Confirm(action)
-        } else {
-            Planned::Read(action)
-        })
+        Ok(Planned::Change(
+            plan.ops
+                .into_iter()
+                .map(|op| match op {
+                    organize::OrganizeOp::Move { from, to } => PlanRequest::Move { from, to },
+                    organize::OrganizeOp::Copy { from, to } => PlanRequest::Copy { from, to },
+                    organize::OrganizeOp::Mkdir { path } => PlanRequest::Mkdir { path },
+                })
+                .collect(),
+        ))
+    }
+
+    /// Lays `steps` out as one plan for review (nothing runs).
+    pub fn build_plan(&self, steps: Vec<PlanRequest>) -> Result<ChangePlan, ToolError> {
+        ChangePlan::build(steps, self.data_dir(), self.journal_dir().as_deref())
+            .map_err(ToolError::Refused)
     }
 
     /// [`vet`](Self::vet) plus "it must exist".
@@ -738,17 +779,32 @@ pub fn normalize(path: &Path) -> PathBuf {
 /// `{"op":"read","path":"~/x"}` is accepted too. Returns `None` if there is no
 /// well-formed tool block.
 pub fn parse_tool_request(reply: &str) -> Option<ToolRequest> {
+    parse_tool_requests(reply).into_iter().next()
+}
+
+/// Most tool blocks taken from one reply.
+pub const MAX_TOOL_BLOCKS: usize = 32;
+
+/// Every tool block in `reply`, in order (see [`parse_tool_request`]). The
+/// change/program steps among them become one combined plan.
+pub fn parse_tool_requests(reply: &str) -> Vec<ToolRequest> {
+    let mut out = Vec::new();
     for (info, body) in fenced_blocks(reply) {
-        let rest = info.strip_prefix("tool")?;
+        let Some(rest) = info.strip_prefix("tool") else {
+            continue;
+        };
         // The info string's first token must be exactly "tool".
         if !rest.is_empty() && !rest.starts_with(char::is_whitespace) {
             continue;
         }
         if let Some(req) = parse_tool_body(rest.trim(), &body) {
-            return Some(req);
+            out.push(req);
+            if out.len() >= MAX_TOOL_BLOCKS {
+                break;
+            }
         }
     }
-    None
+    out
 }
 
 /// Parses one tool block. `inline` is anything after `tool` on the fence line;
@@ -1140,10 +1196,13 @@ mod tests {
             path: "/home/ko/Projects/sub/../out.txt".into(),
             body: "hi".into(),
         }) {
-            Ok(Planned::Confirm(PendingAction::WriteFile { path, body })) => {
-                assert_eq!(path, PathBuf::from("/home/ko/Projects/out.txt"));
-                assert_eq!(body, "hi");
-            }
+            Ok(Planned::Change(steps)) => match &steps[..] {
+                [PlanRequest::Write { path, body, .. }] => {
+                    assert_eq!(*path, PathBuf::from("/home/ko/Projects/out.txt"));
+                    assert_eq!(body, "hi");
+                }
+                other => panic!("{other:?}"),
+            },
             other => panic!("expected gated write, got {other:?}"),
         }
         // Shell -> needs confirm when enabled.
@@ -1151,7 +1210,7 @@ mod tests {
             tools.plan(ToolRequest::Shell {
                 command: "ls".into()
             }),
-            Ok(Planned::Confirm(PendingAction::RunShell { .. }))
+            Ok(Planned::Change(s)) if matches!(s[..], [PlanRequest::Command { shell: true, .. }])
         ));
     }
 
@@ -1355,12 +1414,15 @@ mod tests {
         match t.plan(ToolRequest::Delete {
             paths: vec![d.join("junk.log").display().to_string()],
         }) {
-            Ok(Planned::Confirm(a @ PendingAction::DeletePaths { .. })) => {
-                assert!(a.needs_confirmation());
-                // Even a plain confirm cannot run it.
+            Ok(Planned::Change(steps)) => {
+                let plan = t.build_plan(steps).unwrap();
+                assert!(plan.items[0].detail[0].contains("junk.log"));
+                // Approving without the typed signature cannot run it.
                 let mut sc = lillith_core::soul_contract::SoulContract::new(None);
-                let id = sc.request(a);
+                let ap = lillith_core::access::plan::PlanApproval::all(&plan);
+                let id = sc.request(PendingAction::Plan { plan });
                 assert!(sc.confirm(id).is_err());
+                assert!(sc.approve_plan(id, ap, None).is_err());
             }
             other => panic!("expected a held deletion, got {other:?}"),
         }
@@ -1384,15 +1446,15 @@ mod tests {
     }
 
     #[test]
-    fn run_gates_by_command_class() {
+    fn every_command_is_a_plan_item_and_writes_are_marked_risky() {
         let d = tmp("plan-run");
         let t = access_tools(&d);
-        assert!(matches!(
-            t.plan(ToolRequest::Run {
-                command: "df -h".into()
-            }),
-            Ok(Planned::Read(PendingAction::RunCommand { .. }))
-        ));
+        let Ok(Planned::Change(s)) = t.plan(ToolRequest::Run {
+            command: "df -h".into(),
+        }) else {
+            panic!("even a read-only command is reviewed")
+        };
+        assert!(t.build_plan(s).unwrap().items[0].risky.is_none());
         for c in [
             "sudo pacman -Syu",
             "kill 4242",
@@ -1400,13 +1462,12 @@ mod tests {
             "echo x > ~/f",
             "chmod 600 ~/x",
         ] {
-            assert!(
-                matches!(
-                    t.plan(ToolRequest::Run { command: c.into() }),
-                    Ok(Planned::Confirm(_))
-                ),
-                "{c}"
-            );
+            let Ok(Planned::Change(s)) = t.plan(ToolRequest::Run { command: c.into() }) else {
+                panic!("{c}")
+            };
+            let plan = t.build_plan(s).unwrap();
+            assert!(plan.items[0].risky.is_some(), "{c}");
+            assert!(plan.listing().contains(c), "exact command shown: {c}");
         }
         for c in ["rm -rf ~/x", "find ~ -name '*.tmp' -delete", "sudo rm /x"] {
             assert!(
@@ -1457,7 +1518,7 @@ mod tests {
     }
 
     #[test]
-    fn organize_runs_small_batches_and_previews_big_ones() {
+    fn organize_is_always_a_reviewed_plan() {
         let d = tmp("plan-org");
         for i in 0..12 {
             std::fs::write(d.join(format!("f{i}.png")), "x").unwrap();
@@ -1467,18 +1528,25 @@ mod tests {
             t.plan(ToolRequest::Mkdir {
                 path: d.join("New").display().to_string()
             }),
-            Ok(Planned::Read(PendingAction::Organize { .. }))
+            Ok(Planned::Change(s)) if s.len() == 1
         ));
-        // 12 files + 1 mkdir > preview_over (10): plan shown, needs a Yes.
+        assert!(!d.join("New").exists());
         match t.plan(ToolRequest::Sort {
             path: d.display().to_string(),
             by: "type".into(),
         }) {
-            Ok(Planned::Confirm(a @ PendingAction::Organize { .. })) => {
-                assert!(a.prompt().detail.unwrap().contains("f11.png"));
+            Ok(Planned::Change(steps)) => {
+                let plan = t.build_plan(steps).unwrap();
+                assert_eq!(plan.len(), 13);
+                let l = plan.listing();
+                assert!(
+                    l.contains(&d.join("Images/f11.png").display().to_string()),
+                    "{l}"
+                );
             }
             other => panic!("{other:?}"),
         }
+        assert!(!d.join("Images").exists());
         assert!(t
             .plan(ToolRequest::Move {
                 from: d.join("f0.png").display().to_string(),
@@ -1524,12 +1592,12 @@ mod tests {
                 name: "../../etc/passwd".into()
             })
             .is_err());
-        // A skill script runs through `run`, which asks Ko.
+        // A skill script runs through `run`, which goes into the plan.
         assert!(matches!(
             t.plan(ToolRequest::Run {
                 command: d.join("skills/scripts/backup.sh").display().to_string()
             }),
-            Ok(Planned::Confirm(_))
+            Ok(Planned::Change(_))
         ));
     }
 }

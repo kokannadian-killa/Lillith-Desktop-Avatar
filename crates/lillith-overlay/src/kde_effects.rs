@@ -101,11 +101,11 @@ pub struct Finding {
 
 /// Minimal INI view: `(group, key) -> value` lookups on a kwinrc text.
 pub(crate) struct Ini<'a> {
-    text: &'a str,
+    pub(crate) text: &'a str,
 }
 
 impl Ini<'_> {
-    fn get(&self, group: &str, key: &str) -> Option<String> {
+    pub(crate) fn get(&self, group: &str, key: &str) -> Option<String> {
         let mut in_group = false;
         let mut out: Option<String> = None;
         for line in self.text.lines() {
@@ -129,12 +129,12 @@ impl Ini<'_> {
         out
     }
 
-    fn has_group(&self, group: &str) -> bool {
+    pub(crate) fn has_group(&self, group: &str) -> bool {
         let g = format!("[{group}]");
         self.text.lines().any(|l| l.trim() == g)
     }
 
-    fn bool(&self, group: &str, key: &str) -> Option<bool> {
+    pub(crate) fn bool(&self, group: &str, key: &str) -> Option<bool> {
         self.get(group, key)
             .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "yes"))
     }
@@ -163,17 +163,45 @@ fn unescape(v: &str) -> String {
 /// Her window class on KDE (Wayland: executable name; X11: `WM_CLASS`).
 pub const CLASS: &str = "lillith";
 
-/// Does a Better Blur window-class list line match [`CLASS`]?
-fn blur_class_matches(line: &str) -> bool {
+/// How one `WindowClasses` line relates to her window class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineMatch {
+    /// Exact name or a `/regex/` that matches `lillith`.
+    Yes,
+    /// Doesn't match.
+    No,
+    /// A `/regex/` we can't compile (Qt syntax we don't speak): could be her.
+    Unknown,
+}
+
+/// Does a Better Blur window-class list line match [`CLASS`]? Plain lines
+/// compare exactly (KWin lowercases resource classes); `/re/` lines are
+/// unanchored regex searches, like `QRegularExpression::match().hasMatch()`.
+pub fn line_match(line: &str) -> LineMatch {
     let l = line.trim();
-    if let Some(re) = l.strip_prefix('/').and_then(|r| r.strip_suffix('/')) {
-        // Only the obvious regexes; anything fancier counts as "maybe" = no.
-        let strip: &[char] = &['^', '$', '(', ')'];
-        return re
-            .split('|')
-            .any(|alt| alt.trim_matches(strip).eq_ignore_ascii_case(CLASS));
+    if l.is_empty() {
+        return LineMatch::No;
     }
-    l == CLASS
+    if let Some(re) = l
+        .strip_prefix('/')
+        .and_then(|r| r.strip_suffix('/'))
+        .filter(|r| !r.is_empty())
+    {
+        return match regex::Regex::new(re) {
+            Ok(r) if r.is_match(CLASS) => LineMatch::Yes,
+            Ok(_) => LineMatch::No,
+            Err(_) => LineMatch::Unknown,
+        };
+    }
+    if l == CLASS {
+        LineMatch::Yes
+    } else {
+        LineMatch::No
+    }
+}
+
+fn blur_class_matches(line: &str) -> bool {
+    line_match(line) == LineMatch::Yes
 }
 
 /// A force-blur KWin effect and where its settings live in `kwinrc`.
@@ -206,7 +234,7 @@ impl BlurEffect {
 /// against resourceClass and resourceName), `BlurMatching` (default true =
 /// blur only the listed classes; false = blur all *except* them),
 /// `BlurDocks` (default false: docks never force-blurred).
-pub const BLUR_EFFECTS: [BlurEffect; 2] = [
+pub const BLUR_EFFECTS: [BlurEffect; 3] = [
     BlurEffect {
         name: "Better Blur DX",
         plugin_id: "better_blur_dx",
@@ -222,11 +250,22 @@ pub const BLUR_EFFECTS: [BlurEffect; 2] = [
         group: "Effect-blurplus",
         legacy_group: None,
     },
+    BlurEffect {
+        name: "Blur Plus",
+        plugin_id: "blurplus",
+        plugin_key: "blurplusEnabled",
+        group: "Effect-blurplus",
+        legacy_group: None,
+    },
 ];
 
 /// Does `WindowClasses` + mode force blur onto her?
 pub fn class_list_targets_her(classes: &str, blacklist: bool) -> bool {
     let listed = classes.lines().any(blur_class_matches);
+    if !blacklist && classes.lines().any(|l| line_match(l) == LineMatch::Unknown) {
+        // "Blur only listed" with a regex we can't read: assume it's her.
+        return true;
+    }
     listed != blacklist
 }
 
@@ -411,7 +450,7 @@ pub fn fix_kwin(dry_run: bool) -> std::io::Result<Vec<FixOutcome>> {
 }
 
 /// `$XDG_CONFIG_HOME/kwinrc` or `~/.config/kwinrc`.
-fn kwinrc_path() -> Option<PathBuf> {
+pub(crate) fn kwinrc_path() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)

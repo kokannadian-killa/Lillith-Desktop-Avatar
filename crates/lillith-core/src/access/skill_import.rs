@@ -166,6 +166,114 @@ fn incoming_name(dest: &Path) -> PathBuf {
     dest.with_file_name(format!("{stem} (from desktop){ext}"))
 }
 
+/// One file an import would copy (nothing is copied while planning).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedCopy {
+    pub src: PathBuf,
+    /// Exact destination (a `(from desktop)` name when hers differs).
+    pub dest: PathBuf,
+    /// Path relative to the skills folder that already exists and differs.
+    pub conflict_with: Option<PathBuf>,
+    pub size: u64,
+}
+
+/// What [`plan_import`] found.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ImportPlan {
+    pub copies: Vec<PlannedCopy>,
+    pub unchanged: Vec<PathBuf>,
+    pub skipped: Vec<String>,
+}
+
+/// Works out exactly what importing `from` into `to` would copy, without
+/// touching either folder.
+pub fn plan_import(from: &Path, to: &Path) -> std::io::Result<ImportPlan> {
+    let mut out = ImportPlan::default();
+    if !from.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("{} is not a folder", from.display()),
+        ));
+    }
+    if to.starts_with(from) || from.starts_with(to) {
+        return Err(std::io::Error::other("source and skills folder overlap"));
+    }
+    let mut stack = vec![PathBuf::new()];
+    let mut claimed: Vec<PathBuf> = Vec::new();
+    while let Some(rel) = stack.pop() {
+        let dir = from.join(&rel);
+        let mut kids: Vec<_> = std::fs::read_dir(&dir)?.flatten().collect();
+        kids.sort_by_key(|e| e.file_name());
+        for e in kids {
+            let name = e.file_name();
+            let r = rel.join(&name);
+            if name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+            let meta = std::fs::symlink_metadata(e.path())?;
+            if meta.file_type().is_symlink() {
+                out.skipped.push(format!("{} (symlink)", r.display()));
+                continue;
+            }
+            if meta.is_dir() {
+                stack.push(r);
+                continue;
+            }
+            if !meta.is_file() {
+                continue;
+            }
+            if meta.len() > MAX_FILE_BYTES {
+                out.skipped.push(format!("{} (too big)", r.display()));
+                continue;
+            }
+            let src = e.path();
+            let dest = to.join(&r);
+            if std::fs::symlink_metadata(&dest).is_err() && !claimed.contains(&dest) {
+                claimed.push(dest.clone());
+                out.copies.push(PlannedCopy {
+                    src,
+                    dest,
+                    conflict_with: None,
+                    size: meta.len(),
+                });
+            } else if same_contents(&src, &dest) {
+                out.unchanged.push(r);
+            } else {
+                let base = incoming_name(&dest);
+                let mut cand = base.clone();
+                let mut n = 2;
+                let mut already = false;
+                while std::fs::symlink_metadata(&cand).is_ok() || claimed.contains(&cand) {
+                    if same_contents(&src, &cand) {
+                        already = true;
+                        break;
+                    }
+                    let s = base.to_string_lossy().to_string();
+                    let (a, b) = match s.rfind(" (from desktop)") {
+                        Some(i) => (s[..i].to_string(), s[i + 15..].to_string()),
+                        None => (s.clone(), String::new()),
+                    };
+                    cand = PathBuf::from(format!("{a} (from desktop {n}){b}"));
+                    n += 1;
+                }
+                if already {
+                    out.unchanged
+                        .push(cand.strip_prefix(to).unwrap_or(&cand).to_path_buf());
+                } else {
+                    claimed.push(cand.clone());
+                    out.copies.push(PlannedCopy {
+                        src,
+                        dest: cand,
+                        conflict_with: Some(r),
+                        size: meta.len(),
+                    });
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Copies the files under `from` into `to` (see the module docs). Hidden files
 /// and folders (`.git`) and symlinks are skipped. `log` gets one line per
 /// import run.
@@ -276,7 +384,7 @@ pub fn import(from: &Path, to: &Path, log: Option<&Path>) -> std::io::Result<Imp
     Ok(rep)
 }
 
-fn copy_new(src: &Path, dest: &Path, meta: &std::fs::Metadata) -> std::io::Result<()> {
+pub(crate) fn copy_new(src: &Path, dest: &Path, meta: &std::fs::Metadata) -> std::io::Result<()> {
     let mut s = std::fs::File::open(src)?;
     let mut d = std::fs::OpenOptions::new()
         .write(true)

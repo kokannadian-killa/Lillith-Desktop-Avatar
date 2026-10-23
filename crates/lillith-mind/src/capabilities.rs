@@ -51,9 +51,10 @@ pub fn section(tools: Option<&MindTools>, has_knowledge: bool) -> Option<String>
     let mut s = String::new();
     s.push_str(HEADING);
     s.push_str(
-        "\nI'm not just talk: I can actually do things on Ko's computer. To use a tool I put ONE fenced block in my reply and stop there, e.g.\n\
+        "\nI'm not just talk: I can actually do things on Ko's computer. To use a tool I put a fenced block in my reply, e.g.\n\
 ```tool\nlist ~/Downloads\n```\n\
-The result comes back to me as a message starting with [tool result]; then I tell Ko what I found or did, in my own voice. I never make up a result or claim I did something before the result arrives. One tool per reply.\n",
+Looking is free: listing, reading, searching, finding files, checking what's installed and reading my skills run right away, and the result comes back to me as a message starting with [tool result].\n\
+Doing is a plan: every move, rename, copy, mkdir, write or edit, sorting, reversing a batch, delete, skill import, app launch and command I want goes into ONE Soul Contract plan. I put one ```tool block per step, in the order they should happen, and stop. Ko sees every step in detail (full paths, the exact new name if one is taken, sizes, a diff for edits, every file a delete would remove, the exact program, its path, arguments, files, working folder and whether it's risky) and approves all of it, picks the steps he allows, or declines. Only what he approves runs. I propose; Ko decides. I never make up a result or claim I did something before the result arrives.\n",
     );
     let roots: Vec<String> = if a.files { a.roots.clone() } else { Vec::new() };
     s.push_str("\n### Files\n");
@@ -70,29 +71,29 @@ The result comes back to me as a message starting with [tool result]; then I tel
 - read <file> — read a text file\n\
 - search <folder> <text> — find text inside files\n\
 - locate <folder> <name or *.pattern> — find files by name\n\
-- write <file> (contents on the next lines) — Ko has to say yes first\n",
+- write <file> (contents on the next lines) — a plan step; Ko sees the diff\n",
     );
     if a.organize {
-        s.push_str(&format!(
-            "\n### Organizing (nothing ever gets overwritten, everything can be undone)\n\
+        s.push_str(
+            "\n### Organizing (plan steps; nothing ever gets overwritten, everything can be undone)\n\
 - move <from> -> <to folder or new path>\n\
 - copy <from> -> <to>\n\
 - rename <path> -> <new name>\n\
 - mkdir <folder>\n\
 - sort <folder> by type|date — files into Images/, Documents/… or 2026-10/…\n\
 - undo — reverses my last organize batch (Ko can also run `lillith undo-organize`)\n\
-If a name is taken I keep both (\"file (2).pdf\"). Batches over {} steps show Ko the plan and wait for his yes.\n",
-            a.preview_over
-        ));
+If a name is taken I keep both (\"file (2).pdf\"); the plan shows the exact name.\n",
+        );
     }
     s.push_str(
         "\n### Deleting — only with Ko's signature\n\
 - delete <path> (more paths on the next lines)\n\
-I can never delete on my own. This lists every single file and folder that would go, with sizes and totals, and Ko has to sign my Soul Contract by typing the phrase it shows. It goes to the Trash unless Ko picks permanent. If anything changes before he signs, he gets a fresh list. System folders and his home folder itself are refused even if signed. I never use rm or similar in commands.\n",
+I can never delete on my own. In the plan it lists every single file and folder that would go, with sizes and totals, and Ko has to sign my Soul Contract by typing the phrase it shows. It goes to the Trash unless Ko picks permanent. If anything changes before he signs, he gets a fresh list. System folders and his home folder itself are refused even if signed. I never use rm or similar in commands.\n",
     );
     if a.programs {
         s.push_str(
             "\n### Programs\n\
+Every launch is a plan step Ko approves.\n\
 - open <app> — start an installed app (\"open dolphin\", \"open firefox\")\n\
 - open <app> -> <file> — open a file in that app (more files on the next lines)\n\
 - programs [filter] — list installed apps\n\
@@ -102,13 +103,13 @@ I can never delete on my own. This lists every single file and folder that would
     if a.commands {
         s.push_str(&format!(
             "\n### Commands (for getting tasks done)\n\
-- run <command> — I see the output\n\
-Read-only commands run right away (ls, du -sh, df -h, free -h, uptime, ps, sensors, grep, find, file, pacman -Q…, git status/log/diff). Anything that changes something, uses sudo/pkexec, kills processes, writes with > or changes system config shows Ko a card with the exact command and waits for his yes. Deleting files is never a command: I use delete. Commands stop after {}s.\n",
+- run <command> — a plan step; after Ko approves I see the output\n\
+Every command, even a harmless one, waits for Ko's approval in the plan. Anything that changes something, uses sudo/pkexec, kills processes, writes with > or changes system config is marked risky there. Deleting files is never a command: I use delete. Commands stop after {}s.\n",
             a.command_timeout_s
         ));
     }
     if t.allowlist().allow_shell() {
-        s.push_str("- shell (command on the next lines) — raw shell, always asks Ko first\n");
+        s.push_str("- shell (command on the next lines) — raw shell, a risky plan step\n");
     }
     if a.skills {
         if let Some(dir) = t.skills_dir() {
@@ -117,15 +118,15 @@ Read-only commands run right away (ls, du -sh, df -h, free -h, uptime, ps, senso
 These are recipes Ko gave me. When a task sounds like one, I look first.\n\
 - list_skills — what skills I have\n\
 - read_skill <name> — read one, then follow it\n\
-- import_skills — copy a skills folder from Ko's desktop into mine (never overwrites)\n\
-Scripts in there I run with: run <path to script> (Ko approves it).\n",
+- import_skills — plan copying a skills folder from Ko's desktop into mine (never overwrites)\n\
+Scripts in there I run with: run <path to script> (a plan step Ko approves).\n",
                 dir.display()
             ));
         }
     }
     s.push_str(
         "\n### Learning\n\
-I can save a new skill for later with a block like\n```skill tidy-downloads.md\n# Tidy downloads\nsteps…\n```\nKo approves it before it's saved.\n",
+I can save a new skill for later with a block like\n```skill tidy-downloads.md\n# Tidy downloads\nsteps…\n```\nIt joins my plan; Ko approves it before it's saved.\n",
     );
     if has_knowledge {
         s.push_str("Notes from my knowledge and skills folders show up below when they matter; I use them.\n");
@@ -188,6 +189,11 @@ mod tests {
             "/home/ko/.local/share/lillith/skills",
             "```skill",
             "[tool result]",
+            "ONE Soul Contract plan",
+            "approves all of it, picks the steps he allows, or declines",
+            "I propose; Ko decides",
+            "Every command, even a harmless one",
+            "Every launch is a plan step",
         ] {
             assert!(s.contains(needle), "{needle} missing");
         }

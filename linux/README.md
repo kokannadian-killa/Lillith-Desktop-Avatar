@@ -95,9 +95,19 @@ entry and KWin script, and reverts the Better Blur DX exclusion it added
 
 ## Dark box around her (KDE Better Blur DX)
 
+She checks this herself before she first appears (`[overlay] auto_fix_kwin =
+true`, the default): on KDE she asks KWin over D-Bus which effects are loaded
+(under 1.5 s; she starts anyway if D-Bus doesn't answer), excludes `lillith`
+from Better Blur DX / Better Blur / Blur Plus (recorded for `--revert`) and
+reconfigures KWin, all before her window is mapped. If she can't be excluded
+(a `/regex/` window list or an unknown blur-all effect), the effect is
+unloaded for that session only and she tells you once in chat how to make it
+permanent. Her window stays a dock, which these effects skip by default.
+
 ```fish
 lillith fix-kwin --check               # does a force-blur effect target her?
 lillith fix-kwin                       # exclude `lillith` from it (kwinrc)
+lillith fix-kwin --revert              # undo what fix-kwin / the start-up check changed
 ./linux/kwin-blur-exclude.sh apply     # same; `revert` undoes it, `disable` turns the effect off
 # last resort, turns it off for every window:
 qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect better_blur_dx

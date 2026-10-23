@@ -189,6 +189,14 @@ fn segments(cmd: &str) -> Option<Vec<String>> {
     )
 }
 
+/// Shell words of the first command in `cmd` (quotes removed).
+pub fn split_words(cmd: &str) -> Vec<String> {
+    match segments(cmd) {
+        Some(segs) => segs.first().map(|s| words(s)).unwrap_or_default(),
+        None => words(cmd),
+    }
+}
+
 /// Shell words of one segment (quotes removed).
 fn words(seg: &str) -> Vec<String> {
     let mut out = Vec::new();

@@ -86,13 +86,21 @@ pub enum PendingAction {
         language: crate::build::Language,
     },
     /// Move / rename / copy / make folders (non-destructive, journaled for
-    /// undo). Needs a Yes only when the batch has more than `preview_over`
-    /// steps (the human sees the plan first). `journal` is the undo journal
-    /// folder; Lillith's data folder (its parent) is protected.
+    /// undo). Always needs a Yes. `journal` is the undo journal folder;
+    /// Lillith's data folder (its parent) is protected. Lillith's own
+    /// requests go through [`PendingAction::Plan`] instead.
     Organize {
         plan: crate::access::organize::OrganizePlan,
         journal: PathBuf,
-        preview_over: usize,
+    },
+    /// A full numbered plan of file changes and program runs for Ko to
+    /// review. A plain Yes ([`SoulContract::confirm`]) refuses it: only
+    /// [`SoulContract::approve_plan`] with a [`PlanApproval`] for exactly
+    /// this plan (all items or a chosen subset) runs it.
+    ///
+    /// [`PlanApproval`]: crate::access::plan::PlanApproval
+    Plan {
+        plan: crate::access::plan::ChangePlan,
     },
     /// Delete exactly the listed files and folders. The plain Yes
     /// ([`SoulContract::confirm`]) refuses it: only
@@ -135,6 +143,7 @@ impl PendingAction {
             PendingAction::DeletePaths { .. } => "delete_paths",
             PendingAction::RunCommand { .. } => "run_command",
             PendingAction::Launch { .. } => "launch",
+            PendingAction::Plan { .. } => "plan",
         }
     }
 
@@ -153,6 +162,7 @@ impl PendingAction {
             PendingAction::DeletePaths { manifest } => manifest.roots.first().map(PathBuf::as_path),
             PendingAction::RunShell { .. }
             | PendingAction::Organize { .. }
+            | PendingAction::Plan { .. }
             | PendingAction::Launch { .. } => None,
         }
     }
@@ -167,15 +177,11 @@ impl PendingAction {
             | PendingAction::ScaffoldProject { .. }
             | PendingAction::BuildProject { .. }
             | PendingAction::RunProject { .. }
-            | PendingAction::DeletePaths { .. } => true,
-            PendingAction::Organize {
-                plan, preview_over, ..
-            } => plan.len() > *preview_over,
-            PendingAction::RunCommand { command, .. } => {
-                !crate::access::commands::classify(command, &crate::access::secret_roots())
-                    .is_safe()
-            }
-            PendingAction::Launch { app, .. } => app.is_none(),
+            | PendingAction::DeletePaths { .. }
+            | PendingAction::Organize { .. }
+            | PendingAction::Plan { .. }
+            | PendingAction::RunCommand { .. }
+            | PendingAction::Launch { .. } => true,
             PendingAction::ListDir { .. }
             | PendingAction::ReadFile { .. }
             | PendingAction::SearchFiles { .. } => false,
@@ -217,6 +223,7 @@ impl PendingAction {
                 format!("Delete {}", manifest.totals())
             }
             PendingAction::RunCommand { command, .. } => format!("Run command: {command}"),
+            PendingAction::Plan { plan } => format!("Plan: {}", plan.totals(None)),
             PendingAction::Launch { argv, app } => match app {
                 Some(a) => format!("Open {a}: {}", argv.join(" ")),
                 None => format!("Start program: {}", argv.join(" ")),
@@ -240,6 +247,7 @@ impl PendingAction {
             PendingAction::DeletePaths { .. } => "DELETE — SIGN THE LIST",
             PendingAction::RunCommand { .. } => "RUN COMMAND",
             PendingAction::Launch { .. } => "OPEN PROGRAM",
+            PendingAction::Plan { .. } => "REVIEW THE PLAN",
         }
     }
 
@@ -272,6 +280,7 @@ impl PendingAction {
             PendingAction::Organize { plan, .. } => Some(plan.preview()),
             // The full listing: every file and folder, never elided.
             PendingAction::DeletePaths { manifest } => Some(manifest.listing()),
+            PendingAction::Plan { plan } => Some(plan.listing()),
             _ => None,
         };
         ContractPrompt {
@@ -335,6 +344,10 @@ impl PendingAction {
             PendingAction::DeletePaths { .. } => Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
                 "deleting needs a signed Soul Contract",
+            )),
+            PendingAction::Plan { .. } => Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "a plan runs only through its own approval",
             )),
             PendingAction::ScaffoldProject {
                 dir,
@@ -479,6 +492,13 @@ pub enum ContractError {
     /// The paths can no longer be listed (gone / now protected).
     #[error("refused: {0}")]
     Refused(String),
+    /// A plan was answered with a plain Yes: it needs an approval of
+    /// exactly its items (all, or a chosen subset).
+    #[error("that plan needs your approval of its items (request {0:?})")]
+    NeedsPlanApproval(RequestId),
+    /// [`SoulContract::approve_plan`] on something that is not a plan.
+    #[error("request {0:?} is not a plan")]
+    NotAPlan(RequestId),
 }
 
 type Clock = Box<dyn Fn() -> SystemTime + Send + Sync>;
@@ -538,6 +558,10 @@ impl SoulContract {
     pub fn request(&mut self, action: PendingAction) -> RequestId {
         let id = RequestId(self.next_id);
         self.next_id += 1;
+        if let PendingAction::Plan { plan } = &action {
+            self.audit_plan("PROPOSED", plan, None);
+            self.plans_log(&format!("PROPOSED #{}", id.0), &plan.listing());
+        }
         self.pending.push((id, action));
         id
     }
@@ -565,10 +589,14 @@ impl SoulContract {
     /// A deletion is refused with [`ContractError::NeedsSignature`] and stays
     /// pending: it only runs through [`sign_deletion`](Self::sign_deletion).
     pub fn confirm(&mut self, id: RequestId) -> Result<Confirmed, ContractError> {
-        if let Some((_, PendingAction::DeletePaths { .. })) =
-            self.pending.iter().find(|(i, _)| *i == id)
-        {
-            return Err(ContractError::NeedsSignature(id));
+        match self.pending.iter().find(|(i, _)| *i == id) {
+            Some((_, PendingAction::DeletePaths { .. })) => {
+                return Err(ContractError::NeedsSignature(id))
+            }
+            Some((_, PendingAction::Plan { .. })) => {
+                return Err(ContractError::NeedsPlanApproval(id))
+            }
+            _ => {}
         }
         let action = self.take(id)?;
         let res = action.execute();
@@ -604,6 +632,13 @@ impl SoulContract {
     /// Answers No: drops the request and records the refusal.
     pub fn deny(&mut self, id: RequestId) -> Result<PendingAction, ContractError> {
         let action = self.take(id)?;
+        if let PendingAction::Plan { plan } = &action {
+            self.audit_plan("DECLINED", plan, None);
+            self.plans_log(
+                &format!("DECLINED #{}", id.0),
+                "every item declined; nothing ran",
+            );
+        }
         self.audit("DENY", &action);
         self.log_command("DENY", &action, &Ok((None, None)));
         Ok(action)
@@ -685,6 +720,160 @@ impl SoulContract {
             path: None,
             output: Some(out),
         })
+    }
+
+    /// The pending plan `id`, if it is one.
+    pub fn plan(&self, id: RequestId) -> Option<&crate::access::plan::ChangePlan> {
+        match self.pending.iter().find(|(i, _)| *i == id) {
+            Some((_, PendingAction::Plan { plan })) => Some(plan),
+            _ => None,
+        }
+    }
+
+    /// Runs the items of plan `id` that Ko approved — and only those, in
+    /// order. Rules:
+    ///
+    /// - `approval` must be for exactly this plan (else
+    ///   [`ContractError::WrongSet`]; the plan stays pending). It is consumed.
+    /// - An empty selection declines the whole plan (like [`deny`](Self::deny)).
+    /// - The plan is rebuilt against the disk first: if anything it depends on
+    ///   changed, nothing runs, the fresh plan is filed and
+    ///   [`ContractError::Changed`] returned so Ko reviews it again.
+    /// - If any delete item is selected, `signature` must sign
+    ///   [`ChangePlan::deletion_manifest`] of the selection (else
+    ///   [`ContractError::NeedsSignature`]; still pending).
+    ///
+    /// Every item is audited `APPROVED`/`DECLINED` and then `RESULT-OK` /
+    /// `RESULT-ERR`; `plans.log` gets the whole story.
+    ///
+    /// [`ChangePlan::deletion_manifest`]: crate::access::plan::ChangePlan::deletion_manifest
+    pub fn approve_plan(
+        &mut self,
+        id: RequestId,
+        approval: crate::access::plan::PlanApproval,
+        signature: Option<crate::access::deletion::DeletionSignature>,
+    ) -> Result<Confirmed, ContractError> {
+        use crate::access::deletion;
+        let Some((_, action)) = self.pending.iter().find(|(i, _)| *i == id) else {
+            return Err(ContractError::Unknown(id));
+        };
+        let PendingAction::Plan { plan } = action else {
+            return Err(ContractError::NotAPlan(id));
+        };
+        if approval.fingerprint() != plan.fingerprint {
+            return Err(ContractError::WrongSet);
+        }
+        let selected = approval.selected().clone();
+        if selected.is_empty() {
+            self.deny(id)?;
+            return Err(ContractError::Refused(
+                "you declined the plan; nothing ran".into(),
+            ));
+        }
+        let now = match plan.rebuild() {
+            Ok(p) => p,
+            Err(e) => {
+                let action = self.take(id)?;
+                self.audit("REFUSED", &action);
+                return Err(ContractError::Refused(e));
+            }
+        };
+        if now.fingerprint != plan.fingerprint {
+            let action = self.take(id)?;
+            self.audit("CHANGED", &action);
+            let new_id = self.request(PendingAction::Plan { plan: now });
+            return Err(ContractError::Changed { new_id });
+        }
+        let mode = match now.deletion_manifest(&selected) {
+            None => None,
+            Some(m) => match &signature {
+                Some(sig) if sig.fingerprint() == m.fingerprint() => Some(sig.mode()),
+                Some(_) => return Err(ContractError::WrongSet),
+                None => return Err(ContractError::NeedsSignature(id)),
+            },
+        };
+        let action = self.take(id)?;
+        self.audit_plan("APPROVED", &now, Some(&selected));
+        let trash = self
+            .trash_dir
+            .clone()
+            .unwrap_or_else(deletion::home_trash_dir);
+        let results = now.execute(&selected, mode, &trash, COMMAND_OUTPUT_MAX);
+        let mut out = String::new();
+        let ts = format_utc((self.clock)());
+        for it in &now.items {
+            let line = match results.iter().find(|(n, _)| *n == it.n) {
+                Some((_, Ok(o))) => {
+                    self.audit_line("RESULT-OK", it.req.op(), &it.line);
+                    format!("{}. done: {}", it.n, o.trim_end())
+                }
+                Some((_, Err(e))) => {
+                    self.audit_line("RESULT-ERR", it.req.op(), &format!("{} ({e})", it.line));
+                    format!("{}. FAILED: {} ({e})", it.n, it.line)
+                }
+                None => format!("{}. declined: {}", it.n, it.line),
+            };
+            if it.req.is_program() {
+                if let Some(d) = self.data_dir() {
+                    let cmd = match &it.req {
+                        crate::access::plan::PlanRequest::Command { command, .. } => {
+                            command.clone()
+                        }
+                        crate::access::plan::PlanRequest::Launch { argv, .. } => {
+                            format!("[launch] {}", argv.join(" "))
+                        }
+                        _ => String::new(),
+                    };
+                    let (dec, res) = match results.iter().find(|(n, _)| *n == it.n) {
+                        Some((_, Ok(o))) => {
+                            ("APPROVED", o.lines().last().unwrap_or("").to_string())
+                        }
+                        Some((_, Err(e))) => ("APPROVED", format!("error: {e}")),
+                        None => ("DECLINED", String::new()),
+                    };
+                    crate::access::commands::log_command(&d.join("commands.log"), dec, &cmd, &res);
+                }
+            }
+            out.push_str(&line);
+            out.push('\n');
+        }
+        let _ = ts;
+        out.push_str(&format!("— ran {}", now.totals(Some(&selected))));
+        self.plans_log(&format!("APPROVED #{} items {:?}", id.0, selected), &out);
+        Ok(Confirmed {
+            action,
+            path: None,
+            output: Some(out),
+        })
+    }
+
+    fn audit_plan(
+        &self,
+        decision: &str,
+        plan: &crate::access::plan::ChangePlan,
+        selected: Option<&std::collections::BTreeSet<usize>>,
+    ) {
+        for it in &plan.items {
+            let d = match selected {
+                Some(s) if !s.contains(&it.n) => "DECLINED",
+                _ => decision,
+            };
+            self.audit_line(d, it.req.op(), &format!("#{} {}", it.n, it.line));
+        }
+    }
+
+    fn audit_line(&self, decision: &str, kind: &str, what: &str) {
+        let Some(log) = &self.audit_log else { return };
+        let ts = format_utc((self.clock)());
+        let what = what.replace(['\n', '\t'], " ");
+        let _ = append(log, &format!("{ts}\t{decision}\tplan:{kind}\t{what}\n"));
+    }
+
+    /// Appends a block to `plans.log` next to the audit log.
+    fn plans_log(&self, head: &str, body: &str) {
+        let Some(d) = self.data_dir() else { return };
+        let ts = format_utc((self.clock)());
+        let _ = append(&d.join("plans.log"), &format!("== {ts} {head}\n{body}\n\n"));
     }
 
     /// Records commands / launches in `commands.log` next to the audit log.
@@ -1466,15 +1655,9 @@ mod tests {
     #[test]
     fn commands_are_gated_and_logged() {
         let (d, mut sc) = del_setup("cmd-gate");
-        let safe = PendingAction::RunCommand {
-            command: "echo hi".into(),
-            cwd: None,
-            timeout_s: 5,
-        };
-        assert!(!safe.needs_confirmation());
-        let out = sc.run_now(safe).unwrap().output.unwrap();
-        assert!(out.contains("hi"));
-        for risky in [
+        // Every command — even a read-only one — needs approval now.
+        for cmd in [
+            "echo hi",
             "sudo pacman -Syu",
             "kill 1",
             "echo x > f",
@@ -1482,18 +1665,17 @@ mod tests {
             "dd if=/dev/zero of=x",
         ] {
             let a = PendingAction::RunCommand {
-                command: risky.into(),
+                command: cmd.into(),
                 cwd: Some(d.clone()),
                 timeout_s: 5,
             };
-            assert!(a.needs_confirmation(), "{risky}");
+            assert!(a.needs_confirmation(), "{cmd}");
             assert!(matches!(
                 sc.run_now(a.clone()),
                 Err(ContractError::NeedsConfirmation(_))
             ));
-            let p = a.prompt();
             assert!(
-                p.detail.unwrap().contains(risky),
+                a.prompt().detail.unwrap().contains(cmd),
                 "card shows the exact command"
             );
         }
@@ -1514,30 +1696,251 @@ mod tests {
         }
         assert!(d.join("f").exists());
         let log = std::fs::read_to_string(d.join("data/commands.log")).unwrap();
-        assert!(log.contains("AUTO\techo hi"));
         assert!(log.contains("CONFIRM\trm "));
     }
 
     #[test]
-    fn small_organize_runs_now_big_one_needs_a_yes() {
-        let (d, mut sc) = del_setup("org-gate");
+    fn organize_always_needs_a_yes() {
+        let (d, _sc) = del_setup("org-gate");
         std::fs::write(d.join("a.png"), "a").unwrap();
         let plan = crate::access::organize::suggest_sort(&d, crate::access::organize::SortBy::Type)
             .unwrap();
-        let small = PendingAction::Organize {
-            plan: plan.clone(),
-            journal: d.join("data/organize-journal"),
-            preview_over: 10,
-        };
-        assert!(!small.needs_confirmation());
-        let big = PendingAction::Organize {
+        let a = PendingAction::Organize {
             plan,
             journal: d.join("data/organize-journal"),
-            preview_over: 1,
         };
-        assert!(big.needs_confirmation());
-        assert!(big.prompt().detail.unwrap().contains("a.png"));
-        sc.run_now(small).unwrap();
-        assert!(d.join("Images/a.png").exists());
+        assert!(a.needs_confirmation());
+        assert!(a.prompt().detail.unwrap().contains("a.png"));
+    }
+
+    // ---- Plan review -----------------------------------------------------
+
+    use crate::access::plan::{ChangePlan, PlanApproval, PlanRequest};
+
+    fn file_plan(d: &Path) -> ChangePlan {
+        std::fs::write(d.join("a.txt"), "a").unwrap();
+        std::fs::write(d.join("b.txt"), "b").unwrap();
+        std::fs::write(d.join("old.txt"), "gone").unwrap();
+        ChangePlan::build(
+            vec![
+                PlanRequest::Mkdir {
+                    path: d.join("Docs"),
+                },
+                PlanRequest::Move {
+                    from: d.join("a.txt"),
+                    to: d.join("Docs"),
+                },
+                PlanRequest::Write {
+                    path: d.join("note.md"),
+                    body: "hello".into(),
+                    skill: false,
+                },
+                PlanRequest::Copy {
+                    from: d.join("b.txt"),
+                    to: d.join("Docs"),
+                },
+                PlanRequest::Delete {
+                    path: d.join("old.txt"),
+                },
+            ],
+            Some(&d.join("data")),
+            Some(&d.join("data/organize-journal")),
+        )
+        .unwrap()
+    }
+
+    fn snapshot(d: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+        let mut v = Vec::new();
+        let mut st = vec![d.to_path_buf()];
+        while let Some(p) = st.pop() {
+            for e in std::fs::read_dir(&p).unwrap().flatten() {
+                let p = e.path();
+                if p.starts_with(d.join("data")) {
+                    continue;
+                }
+                if p.is_dir() {
+                    v.push((p.clone(), Vec::new()));
+                    st.push(p);
+                } else {
+                    v.push((p.clone(), std::fs::read(&p).unwrap()));
+                }
+            }
+        }
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn nothing_is_written_before_the_plan_is_approved() {
+        let (d, mut sc) = del_setup("plan-none");
+        let plan = file_plan(&d);
+        let before = snapshot(&d);
+        let a = PendingAction::Plan { plan };
+        assert!(a.needs_confirmation());
+        assert!(matches!(
+            sc.run_now(a.clone()),
+            Err(ContractError::NeedsConfirmation(_))
+        ));
+        let id = sc.request(a);
+        // A plain Yes is not an approval.
+        assert!(matches!(
+            sc.confirm(id),
+            Err(ContractError::NeedsPlanApproval(_))
+        ));
+        assert_eq!(snapshot(&d), before);
+        let audit = std::fs::read_to_string(d.join("data/audit.log")).unwrap();
+        assert_eq!(audit.matches("\tPROPOSED\tplan:").count(), 5);
+        assert!(std::fs::read_to_string(d.join("data/plans.log"))
+            .unwrap()
+            .contains("PROPOSED #1"));
+    }
+
+    #[test]
+    fn a_subset_runs_only_the_chosen_items() {
+        let (d, mut sc) = del_setup("plan-subset");
+        let plan = file_plan(&d);
+        let ap = PlanApproval::subset(&plan, [1, 2]);
+        let id = sc.request(PendingAction::Plan { plan });
+        let out = sc.approve_plan(id, ap, None).unwrap().output.unwrap();
+        assert!(d.join("Docs/a.txt").exists());
+        assert!(!d.join("note.md").exists(), "item 3 not chosen");
+        assert!(!d.join("Docs/b.txt").exists(), "item 4 not chosen");
+        assert!(d.join("old.txt").exists(), "item 5 not chosen");
+        assert!(out.contains("3. declined"), "{out}");
+        let audit = std::fs::read_to_string(d.join("data/audit.log")).unwrap();
+        assert!(audit.contains("\tAPPROVED\tplan:move\t#2"));
+        assert!(audit.contains("\tDECLINED\tplan:write\t#3"));
+        assert!(audit.contains("\tRESULT-OK\tplan:move"));
+        // Single use: the plan is gone.
+        assert!(sc.plan(id).is_none());
+    }
+
+    #[test]
+    fn approve_all_with_delete_needs_the_signature_then_runs_in_order() {
+        let (d, mut sc) = del_setup("plan-all");
+        let plan = file_plan(&d);
+        let man = plan.deletion_manifest(&plan.all()).unwrap();
+        let id = sc.request(PendingAction::Plan { plan: plan.clone() });
+        assert!(matches!(
+            sc.approve_plan(id, PlanApproval::all(&plan), None),
+            Err(ContractError::NeedsSignature(_))
+        ));
+        assert!(
+            d.join("a.txt").exists(),
+            "nothing ran without the signature"
+        );
+        let sig = DeletionSignature::sign(&man, "delete 1 item", DeleteMode::Trash).unwrap();
+        sc.approve_plan(id, PlanApproval::all(&plan), Some(sig))
+            .unwrap();
+        assert!(d.join("Docs/a.txt").exists() && d.join("Docs/b.txt").exists());
+        assert_eq!(std::fs::read_to_string(d.join("note.md")).unwrap(), "hello");
+        assert!(!d.join("old.txt").exists());
+        assert!(
+            d.join("Trash/files/old.txt").exists(),
+            "Trash is the default"
+        );
+        // One undo batch for the organize steps.
+        let b = crate::access::organize::batches(&d.join("data/organize-journal"));
+        assert_eq!(b.len(), 1);
+    }
+
+    #[test]
+    fn declining_writes_nothing() {
+        let (d, mut sc) = del_setup("plan-decline");
+        let plan = file_plan(&d);
+        let before = snapshot(&d);
+        let id = sc.request(PendingAction::Plan { plan: plan.clone() });
+        sc.deny(id).unwrap();
+        assert_eq!(snapshot(&d), before);
+        // An empty selection is a decline too.
+        let id = sc.request(PendingAction::Plan { plan: plan.clone() });
+        assert!(sc
+            .approve_plan(id, PlanApproval::subset(&plan, []), None)
+            .is_err());
+        assert_eq!(snapshot(&d), before);
+        let audit = std::fs::read_to_string(d.join("data/audit.log")).unwrap();
+        assert!(audit.matches("\tDECLINED\tplan:").count() >= 10);
+    }
+
+    #[test]
+    fn a_changed_disk_forces_a_new_plan() {
+        let (d, mut sc) = del_setup("plan-changed");
+        let plan = file_plan(&d);
+        let id = sc.request(PendingAction::Plan { plan: plan.clone() });
+        // Someone creates the destination meanwhile.
+        std::fs::create_dir_all(d.join("Docs")).unwrap();
+        std::fs::write(d.join("Docs/a.txt"), "theirs").unwrap();
+        let before = snapshot(&d);
+        let Err(ContractError::Changed { new_id }) =
+            sc.approve_plan(id, PlanApproval::all(&plan), None)
+        else {
+            panic!("expected a re-plan");
+        };
+        assert_eq!(snapshot(&d), before, "nothing ran");
+        let fresh = sc.plan(new_id).unwrap().clone();
+        assert_eq!(
+            fresh.items[1].dest.as_deref(),
+            Some(d.join("Docs/a (2).txt").as_path()),
+            "the new plan shows the exact auto-rename"
+        );
+        // The old approval does not fit the new plan.
+        assert!(matches!(
+            sc.approve_plan(new_id, PlanApproval::all(&plan), None),
+            Err(ContractError::WrongSet)
+        ));
+        sc.approve_plan(new_id, PlanApproval::subset(&fresh, [2]), None)
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(d.join("Docs/a.txt")).unwrap(),
+            "theirs"
+        );
+        assert!(d.join("Docs/a (2).txt").exists());
+    }
+
+    #[test]
+    fn no_launch_or_command_without_approval_and_subset_runs_only_chosen() {
+        let (d, mut sc) = del_setup("plan-cmds");
+        let cmd = |name: &str| PlanRequest::Command {
+            command: format!("touch '{}'", d.join(name).display()),
+            cwd: Some(d.clone()),
+            timeout_s: 5,
+            shell: false,
+        };
+        let plan = ChangePlan::build(
+            vec![
+                cmd("one"),
+                cmd("two"),
+                PlanRequest::Launch {
+                    argv: vec![
+                        "sh".into(),
+                        "-c".into(),
+                        format!("touch {}", d.join("three").display()),
+                    ],
+                    app: None,
+                },
+            ],
+            Some(&d.join("data")),
+            None,
+        )
+        .unwrap();
+        // "touch" writes: it is marked risky.
+        assert!(plan.items[0].risky.is_some());
+        let id = sc.request(PendingAction::Plan { plan: plan.clone() });
+        let _ = sc.confirm(id);
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(!d.join("one").exists() && !d.join("two").exists() && !d.join("three").exists());
+        let out = sc
+            .approve_plan(id, PlanApproval::subset(&plan, [2]), None)
+            .unwrap()
+            .output
+            .unwrap();
+        assert!(out.contains("2. done"), "{out}");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(d.join("two").exists());
+        assert!(!d.join("one").exists() && !d.join("three").exists());
+        let log = std::fs::read_to_string(d.join("data/commands.log")).unwrap();
+        assert!(log.contains("APPROVED\ttouch"), "{log}");
+        assert!(log.contains("DECLINED\ttouch"), "{log}");
+        assert!(log.contains("DECLINED\t[launch]"), "{log}");
     }
 }
