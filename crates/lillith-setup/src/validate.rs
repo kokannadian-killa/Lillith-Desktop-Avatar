@@ -123,10 +123,12 @@ pub fn field(key: &str, value: &str, ctx: &ValidateCtx) -> Result<(), FieldError
                         .into(),
                 );
             }
-            use std::os::unix::fs::PermissionsExt;
-            match std::fs::metadata(&p) {
-                Ok(m) if m.permissions().mode() & 0o111 != 0 => Ok(()),
-                _ => err("This file isn't executable (chmod +x it).".into()),
+            if crate::detect::is_executable(&p) {
+                Ok(())
+            } else if cfg!(windows) {
+                err("This isn't a program (pick llama-server.exe).".into())
+            } else {
+                err("This file isn't executable (chmod +x it).".into())
             }
         }
         "ollama_model" => {

@@ -18,6 +18,10 @@
 //! `assets/rules.toml`; `lillith preview` lists/plays/renders every manifest
 //! clip through the animator headlessly.
 
+// Windows: no console window behind her (CLI subcommands still print when
+// started from a terminal: see `windows_log_file`).
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use lillith_core::config::{Config, JiggleMode, MoveMode, OverlayPos};
@@ -148,6 +152,21 @@ enum Cmd {
         #[arg(long)]
         import: Option<PathBuf>,
     },
+    /// First-run setup (the Windows installer runs this): point Lily's
+    /// brain at a GGUF model and llama-server on this computer. Writes
+    /// `[llm]` plus `[chat]` / `[chat.server]` (loopback 127.0.0.1 only;
+    /// nothing is downloaded). Creates config.toml if missing.
+    Setup {
+        /// The `.gguf` model file on this computer.
+        #[arg(long)]
+        gguf: Option<PathBuf>,
+        /// The llama-server executable (llama-server.exe on Windows).
+        #[arg(long)]
+        llama_server: Option<PathBuf>,
+        /// Context window for llama-server `-c`.
+        #[arg(long)]
+        ctx_size: Option<u32>,
+    },
     /// The click-to-chat bubble window (started by the overlay; prints
     /// chat events as JSON lines on stdout).
     #[command(hide = true)]
@@ -185,12 +204,20 @@ fn parse_mode(s: &str) -> Result<MoveMode, String> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "lillith=info".into()),
-        )
-        .init();
+    let log = tracing_subscriber::fmt().with_env_filter(
+        tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| "lillith=info".into()),
+    );
+    #[cfg(windows)]
+    match windows_log_file() {
+        Some(f) => log
+            .with_ansi(false)
+            .with_writer(std::sync::Mutex::new(f))
+            .init(),
+        None => log.init(),
+    }
+    #[cfg(not(windows))]
+    log.init();
 
     let cli = Cli::parse();
     let rules = RuleSet::bundled();
@@ -293,9 +320,103 @@ async fn main() -> Result<()> {
             let pos = x.zip(y);
             chat::bubble_main(cfg, pos, offline || cli.no_llm, screenshot.clone(), demo)?;
         }
+        Some(Cmd::Setup {
+            ref gguf,
+            ref llama_server,
+            ctx_size,
+        }) => {
+            let path = cli
+                .config
+                .clone()
+                .or_else(Config::default_path)
+                .ok_or_else(|| anyhow::anyhow!("no config directory; pass --config"))?;
+            let msg = setup(&path, gguf.as_deref(), llama_server.as_deref(), ctx_size)?;
+            tracing::info!("{msg}");
+            println!("{msg}");
+        }
         None => run_overlay(&cli, rules.rules.len()).await?,
     }
     Ok(())
+}
+
+/// `lillith setup`: writes the local model choice into `path` (creating
+/// it from the commented template if missing). Local files only; the
+/// endpoint stays the loopback default.
+fn setup(
+    path: &std::path::Path,
+    gguf: Option<&std::path::Path>,
+    llama_server: Option<&std::path::Path>,
+    ctx_size: Option<u32>,
+) -> Result<String> {
+    use anyhow::Context as _;
+    if !path.exists() {
+        if let Some(d) = path.parent() {
+            std::fs::create_dir_all(d).with_context(|| format!("creating {}", d.display()))?;
+        }
+        std::fs::write(path, lillith_core::menu::settings_template())
+            .with_context(|| format!("writing {}", path.display()))?;
+    }
+    let mut llm = lillith_setup::config::load(path)?;
+    if let Some(g) = gguf {
+        let g = std::path::absolute(g).unwrap_or_else(|_| g.to_path_buf());
+        let is_gguf = g
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("gguf"));
+        if !g.is_file() || !is_gguf {
+            anyhow::bail!("{} is not a .gguf file on this computer", g.display());
+        }
+        llm.backend = lillith_setup::config::Backend::LlamaServer;
+        llm.gguf_path = g.display().to_string();
+    }
+    if let Some(b) = llama_server {
+        let b = std::path::absolute(b).unwrap_or_else(|_| b.to_path_buf());
+        if !lillith_setup::detect::is_executable(&b) {
+            anyhow::bail!("{} is not a llama-server program", b.display());
+        }
+        llm.llama_server_bin = b.display().to_string();
+    }
+    if let Some(c) = ctx_size {
+        llm.ctx_size = c;
+    }
+    lillith_setup::config::save(path, &llm, true)?;
+    Ok(format!(
+        "saved {} (model: {}, llama-server: {}, endpoint {})",
+        path.display(),
+        if llm.gguf_path.is_empty() {
+            "not set"
+        } else {
+            &llm.gguf_path
+        },
+        if llm.llama_server_bin.is_empty() {
+            "not set"
+        } else {
+            &llm.llama_server_bin
+        },
+        llm.server_url
+    ))
+}
+
+/// Windows (GUI subsystem): a terminal that started us gets the output
+/// (`None`); otherwise logs go to `%LOCALAPPDATA%\lillith\lillith.log`
+/// (appended, restarted past 4 MB).
+#[cfg(windows)]
+fn windows_log_file() -> Option<std::fs::File> {
+    use windows_sys::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+    // SAFETY: plain Win32 call without pointers.
+    if unsafe { AttachConsole(ATTACH_PARENT_PROCESS) } != 0 {
+        return None;
+    }
+    let dir = PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("lillith");
+    std::fs::create_dir_all(&dir).ok()?;
+    let path = dir.join("lillith.log");
+    let big = std::fs::metadata(&path).is_ok_and(|m| m.len() > 4 * 1024 * 1024);
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(!big)
+        .write(true)
+        .truncate(big)
+        .open(path)
+        .ok()
 }
 
 /// Loads `--config` / `~/.config/lillith/config.toml` (defaults on error).

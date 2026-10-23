@@ -2387,6 +2387,7 @@ dependencies = [
  "lillith-overlay",
  "lillith-panel",
  "lillith-sense",
+ "lillith-setup",
  "lillith-tray",
  "lillith-voice",
  "serde_json",
@@ -2394,6 +2395,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2467,6 +2469,7 @@ dependencies = [
  "tiny-skia",
  "tracing",
  "wayland-client",
+ "windows-sys 0.59.0",
  "winit",
  "x11rb",
 ]
@@ -2530,6 +2533,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "toml_edit 0.22.27",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

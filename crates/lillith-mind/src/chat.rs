@@ -204,12 +204,20 @@ fn write_json(path: &Path, h: &[Message]) -> std::io::Result<()> {
 
 /// `$XDG_DATA_HOME/lillith/chat_history.json`, else
 /// `~/.local/share/lillith/chat_history.json`.
+/// Windows: `%LOCALAPPDATA%\lillith\chat_history.json`.
 pub fn default_history_path() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_DATA_HOME")
         .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
-    Some(base.join("lillith/chat_history.json"))
+        .map(PathBuf::from);
+    #[cfg(windows)]
+    let base = base.or_else(|| {
+        std::env::var_os("LOCALAPPDATA")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    });
+    let base =
+        base.or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
+    Some(base.join("lillith").join("chat_history.json"))
 }
 
 #[cfg(test)]

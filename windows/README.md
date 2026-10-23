@@ -1,0 +1,92 @@
+# `windows/`: Lillith for Windows
+
+Everything Windows-specific that isn't Rust lives here. The Win32 code
+itself stays in the crates behind `cfg(windows)`, so Linux builds are
+unchanged.
+
+## One-command build (Linux or WSL)
+
+```sh
+windows/build.sh
+```
+
+Output goes to `$DIST` (default `target/dist/windows/`):
+
+| File | What |
+|---|---|
+| `Lillith-<ver>-setup.exe` | NSIS installer (per-user, no admin) |
+| `Lillith-<ver>-windows-x64.zip` | the same files as a portable folder |
+| `SHA256SUMS` | checksums |
+
+Prerequisites (Debian/Ubuntu):
+
+```sh
+rustup target add x86_64-pc-windows-gnu
+sudo apt install gcc-mingw-w64-x86-64 nsis python3-pil
+```
+
+Options (environment): `DIST=/some/dir`, `CARGO=/path/to/cargo`,
+`CARGO_TARGET_DIR=...`, `SKIP_BUILD=1` (re-package the last build),
+`NO_ZIP=1`.
+
+On Windows itself you can build natively instead:
+`cargo build --release --no-default-features --features windows -p lillith`
+and `cargo build --release -p lillith-settings-gui`, then
+`makensis -DVERSION=… -DSTAGE=… windows\installer.nsi` on a folder staged
+like `build.sh` does.
+
+## Layout
+
+| Path | Purpose |
+|---|---|
+| `build.sh` | the one command: cross-build, stage, run makensis, zip, checksums |
+| `installer.nsi` | NSIS script: install, shortcuts, autostart, first-run "brain" page, uninstaller |
+| `stage-assets.py` | copies `manifest.toml` + only the atlas pages it references (about 194 MB of 389 MB) |
+| `make-icon.py` | regenerates `lillith.ico` from the first `idle` frame (reads the art, never edits it) |
+| `lillith.ico` | app / installer / shortcut icon (16–256 px) |
+| `INSTALL-windows.md` | end-user install and setup guide (shipped as `INSTALL-windows.txt`) |
+
+The installed folder (`%LOCALAPPDATA%\Programs\Lillith`) is:
+
+```
+lillith.exe            the companion (Win32 layered overlay)
+lillith-settings.exe   settings and local-model wizard (Brain tab)
+assets\generated\      manifest.toml + atlas pages
+lillith.ico, INSTALL-windows.txt, LICENSE*.txt, config.example.toml
+Uninstall Lillith.exe
+```
+
+Per-user data: `%APPDATA%\lillith\config.toml` (settings),
+`%LOCALAPPDATA%\lillith\chat_history.json` and `lillith.log`.
+
+## First-run setup
+
+The installer's "Lily's brain" page asks for a `.gguf` file and
+`llama-server.exe` that are **already on the PC** and runs
+
+```bat
+lillith.exe setup --gguf "C:\models\lily.gguf" --llama-server "C:\llama.cpp\llama-server.exe"
+```
+
+which writes `[llm]`, `[chat]` and `[chat.server]` into config.toml. The
+endpoint is always loopback (`http://127.0.0.1:8080`), and non-loopback
+endpoints are refused. Both boxes can be left empty, and the same
+command or Lillith Settings ▸ Brain can be used later. Silent install:
+`Lillith-<ver>-setup.exe /S /GGUF=… /LLAMASERVER=… [/AUTOSTART]`.
+
+**Local only:** nothing in the installer or the app downloads models,
+runtimes or updates, and there is no telemetry. The chat talks to the
+llama-server child on 127.0.0.1, and nothing else.
+
+## Rust side (for reference)
+
+| Where | What |
+|---|---|
+| `crates/lillith-overlay/src/win32.rs` | Win32 overlay: `WS_EX_LAYERED` + `UpdateLayeredWindow` (per-pixel alpha), topmost, click-through outside the sprite (`WS_EX_TRANSPARENT` toggled against the hit mask), drag, right-click menu, PerMonitorV2 DPI |
+| `crates/lillith-overlay/src/win_desktop.rs` | which top-level windows she can perch on (EnumWindows + DWM frame bounds + cloaked filter); the floor is the work area (`SPI_GETWORKAREA`, above the taskbar) |
+| `crates/lillith-voice/src/engine.rs` | `Sapi` engine: Windows' built-in voices via System.Speech (offline) |
+| `crates/lillith-setup` | `%APPDATA%`/`%LOCALAPPDATA%` paths, `.exe` lookup, RAM via `GlobalMemoryStatusEx` |
+| `apps/lillith/src/main.rs` | `lillith setup`, GUI subsystem, log file when not started from a console |
+| `crates/lillith-mind/src/server.rs` | llama-server started with `CREATE_NO_WINDOW` |
+
+`android/` (a sibling folder) belongs to the Android port and isn't touched here.

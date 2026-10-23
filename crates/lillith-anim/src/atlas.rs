@@ -591,6 +591,25 @@ pub fn default_manifest_path() -> Option<PathBuf> {
         candidates.push(PathBuf::from(p));
     }
     candidates.push(PathBuf::from("assets/generated/manifest.toml"));
+    // Windows install: `<install dir>\assets\generated\manifest.toml`
+    // next to `lillith.exe`, then `%LOCALAPPDATA%\lillith\generated`.
+    #[cfg(windows)]
+    {
+        if let Some(dir) = std::env::current_exe()
+            .ok()
+            .and_then(|e| e.parent().map(|d| d.to_path_buf()))
+        {
+            candidates.push(dir.join("assets").join("generated").join("manifest.toml"));
+        }
+        if let Some(l) = std::env::var_os("LOCALAPPDATA") {
+            candidates.push(
+                PathBuf::from(l)
+                    .join("lillith")
+                    .join("generated")
+                    .join("manifest.toml"),
+            );
+        }
+    }
     let data = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));

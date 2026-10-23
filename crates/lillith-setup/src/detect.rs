@@ -141,6 +141,21 @@ pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
         }
     }
     roots.push(PathBuf::from("/opt/llama.cpp"));
+    // Windows: where people unzip the llama.cpp release
+    // (`llama-bXXXX-bin-win-*.zip`) or the Lillith installer suggests.
+    #[cfg(windows)]
+    {
+        if let Some(l) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+            roots.push(l.join("Programs/llama.cpp"));
+            roots.push(l.join("Lillith/llama.cpp"));
+        }
+        roots.push(PathBuf::from("C:/llama.cpp"));
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(d) = exe.parent() {
+                roots.push(d.join("llama.cpp"));
+            }
+        }
+    }
     let mut dirs = Vec::new();
     if let Some(p) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&p));
@@ -183,14 +198,25 @@ pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
     dirs
 }
 
-/// First executable `name` in `dirs`.
+/// First executable `name` in `dirs` (`name.exe` on Windows).
 pub fn find_binary(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
-    dirs.iter().map(|d| d.join(name)).find(|p| is_executable(p))
+    let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
+    dirs.iter()
+        .map(|d| d.join(&file))
+        .find(|p| is_executable(p))
 }
 
-fn is_executable(p: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+/// A regular file with an execute bit (Unix) or an `.exe` (Windows).
+pub fn is_executable(p: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe"))
+    }
 }
 
 /// First non-empty line of `<bin> --version` (stdout or stderr), killed
@@ -478,6 +504,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // a shell-script stand-in for llama-server
     fn finds_binaries_in_extra_dirs() {
         use std::os::unix::fs::PermissionsExt;
         let root = std::env::temp_dir().join(format!("lillith-setup-bin-{}", std::process::id()));

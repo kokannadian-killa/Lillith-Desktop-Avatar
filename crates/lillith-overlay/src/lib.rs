@@ -10,6 +10,9 @@
 //! - **X11 / XWayland fallback:** `winit` 0.30 transparent window with
 //!   `WindowLevel::AlwaysOnTop`, click-through via the X Shape input shape
 //!   set to the same mask, drawn with `softbuffer`. Feature `x11`.
+//! - **Windows:** a layered top-most Win32 window ([`win32`]),
+//!   `UpdateLayeredWindow` per-pixel alpha; `cfg(windows)` only, the
+//!   Linux backends are untouched.
 //! - [`stage`]: the M2 animator rendered into the overlay canvas + mask;
 //!   [`drag`]: click/drag and `(left, bottom)` placement; [`run`](mod@run): backend
 //!   dispatch, the shared [`run::Controller`] and position persistence;
@@ -36,6 +39,7 @@ pub mod settings_window;
 pub mod speech;
 pub mod stage;
 pub mod ui;
+pub mod win_desktop;
 pub mod wl_geom;
 
 #[cfg(feature = "wayland")]
@@ -43,6 +47,10 @@ pub mod wayland;
 
 #[cfg(feature = "x11")]
 pub mod x11;
+
+/// Native Windows backend (layered window, EnumWindows perching).
+#[cfg(windows)]
+pub mod win32;
 
 pub use backend::Backend;
 pub use chat::{ChatAnchor, ChatHook};

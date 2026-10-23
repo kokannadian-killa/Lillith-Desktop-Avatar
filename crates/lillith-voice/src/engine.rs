@@ -358,6 +358,7 @@ impl Engine for Piper {
 }
 
 /// `bin` on `$PATH` (executable regular file), if any.
+#[cfg(unix)]
 pub fn which(bin: &str) -> Option<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
     let path = std::env::var_os("PATH")?;
@@ -366,6 +367,75 @@ pub fn which(bin: &str) -> Option<PathBuf> {
             .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
             .unwrap_or(false)
     })
+}
+
+/// `bin.exe` on `%PATH%`, if any.
+#[cfg(not(unix))]
+pub fn which(bin: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    let file = format!("{bin}{}", std::env::consts::EXE_SUFFIX);
+    std::env::split_paths(&path)
+        .map(|d| d.join(&file))
+        .find(|p| p.is_file())
+}
+
+/// Windows' built-in offline voices (SAPI, `System.Speech`) through a
+/// hidden `powershell.exe`. The line goes in on stdin, never on the
+/// command line; nothing leaves the computer.
+#[cfg(windows)]
+#[derive(Debug, Clone)]
+pub struct Sapi {
+    pub bin: PathBuf,
+}
+
+#[cfg(windows)]
+impl Sapi {
+    /// SAPI `Rate` takes -10..=10 (0 = normal).
+    pub fn rate_arg(rate: f32) -> i32 {
+        ((rate - 1.0) * 10.0).round().clamp(-10.0, 10.0) as i32
+    }
+}
+
+#[cfg(windows)]
+impl Engine for Sapi {
+    fn name(&self) -> &'static str {
+        "sapi"
+    }
+    fn start(&mut self, text: &str, o: &SpeakOpts) -> std::io::Result<Box<dyn Playback>> {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let voice = o
+            .voice
+            .as_deref()
+            .map(|v| v.replace('\'', "''"))
+            .map(|v| format!("try {{ $s.SelectVoice('{v}') }} catch {{}};"))
+            .unwrap_or_default();
+        let script = format!(
+            "Add-Type -AssemblyName System.Speech; \
+             $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; \
+             $s.Rate = {}; $s.Volume = {}; {voice} \
+             $t = [Console]::In.ReadToEnd(); if ($t.Trim()) {{ $s.Speak($t) }}",
+            Self::rate_arg(o.rate),
+            (o.volume * 100.0).round().clamp(0.0, 100.0) as i32,
+        );
+        let mut child = Command::new(&self.bin)
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+        if let Some(mut stdin) = child.stdin.take() {
+            let t: String = text.chars().filter(|c| !c.is_control()).collect();
+            let _ = stdin.write_all(t.as_bytes());
+        }
+        Ok(Box::new(ChildPlayback {
+            children: vec![child],
+            pump: None,
+            on_stop: None,
+            done: false,
+        }))
+    }
 }
 
 /// What [`detect`] chose and why.
@@ -457,6 +527,17 @@ pub fn detect_with(cfg: &VoiceConfig, lookup: &dyn Fn(&str) -> Option<PathBuf>) 
             },
             _ => {}
         }
+    }
+    // Windows: the built-in SAPI voices when nothing else was found.
+    #[cfg(windows)]
+    if matches!(cfg.engine, EngineChoice::Auto) {
+        if let Some(bin) = lookup("powershell") {
+            return Detected {
+                reason: "sapi (Windows built-in voices)".into(),
+                engine: Box::new(Sapi { bin }),
+            };
+        }
+        why.push("powershell not on PATH".into());
     }
     none(format!(
         "no TTS engine ({}); staying silent",
