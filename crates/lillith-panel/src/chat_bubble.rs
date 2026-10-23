@@ -720,10 +720,43 @@ fn serde_json_lines(s: &str) -> Option<Vec<Message>> {
     serde_json::from_str(s).ok()
 }
 
+/// What the bubble says when the safeword stops work mid-reply.
+const SAFEWORD_STOPPED: &str =
+    "Stopped. Every running command is dead and the admin helper is gone.";
+
+/// If `text` is the safeword, stops every running command and the admin
+/// helper immediately (no queue) and returns true.
+fn stop_now_if_safeword(text: &str) -> bool {
+    if !lillith_core::access::kill_switch::is_safeword(text) {
+        return false;
+    }
+    lillith_core::access::kill_switch::stop_all();
+    lillith_core::access::admin_broker::shutdown();
+    true
+}
+
 impl Bubble {
     fn send(&mut self) {
         let text = self.input.trim().to_string();
-        if text.is_empty() || self.streaming.is_some() {
+        if text.is_empty() {
+            return;
+        }
+        // The safeword works right now, on the UI thread: the chat worker
+        // may be blocked running the very command it has to stop, so a
+        // queued "red" would only land after the command ended by itself.
+        if stop_now_if_safeword(&text) && self.streaming.is_some() {
+            self.lines.push(Line {
+                me: true,
+                text: text.clone(),
+            });
+            self.lines.push(Line {
+                me: false,
+                text: SAFEWORD_STOPPED.to_string(),
+            });
+            self.input.clear();
+            return;
+        }
+        if self.streaming.is_some() {
             return;
         }
         if text == "/clear" {
@@ -1197,6 +1230,14 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn safeword_stops_on_the_ui_thread_without_the_worker() {
+        let before = lillith_core::access::kill_switch::epoch();
+        assert!(!stop_now_if_safeword("I read a red book"));
+        assert!(stop_now_if_safeword("Red."));
+        assert!(lillith_core::access::kill_switch::stopped_since(before));
+    }
 
     #[test]
     fn confirm_command_parses_only_explicit_answers() {
