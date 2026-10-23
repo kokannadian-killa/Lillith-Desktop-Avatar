@@ -4,6 +4,7 @@
 
 pub mod about;
 pub mod avatar;
+pub mod bounce;
 pub mod brain;
 pub mod companion;
 pub mod knobs;

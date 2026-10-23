@@ -23,6 +23,7 @@
 //!   mapping, moods, mischief, sleep/wake, Wander/Stay, pose cycle, rules.
 
 pub mod bag;
+pub mod bounce;
 pub mod command;
 pub mod config;
 pub mod desktop;

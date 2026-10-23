@@ -897,6 +897,10 @@ impl Animator {
             t.pigtail_offset *= g;
             t.scale = 1.0 + (t.scale - 1.0) * g;
         }
+        if m.contains(Channel::Chest) {
+            // chest bounce > 100 %: a light engine layer over the baked art
+            t.chest_offset = self.physics().layered_chest_offset();
+        }
         t
     }
 

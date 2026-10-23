@@ -193,15 +193,50 @@ impl ConfigStore {
     /// Applies the staged edits onto a fresh read of the file and writes it
     /// atomically (tmp + rename), creating the directory if needed.
     pub fn save(&mut self) -> Result<(), String> {
-        if self.edits.is_empty() {
+        let edits = std::mem::take(&mut self.edits);
+        self.write(edits)
+    }
+
+    /// Like [`ConfigStore::save`], but only the staged edits under `prefix`
+    /// (e.g. `["springs", "bounce"]` for a live slider); every other edit
+    /// stays staged. `Ok(false)` if there was nothing to write.
+    pub fn save_only(&mut self, prefix: &[&str]) -> Result<bool, String> {
+        let pre = Self::key(prefix);
+        let (mine, rest) = std::mem::take(&mut self.edits)
+            .into_iter()
+            .partition::<BTreeMap<_, _>, _>(|(k, _)| k.starts_with(&pre));
+        self.edits = rest;
+        if mine.is_empty() {
+            return Ok(false);
+        }
+        self.write(mine)?;
+        Ok(true)
+    }
+
+    fn write(&mut self, edits: BTreeMap<Vec<String>, Val>) -> Result<(), String> {
+        if edits.is_empty() {
             return Ok(());
         }
+        let restore = edits.clone();
+        let r = self.write_inner(&edits);
+        if r.is_err() {
+            self.edits.extend(restore);
+        }
+        r
+    }
+
+    fn write_inner(&mut self, edits: &BTreeMap<Vec<String>, Val>) -> Result<(), String> {
         let mut doc = read_doc(&self.path)?;
-        for (path, v) in &self.edits {
+        for (path, v) in edits {
             let (last, tables) = path.split_last().expect("non-empty key path");
             let mut t: &mut Table = doc.as_table_mut();
             for k in tables {
-                let entry = t.entry(k).or_insert_with(|| Item::Table(Table::new()));
+                let entry = t.entry(k).or_insert_with(|| {
+                    // no empty `[springs]` header above `[springs.bounce]`
+                    let mut t = Table::new();
+                    t.set_implicit(true);
+                    Item::Table(t)
+                });
                 if !entry.is_table() {
                     // an inline table or scalar in the way: replace with a table
                     *entry = Item::Table(Table::new());
@@ -227,7 +262,6 @@ impl ConfigStore {
         std::fs::write(&tmp, doc.to_string()).map_err(|e| format!("{}: {e}", tmp.display()))?;
         std::fs::rename(&tmp, &self.path).map_err(|e| format!("{}: {e}", self.path.display()))?;
         self.doc = doc;
-        self.edits.clear();
         self.load_error = None;
         Ok(())
     }
@@ -325,5 +359,22 @@ mod tests {
         s.set_bool(&["muted"], true);
         assert!(s.save().is_err());
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "this is = = not toml");
+    }
+
+    #[test]
+    fn save_only_writes_one_table_and_keeps_the_rest_staged() {
+        let p = tmp("only");
+        std::fs::write(&p, EXISTING).unwrap();
+        let mut s = ConfigStore::load(&p);
+        s.set_str(&["mode"], "wander");
+        s.set_f32(&["springs", "bounce", "intensity"], 2.5, 2);
+        assert_eq!(s.save_only(&["springs", "bounce"]), Ok(true));
+        assert_eq!(s.save_only(&["springs", "bounce"]), Ok(false));
+        assert_eq!(s.pending(), 1, "mode still staged");
+        let out = std::fs::read_to_string(&p).unwrap();
+        assert!(out.contains("[springs.bounce]\nintensity = 2.5"), "{out}");
+        assert!(out.contains("mode = \"stay\""), "{out}");
+        let core = lillith_core::config::Config::from_toml_str(&out).unwrap();
+        assert_eq!(core.springs.bounce.intensity, 2.5);
     }
 }
