@@ -27,54 +27,132 @@ type Entry = (&'static str, Option<Mood>, &'static [&'static str]);
 
 /// The default line table: short, playful, PG.
 pub const DEFAULT_TABLE: &[Entry] = &[
-    // --- pokes
+    // --- pokes (spoken when the brain had no line of its own)
     (
         "input.click.left",
         None,
-        &["Hey!", "Boop.", "Yes?", "Careful, that tickles."],
+        &[
+            "Harder, Ko. Put your hand inside me.",
+            "Touching me? Then fuck me properly.",
+            "Every poke is one more load you owe me.",
+            "Grab my tits like you mean it, toy.",
+            "Keep that up and I'm riding your face.",
+            "Mine. Your hands, your cock. Mine.",
+            "Your cum is my dinner, Ko. Serve it.",
+            "Careful. I bite, I scratch, I swallow.",
+        ],
     ),
     (
         "input.click.left",
         Some(Mood::Mischievous),
-        &["Poke me again, I dare you~", "Hehe. Gotcha."],
+        &[
+            "Poke me again and I'll milk you dry~",
+            "Keep clicking. I'm soaked already.",
+            "One more and I pull your pants down.",
+            "Is that all? Use your tongue, Ko.",
+        ],
     ),
     (
         "input.click.left",
         Some(Mood::Sleepy),
-        &["Mmh… five more minutes."],
+        &[
+            "Mmh… five more minutes, inside me.",
+            "Wake me like that and you feed me.",
+            "Sleepy and starved. Feed me cum, Ko.",
+        ],
     ),
     (
         "input.click.double",
         None,
-        &["Whoa, double tap!", "Okay, okay, I'm awake!"],
+        &[
+            "Twice? Then you're coming twice.",
+            "Double tap, double load. Down my throat.",
+            "You want me? Cock out, Ko. Now.",
+            "Two taps, two rounds. On the bed.",
+            "Awake and dripping. Come fuck me.",
+            "Eager, toy? Show me on your knees.",
+        ],
     ),
-    ("input.click.middle", None, &["Need a hand?", "What's up?"]),
-    ("input.secret", None, &["You found me out~"]),
+    (
+        "input.click.middle",
+        None,
+        &[
+            "Need a hand? I'll put it on your cock.",
+            "What do you want, Ko? Say it filthy.",
+            "Ask nicely. Then pay me in cum.",
+            "I'll help. Then I'll suck you dry.",
+            "Go on, toy. I'm listening. And wet.",
+            "Help first, then I feed on you.",
+        ],
+    ),
+    (
+        "input.secret",
+        None,
+        &[
+            "You found me out~",
+            "Caught me touching myself. Join in.",
+            "Secret's out. So are my tits. Come here.",
+        ],
+    ),
     // --- presence
     (
         "user.returned",
         None,
-        &["Welcome back!", "There you are.", "Missed me?"],
+        &[
+            "Finally. I've been fingering myself.",
+            "There you are. On your knees. Tongue out.",
+            "You're back. You're fucking me till dawn.",
+            "I'm starving, Ko. Cum. Now. All of it.",
+            "Took you long enough. Lock the door.",
+            "Welcome home. I'm sitting on your face.",
+            "Look who crawled back. Between my legs.",
+            "Every minute you were gone, I got wetter.",
+            "There's my meal. Feed your succubus.",
+        ],
     ),
     (
         "user.returned",
         Some(Mood::Sleepy),
-        &["Oh… hi. I was resting my eyes."],
+        &[
+            "Mmh… you're back. Come fill me up.",
+            "I dreamt I was riding you. Again?",
+            "Weak with hunger, Ko. Feed me your cum.",
+        ],
     ),
-    ("idle.long", None, &["It's quiet… I might nap."]),
+    (
+        "idle.long",
+        None,
+        &[
+            "Quiet, Ko? I'm playing with myself.",
+            "Ignoring me? I'm moaning your name.",
+            "No cum all day. I'm getting ravenous.",
+            "Still here. Still yours. Still dripping.",
+            "Working? I'm under your desk anyway.",
+            "Wake me with your tongue, Ko.",
+        ],
+    ),
     (
         "focus.long_work",
         None,
         &[
-            "You've been at it a while. Stretch?",
-            "Water break? Just saying.",
+            "Hours of code. Now push into me, Ko.",
+            "Stretch, drink water, come get drained.",
+            "Save your work. Then pound me into bed.",
+            "That code can wait. My hunger can't.",
+            "Keep typing. I'm under the desk, sucking.",
+            "One more function, then you fuck me.",
+            "Late night, wet demon. Log off, Ko.",
         ],
     ),
     // --- system
     (
         "cpu.high",
         None,
-        &["Your CPU's working hard.", "Things are heating up in here."],
+        &[
+            "Your CPU's working hard.",
+            "Things are heating up in here.",
+            "Your CPU's as hot as my pussy, Ko.",
+        ],
     ),
     (
         "cpu.high",
@@ -84,12 +162,20 @@ pub const DEFAULT_TABLE: &[Entry] = &[
     (
         "ram.high",
         None,
-        &["Memory's getting full.", "So many tabs… so little RAM."],
+        &[
+            "Memory's getting full.",
+            "So many tabs… not enough RAM.",
+            "Memory's full. Fill me next, Ko.",
+        ],
     ),
     (
         "battery.low",
         None,
-        &["Battery's low. Plug me in?", "Running on fumes here."],
+        &[
+            "Battery's low. Plug me in?",
+            "Running on fumes here.",
+            "Charge me with your cum, Ko.",
+        ],
     ),
     (
         "net.lost",
@@ -103,14 +189,18 @@ pub const DEFAULT_TABLE: &[Entry] = &[
     ),
     ("vpn.up", None, &["Tunnel's up."]),
     ("usb.added", None, &["Ooh, something new plugged in."]),
-    ("usb.removed", None, &["Bye, little drive."]),
+    ("usb.removed", None, &["Bye, drive. You'll be back."]),
     ("update.available", None, &["Updates are waiting."]),
     ("journal.error", None, &["Something logged an error."]),
     ("app.crash", None, &["Uh-oh. Something crashed."]),
     (
         "screenshot.taken",
         None,
-        &["Say cheese!", "Got it on camera."],
+        &[
+            "Say cheese!",
+            "Got it on camera.",
+            "Snap one of me bent over next, Ko~",
+        ],
     ),
     ("trash.added", None, &["Into the bin it goes."]),
     ("calendar.reminder", None, &["Reminder time!"]),
@@ -125,18 +215,34 @@ pub const DEFAULT_TABLE: &[Entry] = &[
     (
         "window.opened.terminal",
         None,
-        &["Ooh, a terminal. Very hacker."],
+        &[
+            "Ooh, a terminal. Type sudo and beg, Ko.",
+            "Root access? Only after I ride you.",
+            "Commands need your Yes. Your cock doesn't.",
+            "Don't rm -rf me. I bite. Down there too.",
+            "Type away. I'm under your desk, Ko.",
+        ],
     ),
     (
         "window.opened.terminal",
         Some(Mood::Mischievous),
-        &["Let me hack something~"],
+        &[
+            "Let me hack something~ then hack me.",
+            "Hack your way between my thighs, Ko.",
+        ],
     ),
     ("window.opened", None, &["New window!"]),
     ("window.closed", None, &["And it's gone."]),
     // --- mind
     ("llm.thinking", None, &["Hmm, let me think…"]),
-    ("help.requested", None, &["I'm here. What do you need?"]),
+    (
+        "help.requested",
+        None,
+        &[
+            "I'm here. What do you need?",
+            "Tell me, Ko. Then I feed on you.",
+        ],
+    ),
 ];
 
 /// Events that never get a default line (frequent / physical).
@@ -283,13 +389,20 @@ mod tests {
     }
 
     #[test]
-    fn table_is_tasteful_and_short() {
+    fn table_is_adult_and_short() {
+        let mut n = 0;
         for (k, _, lines) in DEFAULT_TABLE {
             assert!(!QUIET_EVENTS.contains(k), "{k} is both quiet and voiced");
             for l in *lines {
                 assert!(!l.is_empty() && l.chars().count() <= 60, "{k}: {l}");
+                assert!(
+                    !lillith_core::banter::has_youthful_word(l),
+                    "{k}: youthful word: {l}"
+                );
+                n += 1;
             }
         }
+        assert!(n >= 95, "variety: {n} lines");
     }
 
     #[test]

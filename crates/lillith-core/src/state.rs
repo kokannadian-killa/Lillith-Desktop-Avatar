@@ -296,12 +296,39 @@ fn cycle_variants(mood: Mood) -> &'static [&'static str] {
 }
 
 /// Playful interruptions when she has been ignored.
-const PRANKS: &[&str] = &["knife_tap", "dance", "tail_wag", "point"];
-const PRANK_LINES: &[&str] = &[
-    "Psst… pay attention to me~",
-    "Bored. Entertain me.",
-    "I could poke something, you know.",
+/// The dominant / seduce clips are used once they're in the manifest.
+const PRANKS: &[&str] = &[
+    "knife_tap",
+    "dance",
+    "tail_wag",
+    "point",
+    "dom_beckon_finger",
+    "dom_arms_crossed_demand",
+    "seduce_tap_glass",
+    "kneel_pout_beg",
 ];
+/// The pool for an event, with a `'static` key for the no-repeat memory.
+fn banter_key(key: &str) -> Option<(&'static str, &'static [&'static str])> {
+    use crate::banter as b;
+    const KEYS: &[&str] = &[
+        "input.click.left",
+        "input.click.double",
+        "input.drag",
+        b::DROP,
+        "input.hover_long",
+        "user.returned",
+        b::WAKE,
+        "idle.long",
+        "idle.asleep",
+        "focus.long_work",
+        "window.opened.terminal",
+        b::PRANK,
+        b::CHAT_OPEN,
+    ];
+    let k = KEYS.iter().copied().find(|k| *k == key)?;
+    Some((k, b::pool(k)?))
+}
+
 /// Clips that are bases/helpers, never a random reaction. Baked-jiggle
 /// `<clip>_jiggle` variants are drawn by the animator in place of `<clip>`
 /// (config `baked_jiggle`), never picked by name.
@@ -350,6 +377,11 @@ pub struct Brain {
     root_motion: bool,
     /// Last clip picked from each `[rule_clip_pools]` entry (no repeats).
     last_pool_pick: BTreeMap<String, String>,
+    /// Canned banter lines ([`crate::banter`]); its own RNG so lines
+    /// never shift the behaviour randomness.
+    banter: crate::banter::Picker,
+    /// When she last greeted Ko (`user.returned`).
+    last_greet: Option<f32>,
     out: Vec<Action>,
 }
 
@@ -389,6 +421,8 @@ impl Brain {
             muted: false,
             root_motion: false,
             last_pool_pick: BTreeMap::new(),
+            banter: crate::banter::Picker::new(seed ^ 0xB4_7E5D_EA10),
+            last_greet: None,
             out: Vec::new(),
         }
     }
@@ -558,6 +592,7 @@ impl Brain {
                 if self.phase == Phase::Dragged {
                     self.phase = Phase::Idle;
                     self.out.push(Action::Stand);
+                    self.say_banter_with_accent(crate::banter::DROP, PRIO_PRANK);
                 }
                 self.last_activity = self.t;
                 self.schedule_wander();
@@ -573,7 +608,13 @@ impl Brain {
         match ev.name.as_str() {
             "idle.long" => self.get_drowsy(),
             "idle.asleep" => self.fall_asleep(),
-            "user.returned" | "user.activity" => {
+            "user.returned" => {
+                // Waking up says its own line; otherwise greet Ko.
+                if !self.activity(0.0) {
+                    self.greet();
+                }
+            }
+            "user.activity" => {
                 self.activity(0.0);
             }
             name => {
@@ -762,10 +803,12 @@ impl Brain {
         let Some(rule) = self.rules.find(event).cloned() else {
             return;
         };
-        if let Some(line) = rule.line_for(&Event::new(event)) {
-            if !line.is_empty() {
-                self.out.push(Action::Say(line));
-            }
+        let line = rule
+            .line_for(&Event::new(event))
+            .filter(|l| !l.trim().is_empty())
+            .or_else(|| self.banter_line(event));
+        if let Some(line) = line {
+            self.out.push(Action::Say(line));
         }
         if let Some(s) = &rule.sfx {
             self.sfx(s);
@@ -809,7 +852,10 @@ impl Brain {
             Some(e) => rule.line_for(e),
             None => rule.line_for(&Event::new(event)),
         };
-        if let Some(line) = line.filter(|l| !l.trim().is_empty()) {
+        let line = line
+            .filter(|l| !l.trim().is_empty())
+            .or_else(|| self.banter_line(event));
+        if let Some(line) = line {
             self.out.push(Action::Say(line));
         }
         if let Some(s) = &rule.sfx {
@@ -823,6 +869,48 @@ impl Brain {
 
     fn fire_rule(&mut self, event: &str, ev: Option<&Event>, force: bool) -> bool {
         self.fire_rule_at(event, ev, force, None)
+    }
+
+    /// A canned line for `key` from [`crate::banter::pool`], if it has one.
+    /// A rule's own `line` in rules.toml still wins over the pool.
+    fn banter_line(&mut self, key: &str) -> Option<String> {
+        let (key, pool) = banter_key(key)?;
+        self.banter.pick(key, pool)
+    }
+
+    fn say_banter(&mut self, key: &str) {
+        if let Some(line) = self.banter_line(key) {
+            self.out.push(Action::Say(line));
+        }
+    }
+
+    /// Says a line for `key` and, if one of its optional accent clips
+    /// ([`crate::banter::accent_clips`]) is in the manifest, plays it.
+    /// Missing clips are skipped: the line alone is fine.
+    fn say_banter_with_accent(&mut self, key: &str, priority: u8) {
+        let have: Vec<&str> = crate::banter::accent_clips(key)
+            .iter()
+            .copied()
+            .filter(|c| self.has(c))
+            .collect();
+        if !have.is_empty() && self.phase == Phase::Idle {
+            let i = self.banter.index(have.len());
+            self.out.push(Action::React {
+                clip: have[i].to_string(),
+                priority,
+            });
+        }
+        self.say_banter(key);
+    }
+
+    /// Ko came back: a greeting, at most every `GREET_GAP_S`.
+    fn greet(&mut self) {
+        let gap = crate::banter::GREET_GAP_S;
+        if self.last_greet.is_some_and(|t0| self.t - t0 < gap) {
+            return;
+        }
+        self.last_greet = Some(self.t);
+        self.say_banter_with_accent("user.returned", PRIO_PRANK);
     }
 
     /// Someone paid attention. `poke` > 0 adds mischief energy. Wakes her
@@ -863,6 +951,7 @@ impl Brain {
         if let Some(s) = self.rules.find("user.returned").and_then(|r| r.sfx.clone()) {
             self.sfx(&s);
         }
+        self.say_banter(crate::banter::WAKE);
         self.mood.set_baseline(Mood::Playful);
         self.feel(Mood::Happy, 0.9);
         self.schedule_wander();
@@ -896,6 +985,7 @@ impl Brain {
         if let Some(s) = self.rules.find("idle.asleep").and_then(|r| r.sfx.clone()) {
             self.sfx(&s);
         }
+        self.say_banter("idle.asleep");
         self.mood.set_baseline(Mood::Sleepy);
         self.feel(Mood::Sleepy, 1.0);
     }
@@ -1138,8 +1228,16 @@ impl Brain {
         let Some(clip) = self.cycle_bag.next(&mut self.rng).map(str::to_string) else {
             return;
         };
+        let paired = crate::banter::clip_pool(&clip);
         self.out.push(Action::React { clip, priority: 0 });
         self.sfx("soft");
+        if let Some(pool) = paired {
+            if self.banter.chance(crate::banter::CLIP_LINE_CHANCE) {
+                if let Some(line) = self.banter.pick("clip", pool) {
+                    self.out.push(Action::Say(line));
+                }
+            }
+        }
     }
 
     fn prank(&mut self) {
@@ -1148,12 +1246,11 @@ impl Brain {
             return;
         }
         let clip = pool[self.rng.index(pool.len())].to_string();
-        let line = PRANK_LINES[self.rng.index(PRANK_LINES.len())].to_string();
         self.out.push(Action::React {
             clip,
             priority: PRIO_PRANK,
         });
-        self.out.push(Action::Say(line));
+        self.say_banter(crate::banter::PRANK);
         self.feel(Mood::Mischievous, 0.8);
         self.next_cycle = self.t + self.cfg.pose_cycle_s;
     }
@@ -1231,6 +1328,66 @@ mod tests {
 
     fn click(b: &mut Brain, btn: Button) -> Vec<Action> {
         b.input(Input::Click(btn))
+    }
+
+    fn says(a: &[Action]) -> Vec<&str> {
+        a.iter()
+            .filter_map(|a| match a {
+                Action::Say(l) => Some(l.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn in_pool(line: &str, key: &str) -> bool {
+        crate::banter::pool(key).unwrap().contains(&line)
+    }
+
+    #[test]
+    fn banter_for_pokes_drags_drops_and_greetings() {
+        let mut b = brain();
+        let a = click(&mut b, Button::Left);
+        let s = says(&a);
+        assert_eq!(s.len(), 1, "{a:?}");
+        assert!(in_pool(s[0], "input.click.left"), "{s:?}");
+        b.tick(5.0, false);
+        let a = b.input(Input::DragStart);
+        assert!(in_pool(says(&a)[0], "input.drag"));
+        let a = b.input(Input::DragEnd { left: 10 });
+        let s = says(&a);
+        assert!(in_pool(s[0], crate::banter::DROP), "{s:?}");
+        // The dominant accent clips aren't in this manifest: no clip, line only.
+        assert!(reacts(&a).is_empty(), "{a:?}");
+        // Greeting on user.returned (awake), at most once a minute.
+        b.tick(5.0, false);
+        let a = b.event(&Event::new("user.returned"));
+        assert!(in_pool(says(&a)[0], "user.returned"), "{a:?}");
+        b.tick(5.0, false);
+        let a = b.event(&Event::new("user.returned"));
+        assert!(says(&a).is_empty(), "greeting gap");
+    }
+
+    #[test]
+    fn banter_accent_clip_only_when_present() {
+        let mut clips: Vec<String> = CLIPS.iter().map(|s| s.to_string()).collect();
+        clips.push("dom_arms_crossed_demand".into());
+        let mut b = Brain::new(cfg(), MoveMode::Stay, RuleSet::bundled(), clips, 7);
+        b.input(Input::DragStart);
+        let a = b.input(Input::DragEnd { left: 10 });
+        assert_eq!(reacts(&a), ["dom_arms_crossed_demand"]);
+        assert!(in_pool(says(&a)[0], crate::banter::DROP));
+    }
+
+    #[test]
+    fn banter_wake_and_goodnight() {
+        let mut b = brain();
+        let a = b.event(&Event::new("idle.asleep"));
+        assert!(b.asleep());
+        assert!(in_pool(says(&a)[0], "idle.asleep"), "{a:?}");
+        let a = b.event(&Event::new("user.returned"));
+        let s = says(&a);
+        assert_eq!(s.len(), 1, "wake line, no extra greeting: {s:?}");
+        assert!(in_pool(s[0], crate::banter::WAKE), "{s:?}");
     }
 
     #[test]

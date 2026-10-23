@@ -112,6 +112,8 @@ struct Line {
 
 struct Bubble {
     lines: Vec<Line>,
+    /// Her opening line while there's no history yet (picked once per open).
+    opener: &'static str,
     streaming: Option<String>,
     input: String,
     tx: Sender<Req>,
@@ -156,17 +158,23 @@ pub fn demo_contract() -> ContractPrompt {
     .prompt()
 }
 
+/// Her opening line in an empty chat, from Lily's banter pool.
+pub fn opener_line(salt: usize) -> &'static str {
+    let pool = lillith_core::banter::CHAT_OPENERS;
+    pool[salt % pool.len()]
+}
+
 /// A canned exchange for previews (`--demo`).
 pub fn demo_lines() -> Vec<(bool, &'static str)> {
     vec![
         (
             false,
-            "Mmh, there you are. Took you long enough to come and play with me~ 😈",
+            "There you are, Ko. I've been fingering myself waiting. Cock out, I'm starving~ 😈",
         ),
         (true, "missed you 🔥"),
         (
             false,
-            "Of course you did. Now come closer and tell me everything ✨",
+            "I know. Now feed me, toy. Your cum down my throat, every last drop 💜",
         ),
     ]
 }
@@ -501,11 +509,7 @@ impl eframe::App for Bubble {
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             if self.lines.is_empty() && self.streaming.is_none() {
-                                bubble_line(
-                                    ui,
-                                    false,
-                                    "Hey you~ finally clicked me. What's on your mind, cutie? 😈",
-                                );
+                                bubble_line(ui, false, self.opener);
                             }
                             for l in &self.lines {
                                 bubble_line(ui, l.me, &l.text);
@@ -654,8 +658,18 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
             } else {
                 history_lines(&opts)
             };
+            // Screenshots stay reproducible with the first opener.
+            let salt = if opts.screenshot.is_some() {
+                0
+            } else {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos() as usize)
+                    .unwrap_or(0)
+            };
             Ok(Box::new(Bubble {
                 lines,
+                opener: opener_line(salt),
                 streaming: None,
                 input: String::new(),
                 tx,
@@ -703,6 +717,7 @@ mod tests {
         let (_ui_tx, rx) = channel();
         let b = Bubble {
             lines: Vec::new(),
+            opener: opener_line(0),
             streaming: None,
             input: String::new(),
             tx,
