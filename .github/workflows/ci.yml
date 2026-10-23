@@ -14,9 +14,11 @@ env:
 # toolchain come from .github/actions/setup-lillith so every compiling job
 # gets the same setup.
 #
-# Git LFS art (~460 MB) is NOT fetched: tests that need the real generated
-# set skip themselves when the sheets are only LFS pointers, which keeps CI
-# from burning the repo's LFS bandwidth on every push.
+# Git LFS art (~460 MB): the Android engine tests render the real generated
+# set, so the test job needs it. It's fetched once and kept in the Actions
+# cache (keyed on the LFS object list), so later runs only download objects
+# that changed and don't burn the repo's LFS bandwidth on every push. The
+# all-features clippy job doesn't need art and skips LFS entirely.
 
 jobs:
   check:
@@ -26,6 +28,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           lfs: false
+      - name: List Git LFS objects
+        run: git lfs ls-files --long | cut -d' ' -f1 | sort > .lfs-assets-id
+      - name: Restore Git LFS cache
+        uses: actions/cache@v6
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+          restore-keys: lfs-
+      - name: Fetch Git LFS art
+        run: git lfs pull
       - uses: ./.github/actions/setup-lillith
         with:
           cache-key: default
