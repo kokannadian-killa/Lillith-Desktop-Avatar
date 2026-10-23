@@ -504,6 +504,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // a shell-script stand-in for llama-server
     fn finds_binaries_in_extra_dirs() {
         use std::os::unix::fs::PermissionsExt;
         let root = std::env::temp_dir().join(format!("lillith-setup-bin-{}", std::process::id()));

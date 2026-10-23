@@ -102,9 +102,12 @@ pub fn spawn_with(
 }
 
 fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .filter(|h| !h.is_empty())
-        .map(PathBuf::from)
+    let var = |k: &str| std::env::var_os(k).filter(|h| !h.is_empty());
+    let h = var("HOME");
+    // Windows: %USERPROFILE% (Downloads, Desktop, ... live there too).
+    #[cfg(windows)]
+    let h = h.or_else(|| var("USERPROFILE"));
+    h.map(PathBuf::from)
 }
 
 async fn poll_loop(cfg: MonitorConfig, sink: Sink, sys: Sys) {

@@ -46,8 +46,8 @@ Next. You can also skip the page and do it later in one of two ways:
   "%LOCALAPPDATA%\Programs\Lillith\lillith.exe" setup --gguf "D:\models\lily.gguf" --llama-server "C:\llama.cpp\llama-server.exe"
   ```
 
-Lillith starts llama-server herself the first time you click her to chat,
-and she stops it when she quits.
+When chat is set up, Lillith starts llama-server herself (hidden, on
+127.0.0.1) when she starts, and she stops it when she quits.
 
 ## 3. Using her
 

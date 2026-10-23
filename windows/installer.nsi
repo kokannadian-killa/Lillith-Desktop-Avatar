@@ -12,7 +12,8 @@
 ; Silent:  Lillith-setup.exe /S [/GGUF=C:\models\x.gguf] [/LLAMASERVER=C:\llama.cpp\llama-server.exe]
 ;          [/AUTOSTART] [/D=C:\path\to\Lillith]   (/D must be last)
 
-Unicode true
+; 64-bit installer (Lillith is x64-only; also runs under 64-bit-only Wine).
+Target amd64-unicode
 ManifestDPIAware true
 SetCompressor /SOLID lzma
 
@@ -229,7 +230,7 @@ Function BrainPage
   Pop $0
   ${NSD_OnClick} $0 BrowseServer
 
-  ${NSD_CreateLabel} 0 108u 100% 30u "Lillith starts llama-server herself when you open the chat and stops it when she exits. Settings live in %APPDATA%\lillith\config.toml."
+  ${NSD_CreateLabel} 0 108u 100% 30u "Lillith starts llama-server herself (hidden, 127.0.0.1) when she starts and stops it when she quits. Settings live in %APPDATA%\lillith\config.toml."
   Pop $0
 
   nsDialogs::Show

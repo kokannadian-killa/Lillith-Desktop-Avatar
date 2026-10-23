@@ -1427,7 +1427,12 @@ mod tests {
     #[test]
     fn settings_helpers() {
         let c = open_settings_command(Path::new("/tmp/x/config.toml"));
-        assert_eq!(c.get_program(), "xdg-open");
+        let opener = if cfg!(windows) {
+            "notepad.exe"
+        } else {
+            "xdg-open"
+        };
+        assert_eq!(c.get_program(), opener);
         assert_eq!(c.get_args().collect::<Vec<_>>(), ["/tmp/x/config.toml"]);
         let t = settings_template();
         let parsed = crate::config::Config::from_toml_str(&t).expect("template parses");

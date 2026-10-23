@@ -1437,6 +1437,7 @@ fn open_settings(path: &std::path::Path) {
 /// Runs the overlay until she is closed. With an auto-detected Wayland
 /// backend, a compositor without layer-shell falls back to X11/XWayland.
 pub fn run(backend: Backend, opts: OverlayOptions) -> Result<(), OverlayError> {
+    #[cfg(not(windows))]
     tracing::info!(
         ?backend,
         forced = opts.forced,
@@ -1448,7 +1449,7 @@ pub fn run(backend: Backend, opts: OverlayOptions) -> Result<(), OverlayError> {
     // Windows has one backend whatever `--backend` says.
     #[cfg(windows)]
     {
-        let _ = backend;
+        tracing::info!(requested = ?backend, "overlay backend: win32");
         crate::win32::run(&opts)
     }
     #[cfg(not(windows))]
@@ -2031,6 +2032,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
     }
 
     #[test]
+    #[cfg(unix)] // fake_bin is a shell script
     fn settings_window_picks_apply_on_tick() {
         use crate::settings_window::tests::{fake_bin, wait_for};
         let (dir, mut c) = m3_controller("settingswin", MoveMode::Stay);
@@ -2582,6 +2584,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
     }
 
     #[test]
+    #[cfg(unix)] // fake_bin is a shell script
     fn settings_window_maps_the_new_menu_items() {
         use crate::settings_window::tests::{fake_bin, wait_for};
         let (dir, mut c) = m3_controller("swnew", MoveMode::Stay);

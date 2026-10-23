@@ -171,12 +171,16 @@ impl SettingsWindow {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    #[cfg(unix)]
     use lillith_core::config::MoveMode;
+    #[cfg(unix)]
     use lillith_core::menu::Size;
+    #[cfg(unix)]
     use std::time::{Duration, Instant};
 
     /// A fake `lillith-settings`: prints a few lines, then waits for
-    /// `release` to appear before exiting.
+    /// `release` to appear before exiting (a shell script: unix only).
+    #[cfg(unix)]
     pub(crate) fn fake_bin(tag: &str, lines: &[&str]) -> (PathBuf, PathBuf) {
         let dir = std::env::temp_dir().join(format!("lillith-sw-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -202,6 +206,7 @@ pub(crate) mod tests {
         (dir, bin)
     }
 
+    #[cfg(unix)]
     pub(crate) fn wait_for(mut f: impl FnMut() -> bool) -> bool {
         let t = Instant::now();
         while t.elapsed() < Duration::from_secs(10) {
@@ -214,6 +219,7 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn picks_come_back_and_only_one_window_runs() {
         let (dir, bin) = fake_bin(
             "picks",
