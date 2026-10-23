@@ -15,47 +15,32 @@
 //! On non-Windows the whole thing is an error, so the plan's elevated branch
 //! compiles everywhere but only runs on Windows.
 
+use std::path::Path;
 use std::time::Duration;
 
 use super::winshell::WinShell;
 
-/// Runs an approved elevated `command` in `shell`, launching or reusing the
-/// helper. `helper` is the path to `lillith-admin.exe`.
-pub fn run_elevated(
-    shell: WinShell,
-    command: &str,
-    cwd: Option<&std::path::Path>,
-    timeout: Duration,
-    cap: usize,
-    per_command: bool,
-    idle_min: u64,
-    helper: &std::path::Path,
-) -> std::io::Result<String> {
+/// Inputs for one approved elevated run (bundled so the call site stays tidy).
+pub struct ElevatedRun<'a> {
+    pub shell: WinShell,
+    pub command: &'a str,
+    pub cwd: Option<&'a Path>,
+    pub timeout: Duration,
+    pub cap: usize,
+    pub per_command: bool,
+    pub idle_min: u64,
+    pub helper: &'a Path,
+}
+
+/// Runs an approved elevated command, launching or reusing the helper.
+pub fn run_elevated(req: ElevatedRun<'_>) -> std::io::Result<String> {
     #[cfg(windows)]
     {
-        imp::run_elevated(
-            shell,
-            command,
-            cwd,
-            timeout,
-            cap,
-            per_command,
-            idle_min,
-            helper,
-        )
+        imp::run_elevated(req)
     }
     #[cfg(not(windows))]
     {
-        let _ = (
-            shell,
-            command,
-            cwd,
-            timeout,
-            cap,
-            per_command,
-            idle_min,
-            helper,
-        );
+        let _ = req;
         Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "elevated commands only run on Windows",
@@ -105,16 +90,17 @@ mod imp {
         *g = None;
     }
 
-    pub fn run_elevated(
-        shell: WinShell,
-        command: &str,
-        cwd: Option<&Path>,
-        timeout: Duration,
-        cap: usize,
-        per_command: bool,
-        idle_min: u64,
-        helper: &Path,
-    ) -> std::io::Result<String> {
+    pub fn run_elevated(req: super::ElevatedRun<'_>) -> std::io::Result<String> {
+        let ElevatedRun {
+            shell,
+            command,
+            cwd,
+            timeout,
+            cap,
+            per_command,
+            idle_min,
+            helper,
+        } = req;
         // The safeword kills the helper too (registered once).
         crate::access::kill_switch::on_stop(shutdown);
 
@@ -124,7 +110,7 @@ mod imp {
         }
         let h = g.as_mut().unwrap();
         let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-        let req = Request::Run {
+        let frame = Request::Run {
             id,
             shell,
             cwd: cwd.map(|p| p.display().to_string()).unwrap_or_default(),
@@ -132,7 +118,7 @@ mod imp {
             cap,
             command: command.to_string(),
         };
-        write_frame(&mut h.pipe, &req.encode(&h.token))?;
+        write_frame(&mut h.pipe, &frame.encode(&h.token))?;
         let reply = read_frame(&mut h.pipe)
             .map_err(|e| std::io::Error::other(format!("admin helper: {e}")))?;
         let out = match Reply::decode(&reply, &h.token)

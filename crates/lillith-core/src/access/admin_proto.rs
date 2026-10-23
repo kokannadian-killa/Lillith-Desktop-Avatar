@@ -318,7 +318,12 @@ pub fn pipe_sddl(sid: &str) -> String {
 pub fn random_hex(n: usize) -> io::Result<String> {
     let mut buf = vec![0u8; n];
     fill_random(&mut buf)?;
-    Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
+    let mut out = String::with_capacity(n * 2);
+    for b in buf {
+        use std::fmt::Write as _;
+        let _ = write!(out, "{b:02x}");
+    }
+    Ok(out)
 }
 
 #[cfg(windows)]

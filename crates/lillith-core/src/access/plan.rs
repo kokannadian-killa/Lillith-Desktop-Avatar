@@ -856,14 +856,16 @@ impl ChangePlan {
                         match super::admin_broker::default_helper_path() {
                             None => Err("cannot find lillith-admin.exe".to_string()),
                             Some(helper) => super::admin_broker::run_elevated(
-                                *shell,
-                                command,
-                                cwd.as_deref(),
-                                t,
-                                command_output_max,
-                                *admin_per_command,
-                                (*admin_idle_min).max(1),
-                                &helper,
+                                super::admin_broker::ElevatedRun {
+                                    shell: *shell,
+                                    command,
+                                    cwd: cwd.as_deref(),
+                                    timeout: t,
+                                    cap: command_output_max,
+                                    per_command: *admin_per_command,
+                                    idle_min: (*admin_idle_min).max(1),
+                                    helper: &helper,
+                                },
                             )
                             .map_err(|e| e.to_string()),
                         }
