@@ -16,7 +16,8 @@
 //! already owns the process's windowing event loop.
 
 use eframe::egui;
-use lillith_core::config::ChatConfig;
+use lillith_core::config::{ChatConfig, MindConfig};
+use lillith_core::soul_contract::PendingAction;
 use lillith_mind::chat::{ChatSession, Outcome};
 use lillith_mind::llm::Message;
 use std::path::PathBuf;
@@ -41,6 +42,8 @@ pub struct BubbleOptions {
     /// normal windows themselves).
     pub pos: Option<(i32, i32)>,
     pub chat: ChatConfig,
+    /// Knowledge + skills folders and the skill-authoring gate (`[mind]`).
+    pub mind: MindConfig,
     /// `--no-llm`: answer with an in-character "switched off" line.
     pub offline: bool,
     /// History file (`None` = in-memory only).
@@ -55,11 +58,36 @@ pub struct BubbleOptions {
 enum Req {
     Send(String),
     Clear,
+    /// Answer the pending Soul Contract (skill, file write, or shell): Yes
+    /// (run it) or No (discard).
+    Confirm(bool),
 }
 
 enum Ui {
     Token(String),
     Done(Outcome),
+    /// A system note to show in the bubble (e.g. a skill proposal/result).
+    Note(String),
+}
+
+/// Parses the bubble's Soul Contract answer: `/contract yes` (or `y`) →
+/// `Some(true)`, `/contract no` (or `n`) → `Some(false)`, anything else →
+/// `None`. `/skill yes|no` is kept as an alias (Phase 1 muscle memory).
+fn parse_confirm_command(text: &str) -> Option<bool> {
+    let mut parts = text.split_whitespace();
+    let cmd = parts.next()?;
+    if cmd != "/contract" && cmd != "/skill" {
+        return None;
+    }
+    let answer = parts.next()?.to_ascii_lowercase();
+    if parts.next().is_some() {
+        return None;
+    }
+    match answer.as_str() {
+        "yes" | "y" => Some(true),
+        "no" | "n" => Some(false),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -117,7 +145,7 @@ pub fn demo_lines() -> Vec<(bool, &'static str)> {
 fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Receiver<Ui>) {
     let (req_tx, req_rx) = channel::<Req>();
     let (ui_tx, ui_rx) = channel::<Ui>();
-    let mut session = ChatSession::new(&opts.chat, opts.offline);
+    let mut session = ChatSession::new(&opts.chat, opts.offline).with_mind(&opts.mind);
     if let Some(p) = &opts.history {
         session = session.with_history_file(p.clone());
     }
@@ -135,6 +163,8 @@ fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Recei
                     return;
                 }
             };
+            // The skill the model last proposed, awaiting a Soul Contract Yes/No.
+            let mut pending: Option<PendingAction> = None;
             while let Ok(req) = req_rx.recv() {
                 match req {
                     Req::Clear => session.clear(),
@@ -159,6 +189,54 @@ fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Recei
                             }
                         }
                         let _ = ui_tx.send(Ui::Done(out));
+                        // Did she propose a mutation (skill, file write, or
+                        // shell)? Hold it for the gate; never run it on our own.
+                        if let Some(action) = session.pending_action() {
+                            let summary = action.summary();
+                            pending = Some(action);
+                            emit("chat.contract_proposed", Some(&summary));
+                            let _ = ui_tx.send(Ui::Note(format!(
+                                "📜 Soul Contract: she wants to {summary}. Type /contract yes to allow, /contract no to discard."
+                            )));
+                        } else if let Some(out) = session.last_tool_output() {
+                            // A read ran (no popup) or a tool was refused.
+                            let _ = ui_tx.send(Ui::Note(format!("🔎 {out}")));
+                        }
+                        ctx.request_repaint();
+                    }
+                    Req::Confirm(yes) => {
+                        let Some(action) = pending.take() else {
+                            let _ = ui_tx.send(Ui::Note(
+                                "Nothing is waiting for a yes/no right now.".into(),
+                            ));
+                            ctx.request_repaint();
+                            continue;
+                        };
+                        let mut sc = session.soul_contract();
+                        let id = sc.request(action);
+                        let note = if yes {
+                            match sc.confirm(id) {
+                                Ok(done) => {
+                                    emit("chat.contract_confirmed", Some(done.action.kind()));
+                                    if let Some(p) = &done.path {
+                                        format!("✅ Done: {}", p.display())
+                                    } else if let Some(out) = &done.output {
+                                        format!("✅ Done:\n{out}")
+                                    } else {
+                                        "✅ Done.".into()
+                                    }
+                                }
+                                Err(e) => {
+                                    emit("chat.contract_error", Some(&e.to_string()));
+                                    format!("Couldn't do that: {e}")
+                                }
+                            }
+                        } else {
+                            let _ = sc.deny(id);
+                            emit("chat.contract_denied", None);
+                            "🚫 Discarded; nothing was changed.".into()
+                        };
+                        let _ = ui_tx.send(Ui::Note(note));
                         ctx.request_repaint();
                     }
                 }
@@ -197,6 +275,9 @@ impl Bubble {
         if text == "/clear" {
             self.lines.clear();
             let _ = self.tx.send(Req::Clear);
+        } else if let Some(yes) = parse_confirm_command(&text) {
+            // Soul Contract answer: nothing runs unless this is a yes.
+            let _ = self.tx.send(Req::Confirm(yes));
         } else {
             self.lines.push(Line {
                 me: true,
@@ -223,6 +304,7 @@ impl Bubble {
                         text: out.text().to_string(),
                     });
                 }
+                Ui::Note(text) => self.lines.push(Line { me: false, text }),
             }
         }
     }
@@ -518,6 +600,26 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn confirm_command_parses_only_explicit_answers() {
+        // Generic /contract form.
+        assert_eq!(parse_confirm_command("/contract yes"), Some(true));
+        assert_eq!(parse_confirm_command("/contract Y"), Some(true));
+        assert_eq!(parse_confirm_command("  /contract   no "), Some(false));
+        assert_eq!(parse_confirm_command("/contract n"), Some(false));
+        // /skill kept as an alias.
+        assert_eq!(parse_confirm_command("/skill yes"), Some(true));
+        assert_eq!(parse_confirm_command("/skill Y"), Some(true));
+        assert_eq!(parse_confirm_command("  /skill   no "), Some(false));
+        assert_eq!(parse_confirm_command("/skill n"), Some(false));
+        // Anything ambiguous is not an answer (and goes to chat instead).
+        assert_eq!(parse_confirm_command("/contract"), None);
+        assert_eq!(parse_confirm_command("/contract maybe"), None);
+        assert_eq!(parse_confirm_command("/skill yes please"), None);
+        assert_eq!(parse_confirm_command("contract yes"), None);
+        assert_eq!(parse_confirm_command("yes"), None);
+    }
 
     #[test]
     fn emoji_render_with_bundled_font() {

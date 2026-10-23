@@ -6,6 +6,7 @@ pub mod about;
 pub mod avatar;
 pub mod bounce;
 pub mod brain;
+pub mod build;
 pub mod companion;
 pub mod knobs;
 pub mod sealed;
@@ -95,6 +96,7 @@ impl TabRegistry {
         r.register(Box::new(brain::BrainTab::new(&shared.config_path)));
         r.register(Box::new(avatar::AvatarTab::new(&shared.config_path)));
         r.register(Box::new(knobs::KnobTab::voice()));
+        r.register(Box::new(build::BuildTab::new(shared)));
         r.register(Box::new(about::AboutTab));
         for n in 1..=3 {
             r.register(Box::new(sealed::SealedTab::new(n)));
@@ -171,6 +173,7 @@ pub(crate) mod tests {
                 "brain",
                 "avatar",
                 "voice",
+                "build",
                 "about",
                 "sealed-1",
                 "sealed-2",
@@ -179,7 +182,7 @@ pub(crate) mod tests {
         );
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 3);
         r.unseal(Box::new(Dummy));
-        assert_eq!(r.index_of("dummy"), Some(6));
+        assert_eq!(r.index_of("dummy"), Some(7));
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 2);
     }
 }

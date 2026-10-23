@@ -24,6 +24,7 @@
 
 pub mod bag;
 pub mod bounce;
+pub mod build;
 pub mod command;
 pub mod config;
 pub mod desktop;
@@ -36,6 +37,7 @@ pub mod physics_config;
 pub mod physics_driver;
 pub mod rng;
 pub mod rules;
+pub mod soul_contract;
 pub mod spring;
 pub mod state;
 

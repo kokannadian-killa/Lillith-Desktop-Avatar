@@ -10,10 +10,15 @@
 //! - [`chat`]: the click-to-chat conversation (history, persona, graceful
 //!   in-character fallbacks); [`persona`]: her system prompt and lines.
 //! - [`server`]: optional self-spawned `llama-server` (`[chat.server]`).
+//! - [`fstools`]: the scoped local file/tool API (Phase 2) — an allowlist,
+//!   a tool-request parser, and a planner that routes mutations through the
+//!   Soul Contract.
 //! - [`tools`]: read-only system tools (summary, disk, top procs, …) with
 //!   an approval gate for anything else (README-DK model).
 
 pub mod chat;
+pub mod fstools;
+pub mod knowledge;
 pub mod llm;
 pub mod memory;
 pub mod persona;
