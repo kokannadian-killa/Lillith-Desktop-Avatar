@@ -369,6 +369,9 @@ impl SettingsTab for KnobTab {
         let defaults = Config::default();
         ui.label(RichText::new(self.intro).color(c32(pal::TEXT_DIM)));
         ui.add_space(6.0);
+        if self.id == "motion" {
+            super::bounce::section(ui, shared);
+        }
         let groups = std::mem::take(&mut self.groups);
         let two = ui.available_width() > 820.0 && groups.len() > 1;
         if two {

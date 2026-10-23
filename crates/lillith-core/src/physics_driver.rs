@@ -223,7 +223,31 @@ fn physics_from(cfg: &PhysicsConfig) -> Physics {
         pigtail_sway_gain: cfg.gains.pigtail_sway,
         hz: cfg.physics_hz,
         suppressed: Default::default(),
+        chest_layer: 0.0,
+        chest_soft: None,
+        chest_kick_tau: 0.0,
+        chest_kick_pending: 0.0,
     }
+}
+
+/// `base` with the user's `[springs]` applied: README-SP overrides
+/// ([`PhysicsConfig::apply_user_springs`]), then the chest bounce
+/// ([`crate::bounce`]): softness sets the chest stiffness/damping,
+/// intensity × kick boost scales `[gains] chest_bounce`, and the hard chest
+/// clamps open up (the soft knee in [`Physics`] limits the drawn offset).
+fn with_user_springs(base: &PhysicsConfig, u: &UserSprings) -> PhysicsConfig {
+    use crate::bounce::{HARD_MAX_OFFSET, HARD_MAX_VELOCITY};
+    let mut cfg = base.clone();
+    cfg.apply_user_springs(u);
+    let b = u.bounce.sanitized();
+    let f = b.feel();
+    let c = &mut cfg.springs.chest;
+    c.stiffness = f.stiffness;
+    c.damping = f.damping;
+    c.max_velocity = c.max_velocity.max(HARD_MAX_VELOCITY);
+    c.max_offset = Some(c.max_offset.unwrap_or(0.0).max(HARD_MAX_OFFSET));
+    cfg.gains.chest_bounce *= b.gain_scale();
+    cfg
 }
 
 fn spring_from(c: &SpringCfg, target: f32) -> Spring {
@@ -262,6 +286,13 @@ pub fn shaped_breath(phase: f32, inhale: f32, hold: f32, exhale: f32) -> (f32, u
 #[derive(Debug, Clone)]
 pub struct PhysicsDriver {
     cfg: Arc<PhysicsConfig>,
+    /// physics.toml as loaded (before the user's `[springs]`): every
+    /// [`PhysicsDriver::set_user_springs`] re-derives `cfg` from it, so a
+    /// knob moved back to its default really goes back.
+    base_cfg: Arc<PhysicsConfig>,
+    /// Chest bounce body coupling / turn kicks, 0 … 1
+    /// ([`crate::bounce::BounceFeel::extra`]).
+    bounce_extra: f32,
     physics: Physics,
     rng: Rng,
     time: f32,
@@ -367,11 +398,14 @@ impl PhysicsDriver {
         physics_hz: f32,
         seed: u64,
     ) -> Self {
-        cfg.apply_user_springs(user_springs);
         if physics_hz > 0.0 {
             cfg.physics_hz = physics_hz;
         }
-        Self::from_config(cfg, seed)
+        let base = Arc::new(cfg);
+        let mut d = Self::from_config(with_user_springs(&base, user_springs), seed);
+        d.base_cfg = base;
+        d.apply_bounce_runtime(&user_springs.bounce);
+        d
     }
 
     /// Driver over the bundled `assets/physics.toml`.
@@ -382,6 +416,7 @@ impl PhysicsDriver {
     /// Driver over `cfg` exactly as given (no user overrides).
     pub fn from_config(cfg: PhysicsConfig, seed: u64) -> Self {
         let cfg = Arc::new(cfg);
+        let base_cfg = Arc::clone(&cfg);
         let physics = physics_from(&cfg);
         let mut rng = Rng::new(seed);
         let mood = Mood::default();
@@ -408,6 +443,8 @@ impl PhysicsDriver {
         let twist = spring_from(&g.twist_spring, 0.0);
         let gait_cycle = cfg.walk.demo_cycle_s;
         let mut d = Self {
+            base_cfg,
+            bounce_extra: 0.0,
             physics,
             rng,
             time: 0.0,
@@ -500,14 +537,36 @@ impl PhysicsDriver {
         &self.physics
     }
     /// Re-applies the user's `[springs]` (Settings, live): stiffness,
-    /// damping (mood multipliers stay on top) and the three gains.
+    /// damping (mood multipliers stay on top), the three gains and the
+    /// chest bounce ([`crate::bounce`]). Derived from the loaded physics.toml
+    /// every time, so it is idempotent and untouched keys keep the
+    /// physics.toml values (gains included).
     pub fn set_user_springs(&mut self, u: &UserSprings) {
-        let mut cfg = (*self.cfg).clone();
-        cfg.apply_user_springs(u);
+        let cfg = with_user_springs(&self.base_cfg, u);
+        let g = cfg.gains;
+        let ch = cfg.springs.chest;
         self.cfg = Arc::new(cfg);
         self.apply_mood_params();
         self.physics
-            .set_gains(u.jiggle_gain, u.chest_bounce_gain, u.pigtail_sway_gain);
+            .set_gains(g.jiggle, g.chest_bounce, g.pigtail_sway);
+        self.physics.chest.max_velocity = ch.max_velocity;
+        self.physics.chest.max_offset = ch.max_offset;
+        self.apply_bounce_runtime(&u.bounce);
+    }
+
+    /// The non-spring parts of the chest bounce: soft knee, baked-art layer
+    /// and body coupling.
+    fn apply_bounce_runtime(&mut self, b: &crate::bounce::ChestBounce) {
+        use crate::bounce::{baked_layer, CAP_PX, KICK_TAU_S, KNEE_PX};
+        let b = b.sanitized();
+        self.physics.chest_soft = Some((KNEE_PX, CAP_PX));
+        self.physics.chest_kick_tau = KICK_TAU_S;
+        self.physics.set_chest_layer(baked_layer(b.intensity));
+        self.bounce_extra = if b.intensity > 0.0 && self.physics.chest_bounce_gain > 0.0 {
+            b.feel().extra
+        } else {
+            0.0
+        };
     }
 
     pub fn physics_mut(&mut self) -> &mut Physics {
@@ -525,7 +584,13 @@ impl PhysicsDriver {
         self.facing
     }
     pub fn set_facing(&mut self, right: bool) {
-        self.facing = if right { 1.0 } else { -1.0 };
+        let f = if right { 1.0 } else { -1.0 };
+        if f != self.facing && self.bounce_extra > 0.0 {
+            // turning around: the chest swings through
+            let k = crate::bounce::TURN_KICK * self.bounce_extra;
+            self.schedule(Target::Ch(Channel::Chest), k, 0.0);
+        }
+        self.facing = f;
     }
     /// `true` if physics.toml has an `[events."<event>"]` entry.
     pub fn knows_event(&self, event: &str) -> bool {
@@ -607,6 +672,10 @@ impl PhysicsDriver {
         match (was, now) {
             (None, Some((vx, _, _))) => {
                 self.facing = if vx < 0.0 { -1.0 } else { 1.0 };
+                if self.bounce_extra > 0.0 {
+                    let k = crate::bounce::WALK_START_KICK * self.bounce_extra;
+                    self.schedule(Target::Ch(Channel::Chest), k, 0.0);
+                }
                 let a = self.cfg.walk.start_tip_angle * self.facing;
                 self.schedule(Target::Ch(Channel::Angle), a, 0.0);
                 // With [gait], a walk restarted while the stride is still
@@ -650,10 +719,19 @@ impl PhysicsDriver {
     /// animator may also call it on other pose-family swaps.
     pub fn on_clip_boundary(&mut self) {
         let cb = self.cfg.clip_boundary;
+        let e = self.bounce_extra;
         for c in CH {
+            // Soft chest bounce (above Natural): the chest carries through
+            // the cut instead of snapping (a visible step at big swings).
+            let (vk, ok) = if c == Channel::Chest && e > 0.0 {
+                let l = |k: f32, w: f32| k + (1.0 - k) * (e * w).min(1.0);
+                (l(cb.velocity_keep, 0.5), l(cb.offset_keep, 4.0))
+            } else {
+                (cb.velocity_keep, cb.offset_keep)
+            };
             let s = self.physics.spring_mut(c);
-            s.velocity *= cb.velocity_keep;
-            s.position = s.target + (s.position - s.target) * cb.offset_keep;
+            s.velocity *= vk;
+            s.position = s.target + (s.position - s.target) * ok;
         }
     }
 
@@ -1436,6 +1514,7 @@ impl PhysicsDriver {
 
     fn substep(&mut self, h: f32) {
         self.time += h;
+        let body_v = self.physics.root_y.velocity;
         let c = Arc::clone(&self.cfg);
 
         // mood blend + revert
@@ -1585,6 +1664,13 @@ impl PhysicsDriver {
 
         // integrate
         self.physics.step(h);
+        if self.bounce_extra > 0.0 && self.physics.live(Channel::Chest) {
+            // chest inertia: it lags the body's vertical moves (hops,
+            // landings, hip pops) and catches up with an overshoot
+            let dv = self.physics.root_y.velocity - body_v;
+            let k = crate::bounce::BODY_COUPLING * self.bounce_extra;
+            self.physics.chest.velocity -= k * dv * self.mood_to.gain;
+        }
         let hz = self.physics.hz;
         self.tail_x.advance(h, hz);
         self.tail_y.advance(h, hz);
@@ -1647,8 +1733,17 @@ mod tests {
 
     const HZ: f32 = 120.0;
 
+    /// The physics-lab look these tests pin: the Natural chest bounce
+    /// (exactly physics.toml's chest spring and gain).
+    fn natural() -> UserSprings {
+        UserSprings {
+            bounce: crate::bounce::BouncePreset::Natural.values(),
+            ..UserSprings::default()
+        }
+    }
+
     fn driver(seed: u64) -> PhysicsDriver {
-        PhysicsDriver::bundled(&UserSprings::default(), HZ, seed)
+        PhysicsDriver::bundled(&natural(), HZ, seed)
     }
 
     fn channels(t: Transform) -> [f32; 6] {
@@ -1729,9 +1824,20 @@ mod tests {
                 }
                 _ => assert_eq!(a.params, b.params, "{c:?}"),
             }
+            if c == Channel::Chest {
+                // chest bounce: hard clamps open, the soft knee limits
+                assert_eq!(a.max_velocity, crate::bounce::HARD_MAX_VELOCITY);
+                assert_eq!(a.max_offset, Some(crate::bounce::HARD_MAX_OFFSET));
+                continue;
+            }
             assert_eq!(a.max_velocity, b.max_velocity, "{c:?}");
             assert_eq!(a.max_offset, b.max_offset, "{c:?}");
         }
+        assert_eq!(
+            d.physics().chest_bounce_gain,
+            1.3,
+            "Natural = physics.toml gain"
+        );
         assert_eq!(d.physics().hz, 120.0);
         assert_eq!(d.mood(), Mood::Playful);
         assert!(!d.auto_idle, "IdleLife schedules in the engine");
@@ -1959,5 +2065,205 @@ mod tests {
             drop < pickup && drop > 0.6 * pickup,
             "pickup {pickup} drop {drop}"
         );
+    }
+
+    // ------------------------------------------------------ chest bounce
+
+    fn bounce(intensity: f32, softness: f32) -> UserSprings {
+        UserSprings {
+            bounce: crate::bounce::ChestBounce {
+                intensity,
+                softness,
+            },
+            ..UserSprings::default()
+        }
+    }
+
+    /// Chest offset (minus a muted twin, so breathing drops out) after a
+    /// knife tap at t = 0.2 s, sampled every `dt`.
+    fn tap_response(u: &UserSprings, dt: f32, secs: f32) -> Vec<(f32, f32)> {
+        let run = |mute: bool| {
+            let mut d = PhysicsDriver::bundled(u, HZ, 7);
+            d.force_mood(Mood::Playful);
+            d.mute_impulses = mute;
+            let mut tapped = false;
+            let mut out = Vec::new();
+            while d.time() < secs {
+                if !tapped && d.time() >= 0.2 {
+                    d.on_event("knife_tap");
+                    tapped = true;
+                }
+                d.tick(dt);
+                out.push((d.time(), d.transform().chest_offset));
+            }
+            out
+        };
+        let (a, b) = (run(false), run(true));
+        a.iter().zip(&b).map(|(x, y)| (x.0, x.1 - y.1)).collect()
+    }
+
+    fn peaks(r: &[(f32, f32)]) -> Vec<f32> {
+        let mut v = Vec::new();
+        for w in r.windows(3) {
+            let (a, b, c) = (w[0].1.abs(), w[1].1.abs(), w[2].1.abs());
+            if b > a && b >= c {
+                v.push(b);
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn chest_bounce_stable_at_0_100_300() {
+        for intensity in [0.0, 1.0, 3.0] {
+            for softness in [0.0, 0.3, 0.85, 1.0] {
+                let mut d = PhysicsDriver::bundled(&bounce(intensity, softness), HZ, 3);
+                // hammer it: taps, walk on/off, turns, every 0.25 s for 6 s
+                for i in 0..24 {
+                    assert!(d.on_event("knife_tap.strong"));
+                    d.set_facing(i % 2 == 0);
+                    d.set_motion(if i % 3 == 0 {
+                        Motion::Walking {
+                            vx: 60.0,
+                            cycle_s: 1.0,
+                        }
+                    } else {
+                        Motion::Idle
+                    });
+                    for _ in 0..30 {
+                        d.tick(1.0 / HZ);
+                        let c = d.transform().chest_offset;
+                        assert!(
+                            c.is_finite() && c.abs() <= crate::bounce::CAP_PX + 2.0,
+                            "{c}"
+                        );
+                    }
+                }
+                d.set_motion(Motion::Idle);
+                d.mute_impulses = true;
+                d.tick(5.0);
+                // settled: only the slow breathing lag remains
+                let mut late = 0.0f32;
+                for _ in 0..120 {
+                    d.tick(1.0 / HZ);
+                    late = late.max(d.physics().chest.offset().abs());
+                }
+                assert!(late < 1.5, "{intensity} {softness}: {late}");
+                if intensity == 0.0 {
+                    assert_eq!(d.physics().chest_bounce_gain, 0.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn chest_bounce_zero_adds_nothing() {
+        let r = tap_response(&bounce(0.0, 0.85), 1.0 / HZ, 3.0);
+        assert!(r.iter().all(|(_, c)| c.abs() < 1e-4), "{:?}", peaks(&r));
+    }
+
+    #[test]
+    fn extra_overshoots_with_two_or_three_wobbles_and_beats_natural() {
+        let nat = tap_response(&bounce(1.0, crate::bounce::NATURAL_SOFTNESS), 1.0 / HZ, 4.0);
+        let ext = tap_response(&UserSprings::default(), 1.0 / HZ, 4.0);
+        let (pn, pe) = (peaks(&nat), peaks(&ext));
+        let big = |p: &[f32]| p.iter().filter(|x| **x >= 0.1 * p[0]).count();
+        assert!(pe[0] > 1.8 * pn[0], "bigger: {pe:?} vs {pn:?}");
+        assert!(
+            big(&pe) >= 3 && big(&pe) <= 5,
+            "1 swing + 2-3 wobbles: {pe:?}"
+        );
+        assert!(big(&pn) <= 2, "natural barely wobbles: {pn:?}");
+        // decaying (no buzz): each wobble smaller than the last
+        for w in pe.windows(2).take(4) {
+            assert!(w[1] < w[0], "{pe:?}");
+        }
+        // 300% is bigger again but soft-limited
+        let max = tap_response(&bounce(3.0, 0.85), 1.0 / HZ, 4.0);
+        let pm = peaks(&max);
+        assert!(pm[0] > pe[0] && pm[0] <= crate::bounce::CAP_PX, "{pm:?}");
+    }
+
+    #[test]
+    fn chest_bounce_is_frame_rate_independent() {
+        let u = UserSprings::default();
+        let fine = tap_response(&u, 1.0 / 240.0, 3.0);
+        for dt in [1.0 / 30.0, 1.0 / 60.0, 1.0 / 144.0] {
+            let r = tap_response(&u, dt, 3.0);
+            for (t, c) in r.iter().filter(|(t, _)| *t > 0.3) {
+                let j = fine.partition_point(|(ft, _)| ft < t).min(fine.len() - 1);
+                assert!(
+                    (fine[j].1 - c).abs() < 0.35,
+                    "dt {dt} t {t}: {c} vs {}",
+                    fine[j].1
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn chest_bounce_survives_extreme_dt() {
+        for intensity in [0.0, 1.0, 3.0] {
+            let mut d = PhysicsDriver::bundled(&bounce(intensity, 1.0), HZ, 9);
+            assert!(d.on_event("knife_tap.strong"));
+            for dt in [10.0, 0.0, 1e-6, 0.5, -1.0, 2.0] {
+                d.tick(dt);
+                d.on_event("knife_tap");
+                let c = d.transform().chest_offset;
+                assert!(
+                    c.is_finite() && c.abs() <= crate::bounce::CAP_PX + 2.0,
+                    "{dt}: {c}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn set_user_springs_is_idempotent_and_keeps_toml_gains() {
+        let mut d = driver(1);
+        let base = d.physics().clone();
+        d.set_user_springs(&bounce(2.5, 1.0));
+        assert!(d.physics().chest_bounce_gain > 3.0);
+        assert!(d.physics().chest_layer > 0.0);
+        d.set_user_springs(&natural());
+        let ch = d.config().springs.chest;
+        assert_eq!(
+            (ch.stiffness, ch.damping),
+            (90.0, 14.5),
+            "back to physics.toml"
+        );
+        let p = d.physics();
+        assert_eq!(
+            (p.jiggle_gain, p.chest_bounce_gain, p.pigtail_sway_gain),
+            (
+                base.jiggle_gain,
+                base.chest_bounce_gain,
+                base.pigtail_sway_gain
+            ),
+            "physics.toml gains survive a reload"
+        );
+        assert_eq!(p.chest_layer, 0.0);
+    }
+
+    #[test]
+    fn baked_chest_gets_no_engine_bounce_until_over_100() {
+        for (intensity, layered) in [(0.0, false), (1.0, false), (3.0, true)] {
+            let mut d = PhysicsDriver::bundled(&bounce(intensity, 0.85), HZ, 5);
+            d.physics_mut()
+                .set_suppressed(crate::spring::SpringMask::of(&[Channel::Chest]));
+            let mut peak = 0.0f32;
+            assert!(d.on_event("knife_tap.strong"));
+            for _ in 0..240 {
+                d.tick(1.0 / HZ);
+                peak = peak.max(d.transform().chest_offset.abs());
+                peak = peak.max(d.physics().layered_chest_offset().abs());
+            }
+            if layered {
+                assert!(peak > 0.5, "light extra layer at 300%: {peak}");
+                assert!(peak < crate::bounce::CAP_PX * crate::bounce::BAKED_LAYER_MAX + 0.01);
+            } else {
+                assert_eq!(peak, 0.0, "{intensity}: baked art only, no double jiggle");
+            }
+        }
     }
 }

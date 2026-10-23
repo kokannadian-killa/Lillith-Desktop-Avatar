@@ -311,6 +311,18 @@ pub struct Physics {
     pub hz: f32,
     /// Channels currently switched off (see [`Physics::set_suppressed`]).
     pub suppressed: SpringMask,
+    /// Share of the chest bounce that keeps running while the chest is
+    /// suppressed (baked chest art), see [`crate::bounce::baked_layer`].
+    /// 0 = fully off (the default).
+    pub chest_layer: f32,
+    /// Soft knee `(knee, cap)` on the reported chest offset
+    /// ([`crate::bounce::soft_limit`]); `None` = raw.
+    pub chest_soft: Option<(f32, f32)>,
+    /// When positive, chest kicks are delivered smoothly over this time
+    /// constant (seconds) instead of all at once ([`crate::bounce::KICK_TAU_S`]).
+    pub chest_kick_tau: f32,
+    /// Chest velocity still to be delivered (see `chest_kick_tau`).
+    pub chest_kick_pending: f32,
 }
 
 impl Default for Physics {
@@ -347,6 +359,10 @@ impl Physics {
             pigtail_sway_gain: cfg.pigtail_sway_gain,
             hz: if hz > 0.0 { hz } else { 120.0 },
             suppressed: SpringMask::NONE,
+            chest_layer: 0.0,
+            chest_soft: None,
+            chest_kick_tau: 0.0,
+            chest_kick_pending: 0.0,
         }
     }
 
@@ -385,10 +401,14 @@ impl Physics {
     /// Velocity kick of `strength` (channel units per second), scaled by the
     /// channel's gain.
     pub fn impulse(&mut self, c: Channel, strength: f32) {
-        if self.suppressed.contains(c) {
+        if !self.live(c) {
             return;
         }
         let g = self.gain(c);
+        if c == Channel::Chest && self.chest_kick_tau > 0.0 {
+            self.chest_kick_pending += strength * g;
+            return;
+        }
         self.spring_mut(c).impulse(strength * g);
     }
 
@@ -413,8 +433,26 @@ impl Physics {
     /// Advances every channel by `dt` seconds in fixed `1/hz` sub-steps.
     pub fn step(&mut self, dt: f32) {
         let hz = self.hz;
+        if self.chest_kick_pending != 0.0 {
+            if !self.live(Channel::Chest) || !self.chest_kick_pending.is_finite() {
+                self.chest_kick_pending = 0.0;
+            } else if dt > 0.0 {
+                let tau = self.chest_kick_tau;
+                let k = if tau > 0.0 {
+                    1.0 - (-dt / tau).exp()
+                } else {
+                    1.0
+                };
+                let mut dv = self.chest_kick_pending * k;
+                if dv.abs() < 1e-3 {
+                    dv = self.chest_kick_pending;
+                }
+                self.chest_kick_pending -= dv;
+                self.chest.impulse(dv);
+            }
+        }
         for c in Channel::ALL {
-            if self.suppressed.contains(c) {
+            if !self.live(c) {
                 Self::hold(self.spring_mut(c));
             } else {
                 self.spring_mut(c).advance(dt, hz);
@@ -436,7 +474,50 @@ impl Physics {
     pub fn set_suppressed(&mut self, mask: SpringMask) {
         self.suppressed = mask;
         for c in mask.channels() {
-            Self::hold(self.spring_mut(c));
+            if !self.live(c) {
+                Self::hold(self.spring_mut(c));
+            }
+        }
+        if !self.live(Channel::Chest) {
+            self.chest_kick_pending = 0.0;
+        }
+    }
+
+    /// `true` if channel `c` integrates and takes kicks: not suppressed, or
+    /// the chest with a [`Physics::chest_layer`] over baked art.
+    pub fn live(&self, c: Channel) -> bool {
+        !self.suppressed.contains(c) || (c == Channel::Chest && self.chest_layer > 0.0)
+    }
+
+    /// Sets [`Physics::chest_layer`] (clamped to 0 … 1); parks the chest if
+    /// it is suppressed and the layer drops to 0.
+    pub fn set_chest_layer(&mut self, layer: f32) {
+        self.chest_layer = if layer.is_finite() {
+            layer.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        if !self.live(Channel::Chest) {
+            Self::hold(&mut self.chest);
+        }
+    }
+
+    /// Chest offset from its target through the soft knee (if any).
+    fn chest_display(&self) -> f32 {
+        let off = self.chest.offset();
+        match self.chest_soft {
+            Some((knee, cap)) => crate::bounce::soft_limit(off, knee, cap),
+            None => off,
+        }
+    }
+
+    /// Chest offset to draw over a clip whose chest motion is baked into the
+    /// art: the engine bounce × [`Physics::chest_layer`] (0 = rest).
+    pub fn layered_chest_offset(&self) -> f32 {
+        if self.chest_layer > 0.0 {
+            self.chest_display() * self.chest_layer
+        } else {
+            0.0
         }
     }
 
@@ -451,7 +532,11 @@ impl Physics {
             y: pick(Channel::RootY, self.root_y.position, rest.y),
             angle: pick(Channel::Angle, self.angle.position, rest.angle),
             scale: pick(Channel::Scale, self.scale.position, rest.scale),
-            chest_offset: pick(Channel::Chest, self.chest.position, rest.chest_offset),
+            chest_offset: if m.contains(Channel::Chest) {
+                self.layered_chest_offset()
+            } else {
+                self.chest.target + self.chest_display()
+            },
             pigtail_offset: pick(Channel::Pigtail, self.pigtail.position, rest.pigtail_offset),
         }
     }

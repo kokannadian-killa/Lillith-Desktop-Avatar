@@ -2662,6 +2662,45 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
     }
 
     #[test]
+    fn chest_bounce_slider_applies_live_over_the_wire() {
+        // Settings ▸ Motion ▸ Chest bounce saves [springs.bounce] and sends
+        // reload_config; the running driver picks it up without a restart.
+        let (dir, mut c) = m3_controller("bounce", MoveMode::Stay);
+        let (_, m) = m3_manifest_with("bounce", "");
+        let anim = AnimatorConfig {
+            idle_enabled: false,
+            physics_driver: true,
+            ..AnimatorConfig::default()
+        };
+        c.stage = Stage::new(m, PageCache::new(&dir), 2.0, anim).unwrap();
+        let path = dir.join("config.toml");
+        c.config_path = Some(path.clone());
+        let gain = |c: &Controller| {
+            let d = c.stage.animator().driver().expect("physics driver");
+            (d.physics().chest_bounce_gain, d.config().springs.chest)
+        };
+        let reload = r#"{"menu_action":"reload_config"}"#;
+        let mut cfg = Config::default();
+        let mut seen = Vec::new();
+        for intensity in [0.0, 1.0, 3.0, 1.0] {
+            cfg.springs.bounce.intensity = intensity;
+            cfg.save(&path).unwrap();
+            c.settings_pick(lillith_core::menu::parse_pick(reload).unwrap());
+            c.tick(1.0 / 30.0).unwrap();
+            seen.push(gain(&c));
+        }
+        assert_eq!(seen[0].0, 0.0, "0% = off");
+        assert!(seen[2].0 > 2.9 * seen[1].0 - 1e-4, "300%: {seen:?}");
+        assert_eq!(seen[3], seen[1], "back to 100% restores it exactly");
+        // softness retunes the spring live
+        cfg.springs.bounce.softness = 0.0;
+        cfg.save(&path).unwrap();
+        c.settings_pick(lillith_core::menu::parse_pick(reload).unwrap());
+        assert!(gain(&c).1.stiffness > seen[1].1.stiffness, "firmer");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn custom_avatar_animates_smoothly_every_frame() {
         let (dir, mut c) = m3_controller("avatar", MoveMode::Stay);
         // Store one avatar made from a flat-background "character".
