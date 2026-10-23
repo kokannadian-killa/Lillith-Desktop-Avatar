@@ -3,7 +3,8 @@
 //! Lillith's settings / options pop-up: a resizable egui window styled as
 //! an ancient demon relic × DemonOS (see `lillith-theme`), with carved tabs
 //! across the top — Companion, Motion, Chat / Brain (first-run LLM setup
-//! wizard on `lillith-setup`), Avatar, Voice, About, and three sealed
+//! wizard on `lillith-setup`), Avatar, Icon (app icon picker), Voice, About,
+//! and two sealed
 //! add-in slots.
 //!
 //! ## Launching
@@ -58,7 +59,7 @@ pub struct Options {
     pub config_path: Option<PathBuf>,
     /// Initial inner size (default 960×660; minimum is 640×480).
     pub inner_size: Option<[f32; 2]>,
-    /// Tab id to open (`companion`, `motion`, `brain`, `avatar`, `voice`,
+    /// Tab id to open (`companion`, `motion`, `brain`, `avatar`, `icon`, `voice`,
     /// `about`, `sealed-1`...).
     pub start_tab: Option<String>,
     /// Sub-page for the start tab (Brain: `runtime`, `pick-model`, `persona`, `test-save`).
@@ -83,16 +84,37 @@ pub fn default_config_path() -> PathBuf {
     lillith_core::config::Config::default_path().unwrap_or_else(|| PathBuf::from("config.toml"))
 }
 
-/// eframe options for the window (Wayland app id `lillith-settings`).
+/// The window icon for app icon `id` (its 64 px PNG), if the icon files
+/// are found.
+pub fn window_icon(id: &str) -> Option<std::sync::Arc<egui::IconData>> {
+    let root = lillith_core::icons::icons_dir()?;
+    let png = lillith_core::icons::thumbnail(&root, id, 64)?;
+    let img = image::open(png).ok()?.to_rgba8();
+    Some(std::sync::Arc::new(egui::IconData {
+        width: img.width(),
+        height: img.height(),
+        rgba: img.into_raw(),
+    }))
+}
+
+/// eframe options for the window (Wayland app id `lillith-settings`; the
+/// window icon is the configured app icon).
 pub fn native_options(opts: &Options) -> eframe::NativeOptions {
     let size = opts.inner_size.unwrap_or(DEFAULT_SIZE);
-    let viewport = egui::ViewportBuilder::default()
+    let config = opts.config_path.clone().unwrap_or_else(default_config_path);
+    let icon_id = lillith_core::config::Config::load(&config)
+        .map(|c| c.icon_info().id.clone())
+        .unwrap_or_else(|_| lillith_core::icons::DEFAULT_ICON.to_string());
+    let mut viewport = egui::ViewportBuilder::default()
         .with_title("Lillith · Settings")
         .with_app_id("lillith-settings")
         .with_inner_size(size)
         .with_min_inner_size(MIN_SIZE)
         .with_resizable(true)
         .with_decorations(opts.decorated);
+    if let Some(icon) = window_icon(&icon_id) {
+        viewport = viewport.with_icon(icon);
+    }
     eframe::NativeOptions {
         viewport,
         centered: true,

@@ -9,6 +9,9 @@ final class Prefs {
     static final String KEY_MODEL = "model_path";
     static final String KEY_SIZE = "size";
     static final String KEY_SETUP_DONE = "setup_done";
+    static final String KEY_PIN_OFFERED = "pin_shortcut_offered";
+    /** Launcher icon id ({@link IconSet#IDS}); unset = {@link IconSet#DEFAULT}. */
+    static final String KEY_ICON = "icon";
 
     private Prefs() {}
 
@@ -18,6 +21,15 @@ final class Prefs {
 
     static String modelPath(Context c) {
         return get(c).getString(KEY_MODEL, null);
+    }
+
+    /** The chosen launcher icon id (a known one; else the default). */
+    static String icon(Context c) {
+        String id = get(c).getString(KEY_ICON, IconSet.DEFAULT);
+        for (String k : IconSet.IDS) {
+            if (k.equals(id)) return id;
+        }
+        return IconSet.DEFAULT;
     }
 
     /** Size multiplier on top of the desktop default scale (1.0 = default). */

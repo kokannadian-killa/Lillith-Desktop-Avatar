@@ -1,0 +1,598 @@
+#!/usr/bin/env bash
+# Lillith for Arch / Garuda / Manjaro (pacman), per-user install.
+#
+#     ./linux/install.sh              from the repo root (works from fish too)
+#     ./linux/install.sh --uninstall  remove it again (asks before deleting settings)
+#
+# Builds Lillith from this checkout and installs, for the current user only:
+#   ~/.local/bin/lillith, ~/.local/bin/lillith-settings
+#   ~/.local/share/lillith/generated/          her animation set (found automatically)
+#   ~/.local/share/applications/lillith.desktop + icons (hicolor, Icon=lillith)
+#   ~/.local/share/lillith/icons/<id>/         the whole icon set (Settings > Icon)
+#   a desktop shortcut, optional autostart, the KWin bridge (Plasma 6)
+#   ~/.config/lillith/config.toml              via `lillith setup` (local model)
+#
+# LOCAL ONLY: the only network use is pacman installing distro packages (and
+# Cargo fetching crates for the build). It never downloads a model, never
+# installs from the AUR, and Lillith only talks to llama-server on 127.0.0.1.
+#
+# Run with --help for all options. Safe to re-run (upgrades in place).
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+BIN_DIR="${LILLITH_BIN_DIR:-$HOME/.local/bin}"
+DATA_DIR="$DATA_HOME/lillith"
+ASSET_DIR="$DATA_DIR/generated"
+CONFIG_DIR="$CONFIG_HOME/lillith"
+CONFIG_FILE="$CONFIG_DIR/config.toml"
+APP_FILE="$DATA_HOME/applications/lillith.desktop"
+AUTOSTART_FILE="$CONFIG_HOME/autostart/lillith.desktop"
+ICON_BASE="$DATA_HOME/icons/hicolor"
+ICON_SIZES=(16 24 32 48 64 128 256)
+ICONS_DIR="$DATA_DIR/icons"          # the icon set (lillith finds it here)
+ICONS_TOML="$ROOT/branding/icons.toml"
+KWIN_ID="lillith-bridge"
+MARK="X-Lillith-Installer=linux/install.sh"
+
+# ── options ─────────────────────────────────────────────────────────
+YES=0 UNINSTALL=0 SKIP_DEPS=0 SKIP_BUILD=0 PURGE=0 LIST_ICONS=0
+ASSETS="" GGUF="" LLAMA="" CTX=""
+AUTOSTART="" DESKTOP_SHORTCUT="" KWIN="" START="" ICON=""
+
+usage() {
+  cat <<'USAGE'
+Usage: ./linux/install.sh [options]
+
+  -y, --yes              no questions: take every default (autostart off,
+                         desktop shortcut on, model auto-picked if found)
+      --uninstall        remove Lillith (same as ./linux/uninstall.sh)
+      --purge            with --uninstall: also delete settings + chat history
+                         (otherwise asked; GGUF model files are never touched)
+
+  Install steps:
+      --skip-deps        don't run pacman (packages already installed, or not Arch)
+      --skip-build       reuse the last release build in the Cargo target dir
+      --assets PATH      animation set to install: a folder with manifest.toml,
+                         or a .zip containing assets/generated (e.g. the release's
+                         Lillith-<ver>-windows-x64.zip). Default: ./assets/generated
+      --gguf FILE        the .gguf model already on disk (skips the search)
+      --llama-server BIN the llama-server program already on disk
+      --ctx-size N       llama-server context size (default: lillith's)
+      --autostart / --no-autostart          start with the desktop session (default: no)
+      --desktop-shortcut / --no-desktop-shortcut   icon on the desktop (default: yes)
+      --no-kwin          don't install/enable the KWin bridge script
+      --icon ID          app icon (menu entry, desktop shortcut); saved as
+                         icon = "ID" in config.toml. Default: the configured
+                         one, else phantomcore-red. --list-icons shows the ids.
+                         Change it later in Settings > Icon or: lillith icon ID
+      --list-icons       print the icon ids and exit
+      --start / --no-start                  start Lillith at the end (asked; --yes: no)
+
+  Environment: CARGO_TARGET_DIR (build dir, default ./target),
+               LILLITH_BIN_DIR (default ~/.local/bin), XDG_DATA_HOME, XDG_CONFIG_HOME.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -y|--yes) YES=1 ;;
+    --uninstall) UNINSTALL=1 ;;
+    --purge) PURGE=1 ;;
+    --skip-deps) SKIP_DEPS=1 ;;
+    --skip-build) SKIP_BUILD=1 ;;
+    --assets) ASSETS="${2:?--assets needs a path}"; shift ;;
+    --assets=*) ASSETS="${1#*=}" ;;
+    --gguf) GGUF="${2:?--gguf needs a file}"; shift ;;
+    --gguf=*) GGUF="${1#*=}" ;;
+    --llama-server) LLAMA="${2:?--llama-server needs a path}"; shift ;;
+    --llama-server=*) LLAMA="${1#*=}" ;;
+    --ctx-size) CTX="${2:?--ctx-size needs a number}"; shift ;;
+    --ctx-size=*) CTX="${1#*=}" ;;
+    --autostart) AUTOSTART=1 ;;
+    --no-autostart) AUTOSTART=0 ;;
+    --desktop-shortcut) DESKTOP_SHORTCUT=1 ;;
+    --no-desktop-shortcut) DESKTOP_SHORTCUT=0 ;;
+    --no-kwin) KWIN=0 ;;
+    --icon) ICON="${2:?--icon needs an id (see --list-icons)}"; shift ;;
+    --icon=*) ICON="${1#*=}" ;;
+    --list-icons) LIST_ICONS=1 ;;
+    --start) START=1 ;;
+    --no-start) START=0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# ── helpers ─────────────────────────────────────────────────────────
+if [[ -t 1 ]]; then B=$'\e[1m' G=$'\e[32m' Y=$'\e[33m' R=$'\e[31m' N=$'\e[0m'; else B="" G="" Y="" R="" N=""; fi
+step() { printf '\n%s==> %s%s\n' "$B" "$*" "$N"; }
+ok()   { printf '  %s✓%s %s\n' "$G" "$N" "$*"; }
+warn() { printf '  %s!%s %s\n' "$Y" "$N" "$*" >&2; }
+die()  { printf '%serror:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# ask "Question?" y|n  → 0 for yes. --yes (or no terminal) takes the default.
+ask() {
+  local q="$1" def="$2" hint ans
+  if [[ $def == y ]]; then hint="[Y/n]"; else hint="[y/N]"; fi
+  if [[ $YES == 1 || ! -t 0 ]]; then
+    printf '  %s %s %s\n' "$q" "$hint" "$([[ $def == y ]] && echo yes || echo no)"
+    [[ $def == y ]]
+    return
+  fi
+  while true; do
+    read -r -p "  $q $hint " ans || ans=""
+    case "${ans,,}" in
+      "") [[ $def == y ]]; return ;;
+      y|yes) return 0 ;;
+      n|no) return 1 ;;
+    esac
+  done
+}
+
+# choose "prompt" item... → prints the chosen item (or nothing for "skip").
+# --yes picks the first item.
+choose() {
+  local prompt="$1"; shift
+  local items=("$@") i n
+  if [[ $YES == 1 || ! -t 0 ]]; then printf '%s' "${items[0]}"; return; fi
+  for i in "${!items[@]}"; do printf '    %d) %s\n' "$((i + 1))" "${items[$i]}" >&2; done
+  printf '    0) skip\n' >&2
+  while true; do
+    read -r -p "  $prompt [1] " n || n=0
+    n="${n:-1}"
+    if [[ $n == 0 ]]; then return; fi
+    if [[ $n =~ ^[0-9]+$ ]] && ((n >= 1 && n <= ${#items[@]})); then
+      printf '%s' "${items[$((n - 1))]}"; return
+    fi
+  done
+}
+
+running() { pgrep -x lillith >/dev/null 2>&1; }
+
+# Plasma / KDE helpers (each optional).
+kwin_reconfigure() {
+  if have qdbus6; then qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+  elif have dbus-send; then
+    dbus-send --session --type=method_call --dest=org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 || true
+  fi
+}
+refresh_menus() {
+  if have update-desktop-database; then update-desktop-database "$DATA_HOME/applications" >/dev/null 2>&1 || true; fi
+  if have gtk-update-icon-cache; then gtk-update-icon-cache -q -t "$ICON_BASE" >/dev/null 2>&1 || true; fi
+  if have kbuildsycoca6; then kbuildsycoca6 --noincremental >/dev/null 2>&1 || true; fi
+}
+# icon_ids: the ids in branding/icons.toml, in order.
+icon_ids() { sed -n 's/^id = "\(.*\)"$/\1/p' "$ICONS_TOML"; }
+icon_default() { sed -n 's/^default = "\(.*\)"$/\1/p' "$ICONS_TOML" | head -n 1; }
+is_icon() { icon_ids | grep -qxF -- "$1"; }
+# configured_icon: top-level `icon = "..."` of config.toml (before any [table]).
+configured_icon() {
+  [[ -f $CONFIG_FILE ]] || return 0
+  awk '/^[[:space:]]*\[/ { exit }
+       /^[[:space:]]*icon[[:space:]]*=/ { sub(/^[^=]*=[[:space:]]*"/, ""); sub(/".*$/, ""); print; exit }' "$CONFIG_FILE"
+}
+desktop_dir() {
+  local d=""
+  have xdg-user-dir && d="$(xdg-user-dir DESKTOP 2>/dev/null || true)"
+  # xdg-user-dir falls back to $HOME itself when no desktop folder is set.
+  if [[ -z $d || $d == "$HOME" || $d == "$HOME/" ]]; then d="$HOME/Desktop"; fi
+  printf '%s' "$d"
+}
+
+# ── icon choice ─────────────────────────────────────────────────────
+[[ -f $ICONS_TOML ]] || { echo "missing $ICONS_TOML (run from a full checkout)" >&2; exit 1; }
+if [[ $LIST_ICONS == 1 ]]; then
+  def="$(icon_default)"
+  while read -r id; do
+    if [[ $id == "$def" ]]; then echo "$id (default)"; else echo "$id"; fi
+  done < <(icon_ids)
+  exit 0
+fi
+ICON_SAVE=0
+if [[ -n $ICON ]]; then
+  is_icon "$ICON" || { echo "unknown icon '$ICON'; ids: $(icon_ids | tr '\n' ' ')" >&2; exit 2; }
+  ICON_SAVE=1
+else
+  ICON="$(configured_icon)"
+  is_icon "${ICON:-}" || ICON="$(icon_default)"
+fi
+
+# ════════════════════════════════════════════════════════════════════
+# Uninstall
+# ════════════════════════════════════════════════════════════════════
+if [[ $UNINSTALL == 1 ]]; then
+  step "Uninstalling Lillith (your GGUF models and llama.cpp are never touched)"
+  if running; then
+    if ask "Lillith is running. Stop her now?" y; then pkill -x lillith || true; sleep 1; fi
+  fi
+  for f in "$BIN_DIR/lillith" "$BIN_DIR/lillith-settings" "$APP_FILE"; do
+    [[ -e $f ]] && rm -f -- "$f" && ok "removed $f"
+  done
+  # Autostart: same file Lillith's own settings toggle writes.
+  if [[ -f $AUTOSTART_FILE ]] && grep -q 'lillith' "$AUTOSTART_FILE"; then
+    rm -f -- "$AUTOSTART_FILE" && ok "removed $AUTOSTART_FILE"
+  fi
+  DESK="$(desktop_dir)/lillith.desktop"
+  if [[ -f $DESK ]] && grep -q "^$MARK" "$DESK"; then rm -f -- "$DESK" && ok "removed $DESK"; fi
+  for s in "${ICON_SIZES[@]}" 512; do rm -f -- "$ICON_BASE/${s}x${s}/apps/lillith.png"; done
+  if [[ -d $ICONS_DIR ]]; then rm -rf -- "$ICONS_DIR"; fi
+  ok "removed icons"
+  if [[ -d $ASSET_DIR ]]; then rm -rf -- "$ASSET_DIR" && ok "removed $ASSET_DIR"; fi
+  if have kpackagetool6 && kpackagetool6 --type=KWin/Script --show "$KWIN_ID" >/dev/null 2>&1; then
+    if have kwriteconfig6; then kwriteconfig6 --file kwinrc --group Plugins --key "${KWIN_ID}Enabled" --delete || true; fi
+    if kpackagetool6 --type=KWin/Script --remove "$KWIN_ID" >/dev/null 2>&1; then
+      ok "removed the KWin bridge script"
+    else
+      warn "couldn't remove the KWin script"
+    fi
+    kwin_reconfigure
+  fi
+  refresh_menus
+
+  # Settings + personal data: named files only (never a blind rm -rf, so a
+  # model someone parked in these folders survives).
+  USER_FILES=("$CONFIG_FILE" "$CONFIG_DIR/Modelfile.lily" "$DATA_DIR/chat_history.json"
+              "$DATA_DIR/lillith_memory.db" "$DATA_DIR/lillith_memory.db-wal" "$DATA_DIR/lillith_memory.db-shm")
+  present=()
+  for f in "${USER_FILES[@]}" "$CONFIG_DIR"/config.toml.*; do [[ -e $f ]] && present+=("$f"); done
+  if ((${#present[@]})); then
+    printf '  Your settings and chat history:\n'; printf '    %s\n' "${present[@]}"
+    if [[ $PURGE == 1 ]] || ask "Delete these too?" n; then
+      rm -f -- "${present[@]}"
+      rmdir -- "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || true
+      ok "deleted settings and chat history"
+    else
+      ok "kept your settings (reinstalling picks them up again)"
+    fi
+  fi
+  rmdir -- "$DATA_DIR" 2>/dev/null || true
+  step "Lillith is uninstalled."
+  exit 0
+fi
+
+# ════════════════════════════════════════════════════════════════════
+# Install
+# ════════════════════════════════════════════════════════════════════
+printf '%sLillith installer%s (Arch / Garuda, per-user, local-only)\n' "$B" "$N"
+printf '  repo: %s\n' "$ROOT"
+[[ -f $ROOT/Cargo.toml && -d $ROOT/apps/lillith ]] || die "run this from a Lillith checkout (linux/ next to apps/ and crates/)"
+[[ $EUID -ne 0 ]] || die "run as your normal user, not root (it asks for sudo only for pacman)"
+
+# ── 1. animation set first, so a main.zip without the art fails fast ─
+step "1/8  Checking her animation set"
+have python3 || [[ $SKIP_DEPS == 0 ]] || die "python3 is needed (sudo pacman -S python)"
+ASSET_SRC="${ASSETS:-$ROOT/assets/generated}"
+ASSET_STATE=ok
+if have python3; then
+  set +e; python3 "$HERE/stage-assets.py" --check "$ASSET_SRC"; rc=$?; set -e
+  if [[ $rc == 3 ]]; then
+    ASSET_STATE=lfs
+    if [[ -z $ASSETS ]] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1 && have git-lfs; then
+      if ask "The art is still Git LFS pointers. Fetch it now with 'git lfs pull' (from your GitHub repo)?" y; then
+        git -C "$ROOT" lfs pull --include "assets/generated/**" && ASSET_STATE=ok
+        python3 "$HERE/stage-assets.py" --check "$ASSET_SRC" >/dev/null || ASSET_STATE=lfs
+      fi
+    fi
+    if [[ $ASSET_STATE == lfs ]] && python3 "$HERE/stage-assets.py" --check "$ASSET_DIR" >/dev/null 2>&1; then
+      warn "keeping the animation set that's already installed in $ASSET_DIR"
+      ASSET_STATE=keep
+    fi
+    if [[ $ASSET_STATE == lfs ]]; then
+      cat >&2 <<MSG
+
+  ${R}Her animation frames aren't in this download.${N} GitHub's "Download ZIP"
+  (main.zip) has only small Git LFS placeholders instead of the PNG art.
+  Any one of these fixes it, then re-run ./linux/install.sh:
+
+    a) Point the installer at a copy that has the art, e.g. the portable zip
+       from the GitHub release (Lillith-0.0.1-windows-x64.zip, same art):
+         ./linux/install.sh --assets ~/Downloads/Lillith-0.0.1-windows-x64.zip
+    b) Use git instead of the zip:
+         sudo pacman -S --needed git git-lfs
+         git clone https://github.com/kokannadian-killa/Lillith-Desktop-Avatar.git
+         cd Lillith-Desktop-Avatar; git lfs install; git lfs pull
+    c) In the GitHub repo: Settings > General > Archives >
+       "Include Git LFS objects in archives", then download main.zip again.
+MSG
+      exit 3
+    fi
+  elif [[ $rc != 0 ]]; then
+    die "no usable animation set at $ASSET_SRC (see above)"
+  fi
+fi
+
+# ── 2. packages ─────────────────────────────────────────────────────
+step "2/8  System packages"
+PKGS=(base-devel git pkgconf libxkbcommon wayland dbus libpulse systemd-libs alsa-lib python)
+if [[ $SKIP_DEPS == 1 ]]; then
+  warn "skipped (--skip-deps); needed on Arch: ${PKGS[*]} + rust"
+else
+  have pacman || die "pacman not found: this installer is for Arch-based systems (use --skip-deps if the libraries are already there; see INSTALL.md for apt/dnf)"
+  have cargo || PKGS+=(rust)
+  missing="$(pacman -T "${PKGS[@]}" 2>/dev/null || true)"
+  if [[ -z $missing ]]; then
+    ok "all present: ${PKGS[*]}"
+  else
+    printf '  missing: %s\n' "$(echo "$missing" | tr '\n' ' ')"
+    if ask "Install them with 'sudo pacman -S --needed'?" y; then
+      PACMAN_ARGS=(-S --needed)
+      [[ $YES == 1 ]] && PACMAN_ARGS+=(--noconfirm)
+      mapfile -t missing_list <<<"$missing"
+      sudo pacman "${PACMAN_ARGS[@]}" "${missing_list[@]}"
+    else
+      die "can't build without them"
+    fi
+  fi
+fi
+# rustup present but no default toolchain → cargo exists but fails.
+if have rustup && ! cargo --version >/dev/null 2>&1; then
+  if ask "rustup has no default toolchain. Run 'rustup default stable'?" y; then rustup default stable; fi
+fi
+have cargo || die "cargo not found (sudo pacman -S rust)"
+RUSTV="$(rustc --version | awk '{print $2}')"
+if [[ "$(printf '%s\n1.85.0\n' "$RUSTV" | sort -V | head -n1)" != 1.85.0 ]]; then
+  die "Rust $RUSTV is too old, need 1.85+ (sudo pacman -Syu rust, or rustup update stable)"
+fi
+ok "rust $RUSTV"
+
+# ── 3. build ────────────────────────────────────────────────────────
+TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
+REL="$TARGET_DIR/release"
+step "3/8  Building (release; first build takes a few minutes)"
+BUILD_PKGS=(-p lillith)
+HAS_SETTINGS=0
+if [[ -f $ROOT/crates/lillith-settings-gui/Cargo.toml ]]; then BUILD_PKGS+=(-p lillith-settings-gui); HAS_SETTINGS=1; fi
+if [[ $SKIP_BUILD == 1 ]]; then
+  warn "skipped (--skip-build), using $REL"
+else
+  (cd "$ROOT" && cargo build --release --locked "${BUILD_PKGS[@]}")
+fi
+[[ -x $REL/lillith ]] || die "$REL/lillith wasn't built"
+ok "built $REL/lillith"
+
+# ── 4. files ────────────────────────────────────────────────────────
+step "4/8  Installing files"
+if running; then warn "Lillith is running; she keeps the old version until restarted"; fi
+install -Dm755 "$REL/lillith" "$BIN_DIR/lillith"
+ok "$BIN_DIR/lillith"
+if [[ $HAS_SETTINGS == 1 && -x $REL/lillith-settings ]]; then
+  install -Dm755 "$REL/lillith-settings" "$BIN_DIR/lillith-settings"
+  ok "$BIN_DIR/lillith-settings"
+fi
+if [[ $ASSET_STATE == ok ]]; then
+  mkdir -p "$DATA_DIR"
+  python3 "$HERE/stage-assets.py" "$ASSET_SRC" "$ASSET_DIR" | sed 's/^/  /'
+fi
+# No env var or config key needed: Lillith looks in
+# $XDG_DATA_HOME/lillith/generated/manifest.toml by itself.
+
+# The whole icon set (PNGs only; the .ico files are for Windows), so
+# Settings > Icon / `lillith icon` can switch without the checkout.
+if [[ -d $ICONS_DIR ]]; then rm -rf -- "$ICONS_DIR"; fi
+n_icons=0
+while read -r id; do
+  for s in "${ICON_SIZES[@]}"; do
+    src="$ROOT/branding/icons/$id/lillith-$s.png"
+    [[ -f $src ]] && install -Dm644 "$src" "$ICONS_DIR/$id/lillith-$s.png"
+  done
+  n_icons=$((n_icons + 1))
+done < <(icon_ids)
+ok "$n_icons icons -> $ICONS_DIR"
+# The menu / desktop icon: hicolor `lillith` = the chosen icon.
+for s in "${ICON_SIZES[@]}"; do
+  src="$ICONS_DIR/$ICON/lillith-$s.png"
+  [[ -f $src ]] && install -Dm644 "$src" "$ICON_BASE/${s}x${s}/apps/lillith.png"
+done
+rm -f -- "$ICON_BASE/512x512/apps/lillith.png"   # older installs shipped 512 px
+ok "icon '$ICON' -> $ICON_BASE/<size>/apps/lillith.png"
+
+# desktop_entry [extra Desktop Entry lines...]
+desktop_entry() {
+  local extra=""
+  if (($#)); then extra="$(printf '%s\n' "$@")"$'\n'; fi
+  cat <<DESK
+[Desktop Entry]
+Type=Application
+Name=Lillith
+GenericName=Desktop companion
+Comment=Your desktop demon: a local-only animated companion
+Exec="$BIN_DIR/lillith"
+Path=$DATA_DIR
+Icon=lillith
+Terminal=false
+Categories=Utility;
+Keywords=avatar;companion;pet;mascot;
+StartupNotify=false
+Actions=settings;
+${extra}$MARK
+
+[Desktop Action settings]
+Name=Lillith Settings
+Exec="$BIN_DIR/lillith-settings"
+DESK
+}
+mkdir -p "$(dirname "$APP_FILE")"
+desktop_entry > "$APP_FILE"
+ok "app menu entry $APP_FILE"
+
+# ── 5. desktop shortcut + autostart ─────────────────────────────────
+step "5/8  Shortcuts"
+if [[ -z $DESKTOP_SHORTCUT ]]; then
+  if ask "Put a Lillith icon on the desktop?" y; then DESKTOP_SHORTCUT=1; else DESKTOP_SHORTCUT=0; fi
+fi
+DESK="$(desktop_dir)/lillith.desktop"
+if [[ $DESKTOP_SHORTCUT == 1 ]]; then
+  mkdir -p "$(dirname "$DESK")"
+  desktop_entry > "$DESK"
+  chmod +x "$DESK"   # Plasma: an executable .desktop on the desktop is trusted
+  if have gio; then gio set "$DESK" metadata::trusted true >/dev/null 2>&1 || true; fi
+  ok "desktop shortcut $DESK"
+elif [[ -f $DESK ]] && grep -q "^$MARK" "$DESK"; then
+  rm -f -- "$DESK"; ok "removed the desktop shortcut"
+fi
+
+if [[ -z $AUTOSTART ]]; then
+  if ask "Start Lillith automatically when you log in?" n; then AUTOSTART=1; else AUTOSTART=0; fi
+fi
+if [[ $AUTOSTART == 1 ]]; then
+  mkdir -p "$(dirname "$AUTOSTART_FILE")"
+  desktop_entry "X-GNOME-Autostart-enabled=true" "X-KDE-autostart-after=panel" > "$AUTOSTART_FILE"
+  ok "autostart $AUTOSTART_FILE"
+elif [[ -f $AUTOSTART_FILE ]] && grep -q 'lillith' "$AUTOSTART_FILE"; then
+  rm -f -- "$AUTOSTART_FILE"; ok "autostart off (removed $AUTOSTART_FILE)"
+else
+  ok "autostart off"
+fi
+refresh_menus
+
+# ── 6. KWin bridge ──────────────────────────────────────────────────
+step "6/8  KWin bridge (window perching on Plasma 6)"
+if [[ $KWIN == 0 ]]; then
+  ok "skipped (--no-kwin)"
+elif ! have kpackagetool6 || ! have kwriteconfig6; then
+  warn "not Plasma 6 (no kpackagetool6/kwriteconfig6): skipped; she lands on the screen bottom instead of windows"
+else
+  if kpackagetool6 --type=KWin/Script --show "$KWIN_ID" >/dev/null 2>&1; then
+    kpackagetool6 --type=KWin/Script --upgrade "$ROOT/kwin/lillith-bridge" >/dev/null
+    # KWin keeps the old copy loaded until it's toggled.
+    kwriteconfig6 --file kwinrc --group Plugins --key "${KWIN_ID}Enabled" false
+    kwin_reconfigure
+    ok "upgraded the KWin script"
+  else
+    kpackagetool6 --type=KWin/Script --install "$ROOT/kwin/lillith-bridge" >/dev/null
+    ok "installed the KWin script"
+  fi
+  kwriteconfig6 --file kwinrc --group Plugins --key "${KWIN_ID}Enabled" true
+  kwin_reconfigure
+  if have qdbus6 && [[ "$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$KWIN_ID" 2>/dev/null)" == true ]]; then
+    ok "enabled and loaded"
+  else
+    ok "enabled (loads with KWin; check: System Settings > Window Management > KWin Scripts)"
+  fi
+fi
+
+# ── 7. local brain ──────────────────────────────────────────────────
+step "7/8  Lily's brain (a local GGUF model; nothing is downloaded)"
+LILLITH="$BIN_DIR/lillith"
+HAS_SETUP=0
+"$LILLITH" setup --help >/dev/null 2>&1 && HAS_SETUP=1
+
+find_gguf() {
+  # Prefer Dolphin 3.0 Llama 3.2 3B Q4_K_M, then other chat models.
+  { find "$HOME" -xdev -maxdepth 6 \
+      \( -path "$HOME/.local/share/Trash" -o -path "$HOME/.cargo" -o -path "$HOME/.rustup" \
+         -o -name node_modules -o -name .git \) -prune -o \
+      -type f -iname '*.gguf' ! -iname '*mmproj*' -size +50M -print 2>/dev/null
+    find /usr/share /opt -maxdepth 4 -type f -iname '*.gguf' -size +50M -print 2>/dev/null
+  } | awk '{ s = tolower($0); r = 3
+             if (s ~ /dolphin/ && s ~ /3\.2/ && s ~ /3b/ && s ~ /q4_k_m/) r = 0
+             else if (s ~ /dolphin/) r = 1
+             else if (s ~ /q4_k_m/) r = 2
+             print r "\t" $0 }' | sort -t$'\t' -k1,1n -k2 | cut -f2- | awk '!seen[$0]++' | head -n 12
+}
+find_llama() {
+  {
+    command -v llama-server 2>/dev/null || true
+    for p in /usr/bin/llama-server /usr/local/bin/llama-server "$HOME/.local/bin/llama-server"; do
+      [[ -x $p ]] && echo "$p"
+    done
+    find "$HOME" -xdev -maxdepth 5 \( -path "$HOME/.local/share/Trash" -o -name .git \) -prune -o \
+      -type f -name llama-server -perm -u+x -print 2>/dev/null
+  } | awk '!seen[$0]++' | head -n 8
+}
+
+if [[ $HAS_SETUP == 0 ]]; then
+  warn "this build has no 'lillith setup'; edit [llm] in $CONFIG_FILE by hand"
+else
+  if [[ -z $GGUF ]]; then
+    printf '  looking for .gguf files under %s and /usr/share, /opt ...\n' "$HOME"
+    mapfile -t ggufs < <(find_gguf)
+    if ((${#ggufs[@]})); then
+      GGUF="$(choose "Which model should Lily use?" "${ggufs[@]}")"
+    else
+      warn "no .gguf model found. Copy one onto this computer (e.g. Dolphin 3.0 Llama 3.2 3B Q4_K_M)"
+      warn "and run: lillith setup --gguf /path/to/model.gguf --llama-server /usr/bin/llama-server"
+    fi
+  fi
+  if [[ -z $LLAMA ]]; then
+    mapfile -t servers < <(find_llama)
+    if ((${#servers[@]})); then
+      LLAMA="$(choose "Which llama-server?" "${servers[@]}")"
+    else
+      warn "llama-server isn't installed. It comes from llama.cpp:"
+      warn "  sudo pacman -S llama.cpp    (if your repos carry it, e.g. Garuda's chaotic-aur)"
+      warn "  or the AUR: paru -S llama.cpp   (this installer never installs from the AUR)"
+      if have pacman && [[ $SKIP_DEPS == 0 ]] && pacman -Si llama.cpp >/dev/null 2>&1; then
+        if ask "llama.cpp is in your pacman repos. Install it now?" n; then
+          sudo pacman -S --needed llama.cpp
+          mapfile -t servers < <(find_llama)
+          ((${#servers[@]})) && LLAMA="${servers[0]}"
+        fi
+      fi
+    fi
+  fi
+  SETUP_ARGS=(setup)
+  [[ -n $GGUF ]] && SETUP_ARGS+=(--gguf "$GGUF")
+  [[ -n $LLAMA ]] && SETUP_ARGS+=(--llama-server "$LLAMA")
+  [[ -n $CTX ]] && SETUP_ARGS+=(--ctx-size "$CTX")
+  # Also creates config.toml (commented defaults) when it doesn't exist yet.
+  if RUST_LOG=warn "$LILLITH" "${SETUP_ARGS[@]}" | sed 's/^/  /'; then
+    ok "config $CONFIG_FILE (endpoint stays http://127.0.0.1:8080, loopback only)"
+  else
+    warn "lillith setup failed; Lillith still runs, just without chat. Retry: lillith ${SETUP_ARGS[*]}"
+  fi
+fi
+if [[ $ICON_SAVE == 1 ]]; then
+  if "$LILLITH" --config "$CONFIG_FILE" icon "$ICON" --no-apply >/dev/null 2>&1; then
+    ok "icon = \"$ICON\" saved to $CONFIG_FILE"
+  else
+    warn "couldn't save the icon choice; run: lillith icon $ICON"
+  fi
+fi
+if [[ -f $CONFIG_FILE ]]; then
+  # Keep the Settings checkbox in step with the autostart entry.
+  want=$([[ $AUTOSTART == 1 ]] && echo true || echo false)
+  sed -i -E "s/^autostart = (true|false)\$/autostart = $want/" "$CONFIG_FILE"
+fi
+
+# ── 8. check + start ────────────────────────────────────────────────
+step "8/8  Checking the install"
+"$LILLITH" --help >/dev/null || die "$LILLITH --help failed"
+ok "lillith --help runs"
+if [[ $ASSET_STATE != lfs ]]; then
+  n="$(cd "$DATA_DIR" && "$LILLITH" preview --list 2>/dev/null | tail -n +2 | wc -l)"
+  if [[ $n -gt 0 ]]; then ok "her animation set loads ($n clips)"; else warn "lillith preview --list found no clips"; fi
+fi
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *) warn "$BIN_DIR isn't on your PATH. fish: fish_add_path $BIN_DIR   bash: export PATH=\"$BIN_DIR:\$PATH\"" ;;
+esac
+
+if [[ -z $START ]]; then
+  if [[ $YES == 1 ]]; then START=0
+  elif ask "Start Lillith now?" y; then START=1; else START=0; fi
+fi
+if [[ $START == 1 ]]; then
+  if [[ -z ${WAYLAND_DISPLAY:-} && -z ${DISPLAY:-} ]]; then
+    warn "no graphical session here; start her from the app menu instead"
+  else
+    if running; then pkill -x lillith || true; sleep 1; fi
+    (cd "$DATA_DIR" && nohup "$LILLITH" >/dev/null 2>&1 &)
+    ok "started. Right-click her for the menu; drag to move her."
+  fi
+fi
+
+step "Done."
+cat <<DONE
+  Start:      Lillith in the app menu, the desktop icon, or 'lillith'
+  Settings:   right-click her > Settings, or 'lillith-settings'
+  Icon:       right-click her > Icon…, or 'lillith icon --list' / 'lillith icon ID'
+  Model:      lillith setup --gguf FILE.gguf --llama-server /usr/bin/llama-server
+  Uninstall:  ./linux/uninstall.sh   (keeps GGUF models; asks about settings)
+DONE

@@ -58,6 +58,11 @@ impl ksni::Tray for LillithTray {
         "lillith".into()
     }
 
+    /// The theme icon the installers put in hicolor; the Icon picker
+    /// rewrites it, so the tray follows the chosen icon.
+    fn icon_name(&self) -> String {
+        "lillith".into()
+    }
     fn title(&self) -> String {
         "Lillith".into()
     }

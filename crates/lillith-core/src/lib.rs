@@ -30,6 +30,7 @@ pub mod command;
 pub mod config;
 pub mod desktop;
 pub mod event;
+pub mod icons;
 pub mod idle;
 pub mod interaction;
 pub mod menu;

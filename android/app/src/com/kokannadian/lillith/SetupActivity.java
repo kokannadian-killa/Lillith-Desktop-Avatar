@@ -2,7 +2,11 @@ package com.kokannadian.lillith;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutManager;
+import android.graphics.drawable.Icon;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Typeface;
@@ -13,6 +17,8 @@ import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -27,7 +33,10 @@ import java.io.OutputStream;
 /**
  * First-run setup: overlay permission, notifications, the local GGUF model
  * (side-loaded by the user, copied into app storage; nothing is downloaded),
- * her size, then start/hide the overlay.
+ * her size, then start/hide the overlay. Also offers a pinned home-screen
+ * shortcut (once, after her first start; plus a button) where the launcher
+ * supports it, and the launcher-icon picker (one activity-alias per icon in
+ * the manifest; picking enables that alias and disables the others).
  */
 public final class SetupActivity extends Activity {
     private static final int REQ_PICK_MODEL = 10;
@@ -36,6 +45,8 @@ public final class SetupActivity extends Activity {
     private TextView overlayStatus, notifyStatus, modelStatus, sizeLabel, startStatus;
     private Button overlayBtn, notifyBtn, pickBtn, removeBtn, startBtn;
     private ProgressBar progress;
+    private TextView iconStatus;
+    private ImageButton[] iconBtns;
     private boolean busy;
 
     @Override
@@ -111,7 +122,12 @@ public final class SetupActivity extends Activity {
         });
         col.addView(size);
 
-        col.addView(title("5. Go", 18));
+        col.addView(title("5. Icon", 18));
+        iconStatus = text("");
+        col.addView(iconStatus);
+        col.addView(iconPicker(dp));
+
+        col.addView(title("6. Go", 18));
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setVisibility(View.GONE);
         col.addView(progress);
@@ -120,6 +136,9 @@ public final class SetupActivity extends Activity {
         startBtn = button("Start Lillith", v -> toggle());
         col.addView(startBtn);
         col.addView(button("Chat with Lily", v -> startActivity(new Intent(this, ChatActivity.class))));
+        if (canPinShortcut()) {
+            col.addView(button("Add Lillith to the home screen", v -> requestPinShortcut()));
+        }
 
         ScrollView sv = new ScrollView(this);
         sv.addView(col);
@@ -147,8 +166,118 @@ public final class SetupActivity extends Activity {
         removeBtn.setEnabled(hasModel && !busy);
         pickBtn.setEnabled(!busy);
         sizeLabel.setText(String.format("%d%% of the desktop default size", Math.round(Prefs.size(this) * 100)));
+        String icon = Prefs.icon(this);
+        iconStatus.setText("Launcher icon: " + iconName(icon)
+                + ". Tap one to switch (the home screen may reload for a moment).");
+        for (int i = 0; i < iconBtns.length; i++) {
+            boolean on = IconSet.IDS[i].equals(icon);
+            iconBtns[i].setAlpha(on ? 1f : 0.55f);
+            iconBtns[i].setSelected(on);
+            iconBtns[i].setBackgroundColor(on ? 0xFFC4001A : 0x00000000);
+        }
         startBtn.setText(OverlayService.running ? "Hide Lillith" : "Start Lillith");
         startBtn.setEnabled(overlay && !busy);
+    }
+
+    /** A row of the launcher icons ({@link IconSet}); a tap switches the icon. */
+    private View iconPicker(float dp) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        iconBtns = new ImageButton[IconSet.IDS.length];
+        int size = (int) (64 * dp), m = (int) (4 * dp);
+        for (int i = 0; i < IconSet.IDS.length; i++) {
+            final String id = IconSet.IDS[i];
+            ImageButton b = new ImageButton(this);
+            int res = iconRes(id);
+            if (res != 0) b.setImageResource(res);
+            b.setScaleType(ImageButton.ScaleType.FIT_CENTER);
+            b.setPadding(m, m, m, m);
+            b.setContentDescription(IconSet.NAMES[i]);
+            b.setOnClickListener(v -> setIcon(id));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+            lp.setMargins(m, m, m, m);
+            row.addView(b, lp);
+            iconBtns[i] = b;
+        }
+        HorizontalScrollView hs = new HorizontalScrollView(this);
+        hs.addView(row);
+        return hs;
+    }
+
+    private int iconRes(String id) {
+        return getResources().getIdentifier(IconSet.mipmap(id), "mipmap", getPackageName());
+    }
+
+    private static String iconName(String id) {
+        for (int i = 0; i < IconSet.IDS.length; i++) {
+            if (IconSet.IDS[i].equals(id)) return IconSet.NAMES[i];
+        }
+        return id;
+    }
+
+    /**
+     * Makes {@code id} the launcher icon: enables its activity-alias, then
+     * disables the others (so there is always one launcher entry). The
+     * launcher may refresh (briefly restart) to show it.
+     */
+    private void setIcon(String id) {
+        if (id.equals(Prefs.icon(this))) return;
+        PackageManager pm = getPackageManager();
+        String pkg = SetupActivity.class.getPackage().getName();
+        try {
+            pm.setComponentEnabledSetting(new ComponentName(getPackageName(), IconSet.alias(pkg, id)),
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP);
+            for (String other : IconSet.IDS) {
+                if (other.equals(id)) continue;
+                pm.setComponentEnabledSetting(new ComponentName(getPackageName(), IconSet.alias(pkg, other)),
+                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+            }
+            Prefs.get(this).edit().putString(Prefs.KEY_ICON, id).apply();
+        } catch (RuntimeException e) {
+            iconStatus.setText("Could not switch the icon: " + e.getMessage());
+            return;
+        }
+        refresh();
+    }
+
+    /** The launcher can pin shortcuts (ShortcutManager, API 26+, launcher-dependent). */
+    private boolean canPinShortcut() {
+        try {
+            ShortcutManager sm = getSystemService(ShortcutManager.class);
+            return sm != null && sm.isRequestPinShortcutSupported();
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** Asks the launcher to pin a "Lillith" home-screen shortcut (the system shows its own confirm dialog). */
+    private void requestPinShortcut() {
+        if (!canPinShortcut()) return;
+        try {
+            Intent open = new Intent(this, SetupActivity.class).setAction(Intent.ACTION_MAIN);
+            ShortcutInfo info = new ShortcutInfo.Builder(this, "lillith_home")
+                    .setShortLabel("Lillith")
+                    .setLongLabel("Lillith setup")
+                    .setIcon(Icon.createWithResource(this, pinIconRes()))
+                    .setIntent(open)
+                    .build();
+            getSystemService(ShortcutManager.class).requestPinShortcut(info, null);
+        } catch (RuntimeException e) {
+            // Launcher refused (or no foreground); the app-drawer icon still works.
+        }
+    }
+
+    /** The chosen launcher icon (falls back to the app icon). */
+    private int pinIconRes() {
+        int res = iconRes(Prefs.icon(this));
+        return res != 0 ? res : getApplicationInfo().icon;
+    }
+
+    /** First run only: offer the home-screen shortcut once after she first starts. */
+    private void offerPinShortcutOnce() {
+        if (Prefs.get(this).getBoolean(Prefs.KEY_PIN_OFFERED, false)) return;
+        Prefs.get(this).edit().putBoolean(Prefs.KEY_PIN_OFFERED, true).apply();
+        requestPinShortcut();
     }
 
     private void toggle() {
@@ -183,6 +312,7 @@ public final class SetupActivity extends Activity {
                     Prefs.get(this).edit().putBoolean(Prefs.KEY_SETUP_DONE, true).apply();
                     startForegroundService(new Intent(this, OverlayService.class));
                     OverlayService.running = true;
+                    offerPinShortcutOnce();
                 }
                 refresh();
             });

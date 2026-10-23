@@ -8,10 +8,14 @@ Windows 10 or 11, 64-bit. No admin rights needed.
    yet, so SmartScreen may say "Windows protected your PC". Click
    **More info ▸ Run anyway**.
 2. Pick the options you want:
-   - **Desktop shortcut** (off by default).
+   - **Desktop shortcut** (on by default; untick it if you don't want one).
    - **Start Lillith when I sign in** (off by default). This puts a
      shortcut in your Startup folder.
-3. The default install folder is `%LOCALAPPDATA%\Programs\Lillith`.
+3. **App icon**: pick one of the 15 icons for the shortcuts (or keep the
+   current one; new installs get *Phantomcore Red*). Change it later in
+   Lillith Settings ▸ **Icon** (or right-click her ▸ **Icon…**). The icon
+   inside `lillith.exe` itself (taskbar, Alt-Tab) stays Phantomcore Red.
+4. The default install folder is `%LOCALAPPDATA%\Programs\Lillith`.
 
 Start menu ▸ **Lillith** gets three shortcuts: *Lillith*, *Lillith Settings*
 and *Uninstall Lillith*.
@@ -57,7 +61,7 @@ When chat is set up, Lillith starts llama-server herself (hidden, on
   down.
 - Clicks on the empty space around her go through to the window
   underneath.
-- **Right-click** her for the menu: modes, chat, settings, quit.
+- **Right-click** her for the menu: modes, chat, settings, icon, quit.
 - **Voice:** with `[voice] engine = "auto"` (the default) she speaks
   with Windows' built-in offline voices (SAPI). Use `engine = "none"` or
   `enabled = false` to keep her quiet.

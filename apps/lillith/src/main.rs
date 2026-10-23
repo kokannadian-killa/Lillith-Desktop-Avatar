@@ -58,7 +58,8 @@ struct Cli {
     #[arg(long)]
     baked_jiggle: bool,
     /// manifest.toml of the animation set (default: $LILLITH_MANIFEST,
-    /// ./assets/generated/manifest.toml, ~/.local/share/lillith/generated/manifest.toml).
+    /// ./assets/generated/manifest.toml, ~/.local/share/lillith/generated/manifest.toml,
+    /// then $XDG_DATA_DIRS/lillith/generated/manifest.toml).
     #[arg(long)]
     manifest: Option<PathBuf>,
     /// Config file (default: ~/.config/lillith/config.toml).
@@ -166,6 +167,22 @@ enum Cmd {
         /// Context window for llama-server `-c`.
         #[arg(long)]
         ctx_size: Option<u32>,
+    },
+    /// Choose Lillith's app icon: saves `icon = "<id>"` to config.toml and
+    /// applies it (Linux: menu entry + desktop shortcut theme icon;
+    /// Windows: Start-menu / Desktop shortcuts). No ID: show the current one.
+    Icon {
+        /// Icon id (see `--list`), e.g. phantomcore-red, classic.
+        id: Option<String>,
+        /// List the icons.
+        #[arg(long)]
+        list: bool,
+        /// Only save to config.toml; don't touch the desktop.
+        #[arg(long)]
+        no_apply: bool,
+        /// Apply the configured icon again without changing it.
+        #[arg(long, conflicts_with = "id")]
+        reapply: bool,
     },
     /// The click-to-chat bubble window (started by the overlay; prints
     /// chat events as JSON lines on stdout).
@@ -348,7 +365,71 @@ async fn main() -> Result<()> {
             tracing::info!("{msg}");
             println!("{msg}");
         }
+        Some(Cmd::Icon {
+            ref id,
+            list,
+            no_apply,
+            reapply,
+        }) => icon_cmd(&cli, id.as_deref(), list, no_apply, reapply)?,
         None => run_overlay(&cli, rules.rules.len()).await?,
+    }
+    Ok(())
+}
+
+/// `lillith icon`.
+fn icon_cmd(cli: &Cli, id: Option<&str>, list: bool, no_apply: bool, reapply: bool) -> Result<()> {
+    use lillith_core::icons;
+    let (cfg, path) = load_config(cli);
+    let current = cfg.icon_info();
+    if list {
+        for i in icons::all() {
+            let mark = if i.id == current.id { "*" } else { " " };
+            let def = if i.id == icons::DEFAULT_ICON {
+                " (default)"
+            } else {
+                ""
+            };
+            println!("{mark} {:<22} {}{def}", i.id, i.name);
+        }
+        return Ok(());
+    }
+    let chosen = match id {
+        Some(id) => icons::find(id).ok_or_else(|| {
+            anyhow::anyhow!("unknown icon {id:?}; `lillith icon --list` shows them")
+        })?,
+        None if reapply => current,
+        None => {
+            println!("{} ({})", current.id, current.name);
+            return Ok(());
+        }
+    };
+    if id.is_some() {
+        let path = path
+            .or_else(Config::default_path)
+            .ok_or_else(|| anyhow::anyhow!("no config path (set --config or $HOME)"))?;
+        if !path.exists() {
+            // Same commented template as `lillith setup` / Settings.
+            if let Some(d) = path.parent() {
+                std::fs::create_dir_all(d)?;
+            }
+            std::fs::write(&path, lillith_core::menu::settings_template())?;
+        }
+        lillith_core::config::save_icon(&path, &chosen.id)?;
+        println!("icon = \"{}\" saved to {}", chosen.id, path.display());
+    }
+    if no_apply {
+        return Ok(());
+    }
+    let root = icons::icons_dir()
+        .ok_or_else(|| anyhow::anyhow!("icon files not found (set LILLITH_ICONS_DIR)"))?;
+    let a = icons::apply(&root, &chosen.id).map_err(|e| anyhow::anyhow!(e))?;
+    println!(
+        "{} applied ({} file(s) updated)",
+        chosen.name,
+        a.changed.len()
+    );
+    for n in &a.notes {
+        println!("  {n}");
     }
     Ok(())
 }

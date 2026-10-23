@@ -4,6 +4,11 @@ This guide covers building Lillith from source, running her, configuring her,
 and fixing the usual overlay problems. For what she does, see the
 [README](README.md).
 
+> **Just want to install?** Use the per-platform installers:
+> [`linux/`](linux/README.md) (Arch/Garuda, one command: `./linux/install.sh`),
+> [`windows/`](windows/README.md) and [`android/`](android/INSTALL-android.md).
+> This guide is for building and running by hand.
+
 - [Tested environment](#tested-environment)
 - [1. Prerequisites](#1-prerequisites)
 - [2. Clone and build](#2-clone-and-build)
@@ -122,6 +127,8 @@ for it in this order:
 2. `$LILLITH_MANIFEST`
 3. `./assets/generated/manifest.toml`
 4. `~/.local/share/lillith/generated/manifest.toml`
+5. `<dir>/lillith/generated/manifest.toml` for each dir in `$XDG_DATA_DIRS`
+   (default `/usr/local/share:/usr/share`; used by the `linux/PKGBUILD` package)
 
 If you only have a `manifest.json` from the image pipeline, convert it first:
 
@@ -209,6 +216,18 @@ lillith preview --all --out preview        # contact sheet for every clip
 lillith panel                              # egui window, Poses tab = clip browser
 lillith settings                           # interim window: avatar import/anchors, jiggle/speed/chat (right-click ▸ Settings… opens lillith-settings)
 lillith settings --section avatar --import ~/Pictures/me.png
+lillith icon --list                        # the 15 app icons (* = current)
+lillith icon glitch                        # save icon = "glitch" + update the menu entry / shortcuts
+```
+
+The app icon can also be picked in **Settings ▸ Icon** (right-click her ▸
+**Icon…**). On Linux it rewrites `~/.local/share/icons/hicolor/*/apps/lillith.png`
+(the `Icon=lillith` theme icon) and refreshes the icon caches; on Windows it
+re-points the Start-menu / Desktop shortcuts at `icons\<id>.ico` (the icon
+inside `lillith.exe` stays Phantomcore Red); on Android the setup screen has
+its own picker.
+
+```fish
 ```
 
 Right-click her for the menu (poses, chat, avatar, resize, minimize,
@@ -233,6 +252,7 @@ baked_jiggle = false   # true: use the baked _jiggle clip variants when present
 always_on_top = true
 click_through = false  # true: only her head takes clicks
 autostart = false      # true: writes ~/.config/autostart/lillith.desktop
+icon = "phantomcore-red"  # app icon (menu entry, desktop/Start-menu shortcuts); ids: `lillith icon --list`
 muted = false
 
 [anim]

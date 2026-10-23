@@ -1,0 +1,76 @@
+# Maintainer: Ko Kannadian
+#
+# System-wide package from this local checkout (no download of the sources):
+#     cd linux && makepkg -si
+# For a per-user install without root use ../linux/install.sh instead.
+# Nothing here downloads a model; llama.cpp is an optional dependency.
+# shellcheck shell=bash disable=SC2034,SC2154
+
+pkgname=lillith
+pkgver=0.0.1
+pkgrel=1
+pkgdesc="Lillith: animated desktop companion for KDE Plasma 6 (local-only LLM chat)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/kokannadian-killa/Lillith-Desktop-Avatar"
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'libxkbcommon' 'wayland' 'dbus' 'libpulse' 'systemd-libs' 'alsa-lib')
+makedepends=('rust' 'pkgconf' 'python')
+optdepends=(
+  'llama.cpp: local chat model server (llama-server; the GGUF stays on your disk)'
+  'kwin: window perching via the bundled KWin script'
+  'espeak-ng: spoken replies when Piper is not installed'
+)
+options=('!lto' '!debug')
+install=lillith.install
+source=()
+sha256sums=()
+
+# The checkout this PKGBUILD lives in (linux/..).
+_repo="$(cd "$startdir/.." && pwd)"
+_target="${CARGO_TARGET_DIR:-$_repo/target}"
+
+pkgver() {
+  sed -n 's/^version *= *"\(.*\)"/\1/p' "$_repo/Cargo.toml" | head -n1
+}
+
+prepare() {
+  # Fail early on a GitHub main.zip whose art is Git LFS placeholders.
+  python3 "$_repo/linux/stage-assets.py" --check "$_repo/assets/generated" || {
+    echo "The animation set has no real images (Git LFS). See linux/README.md." >&2
+    return 1
+  }
+}
+
+build() {
+  cd "$_repo" || return 1
+  export CARGO_TARGET_DIR="$_target"
+  cargo build --release --locked -p lillith -p lillith-settings-gui
+}
+
+package() {
+  cd "$_repo" || return 1
+  install -Dm755 "$_target/release/lillith" "$pkgdir/usr/bin/lillith"
+  install -Dm755 "$_target/release/lillith-settings" "$pkgdir/usr/bin/lillith-settings"
+  # Found through $XDG_DATA_DIRS (/usr/share/lillith/generated/manifest.toml).
+  python3 linux/stage-assets.py assets/generated "$pkgdir/usr/share/lillith/generated"
+  install -Dm644 linux/lillith.desktop "$pkgdir/usr/share/applications/lillith.desktop"
+  # The icon set (found through $XDG_DATA_DIRS: /usr/share/lillith/icons);
+  # hicolor gets the default. A user's pick (Settings > Icon, `lillith icon`)
+  # goes to ~/.local/share/icons/hicolor, which wins over /usr/share.
+  local s id def
+  def="$(sed -n 's/^default = "\(.*\)"$/\1/p' branding/icons.toml)"
+  while read -r id; do
+    for s in 16 24 32 48 64 128 256; do
+      install -Dm644 "branding/icons/$id/lillith-$s.png" "$pkgdir/usr/share/lillith/icons/$id/lillith-$s.png"
+    done
+  done < <(sed -n 's/^id = "\(.*\)"$/\1/p' branding/icons.toml)
+  for s in 16 24 32 48 64 128 256; do
+    install -Dm644 "branding/icons/$def/lillith-$s.png" "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/lillith.png"
+  done
+  install -Dm644 kwin/lillith-bridge/metadata.json "$pkgdir/usr/share/kwin/scripts/lillith-bridge/metadata.json"
+  install -Dm644 kwin/lillith-bridge/contents/code/main.js "$pkgdir/usr/share/kwin/scripts/lillith-bridge/contents/code/main.js"
+  install -Dm644 assets/config.example.toml "$pkgdir/usr/share/doc/lillith/config.example.toml"
+  install -Dm644 linux/README.md "$pkgdir/usr/share/doc/lillith/README-linux.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/lillith/LICENSE"
+  install -Dm644 LICENSE-ASSETS.md "$pkgdir/usr/share/licenses/lillith/LICENSE-ASSETS.md"
+}

@@ -613,7 +613,9 @@ impl Manifest {
 /// Finds the generated set's `manifest.toml`: `$LILLITH_MANIFEST`, then
 /// `./assets/generated/manifest.toml`, then
 /// `$XDG_DATA_HOME/lillith/generated/manifest.toml` (default
-/// `~/.local/share/...`). Returns the first that exists.
+/// `~/.local/share/...`), then (Unix) `<dir>/lillith/generated/manifest.toml`
+/// for each `$XDG_DATA_DIRS` entry (default `/usr/local/share:/usr/share`).
+/// Returns the first that exists.
 pub fn default_manifest_path() -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Some(p) = std::env::var_os("LILLITH_MANIFEST") {
@@ -645,7 +647,35 @@ pub fn default_manifest_path() -> Option<PathBuf> {
     if let Some(d) = data {
         candidates.push(d.join("lillith/generated/manifest.toml"));
     }
+    // System-wide install (the Arch PKGBUILD): `$XDG_DATA_DIRS`, default
+    // `/usr/local/share:/usr/share`.
+    #[cfg(unix)]
+    candidates.extend(
+        system_data_dirs(std::env::var_os("XDG_DATA_DIRS"))
+            .into_iter()
+            .map(|d| d.join("lillith/generated/manifest.toml")),
+    );
     candidates.into_iter().find(|p| p.is_file())
+}
+
+/// `$XDG_DATA_DIRS` as absolute paths (empty or unset: the XDG default
+/// `/usr/local/share:/usr/share`).
+#[cfg(unix)]
+fn system_data_dirs(var: Option<std::ffi::OsString>) -> Vec<PathBuf> {
+    let dirs: Vec<PathBuf> = var
+        .map(|v| std::env::split_paths(&v).collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| p.is_absolute())
+        .collect();
+    if dirs.is_empty() {
+        vec![
+            PathBuf::from("/usr/local/share"),
+            PathBuf::from("/usr/share"),
+        ]
+    } else {
+        dirs
+    }
 }
 
 /// Loads one atlas page as RGBA8.
@@ -656,6 +686,24 @@ pub fn load_page(path: &Path) -> Result<image::RgbaImage, AtlasError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn system_data_dirs_default_and_override() {
+        let def = system_data_dirs(None);
+        assert_eq!(
+            def,
+            vec![
+                PathBuf::from("/usr/local/share"),
+                PathBuf::from("/usr/share")
+            ]
+        );
+        assert_eq!(system_data_dirs(Some("".into())), def);
+        assert_eq!(
+            system_data_dirs(Some("/opt/share:relative:/usr/share".into())),
+            vec![PathBuf::from("/opt/share"), PathBuf::from("/usr/share")]
+        );
+    }
 
     #[test]
     fn parses_manifest() {
