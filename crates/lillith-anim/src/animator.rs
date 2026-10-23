@@ -1176,6 +1176,43 @@ impl Animator {
         self.finish_stand(None);
     }
 
+    /// Switches the base to the seated clip `name` and plays the manifest's
+    /// `<base> -> name` blend over it when there is one (and nothing else is
+    /// playing). Returns the blend's length in seconds.
+    pub fn sit_down(&mut self, name: &str) -> Result<Option<f32>, AnimError> {
+        let from = self.base.clone();
+        self.set_base(name, false)?;
+        if self.overlay.is_some() {
+            return Ok(None);
+        }
+        let Some(b) = self.blend_between(&from, name) else {
+            return Ok(None);
+        };
+        let dur = ClipPlayer::for_clip(&self.manifest.clips[&b]).duration_s();
+        self.start_overlay(b, false, OverlayKind::Transition { remaining_s: dur });
+        Ok(Some(dur))
+    }
+
+    /// [`Self::stand`] from a seated (non-walk) base through its
+    /// `<base> -> idle` blend when the manifest has one. Returns the blend's
+    /// length in seconds (`None`: a plain [`Self::stand`]).
+    pub fn stand_blended(&mut self) -> Option<f32> {
+        if self.stopping.is_none()
+            && self.base != self.idle_base
+            && self.overlay.is_none()
+            && footfall_for(&self.base).is_none()
+        {
+            let (base, idle) = (self.base.clone(), self.idle_base.clone());
+            if let Some(b) = self.blend_between(&base, &idle) {
+                let dur = ClipPlayer::for_clip(&self.manifest.clips[&b]).duration_s();
+                self.finish_stand(Some(b));
+                return Some(dur);
+            }
+        }
+        self.stand();
+        None
+    }
+
     /// The actual switch to idle, optionally through `blend`.
     fn finish_stand(&mut self, blend: Option<String>) {
         self.stopping = None;

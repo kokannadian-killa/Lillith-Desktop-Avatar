@@ -139,13 +139,60 @@ impl Fall {
     }
 }
 
-/// A sit on the window edge in progress.
+/// A vertical shift (px) spread over `left_s` seconds, e.g. lowering her
+/// window while a sit-down blend plays so the seat meets the edge as the
+/// blend ends.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Sit {
+pub struct Ease {
+    /// Px still to move.
+    pub left_px: i32,
     /// Seconds left.
     pub left_s: f32,
-    /// How far (px) the window was lowered to put her seat on the edge.
+}
+
+impl Ease {
+    pub fn new(px: i32, secs: f32) -> Self {
+        Self {
+            left_px: px,
+            left_s: secs.max(0.0),
+        }
+    }
+
+    /// Px to move this tick (linear); the last step takes the rest.
+    pub fn step(&mut self, dt: f32) -> i32 {
+        let d = if self.left_s <= dt || self.left_s <= 0.0 {
+            self.left_px
+        } else {
+            (self.left_px as f32 * dt / self.left_s).round() as i32
+        };
+        self.left_px -= d;
+        self.left_s = (self.left_s - dt).max(0.0);
+        d
+    }
+
+    pub fn done(&self) -> bool {
+        self.left_px == 0
+    }
+}
+
+/// A sit on the window edge in progress.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Sit {
+    /// The seated base clip (one of the controller's sit clips).
+    pub clip: String,
+    /// Seconds left.
+    pub left_s: f32,
+    /// How far (px) the window goes down to put her seat on the edge.
     pub drop_px: i32,
+    /// Part of `drop_px` not applied yet (a sit-down blend is playing).
+    pub sink: Option<Ease>,
+}
+
+impl Sit {
+    /// Px the window is lowered right now.
+    pub fn applied_px(&self) -> i32 {
+        self.drop_px - self.sink.map_or(0, |e| e.left_px)
+    }
 }
 
 /// Standing (or sitting) on top of a window.
@@ -157,6 +204,15 @@ pub struct Perch {
     pub sit: Option<Sit>,
     /// Seconds of calm until the next sit.
     pub next_sit_s: f32,
+    /// Raising her back up while a stand-up blend plays.
+    pub rise: Option<Ease>,
+}
+
+impl Perch {
+    /// Px her window is below standing height (a sit, or a rise in progress).
+    pub fn lowered_px(&self) -> i32 {
+        self.sit.as_ref().map_or(0, Sit::applied_px) + self.rise.map_or(0, |e| e.left_px)
+    }
 }
 
 /// What happened to the window she stands on.
@@ -268,7 +324,13 @@ impl Gravity {
             rect,
             sit: None,
             next_sit_s,
+            rise: None,
         }
+    }
+
+    /// Index of the sit clip to use next, `None` without any (`n == 0`).
+    pub fn pick_sit(&mut self, n: usize) -> Option<usize> {
+        (n > 0).then(|| if n == 1 { 0 } else { self.rng.index(n) })
     }
 
     pub fn sit_pause(&mut self) -> f32 {
@@ -394,6 +456,7 @@ mod tests {
             rect: r,
             sit: None,
             next_sit_s: 1.0,
+            rise: None,
         };
         assert_eq!(check_perch(&desk(&[("a", r)]), &p, 500), PerchCheck::Ok);
         let wider = Rect::new(100, 400, 900, 500);
@@ -455,5 +518,45 @@ mod tests {
         assert_eq!(g.landing(&d, 300, 100, 1036), Landing::Floor { y: 1036 });
         let s = g.sit_pause();
         assert!((8.0..=20.0).contains(&s));
+    }
+
+    #[test]
+    fn eases_spread_the_shift_and_land_exactly() {
+        let mut e = Ease::new(100, 1.0);
+        let steps: Vec<i32> = (0..4).map(|_| e.step(0.25)).collect();
+        assert_eq!(steps.iter().sum::<i32>(), 100);
+        assert!(steps.iter().all(|&d| d > 0 && d <= 34), "{steps:?}");
+        assert!(e.done());
+        assert_eq!(e.step(0.25), 0);
+        // No time left (or a zero-length blend): all at once.
+        assert_eq!(Ease::new(36, 0.0).step(1.0 / 60.0), 36);
+        // A sit that is still sinking counts only what was applied.
+        let sit = Sit {
+            clip: "sit_swing".into(),
+            left_s: 5.0,
+            drop_px: 80,
+            sink: Some(Ease::new(30, 0.5)),
+        };
+        assert_eq!(sit.applied_px(), 50);
+        let p = Perch {
+            id: "a".into(),
+            rect: Rect::new(0, 0, 10, 10),
+            sit: Some(sit),
+            next_sit_s: 1.0,
+            rise: Some(Ease::new(7, 0.2)),
+        };
+        assert_eq!(p.lowered_px(), 57);
+    }
+
+    #[test]
+    fn picks_a_sit_clip_only_when_there_is_one() {
+        let mut g = Gravity::new(GravityConfig::default(), 0, 7);
+        assert_eq!(g.pick_sit(0), None);
+        assert_eq!(g.pick_sit(1), Some(0));
+        let mut seen = [false; 3];
+        for _ in 0..64 {
+            seen[g.pick_sit(3).unwrap()] = true;
+        }
+        assert_eq!(seen, [true; 3]);
     }
 }
