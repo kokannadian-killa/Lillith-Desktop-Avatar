@@ -895,7 +895,7 @@ fn warp_point(
         dy -= gh * p.talk;
     }
     // Breathing: tiny vertical scale about the feet (all images).
-    let sy = 1.0 + p.squash * -1.0 + 0.006 * p.breath;
+    let sy = 1.0 - p.squash + 0.006 * p.breath;
     let sx = 1.0 + p.squash * 0.6;
     let mut cx = ANCHOR.0 as f32 + (x - ANCHOR.0 as f32) * sx + dx;
     let mut cy = base - (base - y) * sy + dy;
