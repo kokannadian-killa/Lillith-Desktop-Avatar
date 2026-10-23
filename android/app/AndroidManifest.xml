@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lillith for Android. Permissions are deliberately minimal:
+  - SYSTEM_ALERT_WINDOW: float over other apps (granted by the user in setup).
+  - FOREGROUND_SERVICE (+ SPECIAL_USE on Android 14): keep the overlay alive.
+  - POST_NOTIFICATIONS: the required "Lillith is on screen" notification.
+  NO INTERNET permission: the chat model is llama.cpp in-process (JNI), not a
+  server, so not even a loopback socket is needed. Without INTERNET the OS
+  refuses every socket, which enforces the "fully local" rule.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.kokannadian.lillith"
+    android:versionCode="1"
+    android:versionName="0.0.1">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:label="Lillith"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:extractNativeLibs="true"
+        android:largeHeap="true"
+        android:theme="@android:style/Theme.DeviceDefault">
+
+        <activity
+            android:name=".SetupActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ChatActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:label="Chat with Lily" />
+
+        <activity
+            android:name=".MenuActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog.NoActionBar" />
+
+        <service
+            android:name=".OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Desktop-pet style avatar overlay drawn over other apps" />
+        </service>
+    </application>
+</manifest>
