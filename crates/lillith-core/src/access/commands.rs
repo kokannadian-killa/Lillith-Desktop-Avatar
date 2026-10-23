@@ -530,6 +530,19 @@ fn run_child_ungated(
         c.creation_flags(super::winshell::CREATE_NO_WINDOW);
     }
     let mut child = c.spawn()?;
+    // Windows: put the child in a Job with KILL_ON_JOB_CLOSE so safeword /
+    // timeout tears down the whole tree (cmd → nested processes) at once.
+    #[cfg(windows)]
+    let job = match super::winjob::Job::new_kill_on_close() {
+        Ok(j) => {
+            let _ = j.assign_pid(child.id());
+            Some(j)
+        }
+        Err(e) => {
+            tracing::warn!("could not create kill-job for command child: {e}");
+            None
+        }
+    };
     let mut so = child.stdout.take();
     let mut se = child.stderr.take();
     let t_out = std::thread::spawn(move || {
@@ -561,6 +574,10 @@ fn run_child_ungated(
         };
         if let Some(w) = why {
             stop = Some(w);
+            #[cfg(windows)]
+            if let Some(ref j) = job {
+                j.terminate();
+            }
             kill_tree(&mut child);
             break None;
         }
