@@ -9,7 +9,7 @@ S=${LILLITH_SRC_VIDEO:-/workspace/lillith/assets/source/video}
 mkdir -p /tmp/vid
 c=$1; shift
 for v in "$@"; do f=${c}_v3_$v; mkdir -p $S/$c; cp -n $A/$f.mp4 $S/$c/ ; d=/tmp/lillith_frames/$f; mkdir -p $d
-  [ -f $d/f_001.png ] || ffmpeg -v error -y -i $S/$c/$f.mp4 $d/f_%03d.png
-  ffmpeg -v error -y -i $S/$c/$f.mp4 -vf "fps=4,scale=200:-1,tile=8x2" -frames:v 1 /tmp/vid/${f}_c.png
+  [ -f $d/f_001.png ] || ffmpeg -nostdin -v error -y -protocol_whitelist file,pipe -i $S/$c/$f.mp4 $d/f_%03d.png
+  ffmpeg -nostdin -v error -y -protocol_whitelist file,pipe -i $S/$c/$f.mp4 -vf "fps=4,scale=200:-1,tile=8x2" -frames:v 1 /tmp/vid/${f}_c.png
   python3 "$HERE/find_loops.py" $d ${MINL:-12} ${MAXL:-48} 3
 done

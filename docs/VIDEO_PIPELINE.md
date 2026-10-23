@@ -100,3 +100,47 @@ and not committed. Examples: a deep bow, or a turn that shows her back.
 - `twirl` shows a brief back view mid-spin, which is natural for the move.
 - `pose_clutch_head` trips the horn-hue QA check because of its baked dizzy swirl. This is expected.
 - The crop corners of `event_screenshot` reach y=395 by design.
+
+## MP4 pose source
+
+Every clip in `assets/generated/` has a `<clip>/<clip>.mp4` next to its sheet. The manifest entry's
+`video` field points at it, and the engine plays the MP4. The JSON keeps all timing: `fps`,
+`loop`/`once` and `frame_durations_ms` holds. The MP4 holds exactly one frame per sheet cell, so the
+PNG sheet stays the fallback and the bounds-check reference.
+
+- **Format** (`alpha_side_by_side`): H.264 High, 4:2:0, full range BT.709, `2W x H` (800×400).
+  - The left half is straight (un-premultiplied) colour, black where alpha = 0.
+  - The right half is alpha as grey.
+  - Encoding uses crf 16, `-preset veryslow -tune animation`, no B-frames and one GOP per clip, with
+    `+faststart` and bitexact output.
+  - The decoder takes alpha from the green channel, snaps ≤3 → 0 and ≥251 → 255, then premultiplies.
+  - Measured over 141 clips, the average edge error is 2.35/255 (worst 3.57). Halo is
+    +0.06 on a dark backdrop and −0.18 on a light one, i.e. no visible fringe. Alpha differs from
+    the PNG by 0.08/255 on average.
+- **Engine** (`lillith-anim::video`, used by `render::PageCache`):
+  - ffmpeg runs as a local child process (`-protocol_whitelist file,pipe`; the MP4 bytes go in
+    through stdin). A standby process is pre-spawned so a clip change doesn't wait for ffmpeg startup.
+  - Frames stream in as they decode. The overlay's `Stage` never blocks for more than 30 ms: it keeps
+    the previous frame until the next one is ready, and it prefetches a blend's target clip.
+  - Decoded clips sit in an LRU cache with a RAM budget: `LILLITH_VIDEO_CACHE_MB`, default 192 MB.
+    One 400×400 frame is 625 KiB, so a 36-frame pose is about 22 MB.
+  - `LILLITH_VIDEO=0` (or `off`/`png`) forces the PNG sheets. `LILLITH_FFMPEG` sets the binary path.
+  - If ffmpeg is missing, or a clip fails to decode, the engine logs it once and falls back to the
+    sheet for that clip.
+  - `log_stats` on exit reports decodes, resident clips/MB, evictions, failures and renders that
+    waited on a frame.
+- **Import check:** `import-manifest --check` probes every MP4 with ffprobe (h264, `yuv(j)420p`,
+  `2W x H`, frame count = clip frames). It then decodes the MP4 the way the engine does and compares
+  the alpha of every frame with the PNG cell (mean absolute difference ≤ 3/255), which catches stale,
+  misordered or alpha-less files. Use `--no-video-check` on a box without ffmpeg.
+- **Packing:**
+  - `tools/video-pipeline/pack_mp4.py <clip_dir>... [--crf 16] [--manifest assets/generated/manifest.json]`
+    re-encodes from the sheet and prints the quality metrics.
+  - It also writes a `video` block (metrics, size) into `<clip>.json` and sets the entry's `video`.
+  - Unchanged clips are skipped unless you pass `--force`.
+- **New pose in one command:** `tools/video-pipeline/new_pose.py`. See `tools/video-pipeline/README_MP4.md`.
+- **Bold allure poses:** 8 poses come from `generated_v2` (approved), each 36 frames, 12 fps, loop, and
+  are listed in `catalog.rs` *Flirty / Allure*: `body_roll_slow`, `arch_back_over_shoulder`,
+  `kneel_hands_on_thighs`, `wall_lean_invisible`, `blow_kiss_hip_pop`, `hair_lift_stretch`,
+  `slow_turn_spin_tease` and `bend_forward_wink`. They ship as sheet + JSON + preview + MP4, without a
+  `frames/` dir.

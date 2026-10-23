@@ -16,6 +16,12 @@ through the mood pose cycle (`lillith_core::state::cycle_variants`). Baked
 mapped by name: with config `baked_jiggle = true` (or `--baked-jiggle`) the
 animator draws the variant in place of the mapped clean clip.
 
+**Pixel source.** Mapping is by clip name only. Every clip in
+`assets/generated/` (145, including the 8 bold allure poses) has an
+alpha-packed MP4 (`video = "<clip>/<clip>.mp4"`), and the engine plays that
+first. The PNG sheet is the fallback when ffmpeg is missing, `LILLITH_VIDEO=0`
+is set, or a decode fails. See `docs/VIDEO_PIPELINE.md` → *MP4 pose source*.
+
 The mapping lives in `assets/rules.toml` under `[rule_clips]` (the older name
 `[event_clips]` is still accepted). It is resolved by
 `lillith_core::rules::RuleSet::clip_for(event)`; `event_clip()` is kept as an
