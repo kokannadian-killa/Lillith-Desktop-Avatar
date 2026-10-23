@@ -34,7 +34,7 @@ wayland-client = { workspace = true, optional = true }
 winit = { workspace = true, optional = true }
 softbuffer = { workspace = true, optional = true }
 # Input shape (click-through) + pointer queries on the winit window.
-x11rb = { workspace = true, optional = true, features = ["shape"] }
+x11rb = { workspace = true, optional = true, features = ["shape", "xfixes"] }
 cosmic-text = { workspace = true, optional = true }
 ashpd = { workspace = true, optional = true }
 
