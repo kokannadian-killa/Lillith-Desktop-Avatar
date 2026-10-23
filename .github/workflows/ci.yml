@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/**']
   pull_request:
 
 env:
@@ -14,7 +14,13 @@ jobs:
     name: fmt + clippy + test (default features)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libwayland-dev libdbus-1-dev \
+            libpulse-dev libsystemd-dev libasound2-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.85"
@@ -31,7 +37,7 @@ jobs:
     name: clippy (all features, system libs)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install system libraries
         run: |
           sudo apt-get update
