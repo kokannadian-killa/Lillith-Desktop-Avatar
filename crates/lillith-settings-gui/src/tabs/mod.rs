@@ -39,6 +39,8 @@ pub struct Shared {
     pub goto_tab: Option<String>,
     /// Set by a tab to ask the app to save everything.
     pub want_save: bool,
+    /// Set when the active avatar changed: the chrome accent to switch to.
+    pub accent_changed: Option<lillith_theme::Accent>,
 }
 
 impl Shared {
@@ -144,6 +146,7 @@ pub(crate) mod tests {
             time: 0.0,
             goto_tab: None,
             want_save: false,
+            accent_changed: None,
         }
     }
 

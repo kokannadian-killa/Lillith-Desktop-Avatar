@@ -271,6 +271,7 @@ pub fn bubble_main(
     offline: bool,
     screenshot: Option<PathBuf>,
     demo: bool,
+    demo_contract: bool,
 ) -> Result<()> {
     let emit = stdout_emit();
     let opts = BubbleOptions {
@@ -282,6 +283,7 @@ pub fn bubble_main(
         emit,
         screenshot,
         demo,
+        demo_contract,
     };
     run_chat_bubble(opts).map_err(|e| anyhow::anyhow!("chat bubble: {e}"))
 }

@@ -220,6 +220,7 @@ mod tests {
             time: 0.0,
             goto_tab: None,
             want_save: false,
+            accent_changed: None,
         };
         (p, s)
     }

@@ -141,6 +141,7 @@ impl AvatarTab {
                 self.say(format!("could not save the choice: {e}"), pal::BLOOD_SHEEN);
                 return;
             }
+            shared.accent_changed = Some(st.accent(id.as_deref()));
         }
         self.selected = id.clone();
         self.say(
@@ -592,7 +593,7 @@ fn vessel_card(
         }
     }
     if on {
-        th::neon_line(p, &poly, pal::PINK, 1.4, 4.0, true);
+        th::neon_line(p, &poly, th::accent().base, 1.4, 4.0, true);
     } else {
         p.add(egui::Shape::closed_line(
             poly.iter().map(|q| pos2(q[0], q[1])).collect(),

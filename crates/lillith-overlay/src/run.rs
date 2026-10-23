@@ -207,6 +207,8 @@ pub struct Controller {
     pub gravity: Gravity,
     /// Window stack to use instead of the KWin bridge's (tests, sims).
     desktop_override: Option<Desktop>,
+    /// Chrome accent of the shown avatar (Lillith's magenta by default).
+    accent: lillith_theme::Accent,
 }
 
 impl Controller {
@@ -298,6 +300,7 @@ impl Controller {
                 opts.animator.seed,
             ),
             desktop_override: None,
+            accent: lillith_theme::Accent::LILLITH,
         }
         .with_click_through(opts.click_through)
     }
@@ -322,6 +325,11 @@ impl Controller {
         self.level.take()
     }
 
+    /// Chrome accent of the shown avatar.
+    pub fn accent(&self) -> lillith_theme::Accent {
+        self.accent
+    }
+
     /// Loads the avatar selected in `<config dir>/avatar.json`.
     pub fn load_selected_avatar(&mut self) {
         let sel = self.avatars.as_ref().and_then(|s| s.selection().selected);
@@ -341,6 +349,10 @@ impl Controller {
             _ => None,
         };
         tracing::info!(avatar = ?av.as_ref().map(|a| &a.meta.id), "avatar");
+        self.accent = av.as_ref().map(|a| a.accent()).unwrap_or_default();
+        if let Some(m) = self.menu.as_mut() {
+            m.set_accent(self.accent);
+        }
         self.stage.set_avatar(av);
         self.stage.set_avatar_pace(self.avatar_cfg.pace);
     }
@@ -1210,7 +1222,9 @@ impl Controller {
         let state = self.menu_state(page);
         self.menu_page = page;
         tracing::info!(?page, "right-click menu opened");
-        self.menu = Some(MenuPopup::new(state));
+        let mut menu = MenuPopup::new(state);
+        menu.set_accent(self.accent);
+        self.menu = Some(menu);
         self.menu_opened = true;
     }
 
@@ -1949,7 +1963,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         let row_y = |c: &Controller, pred: &dyn Fn(&crate::menu_popup::Row) -> bool| {
             let rows = c.menu().unwrap().rows();
             let i = rows.iter().position(pred).unwrap();
-            let top: u32 = crate::menu_popup::PAD
+            let top: u32 = crate::menu_popup::TOP
                 + rows[..i]
                     .iter()
                     .map(|r| match r {
@@ -2739,9 +2753,19 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
             st.extras.avatars.first().map(|a| a.0.as_str()),
             Some(id.as_str())
         );
+        assert_eq!(
+            c.accent(),
+            lillith_theme::Accent::LILLITH,
+            "Lillith default"
+        );
         c.menu_pick(MenuAction::Avatar(1));
         assert_eq!(c.stage.avatar_id(), Some(id.as_str()));
         assert!(c.render_hz() >= 60.0, "smoother redraw for avatars");
+        // The menu follows the avatar's (derived, pink-ish) accent.
+        assert_ne!(c.accent(), lillith_theme::Accent::LILLITH);
+        c.open_menu();
+        assert_eq!(c.menu().unwrap().accent(), c.accent());
+        c.close_menu();
         // Every tick re-renders (continuous motion), and consecutive
         // frames differ only a little (no jumps).
         c.tick(1.0 / 60.0).unwrap();
@@ -2774,6 +2798,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         );
         c.menu_pick(MenuAction::Avatar(0));
         assert_eq!(c.stage.avatar_id(), None);
+        assert_eq!(c.accent(), lillith_theme::Accent::LILLITH);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

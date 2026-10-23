@@ -2,9 +2,12 @@
 //! run small Rust / Python / fish projects — but entirely on-box and offline.
 //!
 //! Nothing here runs on its own. Each button *proposes* a
-//! [`PendingAction`] (scaffold / build / run); the action only executes after
-//! the Soul Contract **Yes** button, the same gate as `/contract yes` in
-//! chat. A **No** records a `DENY` in the audit log and discards it. Every
+//! [`PendingAction`] (scaffold / build / run) and raises the shared Soul
+//! Contract popup ([`lillith_theme::egui_contract`], the same one the chat
+//! bubble uses); the action only executes after its **Yes** (audited
+//! `CONFIRM`). **No** (or `Esc`) records a `DENY` in the audit log and
+//! discards it. While a build/run is in flight the popup's Yes is disabled
+//! (No still works). Every
 //! project directory is confined to the projects root
 //! ([`lillith_core::config::BuildConfig::resolved_projects_dir`], default
 //! `~/Projects/lillith-builds`) by [`lillith_core::build::resolve_project_dir`].
@@ -16,6 +19,7 @@ use egui::RichText;
 use lillith_core::build::{self, Action, Language};
 use lillith_core::config::BuildConfig;
 use lillith_core::soul_contract::{PendingAction, SoulContract};
+use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView};
 use lillith_theme::egui_theme::c32;
 use lillith_theme::palette as pal;
 use std::path::PathBuf;
@@ -313,27 +317,22 @@ impl SettingsTab for BuildTab {
             }
         });
 
-        if self.pending.is_some() {
-            let (summary, preview) = {
-                let p = self.pending.as_ref().unwrap();
-                (p.summary.clone(), p.preview.clone())
+        if let Some(p) = &self.pending {
+            let prompt = p.action.prompt().with_detail(p.preview.clone());
+            let view = ContractView {
+                title: prompt.title,
+                summary: &p.summary,
+                target: prompt.target.as_deref(),
+                detail: prompt.detail.as_deref(),
+                busy: self.busy(),
             };
-            chrome::section(ui, "SOUL CONTRACT", Some("Yes / No"), |ui| {
-                ui.label(RichText::new(&summary).color(c32(pal::TEXT)).size(14.0));
-                ui.add_space(2.0);
-                chrome::code_block(ui, &preview);
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    if chrome::blade_button(ui, "✓ Yes, run it", !self.busy()).clicked()
-                        && !self.busy()
-                    {
-                        self.confirm(ui.ctx());
-                    }
-                    if chrome::stone_button(ui, "✕ No").clicked() {
-                        self.deny();
-                    }
-                });
-            });
+            let choice = soul_contract_popup(ui.ctx(), egui::Id::new("build-soul-contract"), &view);
+            match choice {
+                // The popup disables Yes while busy; check again anyway.
+                Some(ContractChoice::Yes) if !self.busy() => self.confirm(ui.ctx()),
+                Some(ContractChoice::No) => self.deny(),
+                _ => {}
+            }
         }
 
         chrome::section(ui, "LOG", Some("local only"), |ui| {
@@ -412,5 +411,60 @@ mod tests {
         tab.deny();
         assert!(tab.pending.is_none());
         assert!(tab.log.contains("denied"), "{}", tab.log);
+    }
+
+    /// Draws the tab once (headless) with `events`.
+    fn frame(ctx: &egui::Context, tab: &mut BuildTab, s: &mut Shared, events: Vec<egui::Event>) {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1000.0, 700.0),
+            )),
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| tab.ui(ui, s));
+        });
+    }
+
+    #[test]
+    fn pending_raises_popup_and_escape_denies_with_audit() {
+        let mut s = shared();
+        let mut tab = BuildTab::new(&s);
+        let dir = std::env::temp_dir().join(format!("lillith-build-popup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let audit = dir.join("audit.log");
+        let _ = std::fs::remove_file(&audit);
+        tab.audit = Some(audit.clone());
+        tab.root_buf = dir.join("root").display().to_string();
+        tab.name = "proj".into();
+        tab.propose(Action::Run);
+        let ctx = egui::Context::default();
+        lillith_theme::egui_theme::install(&ctx);
+        for _ in 0..3 {
+            frame(&ctx, &mut tab, &mut s, vec![]);
+        }
+        // The popup is up and nothing has been decided or run yet.
+        assert!(ctx
+            .read_response(egui::Id::new("build-soul-contract").with("yes"))
+            .is_some());
+        assert!(tab.pending.is_some());
+        assert!(tab.running.is_none());
+        let esc = egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(&ctx, &mut tab, &mut s, vec![esc]);
+        assert!(tab.pending.is_none());
+        assert!(tab.running.is_none(), "No must never run the action");
+        assert!(tab.log.contains("denied"), "{}", tab.log);
+        let log = std::fs::read_to_string(&audit).unwrap_or_default();
+        assert!(log.contains("DENY") && log.contains("run_project"), "{log}");
+        assert!(!log.contains("CONFIRM"), "{log}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
