@@ -79,7 +79,7 @@ model_path = "/home/me/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
 | `endpoint` | `"http://127.0.0.1:8080"` | Base URL of the OpenAI-compatible server (`/v1/chat/completions` is appended). Other compatible servers work too (LM Studio `:1234`, Ollama `:11434`, …) |
 | `model` | `"local"` | `model` field of the request (llama-server ignores it; other servers need the real name) |
 | `system_prompt` | `""` | Empty means `[llm] system_prompt` if set, else her built-in persona `lillith_setup::modelfile::LILY_SYSTEM_PROMPT` (re-exported as `lillith_mind::persona::DEFAULT_SYSTEM_PROMPT`): a fully explicit, dominant adult succubus who wants Ko and always gets her way. Persona policy: explicit content is allowed and encouraged on Ko's private, local-only model. Hard limit: adult-only (never minors or anyone young-seeming). Out-of-character safeword: `red` (or `OOC: stop`), which she obeys at once |
-| `temperature` | `0.85` | Sampling temperature (same as the wizard's `LILY_TEMPERATURE`) |
+| `temperature` | `0.95` | Sampling temperature (same as the wizard's `LILY_TEMPERATURE`); requests also send `top_p 0.95`, `min_p 0.1`, `repeat_penalty 1.1`, `repeat_last_n 256` |
 | `max_tokens` | `320` | Reply length cap |
 | `history_turns` | `12` | Past user/assistant turns sent with each message |
 | `timeout_s` | `120` | Whole-request timeout (connecting times out after 3 s) |

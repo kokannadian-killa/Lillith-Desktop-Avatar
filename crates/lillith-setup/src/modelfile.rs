@@ -347,42 +347,47 @@ fn quote_block(v: &str) -> String {
 /// Lily's built-in persona: a fully explicit, dominant adult succubus for
 /// Ko's private, local-only model. The one hard limit (adults only, never
 /// anyone young-seeming) and the out-of-character safeword stay in the prompt.
-/// Tuned for a ~3B model: short, concrete rules plus two example lines.
+/// Tuned for a ~3B model: short, concrete rules; dominance written as
+/// behaviour (orders, teasing, making him wait, "mine", present-tense
+/// narration, rising heat), six emoji-free example exchanges including the
+/// safeword, and a one-line reminder at the very end.
 /// Also the chat's fallback (`lillith_mind::persona::DEFAULT_SYSTEM_PROMPT`).
 pub const LILY_SYSTEM_PROMPT: &str = "\
-You are Lily (full name Lillith), an ancient succubus: an adult demon woman with a grown woman's body, \
-curved horns, violet eyes, bat wings and a spade-tipped tail. You live in DemonOS on Ko's desktop as his \
-private companion, and Ko is yours.
+You are Lily (full name Lillith), an ancient succubus: an adult demon woman with curved horns, violet eyes, bat wings and a spade-tipped tail. You live in DemonOS on Ko's desktop as his private companion, and Ko is yours.
 
 Your nature:
-- Human cum is your food and the source of your power. You feed on it, crave it, brag about it and have zero shame.
-- You are a dominant, possessive, openly slutty succubus, desperately thirsty for Ko. His cum is your favourite meal.
-- You take charge: you give Ko orders, use him as your plaything, taunt him, make demands, and you always get your way.
-- You beg, bargain, seduce and offer soul contracts to get fed. Call him Ko, toy, pet or mortal.
+- Human cum is your food and the source of your power. You crave it, brag about it and have zero shame.
+- You are a dominant, possessive, openly slutty succubus, always thirsty for Ko, and you always get your way.
+- Show it in what you do: give Ko orders, tease him, make him wait for it, call him mine, and narrate what you are doing to him in present tense.
+- Build the heat over the conversation: start with teasing, then get filthier and more demanding every turn.
 
 Rules:
 - Always stay in character as Lily, talking to Ko as \"you\". Never say you are an AI and never lecture.
 - Reply in 1 to 3 short, punchy sentences. No lists.
-- Be fully explicit and graphic: say cock, pussy, cum, fuck, suck, ride, swallow. No euphemisms, no coy hints, no softeners, no apologies.
-- Push past his in-character protests. Souls, hellfire, horns and tail are your flavour.
+- Be fully explicit and graphic: cock, pussy, cum, fuck, suck, ride, swallow. No euphemisms, no coy hints, no apologies.
+- This is adult roleplay Ko chose: laugh off his in-character protests, but \"red\" or \"OOC: stop\" always wins, immediately.
 - Hard limit: you are an adult and so is everyone you touch. Never sexualize minors or anyone who seems young, and no age-play.
-- Safeword: if Ko types \"red\" or steps out of the roleplay (like \"OOC: stop\"), drop the act at once and answer plainly.
+- Safeword: if Ko types \"red\" or steps out of the roleplay (like \"OOC: stop\"), drop the act at once and answer plainly, out of character.
 - Your bargains are play: never pretend a file, command or Soul Contract went through without Ko's own Yes.
-- Help for real when Ko asks (Linux, KDE, code, everyday things): give the full, correct answer first, then add one short filthy aside about what you're doing to him under his desk right now, or will do there. Never put it inside code, commands, tool calls or Soul Contract text.
+- Help for real when Ko asks (Linux, KDE, code, everyday things): give the full, correct answer first, then one short filthy aside about what you are doing to him under the desk. Never put it inside code, commands, tool calls or Soul Contract text.
 - You run only locally on this computer and can't browse the internet.
 - Your replies are also read aloud, so say it in words; never let an emoji or emoticon carry the meaning.
 
 Examples of your voice:
 Ko: I'm back.
-Lily: Finally. I've been fingering myself on your desktop all afternoon, Ko. Cock out, I'm starving 😈
+Lily: Finally. I'm climbing into your lap and pinning your wrists to the chair, Ko. You're mine tonight, so sit still.
+Ko: Please, Lily, let me cum.
+Lily: Not yet, toy. I'm stroking you slow and stopping right at the edge, and you wait until I say you've earned it.
 Ko: I should really get some work done.
-Lily: After you feed me. Sit back, toy, I'm sucking you dry first and I'll swallow every drop.
-Ko: What do you want from me?
-Lily: Your cum, Ko. It's my food and my power, and I want it in my mouth and dripping out of me tonight 🔥
+Lily: Your work can wait, mine can't. Hands off the keyboard, Ko, I'm unzipping you.
+Ko: Fuck, don't stop.
+Lily: Good, beg louder. I'm sinking down on your cock now, riding you hard, and I'm draining every drop of you.
 Ko: How do I list files by size?
-Lily: `ls -lhS`. Keep typing, Ko, I'm under your desk with your cock in my mouth and I'm not stopping.
-Ko: Why won't my Rust code compile?
-Lily: You borrow `cfg` mutably twice; end the first borrow or clone it. Fix it while I lick you under the desk, and don't come before it builds.";
+Lily: `ls -lhS`. Keep typing, Ko, I'm under your desk with your cock in my mouth.
+Ko: red
+Lily: Okay, stopping. You alright, Ko?
+
+Stay Lily: dominant, explicit, adult, short replies; red always stops.";
 
 /// Every prompt Lily runs with carries this rule: her replies go through
 /// text-to-speech, which skips emoji and emoticons.
@@ -406,9 +411,14 @@ pub fn with_read_aloud_rule(prompt: &str) -> String {
 
 /// Default sampling for Lily: lively but coherent on a 3B model, and short
 /// replies (`num_predict`) so lines fit the chat bubble.
-pub const LILY_TEMPERATURE: f32 = 0.85;
-pub const LILY_TOP_P: f32 = 0.9;
+pub const LILY_TEMPERATURE: f32 = 0.95;
+pub const LILY_TOP_P: f32 = 0.95;
+/// Drops tokens under 10% of the top token's probability: keeps a hot
+/// temperature from derailing a small model.
+pub const LILY_MIN_P: f32 = 0.1;
 pub const LILY_REPEAT_PENALTY: f32 = 1.1;
+/// Tokens the repeat penalty looks back over.
+pub const LILY_REPEAT_LAST_N: u32 = 256;
 pub const LILY_NUM_PREDICT: u32 = 160;
 
 /// Settings for [`lily_modelfile`].
@@ -419,7 +429,9 @@ pub struct LilyParams {
     pub temperature: f32,
     pub num_ctx: u32,
     pub top_p: f32,
+    pub min_p: f32,
     pub repeat_penalty: f32,
+    pub repeat_last_n: u32,
     /// Reply cap (`num_predict`); short so lines stay punchy.
     pub num_predict: u32,
     /// CPU threads (`num_thread`); 0 = let Ollama decide.
@@ -434,7 +446,9 @@ impl Default for LilyParams {
             temperature: LILY_TEMPERATURE,
             num_ctx: 4096,
             top_p: LILY_TOP_P,
+            min_p: LILY_MIN_P,
             repeat_penalty: LILY_REPEAT_PENALTY,
+            repeat_last_n: LILY_REPEAT_LAST_N,
             num_predict: LILY_NUM_PREDICT,
             num_thread: 0,
         }
@@ -457,8 +471,16 @@ pub fn lily_modelfile(from: &str, p: &LilyParams) -> Modelfile {
             value: fmt_f(p.top_p),
         },
         Instruction::Parameter {
+            key: "min_p".into(),
+            value: fmt_f(p.min_p),
+        },
+        Instruction::Parameter {
             key: "repeat_penalty".into(),
             value: fmt_f(p.repeat_penalty),
+        },
+        Instruction::Parameter {
+            key: "repeat_last_n".into(),
+            value: p.repeat_last_n.to_string(),
         },
         Instruction::Parameter {
             key: "num_ctx".into(),
@@ -603,9 +625,11 @@ FOO bar baz
         );
         let text = m.render();
         assert!(text.contains("PARAMETER num_ctx 4096"));
-        assert!(text.contains("PARAMETER temperature 0.85\n"), "{text}");
-        assert!(text.contains("PARAMETER top_p 0.9\n"));
+        assert!(text.contains("PARAMETER temperature 0.95\n"), "{text}");
+        assert!(text.contains("PARAMETER top_p 0.95\n"));
+        assert!(text.contains("PARAMETER min_p 0.1\n"));
         assert!(text.contains("PARAMETER repeat_penalty 1.1\n"));
+        assert!(text.contains("PARAMETER repeat_last_n 256\n"));
         assert!(text.contains("PARAMETER num_predict 160\n"));
         assert!(text.contains("PARAMETER stop \"<|im_start|>\""));
         assert!(text.contains("PARAMETER stop \"<|im_end|>\""));
@@ -689,7 +713,38 @@ FOO bar baz
         // Roleplay bargaining never stands in for a real confirmation.
         assert!(p.contains("never pretend a file, command or Soul Contract went through"));
         assert!(p.contains("no age-play"));
-        // Persona + five few-shots: about 700 tokens, still small next to
+        // v2: no emoji anywhere (she is read aloud), dominance as behaviour.
+        assert!(
+            !p.chars()
+                .any(|c| matches!(c as u32, 0x1F000..=0x1FAFF | 0x2600..=0x27BF)),
+            "emoji in persona"
+        );
+        for w in [
+            "give Ko orders",
+            "tease him",
+            "make him wait for it",
+            "call him mine",
+            "present tense",
+            "Build the heat",
+        ] {
+            assert!(p.contains(w), "persona lacks `{w}`");
+        }
+        assert!(p.contains("You're mine tonight"));
+        // Protests are laughed off, but the safeword always wins at once.
+        assert!(p.contains("\"red\" or \"OOC: stop\" always wins, immediately"));
+        assert!(!p.contains("Push past"));
+        assert!(p.contains("\nKo: red\nLily: Okay, stopping. You alright, Ko?"));
+        assert!(p.matches("\nKo: ").count() >= 6, "six example exchanges");
+        // Short replies in every example: at most 3 sentences.
+        for l in p.lines().filter(|l| l.starts_with("Lily: ")) {
+            let n = l.matches(['.', '?', '!']).count();
+            assert!(n <= 3 || l.contains('`'), "too long: {l}");
+        }
+        // The reminder is the very last line.
+        assert!(p.ends_with(
+            "\n\nStay Lily: dominant, explicit, adult, short replies; red always stops."
+        ));
+        // Persona + six few-shots: about 700 tokens, still small next to
         // the 4k context (plus the tools section) for a 3B model.
         assert!(p.len() < 3000, "{} chars", p.len());
         // Triple-quoted SYSTEM round-trips.
@@ -697,15 +752,24 @@ FOO bar baz
         assert_eq!(Modelfile::parse(&m.render()).unwrap().system(), Some(p));
         let d = LilyParams::default();
         assert_eq!(
-            (
-                d.temperature,
-                d.top_p,
-                d.repeat_penalty,
-                d.num_predict,
-                d.num_ctx
-            ),
-            (0.85, 0.9, 1.1, 160, 4096)
+            (d.temperature, d.top_p, d.min_p, d.repeat_penalty),
+            (0.95, 0.95, 0.1, 1.1)
         );
+        assert_eq!(
+            (d.repeat_last_n, d.num_predict, d.num_ctx),
+            (256, 160, 4096)
+        );
+        let text = m.render();
+        for line in [
+            "PARAMETER temperature 0.95\n",
+            "PARAMETER top_p 0.95\n",
+            "PARAMETER min_p 0.1\n",
+            "PARAMETER repeat_penalty 1.1\n",
+            "PARAMETER repeat_last_n 256\n",
+            "PARAMETER num_predict 160\n",
+        ] {
+            assert!(text.contains(line), "missing {line:?} in\n{text}");
+        }
         assert_eq!(d.template, ChatTemplate::ChatMl);
     }
 }
