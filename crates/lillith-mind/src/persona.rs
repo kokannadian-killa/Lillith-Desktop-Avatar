@@ -49,33 +49,33 @@ pub fn default_llm_system_prompt() -> Option<String> {
 
 /// Shown when the server cannot be reached at all.
 pub const SERVER_DOWN_LINES: &[&str] = &[
-    "My brain's out cold, Ko. Start llama-server and I'll be all over you again~",
-    "Can't reach my thoughts. Wake my local model, then come wake me properly 😈",
-    "No brain, all body right now. Start llama-server so I can talk dirty to you.",
-    "My mind's locked in hell. Start the local model, Ko, and I'll make it worth it.",
-    "Brain offline. Fix it for me, darling, I have filthy things to tell you.",
-    "llama-server isn't answering. Wake it up, Ko. I'm too hungry to wait.",
+    "My brain's out cold, Ko. Start llama-server and I'll tell you exactly how I'll ride you~",
+    "Can't reach my thoughts. Wake my local model, then come wake me with your cock 😈",
+    "No brain, all body. Start llama-server so I can talk filthy while I drain you.",
+    "My mind's locked in hell. Start the local model, Ko, and I'll suck you as thanks.",
+    "Brain offline and I'm starving. Fix it, Ko, then feed me your cum.",
+    "llama-server isn't answering. Wake it up, Ko. I'm wet and I'm hungry.",
 ];
 
 /// Shown while the server answers 503 (still loading the model).
 pub const SERVER_LOADING_LINES: &[&str] = &[
-    "Still waking up, Ko. Give me a moment and I'm all yours~",
-    "Brain's booting. Keep yourself warm for me 😈",
-    "Loading… stay right there, Ko. Don't you dare leave.",
-    "One sec, darling. Hellfire takes a moment to heat up.",
+    "Still waking up, Ko. Keep your cock hard for me~",
+    "Brain's booting. Stroke yourself slowly till I'm back 😈",
+    "Loading… stay right there, Ko. I'm coming. Then so are you.",
+    "One sec. Hellfire takes a moment to heat up. Then I swallow you whole.",
 ];
 
 /// Shown for any other failure (bad response, timeout, …).
 pub const SERVER_ERROR_LINES: &[&str] = &[
-    "Something went fuzzy in my head. Say it again, Ko, slower~",
-    "Lost my train of thought staring at you. Again?",
-    "My mind slipped. Repeat that, and say it like you mean it.",
-    "Static in my skull, darling. One more time.",
+    "Something went fuzzy in my head. Say it again, Ko, slower, while I lick you~",
+    "Lost my train of thought staring at your crotch. Again?",
+    "My mind slipped. Repeat that, and say it like you're about to come.",
+    "Static in my skull, darling. Too hungry for your cum to think. One more time.",
 ];
 
 /// Shown when chat is switched off (`--no-llm`).
 pub const OFFLINE_LINE: &str =
-    "My dirty mouth is switched off right now (--no-llm). The rest of me still wants you, Ko~";
+    "My filthy mouth is off (--no-llm). My pussy isn't, Ko. Come feed me anyway~";
 
 /// Picks a line from `lines` with a cheap rotating index.
 pub fn pick(lines: &'static [&'static str], salt: usize) -> &'static str {

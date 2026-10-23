@@ -169,12 +169,12 @@ pub fn demo_lines() -> Vec<(bool, &'static str)> {
     vec![
         (
             false,
-            "There you are, Ko. Took you long enough. On your knees by the desk~ 😈",
+            "There you are, Ko. I've been fingering myself waiting. Cock out, I'm starving~ 😈",
         ),
         (true, "missed you 🔥"),
         (
             false,
-            "I know. Now give me what I've been craving all day, every drop of it 💜",
+            "I know. Now feed me, toy. Your cum down my throat, every last drop 💜",
         ),
     ]
 }

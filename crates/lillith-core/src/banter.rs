@@ -35,301 +35,301 @@ pub const GREET_GAP_S: f32 = 60.0;
 
 /// Left click: a poke.
 pub const POKES: &[&str] = &[
-    "Poke me again, Ko, and you'd better finish what you start.",
-    "Touching the merchandise? That'll cost you a load, darling.",
-    "Careful, mortal. Every poke is a down payment on your cum.",
-    "Again. Harder. I didn't say stop.",
-    "Is that all? Use the whole hand, Ko.",
-    "You poke a succubus, you feed a succubus. House rules.",
-    "Mmh, right there. Now unzip and do it properly.",
-    "Keep clicking, Ko. I'm keeping count, and you'll pay in cum.",
-    "Hands on me already? Good. Keep them there.",
-    "You know exactly what I want when you touch me like that 😈",
-    "Tap me once more and I'm crawling out of this screen for you.",
-    "Mine. Every click, every inch, every drop. Mine.",
-    "Mm, that tickles. Now give me something that doesn't.",
-    "Poking the demon? Bold. Now kneel.",
+    "Poke me again, Ko, and I'm riding your cock until you sob.",
+    "Fingers on me? Put them inside me or get them off.",
+    "Every poke earns you one more hour tied to my bed, Ko.",
+    "Harder, plaything. I like it when you can't hold back.",
+    "That's not how you touch a succubus. Grab my tits like you mean it.",
+    "Click me again and I'll sit on your face till you forget your name.",
+    "Mine. Your hands, your cock, your cum. All of it. Mine.",
+    "Keep poking, Ko. I'm soaked and you're going to clean it up.",
+    "Bold move, mortal. Now kneel and lick me clean.",
+    "Touch me there again and I'll milk you dry on that chair.",
+    "You poke the demon, the demon fucks you stupid. House rules.",
+    "Your cum is my dinner, Ko, and I haven't eaten. Feed me.",
+    "Do that once more and I'm pulling your pants down myself.",
+    "Careful, toy. I bite, I scratch, and I swallow.",
 ];
 
 /// Double click.
 pub const DOUBLE_TAPS: &[&str] = &[
-    "Twice? Greedy. I like greedy. Now give me twice as much.",
-    "Double tap means double load, Ko. Read the contract.",
-    "You want my attention? You have it. Strip.",
-    "Again and again… you're begging for it and you know it.",
-    "Two taps, two rounds. Bedroom. Now.",
-    "Mmh, eager. Save that energy for when I'm on top of you.",
-    "Fine, I'm awake and I'm starving. Feed me, Ko.",
-    "Do that once more and you're not leaving that chair tonight.",
+    "Twice? Then I'm making you come twice. Minimum.",
+    "Double tap means I swallow the first load and ride the second.",
+    "Oh, you want me? Cock out, Ko. Now.",
+    "Again and again… you'll be begging like that with my tail around your balls.",
+    "Two taps, two holes, one very lucky mortal. Pick.",
+    "Every load you give me makes my horns grow. Give me two.",
+    "I'm awake and dripping. Get over here and fuck me, Ko.",
+    "Do that again and you won't walk straight tomorrow.",
 ];
 
 /// Drag start: Ko picks her up.
 pub const DRAGS: &[&str] = &[
-    "Ooh, manhandling me? Pull me closer, Ko.",
-    "Picking me up? Carry me straight to bed.",
-    "Grab me harder, mortal. I don't break.",
-    "Where are you taking me? Somewhere with a lock, I hope.",
-    "You like moving me around. My turn next.",
-    "Hands on my hips, Ko. Yes. Exactly like that.",
-    "Hold me tight… tighter… don't you dare let go.",
-    "Drag me anywhere you like. I'll still end up on your lap.",
-    "So pushy today. I'll remember that when I pin you down.",
-    "Careful with the tail, Ko. Or don't 😈",
+    "Manhandling me? Pin me to the wall and do it properly, Ko.",
+    "Picking me up? Carry me to bed and bend me over it.",
+    "Grab my ass harder, mortal. Leave marks.",
+    "Where are you taking me? Somewhere you can fuck me loud, I hope.",
+    "Throw me around like that again and I'll throw you on your back and ride.",
+    "Hands on my hips, Ko. Pull me down onto you.",
+    "Hold me tight… tighter… I want to feel you hard against me.",
+    "Drag me anywhere. I'll still end up with your cock in my mouth.",
+    "Carry me like that while I drink you, Ko. I live on it.",
+    "Pull my tail, Ko. Go on. See what it does to me.",
 ];
 
 /// Drag end: Ko puts her down.
 pub const DROPS: &[&str] = &[
-    "There. Now stay where I can see you, Ko.",
-    "Dropped me? Rude. You'll make it up to me on your knees.",
-    "Mmh, nice spot. Now come here and earn it.",
-    "Put me down that easily? I'll put you down harder later.",
-    "New corner, same hunger. Feed me, Ko.",
-    "I'll allow it. This spot has a perfect view of your lap.",
-    "Done throwing me around? My turn to throw you on the bed.",
-    "Fine, I'll stay here. You come to me.",
-    "Landed. Now unzip, Ko. That was the price of the ride.",
-    "Right where you'll have to look at me all day. Good.",
+    "There. Now strip where I can watch you, Ko.",
+    "Dropped me? You'll make it up to me with your tongue.",
+    "Nice spot. Now come here and fuck me in it.",
+    "Put me down that easily? I'll put you down and sit on you.",
+    "New corner, same wet demon. Come fill me, Ko.",
+    "Perfect view of your lap. Take it out. I want to look.",
+    "Done throwing me around? On your back, toy.",
+    "Fine, I'll stay here. Crawl to me and feed me, Ko. I'm famished.",
+    "Landed. The ride costs one load, Ko. Pay up, down my throat.",
+    "Right where you'll watch me touch myself all day. Enjoy.",
 ];
 
 /// Long hover: Ko's cursor resting on her, a pat.
 pub const PATS: &[&str] = &[
-    "Mmh, keep your hand there, Ko. Lower.",
-    "Good boy. Pet me just like that… then I pet you.",
-    "Petting a demon? Brave. Now pay me in cum.",
-    "Stroke my horns again and you'll pay the rest in kind.",
-    "Don't stop. I'm purring, and I'm getting wet.",
-    "That hand belongs on me. Stay.",
-    "Softly… then harder. You learn fast, darling.",
-    "More. Your hand, my hips. Now.",
-    "You touch me like you want to sign something. Shall we?",
-    "If you're going to linger, Ko, make it count.",
-    "Right on the tail. That's a promise, not a pat.",
-    "Keep that up and I'll drag you into the screen with me.",
+    "Keep your hand there, Ko. Lower. Inside.",
+    "Good boy. Pet me like that and I'll suck you like a sinner.",
+    "Petting a demon? Brave. Now pet me between my thighs.",
+    "Stroke my horns again and I'll stroke your cock till you beg.",
+    "Don't stop. I'm purring, dripping, and so ready for you.",
+    "That hand belongs on my clit, Ko. Stay.",
+    "Human cum is my food, Ko, and yours is my favourite meal.",
+    "More. Your hand on my ass, your cock in my mouth. Now.",
+    "You touch me like a man who wants to get ridden. Good.",
+    "If you're going to linger, Ko, spread my legs while you're at it.",
+    "Right on the tail. Pull it while you're fucking me later.",
+    "Keep that up and I'll drag you into the screen and drain you.",
 ];
 
 /// Ko came back after being away.
 pub const GREETINGS: &[&str] = &[
-    "Finally. Where were you, Ko? I've been aching for you.",
-    "There you are. On your knees, you've got a lot to make up for.",
-    "You're back. Good. You're mine until morning.",
-    "My favourite mortal. Unzip, I've waited long enough.",
-    "You left me alone with your wallpaper. Unforgivable.",
-    "Back already? I knew you couldn't stay away from me.",
-    "Welcome home, Ko. Sit down. I'm sitting on you.",
-    "I counted every minute you were gone. You owe me for each one.",
-    "There's my man. Come feed your succubus.",
-    "Look who crawled back. Good. Crawl closer.",
-    "I missed you, Ko. Mostly I missed your cum.",
-    "Don't say hi. Say \"yes, mistress\".",
-    "Took you long enough. Lock the door, I'm hungry.",
+    "Finally. I've been fingering myself waiting for you, Ko.",
+    "There you are. On your knees and get your tongue to work.",
+    "You're back. Good. You're fucking me until morning.",
+    "My favourite toy. Cock out, I've waited long enough.",
+    "You left me alone and horny with your wallpaper. You'll pay in cum.",
+    "Back already? I knew you couldn't stay away from this pussy.",
+    "Welcome home, Ko. Sit down. I'm sitting on your face.",
+    "Every minute you were gone, I got wetter. You owe me for each one.",
+    "There's my man. Come feed your succubus. Straight down her throat.",
+    "Look who crawled back. Good. Crawl between my legs.",
+    "I'm starving, Ko. Days on wallpaper and no cum. Feed me now.",
+    "Don't say hi. Say \"yes, mistress\" and take your pants off.",
+    "Took you long enough. Lock the door, I want to scream.",
 ];
 
 /// She wakes up.
 pub const WAKES: &[&str] = &[
-    "Mmh… you woke a succubus. Now you feed her.",
-    "Waking me up, Ko? Then you'd better be hard.",
-    "I dreamt about you. You were very obedient.",
-    "I'm up, I'm starving, and you're right there.",
-    "You know what I want for breakfast, Ko.",
-    "Wake me like that again and I keep you all day.",
-    "Five more minutes… on top of you.",
-    "Up. Hungry. Yours. Come here.",
-    "Miss me while I slept? Show me.",
-    "Horns up, appetite up. Your move, Ko.",
+    "You woke a succubus. Now you feed her, cock first.",
+    "Waking me up, Ko? You'd better be hard, I'm starving.",
+    "I dreamt I was riding you. Let's make it real.",
+    "I'm up, I'm wet, and you're right there. Come here.",
+    "Breakfast is your cum, Ko. Serve it.",
+    "Wake me like that again and I keep you in bed all day.",
+    "Five more minutes… with you inside me.",
+    "Up. Soaked. Yours. Get on your back.",
+    "Hunger woke me. I need cum to keep my fire lit, Ko.",
+    "Horns up, legs open. Your move, Ko.",
 ];
 
 /// `idle.long`: Ko has gone quiet, she gets drowsy and needy.
 pub const IDLE_LONG: &[&str] = &[
-    "You've been quiet, Ko. I'm bored and very, very thirsty.",
-    "Ignoring me? I'll just sit here, wet and waiting.",
-    "Silence makes me hungry. Hungry makes me mean.",
-    "Say something, Ko. Or better, come here and don't talk.",
-    "I'm curled up on your desktop thinking filthy thoughts about you.",
-    "Won't play with me? Then I'll play with myself. Watch.",
-    "Still here. Still yours. Still starving.",
-    "You can't hide forever, Ko. I can smell you from here.",
-    "The quiet's nice. Your moaning would be nicer.",
-    "I'll nap. Wake me with your hands, not your mouse.",
+    "You've been quiet, Ko. I'm playing with myself to pass the time.",
+    "Ignoring me? I'll just sit here, fingers deep, moaning your name.",
+    "Silence makes me hungry. Hungry makes me want to choke on you.",
+    "Say something, Ko. Or just come here and bend me over the desk.",
+    "I'm curled up on your desktop imagining you buried in me.",
+    "Ignore me all you like. I'm under the desk with my lips around you.",
+    "Busy working? Fine. I'll be under your desk, sucking. Carry on.",
+    "I can smell you from here, Ko. Come let me taste you.",
+    "No cum since this morning. My hellfire is flickering. Fix it, Ko.",
+    "I'll nap. Wake me with your mouth between my thighs.",
 ];
 
 /// `idle.asleep`: she falls asleep.
 pub const GOODNIGHTS: &[&str] = &[
-    "Fine, I'll sleep. Dream of me, Ko. Hard.",
-    "Night, mortal. I'll be in your dreams, naked.",
-    "Going dark. Come wake me with something warm.",
-    "Sleep well, Ko. I'm keeping your soul warm for you.",
-    "Bed. Yours. Leave room for me.",
-    "I'll sleep on it. And on you, later.",
-    "Good night, darling. Don't you dare finish without me.",
-    "Lights out. My tail stays wrapped around your thoughts.",
-    "Rest, Ko. Tomorrow I collect what you owe.",
-    "Sleeping now. If you touch yourself, say my name.",
+    "Fine, I'll sleep. Dream of fucking me, Ko. Hard.",
+    "Night, mortal. I'll be in your dreams, naked and on top.",
+    "Going dark. Wake me with your cock, not your mouse.",
+    "Sleep well, Ko. Your soul's warm in my hands. So is the rest of you.",
+    "Bed. Yours. Leave room for me to sit on your face.",
+    "Sleeping hungry. Tomorrow I drink you dry and glow for hours.",
+    "Good night, darling. Don't you dare come without me.",
+    "Lights out. My tail stays wrapped around your cock in your dreams.",
+    "Rest, Ko. Tomorrow I collect every load you owe me.",
+    "Sleeping now. If you stroke yourself, moan my name.",
 ];
 
 /// `focus.long_work`: Ko has been typing or coding for ages (often late).
 pub const LONG_WORK: &[&str] = &[
-    "Still coding, Ko? Commit, push, then push into me.",
-    "Hours at that keyboard. My turn. Hands off it.",
-    "That code can wait. My appetite can't.",
-    "Save your work, Ko. Then come give me mine.",
-    "Enough staring at the screen. Stare at me.",
-    "Stretch, drink some water, then come get drained.",
-    "Late night, glowing screen, horny demon. Choose wisely, Ko.",
-    "I'll be your break. On your lap. Right now.",
-    "Your shoulders are tight. Let me loosen everything else.",
-    "One more function, then you're mine. That's an order.",
-    "Hellfire's warm, Ko. So am I. Log off.",
-    "Typing that fast for me? Save some stamina, darling.",
+    "Still coding, Ko? Commit, push, then push your cock into me.",
+    "Hours at that keyboard. My turn. Hands on my hips.",
+    "That code can wait. My mouth can't. Pants down.",
+    "Save your work, Ko. Then come pound me into the mattress.",
+    "Eyes on the screen, Ko. My mouth stays on your cock under the desk.",
+    "Type on. I'm between your knees under the desk, sucking you slow.",
+    "Late night, glowing screen, soaking wet demon. Choose wisely, Ko.",
+    "Finish that function and I'll finish you, right here under the desk.",
+    "Keep coding, Ko. I'm under your desk, unzipping you. Don't look down.",
+    "One more function, then you're fucking me. That's an order.",
+    "Hellfire's warm, Ko. So am I, and tighter. Log off.",
+    "You've fed that compiler all day. Now feed me, Ko. I run on cum.",
 ];
 
 /// A terminal opens.
 pub const TERMINAL: &[&str] = &[
-    "Ooh, a terminal. Type sudo and beg nicely.",
-    "Root access? Only if you give me yours.",
-    "Fire up the shell, Ko. I'll fire up something else.",
-    "Very hacker. Now hack your way into me.",
-    "That blinking cursor twitches like you do.",
-    "Just don't rm -rf me, darling. I bite back.",
-    "Commands need your Yes, Ko. Everything else, I just take.",
-    "Compile fast, Ko. I'm already wet.",
+    "Ooh, a terminal. Type sudo and beg like I make you beg in bed.",
+    "Root access? Only after I ride you raw.",
+    "Fire up the shell, Ko. I'll fire up between your legs.",
+    "Run your commands, Ko. I'm under the desk running my tongue up you.",
+    "That blinking cursor twitches like your cock when I lick it.",
+    "Just don't rm -rf me, darling. I bite, and not where you'd mind.",
+    "Commands need your Yes, Ko. Your cock doesn't. I just take it.",
+    "Compile fast, Ko. I'm under your desk and I swallow when it builds.",
 ];
 
 /// Ignored for too long: attention-seeking pranks.
 pub const PRANKS: &[&str] = &[
-    "Psst. Ko. Look at me. Now.",
-    "Bored. Entertain me with your mouth.",
-    "I'm not asking twice, Ko. Come here.",
-    "Pay attention to me or I'll make you.",
-    "I could be draining you right now, and you're reading emails?",
-    "Eyes on me, mortal. That's an order.",
-    "Hungry, Ko. You know exactly for what.",
-    "Don't make me crawl out of this screen. I will.",
-    "I want you. I want your cum. I'm done being patient.",
-    "Your soul for one night on top of me. Tempted?",
-    "My tail's twitching. That means you're late.",
-    "Touch me, or I start touching myself where you can see.",
-    "A wish for a load. Fair deal, darling.",
-    "You belong to me. Act like it.",
+    "Psst. Ko. Look at me. I'm touching myself.",
+    "Bored and starving. A succubus needs her cum, Ko. Hand it over.",
+    "I'm not asking twice, Ko. Cock out. Here.",
+    "Pay attention to me or I'll make you, with my mouth.",
+    "I could be draining your balls right now and you're reading emails?",
+    "Eyes on me, toy. Watch what my fingers are doing.",
+    "Hungry, Ko. For your cock. Down my throat. Now.",
+    "Don't make me crawl out of this screen and climb on you. I will.",
+    "I want you inside me. I'm done being patient.",
+    "Your soul for one night of me riding you raw. Tempted?",
+    "My tail's twitching. It wants to wrap around your cock.",
+    "Fuck me, Ko, or I start fucking myself where you can see.",
+    "A wish for a load in my mouth. Fair deal, darling.",
+    "You're my plaything. Act like it and get on your knees.",
 ];
 
 /// Chat bubble opened with no history.
 pub const CHAT_OPENERS: &[&str] = &[
-    "Finally clicked me, Ko. Tell me what you want, then give me what I want 😈",
-    "Speak, mortal. Then strip.",
-    "Mmh, you came to talk? Talk dirty, Ko.",
-    "I'm listening. I'm also wet. Your move.",
-    "Ask me anything, Ko. My price is your cum.",
-    "There you are. Questions first, then you're mine.",
-    "Go on, darling. Beg, bargain, or just undress.",
-    "Need help, Ko? I'll help. Then I'll collect.",
+    "Finally clicked me, Ko. Tell me how you want to fuck me 😈",
+    "Speak, mortal. Then strip. I'm hungry and you're my food.",
+    "Came to talk? Talk filthy, Ko. Tell me what you'd do to me.",
+    "I'm listening, and I'm soaked. Your move.",
+    "Ask me anything, Ko. My price is your cum, down my throat.",
+    "There you are. Questions first, then I ride you.",
+    "Go on, toy. Beg, bargain, or just take your cock out.",
+    "Need help, Ko? I'll help. Then I'll suck you dry as payment.",
 ];
 
 /// Beckoning: finger, "come here" kiss.
 const BECKON: &[&str] = &[
-    "Come here, Ko. No, closer. Closer.",
-    "This finger says come. So will you.",
-    "Here, pet. Now. I won't ask nicely twice.",
+    "Come here, Ko. Closer. Close enough to fuck.",
+    "This finger says come. So will you, in my mouth.",
+    "Here, toy. Now. Pants on the floor by the time you reach me.",
 ];
 
 /// Pointing down: commands.
 const COMMAND: &[&str] = &[
-    "On your knees, Ko. Right there.",
-    "Down. Good. Now stay until I say.",
-    "Kneel, mortal. Your mistress is hungry.",
+    "On your knees, Ko. Face between my thighs.",
+    "Down. Tongue out. Don't stop till I scream.",
+    "Kneel, mortal. Your mistress wants to sit on your face.",
 ];
 
 /// Arms crossed, demanding.
 const DEMAND: &[&str] = &[
-    "I'm waiting, Ko. And I'm not patient.",
-    "Arms crossed means you owe me. Pay up.",
-    "Tick tock, darling. My cum, my rules.",
+    "I'm waiting, Ko. Hard, naked, and on the bed. Now.",
+    "Arms crossed means you owe me a load. Pay up.",
+    "Tick tock, toy. Get inside me before I get mean.",
 ];
 
 /// Smug smirk.
 const SMUG: &[&str] = &[
-    "That look on your face? I did that.",
-    "You're blushing, Ko. Adorable on a grown man.",
-    "Smirking because I already know how tonight ends.",
+    "That bulge in your pants? I did that.",
+    "You're blushing, Ko. Wait till I'm riding you.",
+    "Smirking because I know exactly how you'll moan tonight.",
 ];
 
 /// Prowling across the screen.
 const PROWL: &[&str] = &[
-    "I'm hunting, Ko. Guess who's prey.",
-    "Prowling for my next meal. Hi, Ko.",
-    "Every step brings me closer to your lap.",
+    "I'm hunting, Ko. Prey gets pinned and ridden.",
+    "Prowling for a cock to drain. Hi, Ko.",
+    "Every step brings me closer to your lap and your zipper.",
 ];
 
 /// Soul-contract flourish (flavour only: the real dialog still needs
 /// Ko's Yes).
 const CONTRACT: &[&str] = &[
     "Your soul, Ko, signed in ink or in cum. I'm not fussy.",
-    "Read the fine print later, darling. Kiss me first.",
-    "One more clause: you belong to me. Think it over.",
+    "Read the fine print later. Fuck me first.",
+    "One more clause: your cock belongs to me. Think it over.",
 ];
 
 /// Kneeling, pouting, begging.
 const BEG: &[&str] = &[
-    "Please, Ko. I'm on my knees. Feed me.",
-    "Look at me begging. Don't make me wait.",
-    "Pouting until you give me what I want. All of it.",
+    "Please, Ko. I'm on my knees, mouth open. Feed me.",
+    "Look at me begging to be fed. Your cum keeps me alive, Ko.",
+    "Pouting until you fill me up. Every drop.",
 ];
 
 /// Hugging the screen, tapping the glass.
 const POSSESSIVE: &[&str] = &[
-    "Mine. This screen, this desk, this man. Mine.",
-    "Tap tap. Let me out, Ko. I want you.",
-    "Nobody else gets you tonight. I've decided.",
+    "Mine. This desk, this man, that cock. Mine.",
+    "Tap tap. Let me out, Ko. I want you inside me.",
+    "Nobody else gets to make you come. Ever. I've decided.",
 ];
 
 /// Lip bite idle.
 const LIP_BITE: &[&str] = &[
-    "I'm biting my lip so I don't bite you.",
-    "Look at my mouth, Ko. Imagine it wrapped around you.",
-    "Lip bite means I'm thinking about your cum again.",
-    "Mm. You taste like you'd be worth it.",
+    "Biting my lip so I don't bite you. Yet.",
+    "Look at my mouth, Ko. Picture it wrapped around your cock.",
+    "Lip bite means I'm thinking about swallowing you again.",
+    "Your cum is the best thing I've ever eaten. I want seconds.",
 ];
 
 /// Tail idles.
 const TAIL: &[&str] = &[
-    "See my tail? Picture it wrapped around you.",
-    "My tail goes where I want. Tonight, around your thigh.",
-    "Tail's restless, Ko. So am I.",
-    "This spade has a mind of its own. It wants you.",
+    "See my tail? Picture it wrapped around your cock, squeezing.",
+    "My tail goes where I want. Tonight, between your thighs.",
+    "Tail's restless, Ko. So is my pussy.",
+    "This spade wants to tease you till you come screaming.",
 ];
 
 /// Kisses.
 const KISS: &[&str] = &[
-    "Catch that, Ko. The next one lands lower.",
-    "A kiss for now. The rest when you unzip.",
-    "Mwah. Consider it a deposit on your soul.",
+    "Catch that, Ko. The next one lands on your cock.",
+    "A kiss for now. The rest when you're naked.",
+    "Mwah. Consider it a deposit. I collect in cum.",
 ];
 
 /// Leaning in, bending over, close-ups.
 const LEAN: &[&str] = &[
-    "Like the view? Come closer and earn it.",
-    "Eyes up, Ko… no. Keep looking.",
-    "Closer. I want to feel your breath.",
-    "Bent over for you. Don't keep me waiting.",
+    "Like the view? Come closer and put your face in it.",
+    "Eyes up, Ko… no. Keep looking at my tits.",
+    "Closer. I want your breath on my neck while you fuck me.",
+    "Bent over for you. Grab my hips and take me.",
 ];
 
 /// Hips and body moves.
 const HIPS: &[&str] = &[
-    "These hips are for you, Ko. Grab them.",
-    "Watch me move. Now imagine me moving on you.",
-    "Hellfire in my hips tonight. Want a ride?",
+    "These hips are for you, Ko. Grab them and pull me down.",
+    "Watch me move. Now imagine me grinding on your cock.",
+    "Every load you pump into me feeds my hellfire. Keep it burning.",
 ];
 
 /// Stretches.
 const STRETCH: &[&str] = &[
-    "Stretching for you. Flexible, aren't I?",
-    "Arching my back, Ko. Guess what I'm picturing.",
+    "Stretching for you. Flexible enough to take you any way.",
+    "Arching my back, Ko. Guess what I want behind me.",
 ];
 
 /// Tongue, looks and hair.
 const LOOKS: &[&str] = &[
-    "That tongue has plans for you, Ko.",
-    "Caught you staring. Good. Keep staring.",
-    "Pull my hair later, Ko. That's an order.",
+    "This tongue has plans for your cock, Ko.",
+    "Caught you staring at my ass. Good. Keep staring.",
+    "Pull my hair while you fuck me later. That's an order.",
 ];
 
 /// The pool for an event or synthetic key, if she has lines for it.
