@@ -56,6 +56,11 @@ pub struct IdleConfig {
     /// how long she walks the plain gait before a sultry take (saunter,
     /// sassy, strut) plays. Short, so walks look sultry almost at once.
     pub walk_variant_hold_s: f32,
+    /// Shuffle-bag weight of the flirty clips (idle transitions, idle
+    /// gestures and the brain's pose cycle); neutral clips weigh 1. 3 (the
+    /// default) = a flirty clip comes up about three times as often as a
+    /// neutral one; 1 = all equal. Semi-flirty clips get about half.
+    pub flirt_weight: u32,
 }
 
 impl Default for IdleConfig {
@@ -69,6 +74,7 @@ impl Default for IdleConfig {
             variant_hold_s: 12.0,
             variant_play_once: true,
             walk_variant_hold_s: 1.0,
+            flirt_weight: DEFAULT_FLIRT_WEIGHT,
         }
     }
 }
@@ -116,6 +122,10 @@ pub const WEIGHTED_IDLE_REACTIONS: &[(&str, u32)] = &[
     ("stretch_arch", 3),
     ("hair_flip", 3),
     ("hair_twirl", 3),
+    ("over_shoulder_look", 3),
+    ("blow_kiss_hip_pop", 3),
+    ("bend_forward_wink", 2),
+    ("body_roll_slow", 2),
     ("cheeky_tongue_wink", 2),
     ("idle_flirt_shy_giggle", 2),
     ("idle_tail_fidget", 1),
@@ -152,6 +162,10 @@ pub const DEFAULT_IDLE_REACTIONS: &[&str] = &[
     "stretch_arch",
     "hair_flip",
     "hair_twirl",
+    "over_shoulder_look",
+    "blow_kiss_hip_pop",
+    "bend_forward_wink",
+    "body_roll_slow",
     "cheeky_tongue_wink",
     "idle_flirt_shy_giggle",
     "idle_tail_fidget",
@@ -161,8 +175,60 @@ pub const DEFAULT_IDLE_REACTIONS: &[&str] = &[
     "wave",
 ];
 
-fn weight_of(table: &[(&str, u32)], name: &str) -> u32 {
-    table.iter().find(|(n, _)| *n == name).map_or(1, |e| e.1)
+/// Default [`IdleConfig::flirt_weight`].
+pub const DEFAULT_FLIRT_WEIGHT: u32 = 3;
+
+/// Flirty / seductive clips (tasteful, outfit intact): weighted by
+/// [`IdleConfig::flirt_weight`] wherever idle variety is picked.
+pub const FLIRTY_CLIPS: &[&str] = &[
+    "hip_sway",
+    "shoulder_shimmy",
+    "sway_dance",
+    "hip_pop_wink",
+    "lean_tease",
+    "tail_tease",
+    "blow_kiss",
+    "blow_kiss_hip_pop",
+    "stretch_arch",
+    "hair_flip",
+    "hair_twirl",
+    "over_shoulder_look",
+    "bend_forward_wink",
+    "body_roll_slow",
+    "cheeky_tongue_wink",
+    "heart_hands",
+    "tease_closeup",
+];
+
+/// `true` for the flirty clips (every `idle_flirt_*` mannerism and
+/// [`FLIRTY_CLIPS`]).
+pub fn is_flirty(name: &str) -> bool {
+    name.starts_with("idle_flirt_") || FLIRTY_CLIPS.contains(&name)
+}
+
+/// Scales a table weight (3 = flirty, 2 = semi-flirty, 1 = neutral) by
+/// `flirt_weight` (relative to the default 3). Never below 1.
+pub fn scaled_weight(table_weight: u32, flirt_weight: u32) -> u32 {
+    if table_weight <= 1 {
+        return 1;
+    }
+    let w = (table_weight * flirt_weight + DEFAULT_FLIRT_WEIGHT / 2) / DEFAULT_FLIRT_WEIGHT;
+    w.max(1)
+}
+
+/// Shuffle-bag weight of `name` for a free-form pool (e.g. the pose
+/// cycle): `flirt_weight` for flirty clips, 1 otherwise.
+pub fn flirt_weight_of(name: &str, flirt_weight: u32) -> u32 {
+    if is_flirty(name) {
+        flirt_weight.max(1)
+    } else {
+        1
+    }
+}
+
+fn weight_of(table: &[(&str, u32)], name: &str, flirt_weight: u32) -> u32 {
+    let w = table.iter().find(|(n, _)| *n == name).map_or(1, |e| e.1);
+    scaled_weight(w, flirt_weight)
 }
 
 /// Something the idle scheduler wants the animator to do now.
@@ -211,16 +277,18 @@ impl IdleLife {
         let next_blink = rng.range(cfg.blink_every_s.0, cfg.blink_every_s.1);
         let next_transition = rng.range(cfg.transition_every_s.0, cfg.transition_every_s.1);
         let next_reaction = rng.range(cfg.reaction_every_s.0, cfg.reaction_every_s.1);
-        let transition_bag = ShuffleBag::new(
-            transitions
-                .iter()
-                .map(|n| (n.clone(), weight_of(WEIGHTED_TRANSITIONS, n))),
-        );
-        let reaction_bag = ShuffleBag::new(
-            reactions
-                .iter()
-                .map(|n| (n.clone(), weight_of(WEIGHTED_IDLE_REACTIONS, n))),
-        );
+        let transition_bag = ShuffleBag::new(transitions.iter().map(|n| {
+            (
+                n.clone(),
+                weight_of(WEIGHTED_TRANSITIONS, n, cfg.flirt_weight),
+            )
+        }));
+        let reaction_bag = ShuffleBag::new(reactions.iter().map(|n| {
+            (
+                n.clone(),
+                weight_of(WEIGHTED_IDLE_REACTIONS, n, cfg.flirt_weight),
+            )
+        }));
         Self {
             cfg,
             rng,
@@ -538,26 +606,61 @@ mod tests {
         for w in rs.windows(2) {
             assert_ne!(w[0], w[1], "immediate repeat");
         }
-        let flirty = rs
-            .iter()
-            .filter(|c| {
-                c.starts_with("idle_flirt_")
-                    || [
-                        "hip_pop_wink",
-                        "lean_tease",
-                        "tail_tease",
-                        "blow_kiss",
-                        "stretch_arch",
-                        "hair_flip",
-                        "hair_twirl",
-                        "cheeky_tongue_wink",
-                    ]
-                    .contains(&c.as_str())
-            })
-            .count();
+        let flirty = rs.iter().filter(|c| is_flirty(c)).count();
         assert!(flirty * 10 >= rs.len() * 7, "{flirty}/{} flirty", rs.len());
         // The foot tap is in the pool.
         assert!(rs.iter().any(|c| c == "idle_flirt_foot_tap"));
+    }
+
+    #[test]
+    fn every_weighted_flirty_clip_is_marked_flirty() {
+        for (n, w) in WEIGHTED_TRANSITIONS.iter().chain(WEIGHTED_IDLE_REACTIONS) {
+            assert_eq!(*w >= 2, is_flirty(n), "{n} (weight {w})");
+        }
+        assert!(is_flirty("idle_flirt_anything") && !is_flirty("nod"));
+    }
+
+    #[test]
+    fn flirt_weight_scales_the_flirty_clips_only() {
+        assert_eq!(IdleConfig::default().flirt_weight, 3);
+        // Default 3: table weights as written.
+        assert_eq!((scaled_weight(3, 3), scaled_weight(2, 3)), (3, 2));
+        assert_eq!(scaled_weight(1, 3), 1);
+        // 6: twice as flirty; 1: all equal; 0 never drops a clip.
+        assert_eq!((scaled_weight(3, 6), scaled_weight(2, 6)), (6, 4));
+        assert_eq!((scaled_weight(3, 1), scaled_weight(2, 1)), (1, 1));
+        assert_eq!((scaled_weight(3, 0), scaled_weight(1, 0)), (1, 1));
+        assert_eq!(flirt_weight_of("lean_tease", 5), 5);
+        assert_eq!(flirt_weight_of("nod", 5), 1);
+        assert_eq!(flirt_weight_of("lean_tease", 0), 1);
+        let c: IdleConfig = toml::from_str("flirt_weight = 5\n").unwrap();
+        assert_eq!(c.flirt_weight, 5);
+    }
+
+    fn flirty_share(flirt_weight: u32) -> f32 {
+        let cfg = IdleConfig {
+            flirt_weight,
+            ..IdleConfig::lively()
+        };
+        let mut l = IdleLife::with_available(cfg, 5, |_| true);
+        let rs: Vec<String> = run(&mut l, 7200.0)
+            .into_iter()
+            .filter_map(|(_, c)| match c {
+                IdleCue::Reaction { clip } => Some(clip),
+                _ => None,
+            })
+            .collect();
+        for w in rs.windows(2) {
+            assert_ne!(w[0], w[1], "immediate repeat at weight {flirt_weight}");
+        }
+        rs.iter().filter(|c| is_flirty(c)).count() as f32 / rs.len() as f32
+    }
+
+    #[test]
+    fn higher_flirt_weight_means_more_flirty_reactions() {
+        let (flat, default, high) = (flirty_share(1), flirty_share(3), flirty_share(8));
+        assert!(flat < default && default < high, "{flat} {default} {high}");
+        assert!(high > 0.85, "{high}");
     }
 
     #[test]
