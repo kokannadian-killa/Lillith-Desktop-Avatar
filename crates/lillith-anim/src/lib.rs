@@ -11,6 +11,7 @@
 //! - [`gestures`]: procedural gestures ported from `aether_animator.py`
 //!   (easing/tweens become spring targets and impulses).
 //! - [`talk`]: token-driven lip-flap for the `talk_loop` clip (chat replies).
+//! - [`lipsync`]: audio-driven lip-sync from the voice daemon's envelope/visemes.
 //! - [`video`]: alpha-packed MP4 clip source (local ffmpeg, LRU cache, PNG fallback).
 //! - [`particles`]: cyan/magenta/purple/gold/red particle bursts (TODO, M9).
 //!
@@ -22,6 +23,7 @@ pub mod avatar;
 pub mod avatar_edit;
 pub mod catalog;
 pub mod gestures;
+pub mod lipsync;
 pub mod particles;
 pub mod player;
 pub mod preview;

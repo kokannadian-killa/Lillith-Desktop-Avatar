@@ -209,7 +209,7 @@ impl MouthFrames {
 
 /// Seconds per scheduled shape at `talk_speed = 1.0` (the original, fast
 /// pace). Actual durations are these divided by the speed.
-const FLAP_S: f32 = 0.085;
+pub(crate) const FLAP_S: f32 = 0.085;
 const PAUSE_S: f32 = 0.16;
 const SMILE_S: f32 = 0.30;
 /// Default `talk_speed`: mouth shapes change ~38% less often than at 1.0
