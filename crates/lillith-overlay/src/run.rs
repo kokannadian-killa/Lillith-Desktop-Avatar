@@ -1018,13 +1018,46 @@ impl Controller {
             return;
         }
         tracing::info!(?plan, peak, base_scale, "tease: come closer");
+        let center_x = cur.left + size.0 as i32 / 2;
         self.tease_run = Some(TeaseRun {
             plan,
             base_scale,
-            center_x: cur.left + size.0 as i32 / 2,
+            center_x,
         });
         self.tease.begin(peak, beat_s);
+        self.hold_tease_frame(base_scale * peak, center_x);
         self.tease_phase(TeasePhase::Approach);
+    }
+
+    /// Grows the window once to the tease's peak size (centred on
+    /// `center_x`, kept on screen) while she is still drawn at her normal
+    /// size; the easing then only changes her drawing scale inside it. One
+    /// resize per tease edge instead of one per easing step: no flicker and
+    /// no freshly resized, not-yet-painted window area mid-animation.
+    fn hold_tease_frame(&mut self, scale: f32, center_x: i32) {
+        let (fw, _) = self.stage.body_size_at(scale);
+        let mut left = center_x - fw as i32 / 2;
+        if let Some((sw, _)) = self.screen {
+            left = keep_on_screen(left, fw, sw);
+        }
+        let before = self.stage.size();
+        let frame = crate::stage::StageFrame {
+            scale,
+            center_x: (center_x - left) as f32,
+        };
+        if let Err(e) = self.stage.set_frame(Some(frame)) {
+            tracing::warn!("tease frame: {e}");
+            return;
+        }
+        if self.stage.size() != before {
+            self.resized = true;
+        }
+        let cur = self.pending_move.unwrap_or(self.placement);
+        if left != cur.left {
+            self.pending_move = Some(Placement { left, ..cur });
+        }
+        self.brain.set_position(left as f32);
+        self.apply_area();
     }
 
     /// Clips for a tease phase.
@@ -1060,6 +1093,15 @@ impl Controller {
             return;
         };
         self.stage.animator_mut().stand();
+        if self.stage.frame().is_some() {
+            let before = self.stage.size();
+            if let Err(e) = self.stage.set_frame(None) {
+                tracing::warn!("tease frame: {e}");
+            }
+            if self.stage.size() != before {
+                self.resized = true;
+            }
+        }
         self.apply_tease_scale_around(run.base_scale, run.center_x);
         tracing::debug!(scale = run.base_scale, "tease: done");
     }
@@ -1088,6 +1130,17 @@ impl Controller {
     /// Resizes her to `scale` without saving it, keeping the window centred
     /// on `center_x`, her feet on the same line and the window on screen.
     fn apply_tease_scale_around(&mut self, scale: f32, center_x: i32) {
+        if self.stage.frame().is_some() {
+            // Window held at the peak size: only her drawing scale changes.
+            let before = self.stage.size();
+            if let Err(e) = self.stage.set_scale(scale) {
+                tracing::warn!("tease scale: {e}");
+            }
+            if self.stage.size() != before {
+                self.resized = true;
+            }
+            return;
+        }
         if (self.stage.scale() - scale).abs() > f32::EPSILON {
             if let Err(e) = self.stage.set_scale(scale) {
                 tracing::warn!("tease resize: {e}");
@@ -1921,6 +1974,61 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
         // Nothing was saved and the menu shows her normal size.
         assert!(!dir.join("cfg/config.toml").exists());
         assert_eq!(c.normal_scale(), base);
+    }
+
+    #[test]
+    fn tease_resizes_the_window_once_each_way_and_stays_transparent() {
+        let (dir, mut c) = tease_controller("tease_frame");
+        let dt = 1.0 / 30.0;
+        let size0 = c.stage.size();
+        let _ = c.take_resized();
+        let mut center0: Option<f32> = None;
+        let mut sizes = vec![size0];
+        let mut resizes = 0;
+        let mut started = false;
+        for _ in 0..(20.0 / dt) as usize {
+            if let Some(m) = c.take_move() {
+                c.placement = m;
+            }
+            c.tick(dt).unwrap();
+            // The backend applies the move together with the new buffer.
+            if let Some(m) = c.take_move() {
+                c.placement = m;
+            }
+            if c.take_resized() {
+                resizes += 1;
+            }
+            let size = c.stage.size();
+            if sizes.last() != Some(&size) {
+                sizes.push(size);
+            }
+            started |= c.tease.active();
+            if c.tease.active() {
+                // Her feet stay put on screen while she grows inside the
+                // held (peak-sized) window.
+                let feet_x = c.placement.left as f32 + c.stage.feet_anchor().0;
+                let c0 = *center0.get_or_insert(feet_x);
+                assert!((feet_x - c0).abs() <= 1.5, "{feet_x} vs {c0}");
+            }
+            // Every buffer she presents is transparent around her.
+            let (w, h) = c.stage.size();
+            let px = c.stage.canvas().data();
+            for (x, y) in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
+                let i = ((y * w + x) * 4) as usize;
+                assert_eq!(px[i + 3], 0, "corner ({x},{y}) of {w}x{h} is transparent");
+            }
+            if started && !c.tease.active() {
+                break;
+            }
+        }
+        assert!(started, "tease ran");
+        // Grown once to the peak window, shrunk once back: not per step.
+        assert_eq!(sizes.len(), 3, "{sizes:?}");
+        assert!(sizes[1].0 > size0.0 && sizes[1].1 > size0.1);
+        assert_eq!(sizes[2], size0);
+        assert!(resizes <= 2, "{resizes} window resizes");
+        assert!(c.stage.frame().is_none(), "frame released");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

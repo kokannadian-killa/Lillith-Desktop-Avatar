@@ -106,6 +106,24 @@ pub struct Stage {
     avatar_strength: f32,
     /// Renders skipped because a video frame was still decoding.
     pending_frames: u64,
+    /// Canvas held at a fixed size while her scale eases (tease).
+    frame: Option<StageFrame>,
+    /// The canvas was just (re)allocated and is still empty: the next
+    /// render must draw something rather than wait for a video frame.
+    fresh: bool,
+}
+
+/// A canvas size held independently of her drawing scale, so a scale
+/// animation (the "come closer" tease) resizes the window once instead of
+/// on every step: no per-step buffer reallocation, no not-yet-painted
+/// window area, no flicker.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StageFrame {
+    /// Canvas scale (canvas = largest cell × this).
+    pub scale: f32,
+    /// Canvas x (px) of her body centre line (the cell's horizontal
+    /// centre), so she stays put when the window is clamped on screen.
+    pub center_x: f32,
 }
 
 impl std::fmt::Debug for Stage {
@@ -174,6 +192,8 @@ impl Stage {
             avatar: None,
             avatar_strength: lillith_anim::avatar::DEFAULT_STRENGTH,
             pending_frames: 0,
+            frame: None,
+            fresh: true,
         })
     }
 
@@ -184,26 +204,84 @@ impl Stage {
 
     /// Resizes the overlay live (Resize menu / Settings): canvas, feet
     /// anchor and speech area follow; the animator keeps playing.
+    ///
+    /// While a [`StageFrame`] is held (the "come closer" tease) the canvas
+    /// keeps the frame's size and only the drawing scale changes, so the
+    /// window is not resized on every easing step.
     pub fn set_scale(&mut self, scale: f32) -> Result<(), StageError> {
         let scale = scale.clamp(0.1, 4.0);
         let (cw, ch) = self.cell_wh;
-        let w = (cw as f32 * scale).round() as u32;
-        let mut h = (ch as f32 * scale).round() as u32;
+        // Canvas scale: the held frame if it is (about) big enough for her.
+        let held = self.frame.filter(|f| f.scale + 0.01 >= scale);
+        let fs = held.map_or(scale, |f| f.scale.max(scale));
+        let w = (cw as f32 * fs).round() as u32;
+        let body_h = (ch as f32 * fs).round() as u32;
+        let mut h = body_h;
+        let resized = {
+            let mut pad = 0;
+            if let Some(s) = &self.speech {
+                pad = SpeechLayout::new(&s.fonts, w, fs).pad;
+            }
+            h += pad;
+            (w, h) != self.size()
+        };
         let mut pad = 0;
         if let Some(s) = &mut self.speech {
-            s.layout = SpeechLayout::new(&s.fonts, w, scale);
-            s.lines = (String::new(), Vec::new());
+            if resized || (self.scale - scale).abs() > f32::EPSILON {
+                s.layout = SpeechLayout::new(&s.fonts, w, fs);
+                s.lines = (String::new(), Vec::new());
+            }
             pad = s.layout.pad;
-            h += pad;
         }
-        self.canvas = Canvas::new(w, h).ok_or(StageError::Size(w, h))?;
+        if resized {
+            // A new canvas is fully transparent (0x00000000); `fresh`
+            // makes the next render draw her even if a video frame is
+            // still decoding, so a resize never shows an empty window.
+            self.canvas = Canvas::new(w, h).ok_or(StageError::Size(w, h))?;
+            self.fresh = true;
+        }
         self.scale = scale;
         let a = self.base_anchor;
-        self.origin = (a.0 as f32 * scale, a.1 as f32 * scale + pad as f32);
+        self.origin = match held {
+            Some(f) => {
+                // Feet on the frame's body centre line, on the same floor
+                // line the window bottom would give at this scale.
+                let x = f.center_x + (a.0 as f32 - cw as f32 / 2.0) * scale;
+                let y = body_h as f32 - (ch as f32 - a.1 as f32) * scale;
+                (x, y + pad as f32)
+            }
+            _ => (a.0 as f32 * scale, a.1 as f32 * scale + pad as f32),
+        };
         self.key = None;
         self.mask_key = None;
         self.mask.clear();
         Ok(())
+    }
+
+    /// Holds the canvas at `frame` (see [`StageFrame`]) or releases it
+    /// (`None`: the canvas follows her scale again). Re-lays the stage out.
+    pub fn set_frame(&mut self, frame: Option<StageFrame>) -> Result<(), StageError> {
+        self.frame = frame.map(|f| StageFrame {
+            scale: f.scale.clamp(0.1, 4.0),
+            ..f
+        });
+        self.set_scale(self.scale)
+    }
+
+    /// The held canvas frame, if any.
+    pub fn frame(&self) -> Option<StageFrame> {
+        self.frame
+    }
+
+    /// Canvas size (px) for scale `scale` without a held frame and without
+    /// the speech area.
+    pub fn body_size_at(&self, scale: f32) -> (u32, u32) {
+        let (cw, ch) = self.cell_wh;
+        let s = scale.clamp(0.1, 4.0);
+        (
+            (cw as f32 * s).round() as u32,
+            (ch as f32 * s).round() as u32,
+        )
     }
 
     /// Turns the overlay speech area on/off live (resizes the canvas).
@@ -303,6 +381,7 @@ impl Stage {
         let (w, h) = (self.canvas.width(), self.canvas.height() + layout.pad);
         self.canvas = Canvas::new(w, h).ok_or(StageError::Size(w, h))?;
         self.origin.1 += layout.pad as f32;
+        self.fresh = true;
         self.key = None;
         self.mask_key = None;
         self.speech = Some(SpeechArea {
@@ -517,8 +596,20 @@ impl Stage {
                 self.scale,
                 &f,
                 &t,
+                self.fresh,
             )? {
-                Some(head) => head,
+                Some((head, exact)) => {
+                    if !exact {
+                        // Stand-in drawn: render the real frame next tick.
+                        self.fresh = false;
+                        self.render_time += started.elapsed();
+                        return Ok(Changed {
+                            pixels: true,
+                            mask: false,
+                        });
+                    }
+                    head
+                }
                 None => {
                     // Video frame still decoding: keep the previous
                     // picture on screen and retry next tick.
@@ -529,6 +620,7 @@ impl Stage {
             }
         };
         self.key = Some(key);
+        self.fresh = false;
         self.renders += 1;
         let mut mkey = quant(1.0 / self.scale.max(0.1), 0.005, 0.005);
         if self.avatar.is_some() {
@@ -573,24 +665,30 @@ impl Stage {
         scale: f32,
         f: &lillith_anim::animator::FrameRef<'_>,
         t: &lillith_core::spring::Transform,
-    ) -> Result<Option<f32>, StageError> {
+        must_draw: bool,
+    ) -> Result<Option<(f32, bool)>, StageError> {
         let t = *t;
         let ck = (f.clip_name.to_string(), f.frame);
+        // `false` while a stand-in (the previous cell) is drawn.
+        let mut exact = true;
         if cell_cache.as_ref().map(|(k, _)| k) != Some(&ck) {
             // MP4 clips stream in; with no picture yet (start-up) block,
             // otherwise wait a moment and keep the old frame if needed.
-            let cell = if cell_cache.is_none() {
-                pages.cell(f.clip, f.frame)?
+            if cell_cache.is_none() {
+                *cell_cache = Some((ck, pages.cell(f.clip, f.frame)?));
             } else {
                 match pages.poll_cell(f.clip, f.frame, VIDEO_FRAME_WAIT)? {
-                    Some(c) => c,
+                    Some(c) => *cell_cache = Some((ck, c)),
+                    // The canvas was just reallocated (resize) and is still
+                    // empty: draw the previous cell as a stand-in rather
+                    // than present an empty window while this one decodes.
+                    None if must_draw => exact = false,
                     None => return Ok(None),
                 }
-            };
-            *cell_cache = Some((ck, cell));
+            }
         }
         canvas.fill(tiny_skia::Color::TRANSPARENT);
-        let mut blend = f.blend.filter(|&(_, w)| w > 1.0 / 48.0);
+        let mut blend = f.blend.filter(|&(_, w)| exact && w > 1.0 / 48.0);
         if let Some((next, _)) = blend {
             let nk = (f.clip_name.to_string(), next);
             if cell_next.as_ref().map(|(k, _)| k) != Some(&nk) {
@@ -654,7 +752,7 @@ impl Stage {
             tf.map_points(std::slice::from_mut(&mut pt));
             pt.x
         };
-        Ok(Some(head))
+        Ok(Some((head, exact)))
     }
 
     /// The bubble goes on after the mask scan: it never catches clicks.
@@ -901,6 +999,70 @@ pub(crate) mod tests {
         assert_eq!(st.size(), (160, 160));
         st.render().unwrap();
         assert!(st.hit(40.0, 120.0));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn corners_clear(st: &Stage) -> bool {
+        let (w, h) = st.size();
+        let px = st.canvas().data();
+        [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+            .iter()
+            .all(|&(x, y)| px[((y * w + x) * 4 + 3) as usize] == 0)
+    }
+
+    fn opaque_px(st: &Stage) -> usize {
+        st.canvas()
+            .data()
+            .chunks_exact(4)
+            .filter(|p| p[3] == 255)
+            .count()
+    }
+
+    #[test]
+    fn resize_draws_her_into_a_fresh_transparent_canvas() {
+        let (dir, m) = fixture("fresh");
+        let mut st = Stage::new(m, PageCache::new(&dir), 2.0, AnimatorConfig::default()).unwrap();
+        st.render().unwrap();
+        assert!(corners_clear(&st) && opaque_px(&st) > 0);
+        st.set_scale(3.0).unwrap();
+        // The new buffer starts fully transparent (0x00000000), never black.
+        assert_eq!(st.size(), (120, 120));
+        assert!(st.canvas().data().iter().all(|&b| b == 0), "cleared to 0");
+        let c = st.render().unwrap();
+        assert!(c.pixels, "first frame after a resize is drawn");
+        assert!(corners_clear(&st), "transparent around her after resize");
+        assert!(opaque_px(&st) > 0, "she is in the resized buffer");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn held_frame_keeps_the_canvas_while_she_scales() {
+        let (dir, m) = fixture("frame");
+        let mut st = Stage::new(m, PageCache::new(&dir), 2.0, AnimatorConfig::default()).unwrap();
+        st.set_frame(Some(StageFrame {
+            scale: 4.0,
+            center_x: 70.0,
+        }))
+        .unwrap();
+        assert_eq!(st.size(), (160, 160), "window grows once, to the peak");
+        // Still drawn at her normal size, feet on the centre line / floor.
+        assert_eq!(st.scale(), 2.0);
+        assert_eq!(st.feet_anchor(), (70.0, 160.0 - 2.0 * 2.0));
+        st.render().unwrap();
+        assert!(corners_clear(&st));
+        let small = opaque_px(&st);
+        for s in [2.5, 3.0, 3.5, 4.0] {
+            st.set_scale(s).unwrap();
+            assert_eq!(st.size(), (160, 160), "no resize at {s}");
+            assert_eq!(st.feet_anchor(), (70.0, 160.0 - 2.0 * s));
+            st.render().unwrap();
+            assert!(corners_clear(&st), "transparent at {s}");
+        }
+        assert!(opaque_px(&st) > small * 3, "she grew inside the frame");
+        st.set_scale(2.0).unwrap();
+        st.set_frame(None).unwrap();
+        assert_eq!(st.size(), (80, 80), "back to her own size");
+        assert_eq!(st.feet_anchor(), (40.0, 76.0));
         let _ = std::fs::remove_dir_all(dir);
     }
 }
