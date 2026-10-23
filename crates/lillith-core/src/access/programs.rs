@@ -84,8 +84,30 @@ pub fn parse_desktop(file: &Path, id: &str) -> Option<DesktopApp> {
 }
 
 /// Every visible installed app, first definition of an id wins, sorted by name.
+/// On Windows: Start Menu shortcuts plus the App Paths / Uninstall registry
+/// keys (see [`super::winprograms`]).
 pub fn desktop_apps() -> Vec<DesktopApp> {
-    apps_in(&application_dirs())
+    #[cfg(windows)]
+    {
+        super::winprograms::installed()
+            .into_iter()
+            .filter_map(|p| {
+                let t = p.target.clone()?;
+                Some(DesktopApp {
+                    id: p.name.clone(),
+                    name: p.name,
+                    generic: p.source.to_string(),
+                    exec: t.display().to_string(),
+                    file: t,
+                    terminal: false,
+                })
+            })
+            .collect()
+    }
+    #[cfg(not(windows))]
+    {
+        apps_in(&application_dirs())
+    }
 }
 
 /// [`desktop_apps`] over explicit folders (tests).
@@ -146,15 +168,24 @@ pub fn find_app<'a>(apps: &'a [DesktopApp], query: &str) -> Option<&'a DesktopAp
     tests.iter().find_map(|t| apps.iter().find(|a| t(a)))
 }
 
-/// `name` on `PATH`, if it is an executable file.
+/// `name` on `PATH`, if it is an executable file. On Windows the `PATHEXT`
+/// extensions (`.exe`, `.cmd`, …) are tried too.
 pub fn which(name: &str) -> Option<PathBuf> {
-    if name.is_empty() || name.contains('/') {
+    if name.is_empty() || name.contains('/') || (cfg!(windows) && name.contains('\\')) {
         let p = PathBuf::from(name);
         return is_exec(&p).then_some(p);
     }
     let path = std::env::var_os("PATH")?;
+    let exts: Vec<String> = if cfg!(windows) {
+        let pe = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
+        std::iter::once(String::new())
+            .chain(pe.split(';').filter(|e| !e.is_empty()).map(str::to_string))
+            .collect()
+    } else {
+        vec![String::new()]
+    };
     std::env::split_paths(&path)
-        .map(|d| d.join(name))
+        .flat_map(|d| exts.iter().map(move |e| d.join(format!("{name}{e}"))))
         .find(|p| is_exec(p))
 }
 
@@ -258,6 +289,13 @@ pub fn split_exec(exec: &str) -> Vec<String> {
 /// dropped. Files are appended when the Exec line has no file code.
 pub fn launch_argv(app: &DesktopApp, files: &[PathBuf]) -> Vec<String> {
     let fs: Vec<String> = files.iter().map(|f| f.display().to_string()).collect();
+    if cfg!(windows) {
+        // A Windows entry's `exec` is the .exe / .lnk path itself (backslashes
+        // are separators there, not escapes).
+        let mut v = vec![app.exec.clone()];
+        v.extend(fs);
+        return v;
+    }
     let mut out = Vec::new();
     let mut used = false;
     for w in split_exec(&app.exec) {
@@ -300,6 +338,71 @@ pub fn spawn_detached(argv: &[String]) -> std::io::Result<u32> {
     let (cmd, args) = argv
         .split_first()
         .ok_or_else(|| std::io::Error::other("nothing to launch"))?;
+    #[cfg(windows)]
+    {
+        // Shortcuts, documents and anything not an .exe open through the
+        // shell (ShellExecuteW "open"), exactly like a double-click.
+        let lower = cmd.to_ascii_lowercase();
+        if !lower.ends_with(".exe")
+            && !lower.ends_with(".com")
+            && !lower.ends_with(".bat")
+            && !lower.ends_with(".cmd")
+            && (lower.contains('\\') || lower.contains('.'))
+        {
+            return shell_open(cmd, &super::winshell::join_args(args)).map(|()| 0);
+        }
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        let child = std::process::Command::new(cmd)
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+            .spawn()?;
+        Ok(child.id())
+    }
+    #[cfg(not(windows))]
+    {
+        spawn_unix(cmd, args)
+    }
+}
+
+/// Opens `file` with `params` through the Windows shell (`open` verb).
+#[cfg(windows)]
+pub fn shell_open(file: &str, params: &str) -> std::io::Result<()> {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let w = |s: &str| -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() };
+    let (verb, f, p) = (w("open"), w(file), w(params));
+    // SAFETY: every pointer is a NUL-terminated UTF-16 buffer that outlives
+    // the call; a null HWND and directory are allowed.
+    let r = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            f.as_ptr(),
+            if params.is_empty() {
+                std::ptr::null()
+            } else {
+                p.as_ptr()
+            },
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if (r as isize) <= 32 {
+        return Err(std::io::Error::other(format!(
+            "Windows could not open {file} (ShellExecute code {})",
+            r as isize
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn spawn_unix(cmd: &str, args: &[String]) -> std::io::Result<u32> {
     let mut c = std::process::Command::new(cmd);
     c.args(args)
         .stdin(std::process::Stdio::null())

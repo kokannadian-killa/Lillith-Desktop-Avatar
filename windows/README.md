@@ -30,10 +30,22 @@ Options (environment): `DIST=/some/dir`, `CARGO=/path/to/cargo`,
 `NO_ZIP=1`.
 
 On Windows itself you can build natively instead:
-`cargo build --release --no-default-features --features windows -p lillith`
-and `cargo build --release -p lillith-settings-gui`, then
+`cargo build --release --no-default-features --features windows -p lillith`,
+`cargo build --release -p lillith-settings-gui` and
+`cargo build --release -p lillith-admin`, then
 `makensis -DVERSION=… -DSTAGE=… windows\installer.nsi` on a folder staged
 like `build.sh` does.
+
+## Admin helper (`lillith-admin.exe`)
+
+Ships next to `lillith.exe`. The main app stays non-admin. The first
+approved elevated command of a session launches the helper through UAC
+(`ShellExecuteW` / `runas`); they talk over a local named pipe
+`\\.\pipe\lillith-admin-<hex>` ACL'd to your account only. Setting
+`[mind.access.windows] admin_prompt = "per-session"` (default) or
+`"per-command"` is in Settings ▸ Access ▸ WINDOWS · ADMIN. Every elevated
+command still shows an **ELEVATED (admin)** badge on the Soul Contract
+card; voice never approves.
 
 ## Layout
 

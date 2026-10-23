@@ -207,6 +207,28 @@ impl KnobTab {
                     ],
                 },
                 Group {
+                    title: "WINDOWS · ADMIN",
+                    tag: "[mind.access.windows]",
+                    knobs: vec![
+                        b(&["mind", "access", "windows", "admin"], "Admin commands", "Allow elevated cmd / PowerShell through lillith-admin (each one still shows ELEVATED (admin) on the Soul Contract card; voice never approves)", |c| c.mind.access.windows.admin),
+                        Knob {
+                            path: &["mind", "access", "windows", "admin_prompt"],
+                            label: "UAC prompt",
+                            help: "per-session = one UAC prompt, the helper stays until you quit, say the safeword, or it idles out. per-command = a UAC prompt for every elevated command.",
+                            kind: Kind::Choice {
+                                options: &["per-session", "per-command"],
+                                default: "per-session",
+                            },
+                        },
+                        Knob {
+                            path: &["mind", "access", "windows", "admin_idle_timeout_min"],
+                            label: "Admin idle",
+                            help: "Minutes without an elevated command before the helper exits (per-session mode)",
+                            kind: Kind::Int { min: 1, max: 240, unit: "min", default: 15 },
+                        },
+                    ],
+                },
+                Group {
                     title: "SKILLS",
                     tag: "[mind]",
                     knobs: vec![

@@ -135,6 +135,7 @@ impl PlanPrompt {
                     detail: i.detail.clone(),
                     delete_entries: i.manifest.as_ref().map_or(0, |m| m.entries.len()),
                     risky: i.risky.is_some(),
+                    elevated: i.elevated,
                 })
                 .collect(),
             totals: plan.totals(None),

@@ -2400,6 +2400,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lillith-admin"
+version = "0.0.1"
+dependencies = [
+ "lillith-core",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "lillith-android"
 version = "0.0.1"
 dependencies = [
@@ -2438,6 +2446,7 @@ dependencies = [
  "thiserror 2.0.21",
  "toml",
  "tracing",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

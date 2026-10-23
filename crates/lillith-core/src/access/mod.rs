@@ -16,13 +16,18 @@
 //!
 //! Everything here is local. Nothing opens a network connection.
 
+pub mod admin_broker;
+pub mod admin_proto;
 pub mod commands;
 pub mod deletion;
 pub mod find;
+pub mod kill_switch;
 pub mod organize;
 pub mod plan;
 pub mod programs;
 pub mod skill_import;
+pub mod winprograms;
+pub mod winshell;
 
 use std::path::{Component, Path, PathBuf};
 
@@ -89,15 +94,76 @@ pub const HOME_SECRET_TREES: &[&str] = &[
 /// them need approval; the tool API denies them).
 pub fn secret_roots() -> Vec<PathBuf> {
     match home() {
-        Some(h) => HOME_SECRET_TREES.iter().map(|s| h.join(s)).collect(),
+        Some(h) => HOME_SECRET_TREES
+            .iter()
+            .chain(WIN_HOME_SECRET_TREES)
+            .map(|s| h.join(s))
+            .collect(),
         None => Vec::new(),
     }
 }
 
-/// The user's home (`$HOME`).
+/// Windows secrets folders under `%USERPROFILE%` (credentials, DPAPI keys,
+/// browser profiles). Empty elsewhere.
+#[cfg(windows)]
+pub const WIN_HOME_SECRET_TREES: &[&str] = &[
+    r"AppData\Roaming\Microsoft\Credentials",
+    r"AppData\Roaming\Microsoft\Protect",
+    r"AppData\Roaming\Microsoft\Crypto",
+    r"AppData\Roaming\Microsoft\SystemCertificates",
+    r"AppData\Local\Microsoft\Credentials",
+    r"AppData\Local\Microsoft\Vault",
+    r"AppData\Local\Google\Chrome\User Data",
+    r"AppData\Local\Microsoft\Edge\User Data",
+    r"AppData\Roaming\Mozilla\Firefox\Profiles",
+];
+/// Windows secrets folders under `%USERPROFILE%`. Empty elsewhere.
+#[cfg(not(windows))]
+pub const WIN_HOME_SECRET_TREES: &[&str] = &[];
+
+/// Windows system folders that are never moved or deleted (nor their
+/// contents). Resolved from the environment so they match the real install.
+#[cfg(windows)]
+pub fn windows_system_trees() -> Vec<PathBuf> {
+    let mut v = Vec::new();
+    let mut push = |s: Option<std::ffi::OsString>| {
+        if let Some(s) = s.filter(|s| !s.is_empty()) {
+            v.push(PathBuf::from(s));
+        }
+    };
+    push(std::env::var_os("SystemRoot")); // C:\Windows
+    push(std::env::var_os("windir"));
+    push(std::env::var_os("ProgramFiles"));
+    push(std::env::var_os("ProgramFiles(x86)"));
+    push(std::env::var_os("ProgramData"));
+    v.dedup();
+    v
+}
+
+/// Whether Windows path `p` is `root` or inside it: case-insensitive,
+/// either separator, `\\?\` verbatim prefixes ignored. Pure, so it is
+/// tested on every platform.
+pub fn win_path_under(p: &str, root: &str) -> bool {
+    let canon = |s: &str| {
+        let s = s.strip_prefix(r"\\?\").unwrap_or(s);
+        let mut t = s.replace('/', "\\").to_lowercase();
+        while t.len() > 3 && t.ends_with('\\') {
+            t.pop();
+        }
+        t
+    };
+    let (p, r) = (canon(p), canon(root));
+    if r.is_empty() {
+        return false;
+    }
+    p == r || (p.starts_with(&r) && (r.ends_with('\\') || p[r.len()..].starts_with('\\')))
+}
+
+/// The user's home: `$HOME`, or `%USERPROFILE%` on Windows.
 pub fn home() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .filter(|h| !h.is_empty())
+        .or_else(|| std::env::var_os("USERPROFILE").filter(|h| !h.is_empty()))
         .map(PathBuf::from)
 }
 
@@ -151,7 +217,15 @@ pub fn real_path(path: &Path) -> PathBuf {
 pub fn protected_reason(path: &Path, data_dir: Option<&Path>) -> Option<String> {
     let p = real_path(path);
     let lex = normalize(path);
+    #[cfg(windows)]
+    let win_trees = windows_system_trees();
     for cand in [&p, &lex] {
+        #[cfg(windows)]
+        for t in &win_trees {
+            if win_path_under(&cand.to_string_lossy(), &t.to_string_lossy()) {
+                return Some(format!("{} is a Windows system folder", cand.display()));
+            }
+        }
         for t in SYSTEM_TREES {
             if cand.starts_with(t) {
                 return Some(format!("{} is a system folder ({t})", cand.display()));
@@ -193,6 +267,11 @@ pub fn protected_reason(path: &Path, data_dir: Option<&Path>) -> Option<String> 
             }
             for s in HOME_SECRET_TREES {
                 if cand.starts_with(h.join(s)) {
+                    return Some(format!("{} holds secrets/keys", cand.display()));
+                }
+            }
+            for s in WIN_HOME_SECRET_TREES {
+                if win_path_under(&cand.to_string_lossy(), &h.join(s).to_string_lossy()) {
                     return Some(format!("{} holds secrets/keys", cand.display()));
                 }
             }
@@ -327,6 +406,20 @@ mod tests {
         let h = home().unwrap();
         let sneaky = h.join("../../usr/lib");
         assert!(protected_reason(&sneaky, None).is_some());
+    }
+
+    #[test]
+    fn windows_paths_compare_case_insensitively() {
+        assert!(win_path_under(r"C:\Windows\System32\x.dll", r"C:\Windows"));
+        assert!(win_path_under(r"c:/windows/system32", r"C:\Windows\"));
+        assert!(win_path_under(
+            r"\\?\C:\Program Files\App",
+            r"C:\Program Files"
+        ));
+        assert!(win_path_under(r"C:\Windows", r"C:\Windows"));
+        assert!(!win_path_under(r"C:\WindowsApps\x", r"C:\Windows"));
+        assert!(!win_path_under(r"D:\Windows", r"C:\Windows"));
+        assert!(!win_path_under(r"C:\x", ""));
     }
 
     #[test]

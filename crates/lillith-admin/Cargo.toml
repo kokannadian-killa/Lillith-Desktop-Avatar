@@ -1,0 +1,28 @@
+[package]
+name = "lillith-admin"
+description = "Elevated Windows helper for Lillith: one UAC prompt, then cmd/PowerShell over a local named pipe."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "lillith-admin"
+path = "src/main.rs"
+
+[dependencies]
+lillith-core = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+] }

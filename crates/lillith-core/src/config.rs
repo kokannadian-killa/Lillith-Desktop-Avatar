@@ -434,6 +434,50 @@ pub struct AccessConfig {
     pub roots: Vec<String>,
     /// Seconds a command may run before it is stopped.
     pub command_timeout_s: u64,
+    /// `[mind.access.windows]`: cmd / PowerShell and the admin helper.
+    pub windows: WindowsAccessConfig,
+}
+
+/// `[mind.access.windows]`: Windows-only command access. Every command
+/// (elevated or not) is still a Soul Contract plan item Ko approves; these
+/// keys only decide whether admin runs are possible and how often Windows
+/// shows its UAC prompt.
+///
+/// - `admin`: allow commands to run elevated through the `lillith-admin`
+///   helper (each one still shows an `ELEVATED (admin)` badge on the card).
+/// - `admin_prompt`: `"per-session"` (one UAC prompt, the helper stays up
+///   until Lillith exits, the safeword, or `admin_idle_timeout_min` without
+///   use) or `"per-command"` (a UAC prompt for every elevated command).
+/// - `admin_idle_timeout_min`: idle minutes before the helper exits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WindowsAccessConfig {
+    pub admin: bool,
+    pub admin_prompt: String,
+    pub admin_idle_timeout_min: u64,
+}
+
+impl Default for WindowsAccessConfig {
+    fn default() -> Self {
+        Self {
+            admin: true,
+            admin_prompt: "per-session".into(),
+            admin_idle_timeout_min: 15,
+        }
+    }
+}
+
+impl WindowsAccessConfig {
+    /// `true` for `per-command` (anything else is per-session).
+    pub fn per_command(&self) -> bool {
+        let p = self.admin_prompt.trim().to_ascii_lowercase();
+        p == "per-command" || p == "per_command" || p == "command"
+    }
+
+    /// Idle timeout, at least one minute.
+    pub fn idle_timeout_min(&self) -> u64 {
+        self.admin_idle_timeout_min.max(1)
+    }
 }
 
 impl Default for AccessConfig {
@@ -447,6 +491,7 @@ impl Default for AccessConfig {
             import_desktop_skills: true,
             roots: DEFAULT_ACCESS_ROOTS.iter().map(|s| s.to_string()).collect(),
             command_timeout_s: 30,
+            windows: WindowsAccessConfig::default(),
         }
     }
 }
@@ -589,11 +634,12 @@ pub fn expand_tilde(raw: &str) -> Option<PathBuf> {
         return None;
     }
     if t == "~" {
-        return std::env::var_os("HOME").map(PathBuf::from);
+        return crate::access::home();
     }
-    if let Some(rest) = t.strip_prefix("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return Some(PathBuf::from(home).join(rest));
+    // `~\` is the Windows spelling.
+    if let Some(rest) = t.strip_prefix("~/").or_else(|| t.strip_prefix("~\\")) {
+        if let Some(home) = crate::access::home() {
+            return Some(home.join(rest));
         }
     }
     Some(PathBuf::from(t))
@@ -1248,6 +1294,20 @@ mod tests {
         assert!(!d.join("lillith.desktop").exists());
         set_autostart(&d, Path::new("/usr/bin/lillith"), false).unwrap();
         let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn windows_access_keys_parse_with_defaults() {
+        let c: Config = toml::from_str(
+            "[mind.access.windows]\nadmin_prompt = \"per-command\"\nadmin_idle_timeout_min = 0\n",
+        )
+        .unwrap();
+        let w = &c.mind.access.windows;
+        assert!(w.admin && w.per_command());
+        assert_eq!(w.idle_timeout_min(), 1);
+        let d = WindowsAccessConfig::default();
+        assert!(!d.per_command() && d.admin_prompt == "per-session");
+        assert_eq!(d.idle_timeout_min(), 15);
     }
 
     #[test]

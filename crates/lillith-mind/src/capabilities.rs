@@ -33,6 +33,12 @@ pub fn enabled_tools(tools: &MindTools, has_knowledge: bool) -> Vec<&'static str
     }
     if a.commands {
         v.push("run");
+        v.extend([
+            "run_cmd",
+            "run_powershell",
+            "list_programs",
+            "launch_program",
+        ]);
     }
     if tools.allowlist().allow_shell() {
         v.push("shell");
@@ -104,7 +110,12 @@ Every launch is a plan step Ko approves.\n\
         s.push_str(&format!(
             "\n### Commands (for getting tasks done)\n\
 - run <command> — a plan step; after Ko approves I see the output\n\
-Every command, even a harmless one, waits for Ko's approval in the plan. Anything that changes something, uses sudo/pkexec, kills processes, writes with > or changes system config is marked risky there. Deleting files is never a command: I use delete. Commands stop after {}s.\n",
+- run_cmd <command> — Windows cmd.exe (same card; Windows only)\n\
+- run_powershell <command> — Windows PowerShell (same card)\n\
+- run_cmd_admin / run_powershell_admin <command> — elevated through the admin helper; the card shows ELEVATED (admin) and Ko's Yes is the only approval (voice never confirms)\n\
+- list_programs [filter] — Start Menu + App Paths + Uninstall (Windows)\n\
+- launch_program <app> — same as open\n\
+Every command, even a harmless one, waits for Ko's approval in the plan. Anything that changes something, uses sudo/pkexec, kills processes, writes with > or changes system config is marked risky there. Deleting files is never a command: I use delete. Commands stop after {}s. Ko saying the safeword (\"red\" / \"OOC: stop\") kills every running command and the admin helper.\n",
             a.command_timeout_s
         ));
     }

@@ -395,4 +395,24 @@ mod tests {
         assert!(cfg.mind.access.files, "untouched switches stay on");
         assert_eq!(cfg.mind.skills_dir, "/home/ko/skills");
     }
+
+    #[test]
+    fn windows_admin_keys_land_in_access_windows() {
+        let p = tmp("access-win");
+        let _ = std::fs::remove_file(&p);
+        let mut s = ConfigStore::load(&p);
+        s.set_bool(&["mind", "access", "windows", "admin"], false);
+        s.set_str(
+            &["mind", "access", "windows", "admin_prompt"],
+            "per-command",
+        );
+        s.set_i64(&["mind", "access", "windows", "admin_idle_timeout_min"], 7);
+        s.save().unwrap();
+        let cfg =
+            lillith_core::config::Config::from_toml_str(&std::fs::read_to_string(&p).unwrap())
+                .unwrap();
+        assert!(!cfg.mind.access.windows.admin);
+        assert!(cfg.mind.access.windows.per_command());
+        assert_eq!(cfg.mind.access.windows.admin_idle_timeout_min, 7);
+    }
 }

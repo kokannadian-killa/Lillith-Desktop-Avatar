@@ -32,6 +32,8 @@ pub struct PlanRow {
     pub delete_entries: usize,
     /// A program run marked risky.
     pub risky: bool,
+    /// Runs elevated through the admin helper — show the badge.
+    pub elevated: bool,
 }
 
 /// What the popup shows.
@@ -204,7 +206,8 @@ pub fn plan_review_popup(
                             ui.horizontal(|ui| {
                                 ui.add_space(14.0);
                                 let mut on = state.checked.contains(&row.n);
-                                let colour = if row.delete_entries > 0 || row.risky {
+                                let colour = if row.delete_entries > 0 || row.risky || row.elevated
+                                {
                                     pal::BLOOD_NEON
                                 } else {
                                     pal::TERMINAL_TEXT
@@ -213,6 +216,9 @@ pub fn plan_review_popup(
                                     &mut on,
                                     mono(format!("{:>2}. {}", row.n, row.line), 11.0, colour),
                                 );
+                                if row.elevated {
+                                    ui.label(mono("ELEVATED (admin)", 10.0, pal::BLOOD_NEON));
+                                }
                                 ui.ctx()
                                     .data_mut(|d| d.insert_temp(id.with(("row", row.n)), c.rect));
                                 if c.changed() {
@@ -388,6 +394,14 @@ mod tests {
                 line: "run $ df -h".into(),
                 ..Default::default()
             },
+            PlanRow {
+                n: 4,
+                group: "programs".into(),
+                line: "cmd $ ver".into(),
+                elevated: true,
+                risky: true,
+                ..Default::default()
+            },
         ]
     }
 
@@ -453,20 +467,20 @@ mod tests {
             for _ in 0..3 {
                 assert_eq!(frame(&ctx, vec![], &mut s), None);
             }
-            assert_eq!(s.checked.len(), 3, "everything ticked at first");
+            assert_eq!(s.checked.len(), 4, "everything ticked at first");
             // APPROVE ALL is dead until the delete phrase is typed.
             assert_eq!(click(&ctx, &mut s, rect(&ctx, "all-rect").center()), None);
             // Untick the delete (item 2): APPROVE SELECTED works without a phrase.
             let row2 = rect(&ctx, ("row", 2usize));
             let _ = click(&ctx, &mut s, Pos2::new(row2.left() + 6.0, row2.center().y));
-            assert_eq!(s.checked, [1, 3].into());
+            assert_eq!(s.checked, [1, 3, 4].into());
             for _ in 0..2 {
                 let _ = frame(&ctx, vec![], &mut s);
             }
             assert_eq!(
                 click(&ctx, &mut s, rect(&ctx, "some-rect").center()),
                 Some(PlanChoice::Approve {
-                    items: vec![1, 3],
+                    items: vec![1, 3, 4],
                     typed: String::new(),
                     permanent: false
                 })
@@ -478,7 +492,7 @@ mod tests {
             assert_eq!(
                 click(&ctx, &mut s, rect(&ctx, "all-rect").center()),
                 Some(PlanChoice::Approve {
-                    items: vec![1, 2, 3],
+                    items: vec![1, 2, 3, 4],
                     typed: "delete 3 items".into(),
                     permanent: false
                 })

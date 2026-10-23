@@ -109,6 +109,8 @@ Page custom BrainPage BrainLeave
   Pop $0
   nsExec::Exec '"$SYSDIR\taskkill.exe" /IM lillith-settings.exe /F'
   Pop $0
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /IM lillith-admin.exe /T /F'
+  Pop $0
   Sleep 300
 !macroend
 
@@ -380,6 +382,7 @@ Section "Uninstall"
   ; dropped next to Lillith are left alone).
   Delete "$INSTDIR\lillith.exe"
   Delete "$INSTDIR\lillith-settings.exe"
+  Delete "$INSTDIR\lillith-admin.exe"
   Delete "$INSTDIR\lillith.ico"
   RMDir /r "$INSTDIR\icons"
   Delete "$INSTDIR\INSTALL-windows.txt"

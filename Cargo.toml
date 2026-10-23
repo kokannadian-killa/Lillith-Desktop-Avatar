@@ -15,6 +15,7 @@ members = [
     "tools/import-manifest",
     "crates/lillith-theme",
     "crates/lillith-settings-gui",
+    "crates/lillith-admin",
     "android/rust",
 ]
 default-members = [
@@ -32,6 +33,7 @@ default-members = [
     "tools/import-manifest",
     "crates/lillith-theme",
     "crates/lillith-settings-gui",
+    "crates/lillith-admin",
     "android/rust",
 ]
 
@@ -57,6 +59,7 @@ lillith-tray = { path = "crates/lillith-tray" }
 lillith-theme = { path = "crates/lillith-theme" }
 lillith-settings-gui = { path = "crates/lillith-settings-gui" }
 lillith-setup = { path = "crates/lillith-setup" }
+lillith-admin = { path = "crates/lillith-admin" }
 lillith-android = { path = "android/rust" }
 
 # Common

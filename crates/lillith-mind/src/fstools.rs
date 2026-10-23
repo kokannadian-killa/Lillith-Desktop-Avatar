@@ -61,6 +61,14 @@ pub enum ToolRequest {
     Programs { filter: String },
     /// Run a CLI command (read-only ones run now; others need a Yes).
     Run { command: String },
+    /// Run a Windows `cmd.exe` / PowerShell command (always a plan item).
+    /// `elevated` asks for the admin helper; the card shows `ELEVATED (admin)`.
+    WinRun {
+        shell: lillith_core::access::winshell::WinShell,
+        command: String,
+        elevated: bool,
+        cwd: Option<String>,
+    },
     /// List the skills folder.
     ListSkills,
     /// Read one skill by name or file.
@@ -90,6 +98,26 @@ impl ToolRequest {
             ToolRequest::Installed { .. } => "installed",
             ToolRequest::Programs { .. } => "programs",
             ToolRequest::Run { .. } => "run",
+            ToolRequest::WinRun {
+                shell: lillith_core::access::winshell::WinShell::Cmd,
+                elevated: false,
+                ..
+            } => "run_cmd",
+            ToolRequest::WinRun {
+                shell: lillith_core::access::winshell::WinShell::Cmd,
+                elevated: true,
+                ..
+            } => "run_cmd_admin",
+            ToolRequest::WinRun {
+                shell: lillith_core::access::winshell::WinShell::PowerShell,
+                elevated: false,
+                ..
+            } => "run_powershell",
+            ToolRequest::WinRun {
+                shell: lillith_core::access::winshell::WinShell::PowerShell,
+                elevated: true,
+                ..
+            } => "run_powershell_admin",
             ToolRequest::ListSkills => "list_skills",
             ToolRequest::ReadSkill { .. } => "read_skill",
             ToolRequest::ImportSkills { .. } => "import_skills",
@@ -467,6 +495,40 @@ impl MindTools {
                     shell: false,
                 }]))
             }
+            ToolRequest::WinRun {
+                shell,
+                command,
+                elevated,
+                cwd,
+            } => {
+                self.need(self.access.commands, "commands")?;
+                let command = command.trim().to_string();
+                if command.is_empty() {
+                    return Err(ToolError::Empty);
+                }
+                if let Err(r) = access::winshell::assess(shell, &command) {
+                    return Err(ToolError::Refused(r));
+                }
+                if elevated && !self.access.windows.admin {
+                    return Err(ToolError::Refused(
+                        "admin commands are switched off ([mind.access.windows] admin = false)"
+                            .into(),
+                    ));
+                }
+                let cwd = match cwd {
+                    Some(c) if !c.trim().is_empty() => Some(self.vet(c.trim())?),
+                    _ => None,
+                };
+                Ok(Planned::Change(vec![PlanRequest::WinCommand {
+                    shell,
+                    command,
+                    cwd,
+                    timeout_s: self.access.command_timeout_s.max(1),
+                    elevated,
+                    admin_per_command: self.access.windows.per_command(),
+                    admin_idle_min: self.access.windows.idle_timeout_min(),
+                }]))
+            }
             ToolRequest::ListSkills => {
                 let dir = self.skills()?;
                 Ok(Planned::Info(skills_listing(&dir)))
@@ -703,6 +765,20 @@ fn default_deny_roots() -> Vec<PathBuf> {
         PathBuf::from("/sys"),
         PathBuf::from("/dev"),
     ];
+    #[cfg(windows)]
+    {
+        for k in [
+            "SystemRoot",
+            "windir",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+            "ProgramData",
+        ] {
+            if let Some(p) = std::env::var_os(k).filter(|s| !s.is_empty()) {
+                v.push(PathBuf::from(p));
+            }
+        }
+    }
     // Shared with the delete/organize protection list (lillith_core::access).
     v.extend(access::secret_roots());
     v
@@ -723,7 +799,7 @@ pub fn normalize(path: &Path) -> PathBuf {
     // Anchor relative paths at HOME so there is always a root to confine.
     let anchored = if expanded.is_absolute() {
         expanded
-    } else if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+    } else if let Some(home) = access::home() {
         home.join(expanded)
     } else {
         expanded
@@ -838,14 +914,16 @@ fn parse_tool_body(inline: &str, body: &str) -> Option<ToolRequest> {
         .unwrap_or_default();
     match op.as_str() {
         "list" | "ls" | "dir" => (!arg.is_empty()).then_some(ToolRequest::List { path: arg }),
-        "read" | "cat" => (!arg.is_empty()).then_some(ToolRequest::Read { path: arg }),
+        "read" | "cat" | "read_file" => {
+            (!arg.is_empty()).then_some(ToolRequest::Read { path: arg })
+        }
         "search" | "grep" | "find" => {
             let mut a = arg.splitn(2, char::is_whitespace);
             let path = a.next().unwrap_or_default().trim().to_string();
             let query = a.next().unwrap_or_default().trim().to_string();
             (!path.is_empty() && !query.is_empty()).then_some(ToolRequest::Search { path, query })
         }
-        "write" => {
+        "write" | "write_file" => {
             let content = content.trim_end_matches('\n').to_string();
             (!arg.is_empty()).then_some(ToolRequest::Write {
                 path: arg,
@@ -869,15 +947,32 @@ fn parse_tool_body(inline: &str, body: &str) -> Option<ToolRequest> {
             };
             (!command.is_empty()).then_some(ToolRequest::Run { command })
         }
+        "run_cmd" | "cmd" | "run_cmd_admin" | "cmd_admin" => parse_win_run(
+            lillith_core::access::winshell::WinShell::Cmd,
+            &op,
+            &arg,
+            &content,
+        ),
+        "run_powershell"
+        | "powershell"
+        | "ps"
+        | "run_powershell_admin"
+        | "powershell_admin"
+        | "ps_admin" => parse_win_run(
+            lillith_core::access::winshell::WinShell::PowerShell,
+            &op,
+            &arg,
+            &content,
+        ),
         "locate" | "find_name" | "findname" => {
             let (path, pattern) = split_two(&arg)?;
             Some(ToolRequest::Locate { path, pattern })
         }
-        "move" | "mv" => {
+        "move" | "mv" | "move_file" => {
             let (from, to) = split_two(&arg)?;
             Some(ToolRequest::Move { from, to })
         }
-        "copy" | "cp" => {
+        "copy" | "cp" | "copy_file" => {
             let (from, to) = split_two(&arg)?;
             Some(ToolRequest::Copy { from, to })
         }
@@ -905,7 +1000,7 @@ fn parse_tool_body(inline: &str, body: &str) -> Option<ToolRequest> {
             Some(ToolRequest::Sort { path, by })
         }
         "undo" | "undo_organize" | "undo-organize" => Some(ToolRequest::Undo),
-        "delete" | "trash" | "rm" | "remove" => {
+        "delete" | "trash" | "rm" | "remove" | "delete_file" => {
             let mut paths: Vec<String> = Vec::new();
             if !arg.is_empty() {
                 paths.push(arg);
@@ -919,7 +1014,7 @@ fn parse_tool_body(inline: &str, body: &str) -> Option<ToolRequest> {
             );
             (!paths.is_empty()).then_some(ToolRequest::Delete { paths })
         }
-        "open" | "launch" | "start" => {
+        "open" | "launch" | "start" | "launch_program" => {
             let (app, mut files) = match split_arrow(&arg) {
                 Some((a, f)) => (a, vec![f]),
                 None => (arg.clone(), Vec::new()),
@@ -936,7 +1031,7 @@ fn parse_tool_body(inline: &str, body: &str) -> Option<ToolRequest> {
         "installed" | "which" | "has" => {
             (!arg.is_empty()).then_some(ToolRequest::Installed { name: arg })
         }
-        "programs" | "apps" => Some(ToolRequest::Programs { filter: arg }),
+        "programs" | "apps" | "list_programs" => Some(ToolRequest::Programs { filter: arg }),
         "list_skills" | "skills" | "list-skills" => Some(ToolRequest::ListSkills),
         "read_skill" | "skill" | "read-skill" => {
             (!arg.is_empty()).then_some(ToolRequest::ReadSkill { name: arg })
@@ -946,6 +1041,54 @@ fn parse_tool_body(inline: &str, body: &str) -> Option<ToolRequest> {
         }),
         _ => None,
     }
+}
+
+/// Builds a [`ToolRequest::WinRun`]. The command is the arg, else the body.
+/// `admin` / `elevated` in the op name or a leading `admin:` on the arg sets
+/// the elevated flag (the card always shows it — the model cannot hide it).
+fn parse_win_run(
+    shell: lillith_core::access::winshell::WinShell,
+    op: &str,
+    arg: &str,
+    content: &str,
+) -> Option<ToolRequest> {
+    let mut elevated = op.contains("admin");
+    let mut command = if arg.is_empty() {
+        content.trim().to_string()
+    } else {
+        arg.to_string()
+    };
+    let mut cwd = None;
+    // Optional leading flags: `admin: dir=C:\Users\Ko  Get-Process`
+    loop {
+        let t = command.trim_start();
+        if let Some(rest) = t.strip_prefix("admin:") {
+            elevated = true;
+            command = rest.trim_start().to_string();
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix("elevated:") {
+            elevated = true;
+            command = rest.trim_start().to_string();
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix("cwd=") {
+            let (dir, rem) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+            cwd = Some(dir.trim_matches('"').to_string());
+            command = rem.trim_start().to_string();
+            continue;
+        }
+        break;
+    }
+    if command.is_empty() {
+        command = content.trim().to_string();
+    }
+    (!command.is_empty()).then_some(ToolRequest::WinRun {
+        shell,
+        command,
+        elevated,
+        cwd,
+    })
 }
 
 /// `a -> b` / `a → b`.
@@ -1040,6 +1183,62 @@ fn parse_tool_json(s: &str) -> Option<ToolRequest> {
         "run" => Some(ToolRequest::Run {
             command: get("command").or_else(|| get("cmd"))?,
         }),
+        "run_cmd" | "cmd" => Some(ToolRequest::WinRun {
+            shell: lillith_core::access::winshell::WinShell::Cmd,
+            command: get("command").or_else(|| get("cmd"))?,
+            elevated: v
+                .get("elevated")
+                .or_else(|| v.get("admin"))
+                .and_then(|x| x.as_bool())
+                .unwrap_or(false)
+                || op.ends_with("_admin"),
+            cwd: get("cwd").or_else(|| get("dir")),
+        }),
+        "run_powershell" | "powershell" | "ps" => Some(ToolRequest::WinRun {
+            shell: lillith_core::access::winshell::WinShell::PowerShell,
+            command: get("command").or_else(|| get("cmd"))?,
+            elevated: v
+                .get("elevated")
+                .or_else(|| v.get("admin"))
+                .and_then(|x| x.as_bool())
+                .unwrap_or(false)
+                || op.ends_with("_admin"),
+            cwd: get("cwd").or_else(|| get("dir")),
+        }),
+        "list_programs" => Some(ToolRequest::Programs {
+            filter: get("filter").unwrap_or_default(),
+        }),
+        "launch_program" => Some(ToolRequest::Open {
+            app: get("app").or_else(|| get("name"))?,
+            files: [list("files"), list("file")].concat(),
+        }),
+        "read_file" => path.map(|path| ToolRequest::Read { path }),
+        "write_file" => {
+            let body = v
+                .get("body")
+                .or_else(|| v.get("content"))
+                .and_then(|b| b.as_str())
+                .unwrap_or("")
+                .to_string();
+            path.map(|path| ToolRequest::Write { path, body })
+        }
+        "move_file" => {
+            let from = get("from").or(path)?;
+            let to = get("to")?;
+            Some(ToolRequest::Move { from, to })
+        }
+        "copy_file" => {
+            let from = get("from").or(path)?;
+            let to = get("to")?;
+            Some(ToolRequest::Copy { from, to })
+        }
+        "delete_file" => {
+            let mut paths = list("paths");
+            if let Some(p) = path {
+                paths.insert(0, p);
+            }
+            (!paths.is_empty()).then_some(ToolRequest::Delete { paths })
+        }
         "list_skills" => Some(ToolRequest::ListSkills),
         "read_skill" => Some(ToolRequest::ReadSkill {
             name: get("name").or(path)?,
@@ -1599,5 +1798,74 @@ mod tests {
             }),
             Ok(Planned::Change(_))
         ));
+    }
+
+    #[test]
+    fn win_run_tools_parse_and_need_confirm() {
+        let req = parse_tool_request("```tool\nrun_cmd_admin ver\n```\n").unwrap();
+        assert_eq!(
+            req,
+            ToolRequest::WinRun {
+                shell: lillith_core::access::winshell::WinShell::Cmd,
+                command: "ver".into(),
+                elevated: true,
+                cwd: None,
+            }
+        );
+        let req = parse_tool_request(
+            "```tool\n{\"op\":\"run_powershell\",\"command\":\"Get-Date\",\"admin\":true}\n```\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            req,
+            ToolRequest::WinRun {
+                shell: lillith_core::access::winshell::WinShell::PowerShell,
+                elevated: true,
+                ..
+            }
+        ));
+        // Planning an elevated command with admin switched off is refused.
+        let off =
+            access_tools(&std::env::temp_dir()).with_access(lillith_core::config::AccessConfig {
+                windows: lillith_core::config::WindowsAccessConfig {
+                    admin: false,
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+        assert!(matches!(
+            off.plan(ToolRequest::WinRun {
+                shell: lillith_core::access::winshell::WinShell::Cmd,
+                command: "ver".into(),
+                elevated: true,
+                cwd: None,
+            }),
+            Err(ToolError::Refused(_))
+        ));
+        // With admin on, it becomes a plan item (never runs here).
+        let on = access_tools(&std::env::temp_dir());
+        let planned = on
+            .plan(ToolRequest::WinRun {
+                shell: lillith_core::access::winshell::WinShell::Cmd,
+                command: "ver".into(),
+                elevated: true,
+                cwd: None,
+            })
+            .unwrap();
+        match planned {
+            Planned::Change(steps) => {
+                assert!(matches!(
+                    &steps[0],
+                    PlanRequest::WinCommand { elevated: true, .. }
+                ));
+            }
+            _ => panic!("expected a plan item"),
+        }
+        assert_eq!(
+            parse_tool_request("```tool\nlist_programs chrome\n```\n").unwrap(),
+            ToolRequest::Programs {
+                filter: "chrome".into()
+            }
+        );
     }
 }

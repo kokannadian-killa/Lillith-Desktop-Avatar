@@ -482,20 +482,52 @@ pub fn run_captured(
     cap: usize,
 ) -> std::io::Result<String> {
     let mut c = std::process::Command::new("sh");
-    c.arg("-c")
-        .arg(cmd)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
+    c.arg("-c").arg(cmd);
     if let Some(d) = cwd.map(Path::to_path_buf).or_else(super::home) {
         if d.is_dir() {
             c.current_dir(d);
         }
     }
+    run_child(c, timeout, cap)
+}
+
+/// Runs a prepared command with no stdin and captured stdout/stderr, a
+/// `timeout` and output capped at `cap` bytes. The whole child tree is
+/// killed on timeout or when the safeword fires
+/// ([`super::kill_switch::stop_all`]). Returns the combined output plus an
+/// `[exit N]` / `[timed out after Ns]` / `[stopped by the safeword]` line.
+pub fn run_child(
+    c: std::process::Command,
+    timeout: Duration,
+    cap: usize,
+) -> std::io::Result<String> {
+    // Tests that pull the safeword hold the write side, so other tests'
+    // commands are never caught by it.
+    #[cfg(test)]
+    let _gate = super::kill_switch::TEST_GATE
+        .read()
+        .unwrap_or_else(|e| e.into_inner());
+    run_child_ungated(c, timeout, cap)
+}
+
+fn run_child_ungated(
+    mut c: std::process::Command,
+    timeout: Duration,
+    cap: usize,
+) -> std::io::Result<String> {
+    let epoch = super::kill_switch::epoch();
+    c.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         c.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(super::winshell::CREATE_NO_WINDOW);
     }
     let mut child = c.spawn()?;
     let mut so = child.stdout.take();
@@ -515,23 +547,21 @@ pub fn run_captured(
         b
     });
     let start = Instant::now();
-    let mut timed_out = false;
+    let mut stop: Option<&str> = None;
     let status = loop {
         if let Some(st) = child.try_wait()? {
             break Some(st);
         }
-        if start.elapsed() >= timeout {
-            timed_out = true;
-            #[cfg(unix)]
-            {
-                // Kill the whole process group we started.
-                let _ = std::process::Command::new("kill")
-                    .arg("-KILL")
-                    .arg(format!("-{}", child.id()))
-                    .status();
-            }
-            let _ = child.kill();
-            let _ = child.wait();
+        let why = if super::kill_switch::stopped_since(epoch) {
+            Some("safeword")
+        } else if start.elapsed() >= timeout {
+            Some("timeout")
+        } else {
+            None
+        };
+        if let Some(w) = why {
+            stop = Some(w);
+            kill_tree(&mut child);
             break None;
         }
         std::thread::sleep(Duration::from_millis(20));
@@ -557,8 +587,9 @@ pub fn run_captured(
     if !text.is_empty() && !text.ends_with('\n') {
         text.push('\n');
     }
-    match (timed_out, status) {
-        (true, _) => text.push_str(&format!("[timed out after {}s]", timeout.as_secs())),
+    match (stop, status) {
+        (Some("safeword"), _) => text.push_str("[stopped by the safeword]"),
+        (Some(_), _) => text.push_str(&format!("[timed out after {}s]", timeout.as_secs())),
         (_, Some(st)) => text.push_str(&format!(
             "[exit {}]",
             st.code()
@@ -568,6 +599,31 @@ pub fn run_captured(
         _ => {}
     }
     Ok(text)
+}
+
+/// Kills `child` and everything it started, then reaps it.
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        // Kill the whole process group we started.
+        let _ = std::process::Command::new("kill")
+            .arg("-KILL")
+            .arg(format!("-{}", child.id()))
+            .status();
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .creation_flags(super::winshell::CREATE_NO_WINDOW)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 /// Appends `<utc>\t<decision>\t<command>\t<result>` to the command log.
@@ -678,5 +734,23 @@ mod tests {
         assert!(out.contains("timed out"), "{out}");
         let out = run_captured("yes | head -c 10000", None, Duration::from_secs(5), 100).unwrap();
         assert!(out.contains("more bytes"), "{out}");
+    }
+
+    #[test]
+    fn safeword_kills_a_running_command() {
+        let _gate = super::super::kill_switch::TEST_GATE
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        let t = std::thread::spawn(|| {
+            let mut c = std::process::Command::new("sh");
+            c.arg("-c").arg("sleep 20");
+            run_child_ungated(c, Duration::from_secs(30), 4096)
+        });
+        std::thread::sleep(Duration::from_millis(300));
+        let started = Instant::now();
+        super::super::kill_switch::stop_all();
+        let out = t.join().unwrap().unwrap();
+        assert!(out.contains("stopped by the safeword"), "{out}");
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 }

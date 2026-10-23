@@ -63,6 +63,20 @@ pub enum PlanRequest {
         timeout_s: u64,
         shell: bool,
     },
+    /// Run a Windows `cmd` / PowerShell command (captured). Always a Soul
+    /// Contract plan item. When `elevated`, the card shows an
+    /// `ELEVATED (admin)` badge and the admin helper runs it after UAC.
+    WinCommand {
+        shell: super::winshell::WinShell,
+        command: String,
+        cwd: Option<PathBuf>,
+        timeout_s: u64,
+        elevated: bool,
+        /// From `[mind.access.windows] admin_prompt = "per-command"`.
+        admin_per_command: bool,
+        /// From `[mind.access.windows] admin_idle_timeout_min`.
+        admin_idle_min: u64,
+    },
 }
 
 impl PlanRequest {
@@ -80,6 +94,26 @@ impl PlanRequest {
             PlanRequest::Launch { .. } => "launch",
             PlanRequest::Command { shell: true, .. } => "shell",
             PlanRequest::Command { .. } => "run",
+            PlanRequest::WinCommand {
+                shell: super::winshell::WinShell::Cmd,
+                elevated: false,
+                ..
+            } => "run_cmd",
+            PlanRequest::WinCommand {
+                shell: super::winshell::WinShell::Cmd,
+                elevated: true,
+                ..
+            } => "run_cmd (admin)",
+            PlanRequest::WinCommand {
+                shell: super::winshell::WinShell::PowerShell,
+                elevated: false,
+                ..
+            } => "run_powershell",
+            PlanRequest::WinCommand {
+                shell: super::winshell::WinShell::PowerShell,
+                elevated: true,
+                ..
+            } => "run_powershell (admin)",
         }
     }
 
@@ -87,8 +121,15 @@ impl PlanRequest {
     pub fn is_program(&self) -> bool {
         matches!(
             self,
-            PlanRequest::Launch { .. } | PlanRequest::Command { .. }
+            PlanRequest::Launch { .. }
+                | PlanRequest::Command { .. }
+                | PlanRequest::WinCommand { .. }
         )
+    }
+
+    /// Whether this step runs elevated (admin helper). Always shown on the card.
+    pub fn elevated(&self) -> bool {
+        matches!(self, PlanRequest::WinCommand { elevated: true, .. })
     }
 }
 
@@ -112,6 +153,8 @@ pub struct PlanItem {
     pub dest: Option<PathBuf>,
     /// Why it is risky (commands/launches), if it is.
     pub risky: Option<String>,
+    /// The `ELEVATED (admin)` badge: this step runs through the admin helper.
+    pub elevated: bool,
     /// Bytes involved (files moved/copied/written/deleted).
     pub bytes: u64,
     /// For deletes: everything under the path.
@@ -270,6 +313,7 @@ impl ChangePlan {
                 detail: Vec::new(),
                 dest: None,
                 risky: None,
+                elevated: req.elevated(),
                 bytes: 0,
                 manifest: None,
             };
@@ -518,6 +562,60 @@ impl ChangePlan {
                     let v = risky_text(&it.risky);
                     f(&mut it, "risky", v);
                 }
+                PlanRequest::WinCommand {
+                    shell,
+                    command,
+                    cwd,
+                    timeout_s,
+                    elevated,
+                    admin_per_command: _,
+                    admin_idle_min: _,
+                } => {
+                    let risk = super::winshell::assess(*shell, command)?;
+                    shell.hash(&mut h);
+                    elevated.hash(&mut h);
+                    it.group = "programs".into();
+                    it.line = if *elevated {
+                        format!("ELEVATED (admin) · {} $ {command}", shell.as_str())
+                    } else {
+                        format!("{} $ {command}", shell.as_str())
+                    };
+                    f(&mut it, "command", command.clone());
+                    f(&mut it, "shell", shell.program().into());
+                    f(
+                        &mut it,
+                        "invocation",
+                        super::winshell::describe(*shell).into(),
+                    );
+                    f(
+                        &mut it,
+                        "working folder",
+                        cwd.clone()
+                            .or_else(super::home)
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_default(),
+                    );
+                    f(&mut it, "timeout", format!("{}s", timeout_s.max(&1)));
+                    f(
+                        &mut it,
+                        "admin",
+                        if *elevated {
+                            "ELEVATED (admin) — UAC helper".into()
+                        } else {
+                            "no (runs as you)".into()
+                        },
+                    );
+                    it.risky = if *elevated {
+                        Some(match risk {
+                            Some(r) => format!("ELEVATED (admin); {r}"),
+                            None => "ELEVATED (admin)".into(),
+                        })
+                    } else {
+                        risk
+                    };
+                    let v = risky_text(&it.risky);
+                    f(&mut it, "risky", v);
+                }
             }
             items.push(it);
         }
@@ -744,6 +842,36 @@ impl ChangePlan {
                     command_output_max,
                 )
                 .map_err(|e| e.to_string()),
+                PlanRequest::WinCommand {
+                    shell,
+                    command,
+                    cwd,
+                    timeout_s,
+                    elevated,
+                    admin_per_command,
+                    admin_idle_min,
+                } => {
+                    let t = std::time::Duration::from_secs((*timeout_s).max(1));
+                    if *elevated {
+                        match super::admin_broker::default_helper_path() {
+                            None => Err("cannot find lillith-admin.exe".to_string()),
+                            Some(helper) => super::admin_broker::run_elevated(
+                                *shell,
+                                command,
+                                cwd.as_deref(),
+                                t,
+                                command_output_max,
+                                *admin_per_command,
+                                (*admin_idle_min).max(1),
+                                &helper,
+                            )
+                            .map_err(|e| e.to_string()),
+                        }
+                    } else {
+                        super::winshell::run(*shell, command, cwd.as_deref(), t, command_output_max)
+                            .map_err(|e| e.to_string())
+                    }
+                }
             };
             out.push((it.n, r));
         }
@@ -1082,5 +1210,64 @@ mod tests {
         )
         .is_err());
         let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn win_command_shows_admin_badge_and_never_runs_without_confirm() {
+        let plan = ChangePlan::build(
+            vec![
+                PlanRequest::WinCommand {
+                    shell: super::super::winshell::WinShell::Cmd,
+                    command: "ver".into(),
+                    cwd: None,
+                    timeout_s: 5,
+                    elevated: false,
+                    admin_per_command: false,
+                    admin_idle_min: 15,
+                },
+                PlanRequest::WinCommand {
+                    shell: super::super::winshell::WinShell::PowerShell,
+                    command: "Get-Process".into(),
+                    cwd: None,
+                    timeout_s: 5,
+                    elevated: true,
+                    admin_per_command: false,
+                    admin_idle_min: 15,
+                },
+            ],
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(!plan.items[0].elevated);
+        assert!(plan.items[1].elevated);
+        assert!(plan.items[1].line.contains("ELEVATED (admin)"));
+        assert!(plan.items[1]
+            .fields
+            .iter()
+            .any(|(k, v)| k == "admin" && v.contains("ELEVATED")));
+        // Removals never become a plan item.
+        assert!(ChangePlan::build(
+            vec![PlanRequest::WinCommand {
+                shell: super::super::winshell::WinShell::Cmd,
+                command: "del /q C:\\x".into(),
+                cwd: None,
+                timeout_s: 5,
+                elevated: true,
+                admin_per_command: false,
+                admin_idle_min: 15,
+            }],
+            None,
+            None
+        )
+        .is_err());
+        // Execute is Windows-only; on Linux it returns an error without
+        // spawning anything (and never runs without going through approve).
+        #[cfg(not(windows))]
+        {
+            let sel: BTreeSet<usize> = [1].into();
+            let res = plan.execute(&sel, None, &std::env::temp_dir(), 1000);
+            assert!(res[0].1.is_err());
+        }
     }
 }

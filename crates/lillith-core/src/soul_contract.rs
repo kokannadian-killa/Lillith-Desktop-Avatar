@@ -819,6 +819,15 @@ impl SoulContract {
                         crate::access::plan::PlanRequest::Command { command, .. } => {
                             command.clone()
                         }
+                        crate::access::plan::PlanRequest::WinCommand {
+                            shell,
+                            command,
+                            elevated,
+                            ..
+                        } => {
+                            let badge = if *elevated { " [ELEVATED]" } else { "" };
+                            format!("[{}{badge}] {command}", shell.as_str())
+                        }
                         crate::access::plan::PlanRequest::Launch { argv, .. } => {
                             format!("[launch] {}", argv.join(" "))
                         }

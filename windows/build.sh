@@ -3,7 +3,8 @@
 #
 #     windows/build.sh
 #
-# Cross-builds lillith.exe + lillith-settings.exe for x86_64-pc-windows-gnu,
+# Cross-builds lillith.exe + lillith-settings.exe + lillith-admin.exe for
+# x86_64-pc-windows-gnu,
 # stages them with the atlas pages Lillith needs (no GGUF, no models), and
 # writes to $DIST (default: <target dir>/dist/windows):
 #   Lillith-<version>-setup.exe              NSIS installer (per-user)
@@ -44,13 +45,15 @@ if [[ "${SKIP_BUILD:-}" != 1 ]]; then
   "$CARGO" build --release --locked --target "$TARGET" \
     -p lillith --no-default-features --features windows
   "$CARGO" build --release --locked --target "$TARGET" -p lillith-settings-gui
+  # Elevated helper (requireAdministrator manifest embedded by its build.rs).
+  "$CARGO" build --release --locked --target "$TARGET" -p lillith-admin
 fi
 BIN="$TARGET_DIR/$TARGET/release"
 
 echo "==> staging $STAGE"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-cp "$BIN/lillith.exe" "$BIN/lillith-settings.exe" "$STAGE/"
+cp "$BIN/lillith.exe" "$BIN/lillith-settings.exe" "$BIN/lillith-admin.exe" "$STAGE/"
 python3 "$HERE/stage-assets.py" "$STAGE"
 [[ -f "$HERE/lillith.ico" ]] || python3 "$ROOT/branding/make-icons.py"
 cp "$HERE/lillith.ico" "$STAGE/"

@@ -21,7 +21,18 @@ Start menu ▸ **Lillith** gets three shortcuts: *Lillith*, *Lillith Settings*
 and *Uninstall Lillith*.
 
 Prefer no installer? Unzip `Lillith-<version>-windows-x64.zip` anywhere
-and run `lillith.exe`. Keep the `assets` folder next to it.
+and run `lillith.exe`. Keep the `assets` folder next to it (and
+`lillith-admin.exe` — she needs it for elevated commands).
+
+### Elevated (admin) commands
+
+Settings ▸ Access ▸ **WINDOWS · ADMIN**. When she proposes an elevated
+cmd / PowerShell command, the Soul Contract card shows **ELEVATED
+(admin)** with the exact command and working folder. Your **Yes** is the
+only approval (voice never confirms). The first Yes of a session asks
+Windows for one UAC prompt; after that the helper stays until you quit,
+say the safeword (`red` / `OOC: stop`), or it idles out. Set UAC to
+**per-command** if you want a prompt every time.
 
 ## 2. Her brain (optional, fully local)
 

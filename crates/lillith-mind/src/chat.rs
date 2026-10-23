@@ -364,6 +364,18 @@ impl ChatSession {
     /// streamed too, as one in-character line, and are not stored in the
     /// history (so the next try resends the same context).
     pub async fn send<F: FnMut(&str)>(&mut self, user: &str, mut on_token: F) -> Outcome {
+        if lillith_core::access::kill_switch::is_safeword(user) {
+            lillith_core::access::kill_switch::stop_all();
+            lillith_core::access::admin_broker::shutdown();
+            // Drop any pending plan / skill so nothing is still waiting.
+            self.pending_tool = None;
+            self.pending_skill = None;
+            let line =
+                "Stopped. Every running command is dead and the admin helper is gone.".to_string();
+            on_token(&line);
+            return Outcome::Reply(line);
+        }
+
         let user = user.trim();
         let messages = self.request_messages(user);
         self.salt = self.salt.wrapping_add(1);
