@@ -18,6 +18,9 @@ use std::path::Path;
 
 /// Alpha at or above which a pixel catches clicks.
 pub const HIT_ALPHA: u8 = 40;
+/// How long one render tick waits for a pose-video frame that is still
+/// decoding before it keeps the previous frame on screen.
+pub const VIDEO_FRAME_WAIT: std::time::Duration = std::time::Duration::from_millis(30);
 /// Horizontal snap for mask rectangles (fewer rects, ≤ 2 px wider hit area).
 pub const MASK_GRID: u32 = 2;
 
@@ -101,6 +104,8 @@ pub struct Stage {
     avatar: Option<AvatarRig>,
     /// Jiggle strength 0..1 of the custom avatar (Settings slider).
     avatar_strength: f32,
+    /// Renders skipped because a video frame was still decoding.
+    pending_frames: u64,
 }
 
 impl std::fmt::Debug for Stage {
@@ -168,6 +173,7 @@ impl Stage {
             click_through: false,
             avatar: None,
             avatar_strength: lillith_anim::avatar::DEFAULT_STRENGTH,
+            pending_frames: 0,
         })
     }
 
@@ -369,6 +375,17 @@ impl Stage {
         rects_hit(&self.mask, x.floor() as i32, y.floor() as i32)
     }
 
+    /// Pose-video cache counters and the renders skipped while a video
+    /// frame was still decoding.
+    pub fn video_stats(&self) -> (lillith_anim::video::VideoStats, u64) {
+        (self.pages.video().stats(), self.pending_frames)
+    }
+
+    /// Bytes of decoded PNG pages held (the PNG fallback / non-video clips).
+    pub fn page_bytes(&self) -> usize {
+        self.pages.page_bytes()
+    }
+
     /// Frames actually rasterised so far (for CPU diagnostics).
     pub fn renders(&self) -> u64 {
         self.renders
@@ -484,7 +501,14 @@ impl Stage {
             tf.map_points(std::slice::from_mut(&mut pt));
             pt.x
         } else {
-            Self::render_sprite(
+            // A blend helper is followed by its target clip: start
+            // decoding that clip's video now so it is ready on time.
+            if let Some(next) = f.clip.blend.as_ref().map(|b| b.to.clone()) {
+                if let Some(c) = self.anim.manifest().clips.get(&next) {
+                    self.pages.prefetch(c);
+                }
+            }
+            match Self::render_sprite(
                 &mut self.pages,
                 &mut self.cell,
                 &mut self.cell_next,
@@ -493,7 +517,16 @@ impl Stage {
                 self.scale,
                 &f,
                 &t,
-            )?
+            )? {
+                Some(head) => head,
+                None => {
+                    // Video frame still decoding: keep the previous
+                    // picture on screen and retry next tick.
+                    self.pending_frames += 1;
+                    self.render_time += started.elapsed();
+                    return Ok(Changed::default());
+                }
+            }
         };
         self.key = Some(key);
         self.renders += 1;
@@ -540,22 +573,36 @@ impl Stage {
         scale: f32,
         f: &lillith_anim::animator::FrameRef<'_>,
         t: &lillith_core::spring::Transform,
-    ) -> Result<f32, StageError> {
+    ) -> Result<Option<f32>, StageError> {
         let t = *t;
         let ck = (f.clip_name.to_string(), f.frame);
         if cell_cache.as_ref().map(|(k, _)| k) != Some(&ck) {
-            let cell = pages.cell(f.clip, f.frame)?;
+            // MP4 clips stream in; with no picture yet (start-up) block,
+            // otherwise wait a moment and keep the old frame if needed.
+            let cell = if cell_cache.is_none() {
+                pages.cell(f.clip, f.frame)?
+            } else {
+                match pages.poll_cell(f.clip, f.frame, VIDEO_FRAME_WAIT)? {
+                    Some(c) => c,
+                    None => return Ok(None),
+                }
+            };
             *cell_cache = Some((ck, cell));
         }
         canvas.fill(tiny_skia::Color::TRANSPARENT);
-        let blend = f.blend.filter(|&(_, w)| w > 1.0 / 48.0);
-        if let Some((next, w)) = blend {
+        let mut blend = f.blend.filter(|&(_, w)| w > 1.0 / 48.0);
+        if let Some((next, _)) = blend {
             let nk = (f.clip_name.to_string(), next);
             if cell_next.as_ref().map(|(k, _)| k) != Some(&nk) {
                 // Usually the previous "next" becomes the current cell.
-                let cell = pages.cell(f.clip, next)?;
-                *cell_next = Some((nk, cell));
+                match pages.poll_cell(f.clip, next, VIDEO_FRAME_WAIT)? {
+                    Some(cell) => *cell_next = Some((nk, cell)),
+                    // Not decoded yet: draw this frame without the fade.
+                    None => blend = None,
+                }
             }
+        }
+        if let Some((next, w)) = blend {
             let a = &cell_cache.as_ref().expect("cell cached").1;
             let b = &cell_next.as_ref().expect("cell cached").1;
             let anchor_b = f.clip.frames[next].anchor;
@@ -607,7 +654,7 @@ impl Stage {
             tf.map_points(std::slice::from_mut(&mut pt));
             pt.x
         };
-        Ok(head)
+        Ok(Some(head))
     }
 
     /// The bubble goes on after the mask scan: it never catches clicks.

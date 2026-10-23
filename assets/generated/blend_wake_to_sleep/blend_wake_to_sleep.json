@@ -99,5 +99,25 @@
       191,
       391
     ]
-  ]
+  ],
+  "video": {
+    "file": "blend_wake_to_sleep.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 6,
+    "fps": 8.0,
+    "bytes": 96764,
+    "quality": {
+      "edge_mae": 2.286,
+      "edge_p99": 17.0,
+      "halo_dark": 0.078,
+      "halo_light": -0.294,
+      "alpha_mae": 0.0713
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

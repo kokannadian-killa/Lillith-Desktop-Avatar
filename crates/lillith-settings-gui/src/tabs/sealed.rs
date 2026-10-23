@@ -82,7 +82,13 @@ impl SettingsTab for SealedTab {
                 c.x + a.cos() * rad - geom::rune_width(rh) * 0.5,
                 c.y + a.sin() * rad - rh * 0.5,
             );
-            th::neon_rune(p, i * 3 + self.n, o, rh, pal::VIOLET.lerp(pal::PINK, 0.25));
+            th::neon_rune(
+                p,
+                i * 3 + self.n,
+                o,
+                rh,
+                pal::VIOLET.lerp(th::accent().base, 0.25),
+            );
         }
         // wax seal
         p.circle_filled(

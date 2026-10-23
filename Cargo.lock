@@ -2055,6 +2055,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
+ "image",
  "lillith-anim",
  "lillith-core",
  "serde",
@@ -2419,11 +2420,13 @@ dependencies = [
  "glam",
  "image",
  "lillith-core",
+ "lillith-theme",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
  "tiny-skia",
  "toml",
+ "tracing",
 ]
 
 [[package]]
@@ -2463,6 +2466,7 @@ dependencies = [
  "image",
  "lillith-anim",
  "lillith-core",
+ "lillith-theme",
  "smithay-client-toolkit 0.19.2",
  "softbuffer",
  "thiserror 2.0.21",

@@ -291,5 +291,25 @@
       ]
     ]
   },
-  "grab_point_note": "Recomputed for the v2 clip: where the drawn off-screen hand meets her head (first row of her head below the thin hand stub), per frame in frame_points, clip value = median. Old clip pinned the back of the neck [200,76]; here the model grabs the top of her head, so the pin point is higher on the figure."
+  "grab_point_note": "Recomputed for the v2 clip: where the drawn off-screen hand meets her head (first row of her head below the thin hand stub), per frame in frame_points, clip value = median. Old clip pinned the back of the neck [200,76]; here the model grabs the top of her head, so the pin point is higher on the figure.",
+  "video": {
+    "file": "drag_held.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 19,
+    "fps": 12.0,
+    "bytes": 293712,
+    "quality": {
+      "edge_mae": 2.505,
+      "edge_p99": 16.41,
+      "halo_dark": 0.077,
+      "halo_light": -0.236,
+      "alpha_mae": 0.0961
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

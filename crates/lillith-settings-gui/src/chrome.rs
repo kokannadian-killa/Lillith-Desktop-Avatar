@@ -104,7 +104,7 @@ pub fn choice(ui: &mut Ui, label: &str, selected: bool, rune: usize) -> Response
     );
     if selected {
         th::knife_highlight(p, rect.shrink2(vec2(2.0, 3.0)), 1.0);
-        th::neon_line(p, &poly, pal::PINK, 1.2, 3.5, true);
+        th::neon_line(p, &poly, th::accent().base, 1.2, 3.5, true);
     } else {
         th::knife_highlight(p, rect.shrink2(vec2(2.0, 3.0)), hover * 0.55);
         p.add(egui::Shape::closed_line(
@@ -156,7 +156,7 @@ pub fn rune_check(ui: &mut Ui, on: bool, label: &str) -> Response {
         Stroke::new(
             1.0,
             c32(if on {
-                pal::PINK
+                th::accent().base
             } else {
                 pal::IRON_HI.lerp(pal::BLOOD_NEON, hover)
             }),
@@ -168,7 +168,7 @@ pub fn rune_check(ui: &mut Ui, on: bool, label: &str) -> Response {
             13,
             pos2(b.center().x - 4.3, b.top() + 3.0),
             12.0,
-            pal::PINK,
+            th::accent().base,
         );
     }
     p.galley(
@@ -243,7 +243,7 @@ pub fn blade_button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
     for v in &outline {
         let t = (v[0] - x0) / rect.width();
         let col = if enabled {
-            pal::CRIMSON.lerp(pal::PINK, t * (0.55 + 0.45 * hover))
+            pal::CRIMSON.lerp(th::accent().base, t * (0.55 + 0.45 * hover))
         } else {
             pal::IRON_MID
         };
@@ -257,7 +257,7 @@ pub fn blade_button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
             p,
             rect.center(),
             rect.height() * 1.1,
-            pal::PINK,
+            th::accent().base,
             0.25 + 0.5 * hover,
         );
     }

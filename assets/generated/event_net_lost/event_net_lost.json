@@ -213,5 +213,25 @@
       22,
       392
     ]
-  ]
+  ],
+  "video": {
+    "file": "event_net_lost.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 10,
+    "fps": 10.0,
+    "bytes": 124758,
+    "quality": {
+      "edge_mae": 2.257,
+      "edge_p99": 18.96,
+      "halo_dark": 0.033,
+      "halo_light": -0.178,
+      "alpha_mae": 0.0769
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

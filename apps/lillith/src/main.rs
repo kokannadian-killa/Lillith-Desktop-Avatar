@@ -184,6 +184,10 @@ enum Cmd {
         /// Show a sample conversation instead of the history (previews).
         #[arg(long)]
         demo: bool,
+        /// Show a sample Soul Contract popup (previews; answering it only
+        /// dismisses it, nothing runs).
+        #[arg(long)]
+        demo_contract: bool,
     },
 }
 
@@ -287,11 +291,12 @@ async fn main() -> Result<()> {
             no_history,
             ref endpoint,
         }) => {
-            let mut cfg = load_config(&cli).0.chat;
+            let full = load_config(&cli).0;
+            let mut cfg = full.chat;
             if let Some(e) = endpoint {
                 cfg.endpoint = e.clone();
             }
-            chat::cli_chat(cfg, message.clone(), spawn_server, no_history).await?;
+            chat::cli_chat(cfg, full.mind, message.clone(), spawn_server, no_history).await?;
         }
         Some(Cmd::Settings {
             ref section,
@@ -315,10 +320,19 @@ async fn main() -> Result<()> {
             offline,
             ref screenshot,
             demo,
+            demo_contract,
         }) => {
-            let cfg = load_config(&cli).0.chat;
+            let full = load_config(&cli).0;
             let pos = x.zip(y);
-            chat::bubble_main(cfg, pos, offline || cli.no_llm, screenshot.clone(), demo)?;
+            chat::bubble_main(
+                full.chat,
+                full.mind,
+                pos,
+                offline || cli.no_llm,
+                screenshot.clone(),
+                demo,
+                demo_contract,
+            )?;
         }
         Some(Cmd::Setup {
             ref gguf,

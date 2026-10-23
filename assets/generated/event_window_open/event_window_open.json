@@ -243,5 +243,25 @@
       20,
       391
     ]
-  ]
+  ],
+  "video": {
+    "file": "event_window_open.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 12,
+    "fps": 10.0,
+    "bytes": 184968,
+    "quality": {
+      "edge_mae": 2.631,
+      "edge_p99": 20.0,
+      "halo_dark": 0.077,
+      "halo_light": -0.205,
+      "alpha_mae": 0.0836
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

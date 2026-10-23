@@ -109,6 +109,10 @@ pub struct AvatarMeta {
     pub already_transparent: bool,
     /// Opaque silhouette box on the canvas (x0, y0, x1, y1).
     pub bbox: (u32, u32, u32, u32),
+    /// Chrome accent `"#rrggbb"` (menu popup / settings highlight); absent
+    /// = derived from the image ([`lillith_theme::Accent::derive`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent: Option<String>,
 }
 
 /// Import options.
@@ -467,6 +471,7 @@ pub fn import_image(
         jiggle_strength: if character { DEFAULT_STRENGTH } else { 0.0 },
         already_transparent: transparent,
         bbox,
+        accent: None,
     };
     Ok((fitted, meta))
 }
@@ -495,7 +500,32 @@ pub struct Avatar {
     pub path: PathBuf,
 }
 
+impl Avatar {
+    /// The chrome accent for this avatar: `avatar.json`'s `accent` if it
+    /// parses, else derived from the image, else Lillith's.
+    pub fn accent(&self) -> lillith_theme::Accent {
+        self.meta
+            .accent
+            .as_deref()
+            .and_then(lillith_theme::Accent::from_hex)
+            .or_else(|| lillith_theme::Accent::derive(self.image.data()))
+            .unwrap_or_default()
+    }
+}
+
 impl AvatarStore {
+    /// The accent of avatar `id` (`None` or unloadable = Lillith's).
+    pub fn accent(&self, id: Option<&str>) -> lillith_theme::Accent {
+        id.and_then(|id| self.load(id).ok())
+            .map(|a| a.accent())
+            .unwrap_or_default()
+    }
+
+    /// The accent of the selected avatar.
+    pub fn selected_accent(&self) -> lillith_theme::Accent {
+        self.accent(self.selection().selected.as_deref())
+    }
+
     /// Store in `config_dir` (e.g. `~/.config/lillith`).
     pub fn new(config_dir: impl Into<PathBuf>) -> Self {
         Self {
@@ -1172,8 +1202,20 @@ mod tests {
         let av = store.load(&id).unwrap();
         assert_eq!(av.image.width(), CANVAS);
         assert_eq!(store.list().len(), 2);
+        // Accent: derived from the pink character, then the stored one wins.
+        let (h, _, _) = lillith_theme::accent::rgb_to_hsv(av.accent().base);
+        assert!((h - 333.0).abs() < 12.0, "derived hue {h}");
+        assert_eq!(store.selected_accent(), av.accent());
+        let mut m = av.meta.clone();
+        m.accent = Some("#22ccff".into());
+        store.save_meta(&m).unwrap();
+        let (h, _, _) = lillith_theme::accent::rgb_to_hsv(store.selected_accent().base);
+        assert!((h - 194.0).abs() < 8.0, "stored hue {h}");
+        let other = std::fs::read_to_string(dir.join("avatars/cute-girl-2/avatar.json")).unwrap();
+        assert!(!other.contains("accent"), "unset accent is not written");
         store.select(None).unwrap();
         assert_eq!(store.selection().selected, None);
+        assert_eq!(store.selected_accent(), lillith_theme::Accent::LILLITH);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1234,6 +1276,7 @@ mod tests {
                 jiggle_strength: 0.5,
                 already_transparent: false,
                 bbox: alpha_bbox(&fit).unwrap(),
+                accent: None,
             },
             image: crate::render::pixmap_from_rgba(&fit).unwrap(),
             path: PathBuf::new(),

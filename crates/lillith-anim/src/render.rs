@@ -8,10 +8,12 @@
 
 use crate::animator::{FrameRef, MouthDraw};
 use crate::atlas::{AtlasError, Clip};
+use crate::video::{Poll, VideoCache, VideoConfig};
 use crate::Canvas;
 use lillith_core::spring::Transform;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tiny_skia::{IntRect, IntSize, PixmapPaint, Transform as SkTransform};
 
 /// Fraction of vertical squash per px of chest offset.
@@ -42,23 +44,42 @@ pub fn rgba_from_pixmap(p: &Canvas) -> image::RgbaImage {
 }
 
 /// Loads and caches atlas pages (as premultiplied pixmaps) relative to the
-/// manifest's directory.
+/// manifest's directory, and plays clips that have a [`Clip::video`] from
+/// their MP4 ([`crate::video::VideoCache`]), falling back to the page when
+/// the video is off, ffmpeg is missing or the file is bad.
 #[derive(Debug, Default)]
 pub struct PageCache {
     dir: PathBuf,
     pages: HashMap<String, Canvas>,
+    video: VideoCache,
 }
 
 impl PageCache {
     pub fn new(manifest_dir: impl Into<PathBuf>) -> Self {
+        Self::with_video(manifest_dir, VideoConfig::from_env())
+    }
+
+    /// [`PageCache::new`] with explicit video settings.
+    pub fn with_video(manifest_dir: impl Into<PathBuf>, cfg: VideoConfig) -> Self {
         Self {
             dir: manifest_dir.into(),
             pages: HashMap::new(),
+            video: VideoCache::new(cfg),
         }
     }
 
     pub fn dir(&self) -> &Path {
         &self.dir
+    }
+
+    /// The MP4 decoder cache (stats, config).
+    pub fn video(&self) -> &VideoCache {
+        &self.video
+    }
+
+    /// Bytes held by decoded PNG pages (video frames: [`VideoCache::stats`]).
+    pub fn page_bytes(&self) -> usize {
+        self.pages.values().map(|p| p.data().len()).sum()
     }
 
     /// Page for `clip`, loading it on first use.
@@ -88,8 +109,25 @@ impl PageCache {
         Ok(&self.pages[rel])
     }
 
-    /// Crops one frame cell out of its page.
-    pub fn cell(&mut self, clip: &Clip, frame: usize) -> Result<Canvas, AtlasError> {
+    /// `true` if `clip` is (or will be) drawn from its MP4.
+    pub fn plays_video(&self, clip: &Clip) -> bool {
+        clip.video.is_some()
+            && self.video.enabled()
+            && clip
+                .video_path(&self.dir)
+                .is_some_and(|p| !self.video.has_failed(&p))
+    }
+
+    /// Starts decoding `clip`'s video in the background (no-op without one).
+    pub fn prefetch(&mut self, clip: &Clip) {
+        if let Some(p) = clip.video_path(&self.dir) {
+            let (w, h) = clip.cell_size();
+            self.video.prefetch(&p, w, h, clip.frames.len());
+        }
+    }
+
+    /// Crops one frame cell out of its page (PNG only, ignores the video).
+    pub fn page_cell(&mut self, clip: &Clip, frame: usize) -> Result<Canvas, AtlasError> {
         let r = clip.frames[frame.min(clip.frames.len() - 1)];
         let page = self.page(clip)?;
         IntRect::from_xywh(r.x as i32, r.y as i32, r.w, r.h)
@@ -98,6 +136,40 @@ impl PageCache {
                 clip: clip.page.clone(),
                 reason: format!("frame {frame} rect {r:?} outside page"),
             })
+    }
+
+    /// One frame cell: from the clip's MP4 when it has one (blocking until
+    /// that frame is decoded), else (or on any video failure) its page.
+    pub fn cell(&mut self, clip: &Clip, frame: usize) -> Result<Canvas, AtlasError> {
+        if let Some(p) = clip.video_path(&self.dir) {
+            let (w, h) = clip.cell_size();
+            let i = frame.min(clip.frames.len() - 1);
+            if let Some(c) = self.video.wait_frame(&p, w, h, clip.frames.len(), i) {
+                return Ok(c);
+            }
+        }
+        self.page_cell(clip, frame)
+    }
+
+    /// Non-blocking [`PageCache::cell`] for the render loop: waits at most
+    /// `wait` for a video frame still decoding and returns `Ok(None)` if it
+    /// isn't there yet (keep showing the previous frame, retry next tick).
+    pub fn poll_cell(
+        &mut self,
+        clip: &Clip,
+        frame: usize,
+        wait: Duration,
+    ) -> Result<Option<Canvas>, AtlasError> {
+        if let Some(p) = clip.video_path(&self.dir) {
+            let (w, h) = clip.cell_size();
+            let i = frame.min(clip.frames.len() - 1);
+            match self.video.poll(&p, w, h, clip.frames.len(), i, wait) {
+                Poll::Ready(c) => return Ok(Some(c)),
+                Poll::Pending => return Ok(None),
+                Poll::Unavailable => {}
+            }
+        }
+        self.page_cell(clip, frame).map(Some)
     }
 }
 

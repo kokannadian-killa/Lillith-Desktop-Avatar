@@ -24,6 +24,10 @@ pub struct Springs {
     pub jiggle_gain: f32,
     pub chest_bounce_gain: f32,
     pub pigtail_sway_gain: f32,
+    /// `[springs.bounce]`: Settings ▸ Motion ▸ Chest bounce (intensity and
+    /// softness). With the physics driver it owns the chest spring's
+    /// stiffness/damping; see [`crate::bounce`].
+    pub bounce: crate::bounce::ChestBounce,
 }
 
 impl Default for Springs {
@@ -38,6 +42,7 @@ impl Default for Springs {
             jiggle_gain: 0.6,
             chest_bounce_gain: 1.0,
             pigtail_sway_gain: 0.9,
+            bounce: Default::default(),
         }
     }
 }
@@ -332,6 +337,221 @@ impl Default for AnimConfig {
     }
 }
 
+/// Default budget (in rough tokens) for knowledge/skill material injected
+/// into a chat turn (see [`MindConfig::max_context_tokens`]).
+pub const DEFAULT_MIND_CONTEXT_TOKENS: usize = 800;
+
+/// Default cap (bytes) on a single tool-driven file read (see
+/// [`MindConfig::max_read_bytes`]). Keeps a huge file from flooding the
+/// prompt or the audit trail.
+pub const DEFAULT_MIND_MAX_READ_BYTES: usize = 64 * 1024;
+
+/// Knowledge + skills folders Lillith may read, and the skill-authoring
+/// gate (`[mind]`, Phase 1 of the companion plan).
+///
+/// Everything here is local-only: plain files under her data dir. On each
+/// chat turn she indexes the markdown/text in [`MindConfig::knowledge_dir`]
+/// and [`MindConfig::skills_dir`] and injects the most relevant snippets
+/// into the prompt, capped at [`MindConfig::max_context_tokens`]. She can
+/// *draft* a new skill, but it is only written after a Soul Contract
+/// confirmation (see [`crate::soul_contract`]); nothing here writes on its
+/// own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MindConfig {
+    /// Master switch for knowledge/skills injection and skill authoring.
+    pub enabled: bool,
+    /// Folder of reference knowledge (`.md`/`.markdown`/`.txt`). Empty =
+    /// the default `<data>/lillith/knowledge`.
+    pub knowledge_dir: String,
+    /// Folder of how-to skills she can read and (gated) write. Empty =
+    /// the default `<data>/lillith/skills`.
+    pub skills_dir: String,
+    /// Rough token budget for injected material per turn (~4 chars/token).
+    pub max_context_tokens: usize,
+    /// Extra folders Lillith's scoped file/tool API may touch, on top of the
+    /// always-allowed config dir, `knowledge_dir` and `skills_dir` (Phase 2).
+    /// Each entry is a directory root; `~` is expanded. Reads inside these
+    /// roots run without a popup (but are audited); writes always need a Soul
+    /// Contract Yes. Example: `["~/Projects"]`.
+    pub allow_paths: Vec<String>,
+    /// Whether she may propose shell commands at all. Even when `true`, every
+    /// shell run still needs an explicit Soul Contract Yes (Phase 2).
+    pub allow_shell: bool,
+    /// Cap (bytes) on a single tool-driven file read.
+    pub max_read_bytes: usize,
+    /// Roots that re-open the built-in deny list (secrets dirs, `/etc`) for
+    /// the tool API. Use sparingly; `~` is expanded (Phase 2).
+    pub unlock_paths: Vec<String>,
+}
+
+impl Default for MindConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            knowledge_dir: String::new(),
+            skills_dir: String::new(),
+            max_context_tokens: DEFAULT_MIND_CONTEXT_TOKENS,
+            allow_paths: Vec::new(),
+            allow_shell: false,
+            max_read_bytes: DEFAULT_MIND_MAX_READ_BYTES,
+            unlock_paths: Vec::new(),
+        }
+    }
+}
+
+impl MindConfig {
+    /// Resolved knowledge folder: the configured override, else the default
+    /// `<data>/lillith/knowledge` (`None` only if no data dir can be found).
+    pub fn resolved_knowledge_dir(&self) -> Option<PathBuf> {
+        resolve_dir(&self.knowledge_dir, "knowledge")
+    }
+
+    /// Resolved skills folder: the configured override, else the default
+    /// `<data>/lillith/skills`.
+    pub fn resolved_skills_dir(&self) -> Option<PathBuf> {
+        resolve_dir(&self.skills_dir, "skills")
+    }
+
+    /// Where skill writes and denials are logged (`<data>/lillith/audit.log`).
+    pub fn audit_log_path(&self) -> Option<PathBuf> {
+        data_dir().map(|d| d.join("audit.log"))
+    }
+
+    /// Clamped token budget (at least 1).
+    pub fn context_budget(&self) -> usize {
+        self.max_context_tokens.max(1)
+    }
+
+    /// Clamped read cap (at least 1 byte).
+    pub fn read_cap(&self) -> usize {
+        self.max_read_bytes.max(1)
+    }
+
+    /// The directory roots the tool API may touch: the config dir, the
+    /// resolved knowledge and skills folders, plus every `allow_paths` entry
+    /// (with `~` expanded). Deduplicated, order preserved.
+    pub fn resolved_allow_roots(&self) -> Vec<PathBuf> {
+        let mut roots: Vec<PathBuf> = Vec::new();
+        let mut push = |p: Option<PathBuf>| {
+            if let Some(p) = p {
+                if !roots.contains(&p) {
+                    roots.push(p);
+                }
+            }
+        };
+        push(config_dir());
+        push(self.resolved_knowledge_dir());
+        push(self.resolved_skills_dir());
+        for raw in &self.allow_paths {
+            push(expand_tilde(raw));
+        }
+        roots
+    }
+
+    /// Extra roots that re-open the built-in deny list (`unlock_paths`, with
+    /// `~` expanded).
+    pub fn resolved_unlock_roots(&self) -> Vec<PathBuf> {
+        self.unlock_paths
+            .iter()
+            .filter_map(|r| expand_tilde(r))
+            .collect()
+    }
+}
+
+/// An override (used verbatim if non-empty) or `<data>/lillith/<name>`.
+fn resolve_dir(override_path: &str, name: &str) -> Option<PathBuf> {
+    let o = override_path.trim();
+    if !o.is_empty() {
+        return Some(PathBuf::from(o));
+    }
+    data_dir().map(|d| d.join(name))
+}
+
+/// `$XDG_DATA_HOME/lillith`, else `~/.local/share/lillith`.
+pub fn data_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_DATA_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
+    Some(base.join("lillith"))
+}
+
+/// `$XDG_CONFIG_HOME/lillith`, else `~/.config/lillith`. This is the folder
+/// `config.toml` lives in; the tool API always allows it.
+pub fn config_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    Some(base.join("lillith"))
+}
+
+/// Expands a leading `~` or `~/` to `$HOME` and trims surrounding whitespace.
+/// An empty string (after trimming) yields `None`.
+pub fn expand_tilde(raw: &str) -> Option<PathBuf> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return None;
+    }
+    if t == "~" {
+        return std::env::var_os("HOME").map(PathBuf::from);
+    }
+    if let Some(rest) = t.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return Some(PathBuf::from(home).join(rest));
+        }
+    }
+    Some(PathBuf::from(t))
+}
+
+/// `[build]`: the settings-GUI **Build** tab (Phase 3) — local, offline
+/// project scaffolding and building ("vibe coding", but entirely on-box).
+///
+/// Everything the tab does is gated by the Soul Contract and confined to
+/// [`BuildConfig::resolved_projects_dir`]. No network, no cloud: see
+/// [`crate::build`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BuildConfig {
+    /// Master switch for the Build tab.
+    pub enabled: bool,
+    /// Root every scaffolded project lives under. Empty = the default
+    /// `~/Projects/lillith-builds`. `~` is expanded.
+    pub projects_dir: String,
+    /// Language preselected in the tab (`rust` / `python` / `fish`).
+    pub default_language: String,
+}
+
+impl Default for BuildConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            projects_dir: String::new(),
+            default_language: "rust".into(),
+        }
+    }
+}
+
+impl BuildConfig {
+    /// The resolved projects root: the configured override, else the default
+    /// `~/Projects/lillith-builds` (`None` only if `$HOME` is unset and no
+    /// override is given).
+    pub fn resolved_projects_dir(&self) -> Option<PathBuf> {
+        let o = self.projects_dir.trim();
+        if !o.is_empty() {
+            return expand_tilde(o);
+        }
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Projects/lillith-builds"))
+    }
+
+    /// The preselected language, defaulting to Rust on an unknown token.
+    pub fn resolved_default_language(&self) -> crate::build::Language {
+        crate::build::Language::parse(&self.default_language)
+            .unwrap_or(crate::build::Language::Rust)
+    }
+}
+
 /// `[avatar]`: custom (single-image) avatars, animated procedurally.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -402,6 +622,10 @@ pub struct Config {
     pub chat: ChatConfig,
     /// Animation pacing (`[anim]`).
     pub anim: AnimConfig,
+    /// Knowledge + skills folders and the skill-authoring gate (`[mind]`).
+    pub mind: MindConfig,
+    /// Local project scaffolding/building (`[build]`, Phase 3).
+    pub build: BuildConfig,
 }
 
 impl Default for Config {
@@ -433,6 +657,8 @@ impl Default for Config {
             monitor: MonitorConfig::default(),
             chat: ChatConfig::default(),
             anim: AnimConfig::default(),
+            mind: MindConfig::default(),
+            build: BuildConfig::default(),
         }
     }
 }
@@ -681,6 +907,135 @@ mod tests {
         assert!(!c.overlay_speech && !c.talk_jiggle);
         // Serialises (tables after plain keys).
         assert!(toml::to_string(&Config::default()).is_ok());
+    }
+
+    #[test]
+    fn build_table_defaults_and_override() {
+        use crate::build::Language;
+        // Defaults: enabled, empty projects_dir (= ~/Projects/lillith-builds),
+        // rust preselected. Old configs that omit [build] still parse.
+        let d = Config::default().build;
+        assert!(d.enabled);
+        assert!(d.projects_dir.is_empty());
+        assert_eq!(d.resolved_default_language(), Language::Rust);
+        if let Some(root) = d.resolved_projects_dir() {
+            assert!(root.ends_with("Projects/lillith-builds"), "{root:?}");
+        }
+
+        // Overrides parse and are used verbatim.
+        let c = Config::from_toml_str(
+            "[build]\nenabled = false\nprojects_dir = \"/srv/builds\"\ndefault_language = \"python\"\n",
+        )
+        .unwrap()
+        .build;
+        assert!(!c.enabled);
+        assert_eq!(
+            c.resolved_projects_dir(),
+            Some(PathBuf::from("/srv/builds"))
+        );
+        assert_eq!(c.resolved_default_language(), Language::Python);
+
+        // An unknown language falls back to Rust.
+        let bad = BuildConfig {
+            default_language: "klingon".into(),
+            ..BuildConfig::default()
+        };
+        assert_eq!(bad.resolved_default_language(), Language::Rust);
+
+        // A config with no [build] table still loads with build defaults.
+        let none = Config::from_toml_str("mode = \"stay\"\n").unwrap();
+        assert!(none.build.enabled);
+    }
+
+    #[test]
+    fn mind_table_defaults_and_override() {
+        // Defaults: enabled, empty (= default) dirs, ~800 token budget.
+        let d = Config::default().mind;
+        assert!(d.enabled);
+        assert_eq!(d.max_context_tokens, DEFAULT_MIND_CONTEXT_TOKENS);
+        assert!(d.knowledge_dir.is_empty() && d.skills_dir.is_empty());
+        assert_eq!(d.context_budget(), DEFAULT_MIND_CONTEXT_TOKENS);
+
+        // Empty budget is clamped to at least 1.
+        let zeroed = MindConfig {
+            max_context_tokens: 0,
+            ..MindConfig::default()
+        };
+        assert_eq!(zeroed.context_budget(), 1);
+
+        // Overrides parse and are used verbatim.
+        let c = Config::from_toml_str(
+            "[mind]\nenabled = false\nknowledge_dir = \"/srv/kb\"\nmax_context_tokens = 256\n",
+        )
+        .unwrap()
+        .mind;
+        assert!(!c.enabled);
+        assert_eq!(c.max_context_tokens, 256);
+        assert_eq!(c.resolved_knowledge_dir(), Some(PathBuf::from("/srv/kb")));
+        // skills_dir left empty -> default under the data dir (ends with the
+        // folder name when a data dir exists).
+        if let Some(sk) = c.resolved_skills_dir() {
+            assert!(sk.ends_with("lillith/skills"));
+        }
+
+        // Phase 2 tool-API defaults.
+        assert!(d.allow_paths.is_empty());
+        assert!(!d.allow_shell, "shell is off by default");
+        assert_eq!(d.max_read_bytes, DEFAULT_MIND_MAX_READ_BYTES);
+        assert!(d.unlock_paths.is_empty());
+        assert_eq!(
+            MindConfig {
+                max_read_bytes: 0,
+                ..MindConfig::default()
+            }
+            .read_cap(),
+            1
+        );
+
+        // Phase 2 keys parse; `~` expands against the current HOME (read, never
+        // mutated, so parallel tests are unaffected); old configs that omit
+        // these keys still load with the defaults asserted above.
+        let c2 = Config::from_toml_str(
+            "[mind]\nallow_shell = true\nmax_read_bytes = 2048\n\
+             allow_paths = [\"~/Projects\", \"/srv/data\"]\n\
+             unlock_paths = [\"~/.secrets\"]\n",
+        )
+        .unwrap()
+        .mind;
+        assert!(c2.allow_shell);
+        assert_eq!(c2.max_read_bytes, 2048);
+        let roots = c2.resolved_allow_roots();
+        assert!(roots.contains(&PathBuf::from("/srv/data")), "{roots:?}");
+        // The config dir is always allowed.
+        assert!(
+            roots.iter().any(|r| r.ends_with("lillith")),
+            "config dir allowed: {roots:?}"
+        );
+        if let Some(home) = std::env::var_os("HOME") {
+            assert!(
+                roots.contains(&PathBuf::from(&home).join("Projects")),
+                "~ expands: {roots:?}"
+            );
+            assert_eq!(
+                c2.resolved_unlock_roots(),
+                vec![PathBuf::from(&home).join(".secrets")]
+            );
+        }
+    }
+
+    #[test]
+    fn mind_default_dirs_follow_xdg_data_home() {
+        // resolve against an explicit XDG_DATA_HOME so the test is hermetic.
+        let tmp = std::env::temp_dir().join(format!("lillith-mind-xdg-{}", std::process::id()));
+        std::env::set_var("XDG_DATA_HOME", &tmp);
+        let c = MindConfig::default();
+        assert_eq!(
+            c.resolved_knowledge_dir(),
+            Some(tmp.join("lillith/knowledge"))
+        );
+        assert_eq!(c.resolved_skills_dir(), Some(tmp.join("lillith/skills")));
+        assert_eq!(c.audit_log_path(), Some(tmp.join("lillith/audit.log")));
+        std::env::remove_var("XDG_DATA_HOME");
     }
 
     #[test]

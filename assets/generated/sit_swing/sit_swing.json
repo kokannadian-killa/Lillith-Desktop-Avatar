@@ -156,5 +156,25 @@
       362
     ]
   ],
-  "feet_lowest_y": 366
+  "feet_lowest_y": 366,
+  "video": {
+    "file": "sit_swing.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 12,
+    "fps": 12.0,
+    "bytes": 148632,
+    "quality": {
+      "edge_mae": 2.442,
+      "edge_p99": 17.0,
+      "halo_dark": 0.081,
+      "halo_light": -0.226,
+      "alpha_mae": 0.0813
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

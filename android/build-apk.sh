@@ -39,6 +39,8 @@ OUT="${OUT:-$CARGO_TARGET_DIR/apk}"
 JAVAC="${JAVA_HOME:+$JAVA_HOME/bin/}javac"
 KEYTOOL="${JAVA_HOME:+$JAVA_HOME/bin/}keytool"
 LLVM="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+# d8/apksigner are shell wrappers that exec `java` from PATH.
+[ -n "${JAVA_HOME:-}" ] && export PATH="$JAVA_HOME/bin:$PATH"
 
 for f in "$NDK" "$BT/aapt2" "$BT/d8" "$BT/zipalign" "$BT/apksigner" "$PLATFORM_JAR" "$CMAKE_BIN/cmake"; do
   [ -e "$f" ] || { echo "missing: $f (see android/INSTALL-android.md)" >&2; exit 1; }
@@ -66,7 +68,7 @@ fi
   -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM="android-$API" \
   -DCMAKE_BUILD_TYPE=Release -DLLAMA_CPP_DIR="$LLAMA_CPP_DIR" >/dev/null
-"$CMAKE_BIN/ninja" -C "$OUT/build-llm" lillith_llm
+"$CMAKE_BIN/ninja" -j "${NINJA_JOBS:-2}" -C "$OUT/build-llm" lillith_llm
 cp "$OUT/build-llm/liblillith_llm.so" "$STAGE/lib/arm64-v8a/"
 "$LLVM/llvm-strip" --strip-unneeded "$STAGE/lib/arm64-v8a/liblillith_llm.so"
 

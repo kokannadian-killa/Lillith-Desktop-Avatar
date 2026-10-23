@@ -580,7 +580,7 @@ impl App {
         self.move_to(p);
         self.pixels_dirty = true;
         self.mask_dirty = true;
-        tracing::info!(size = ?(w, h), "overlay resized");
+        tracing::debug!(size = ?(w, h), "overlay resized");
     }
 
     /// Shows / hides / redraws the menu window to match the controller.

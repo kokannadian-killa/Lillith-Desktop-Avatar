@@ -23,6 +23,8 @@ portal = ["dep:ashpd"]
 [dependencies]
 lillith-core.workspace = true
 lillith-anim.workspace = true
+# Toolkit-free palette + geometry only (no `egui` feature here).
+lillith-theme.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tiny-skia.workspace = true

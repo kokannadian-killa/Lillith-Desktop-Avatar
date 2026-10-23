@@ -64,6 +64,9 @@ are the constants in `lillith_core::menu::wire`; `action_line` /
 | `quit` | – | Close |
 | `reload_config` | – | config.toml changed: re-read and apply live |
 
+**Chest bounce** (Settings ▸ Motion, applies live while you drag): see
+[CHEST_BOUNCE.md](CHEST_BOUNCE.md).
+
 ## Interim settings window (`lillith settings`)
 
 Her menu now opens `lillith-settings`. Until `lillith-settings-gui` adopts

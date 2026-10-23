@@ -4,7 +4,9 @@
 
 pub mod about;
 pub mod avatar;
+pub mod bounce;
 pub mod brain;
+pub mod build;
 pub mod companion;
 pub mod knobs;
 pub mod sealed;
@@ -37,6 +39,8 @@ pub struct Shared {
     pub goto_tab: Option<String>,
     /// Set by a tab to ask the app to save everything.
     pub want_save: bool,
+    /// Set when the active avatar changed: the chrome accent to switch to.
+    pub accent_changed: Option<lillith_theme::Accent>,
 }
 
 impl Shared {
@@ -94,6 +98,7 @@ impl TabRegistry {
         r.register(Box::new(brain::BrainTab::new(&shared.config_path)));
         r.register(Box::new(avatar::AvatarTab::new(&shared.config_path)));
         r.register(Box::new(knobs::KnobTab::voice()));
+        r.register(Box::new(build::BuildTab::new(shared)));
         r.register(Box::new(about::AboutTab));
         for n in 1..=3 {
             r.register(Box::new(sealed::SealedTab::new(n)));
@@ -141,6 +146,7 @@ pub(crate) mod tests {
             time: 0.0,
             goto_tab: None,
             want_save: false,
+            accent_changed: None,
         }
     }
 
@@ -170,6 +176,7 @@ pub(crate) mod tests {
                 "brain",
                 "avatar",
                 "voice",
+                "build",
                 "about",
                 "sealed-1",
                 "sealed-2",
@@ -178,7 +185,7 @@ pub(crate) mod tests {
         );
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 3);
         r.unseal(Box::new(Dummy));
-        assert_eq!(r.index_of("dummy"), Some(6));
+        assert_eq!(r.index_of("dummy"), Some(7));
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 2);
     }
 }
