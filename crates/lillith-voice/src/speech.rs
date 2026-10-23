@@ -352,7 +352,10 @@ impl Voice {
         if self.worker.is_none() {
             return Err(Dropped::NoEngine);
         }
-        let line = clean_line(text, max_chars);
+        // The bubble keeps her emoji / emoticons; the voice must not read
+        // them out ("smiling face with horns", "colon parenthesis"). Applies
+        // to banter lines and chat replies alike.
+        let line = clean_line(&crate::speech_text::speech_text(text), max_chars);
         if line.is_empty() {
             return Err(Dropped::Empty);
         }
@@ -634,6 +637,11 @@ mod tests {
         assert_eq!(v.say_reply("   "), Err(Dropped::Muted));
         v.set_muted(false);
         assert_eq!(v.say_reply_at("  ", 99.0), Err(Dropped::Empty));
+        // Chat replies are emoji-filtered too (speech_text); emoji-only is Empty.
+        assert_eq!(v.say_reply_at("😈💜 <3", 200.0), Err(Dropped::Empty));
+        v.say_reply_at("*purrs* Good boy 😈", 300.0).unwrap();
+        wait_until(|| m.started.lock().unwrap().len() == 3);
+        assert_eq!(m.started.lock().unwrap()[2], "Good boy");
     }
 
     #[test]
@@ -653,6 +661,18 @@ mod tests {
         v.say("two", Urgency::Normal).unwrap();
         wait_until(|| v.stats().spoken == 2);
         assert_eq!(*m.started.lock().unwrap(), ["one", "two"]);
+    }
+
+    #[test]
+    fn engine_never_hears_emoji_or_emoticons() {
+        let m = Mock::default();
+        let mut v = Voice::with_engine(cfg(), Box::new(m.clone()), Box::new(NoLines));
+        v.say("*winks* Gotcha! 🗡️ :)", Urgency::Normal).unwrap();
+        wait_until(|| v.stats().spoken == 1);
+        assert_eq!(*m.started.lock().unwrap(), ["Gotcha!"]);
+        // Nothing speakable left: skipped, the engine is not started.
+        assert_eq!(v.say("😈💜 <3", Urgency::Normal), Err(Dropped::Empty));
+        assert_eq!(v.stats().queued, 1);
     }
 
     #[test]
