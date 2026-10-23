@@ -284,7 +284,9 @@ impl Voice {
         if self.worker.is_none() {
             return Err(Dropped::NoEngine);
         }
-        let line = clean_line(text, self.cfg.max_chars);
+        // The bubble keeps her emoji / emoticons; the voice must not read
+        // them out ("smiling face with horns", "colon parenthesis").
+        let line = clean_line(&crate::speech_text::speech_text(text), self.cfg.max_chars);
         if line.is_empty() {
             return Err(Dropped::Empty);
         }
@@ -522,6 +524,18 @@ mod tests {
         v.say("two", Urgency::Normal).unwrap();
         wait_until(|| v.stats().spoken == 2);
         assert_eq!(*m.started.lock().unwrap(), ["one", "two"]);
+    }
+
+    #[test]
+    fn engine_never_hears_emoji_or_emoticons() {
+        let m = Mock::default();
+        let mut v = Voice::with_engine(cfg(), Box::new(m.clone()), Box::new(NoLines));
+        v.say("*winks* Gotcha! 🗡️ :)", Urgency::Normal).unwrap();
+        wait_until(|| v.stats().spoken == 1);
+        assert_eq!(*m.started.lock().unwrap(), ["Gotcha!"]);
+        // Nothing speakable left: skipped, the engine is not started.
+        assert_eq!(v.say("😈💜 <3", Urgency::Normal), Err(Dropped::Empty));
+        assert_eq!(v.stats().queued, 1);
     }
 
     #[test]
