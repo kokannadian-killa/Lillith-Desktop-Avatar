@@ -4804,6 +4804,34 @@
    ],
    "allure": true,
    "video": "hair_lift_stretch_long/hair_lift_stretch_long.mp4"
+  },
+  {
+   "name": "slow_turn_spin_tease_long",
+   "frame_count": 180,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "slow_turn_spin_tease_long/",
+   "sheet": "slow_turn_spin_tease_long/slow_turn_spin_tease_long_sheet.png",
+   "manifest": "slow_turn_spin_tease_long/slow_turn_spin_tease_long.json",
+   "preview": "slow_turn_spin_tease_long/slow_turn_spin_tease_long_preview.gif",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "slow_turn_spin_tease_long/slow_turn_spin_tease_long.mp4"
   }
  ]
 }
