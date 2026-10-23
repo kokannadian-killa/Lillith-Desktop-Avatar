@@ -26,6 +26,7 @@ impl CompanionTab {
         let avatars = AvatarStore::for_config(Some(&shared.config_path));
         let mut state = model::state_from_store(&shared.store);
         state.extras = model::extras_for(Vec::new(), avatars.as_ref());
+        state.extras.speaker = Some(model::speaker_from_store(&shared.store));
         let poses_rx = shared.manifest.clone().map(|path| {
             let (tx, rx) = channel();
             std::thread::spawn(move || {
@@ -461,6 +462,7 @@ impl SettingsTab for CompanionTab {
         let extras = std::mem::take(&mut self.state.extras);
         self.state = model::state_from_store(&shared.store);
         self.state.extras = extras;
+        self.state.extras.speaker = Some(model::speaker_from_store(&shared.store));
     }
 }
 

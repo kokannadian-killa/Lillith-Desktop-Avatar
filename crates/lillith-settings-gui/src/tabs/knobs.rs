@@ -244,8 +244,8 @@ impl KnobTab {
                     knobs: vec![
                         Knob {
                             path: &["voice", "enabled"],
-                            label: "Speak",
-                            help: "Master switch",
+                            label: lillith_core::menu::SPEAKER_LABEL,
+                            help: "TTS on/off, live; text still shows when off",
                             kind: Kind::Bool {
                                 default: |c| c.voice_enabled,
                             },

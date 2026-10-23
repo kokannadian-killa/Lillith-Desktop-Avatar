@@ -11,6 +11,12 @@
 //!   everything until unmuted (runtime toggle; the menu's "Mute voice").
 //! - With no engine ([`NullEngine`]) no thread is spawned; every line is
 //!   dropped as [`Dropped::NoEngine`] (logged once at start-up).
+//! - [`Voice::set_enabled`] is the live "Speak out loud (speakers)" switch
+//!   (`[voice] enabled`): off cuts the current line and drops every line as
+//!   [`Dropped::Disabled`]; on speaks again without a restart (the worker
+//!   runs whenever a real engine exists). Text on screen is not affected.
+//! - [`Voice::say_reply`] speaks a whole chat reply (cuts banter, skips the
+//!   cooldown, longer limit than banter lines).
 
 use crate::config::VoiceConfig;
 use crate::engine::{detect, Engine, Playback, SpeakOpts};
@@ -140,6 +146,15 @@ struct Shared {
     state: Mutex<State>,
     cv: Condvar,
     muted: AtomicBool,
+    /// `[voice] enabled`, switchable live ([`Voice::set_enabled`]).
+    enabled: AtomicBool,
+}
+
+impl Shared {
+    /// `true` while lines must not be heard (muted or speakers off).
+    fn silenced(&self) -> bool {
+        self.muted.load(Ordering::SeqCst) || !self.enabled.load(Ordering::SeqCst)
+    }
 }
 
 /// The voice (see the module docs). Dropping it stops the worker.
@@ -164,6 +179,10 @@ impl std::fmt::Debug for Voice {
 
 /// Poll interval of the worker while a line plays.
 const POLL: Duration = Duration::from_millis(20);
+
+/// Longest chat reply read aloud in one go (characters; banter lines use
+/// `[voice] max_chars`).
+pub const REPLY_MAX_CHARS: usize = 1200;
 
 impl Voice {
     /// Detects the engine for `cfg` (logs the choice once) with the
@@ -197,9 +216,11 @@ impl Voice {
             }),
             cv: Condvar::new(),
             muted: AtomicBool::new(cfg.mute),
+            enabled: AtomicBool::new(cfg.enabled),
         });
         let engine_name = engine.name();
-        let worker = (cfg.enabled && engine.is_real()).then(|| {
+        // Spawned even while disabled so the speakers switch works live.
+        let worker = engine.is_real().then(|| {
             let sh = Arc::clone(&shared);
             let opts = SpeakOpts::from_config(&cfg);
             std::thread::Builder::new()
@@ -223,7 +244,29 @@ impl Voice {
     }
     /// `true` if lines can actually be heard (enabled + a real engine).
     pub fn is_active(&self) -> bool {
+        self.worker.is_some() && self.enabled()
+    }
+    /// `true` if a real TTS engine was found (the speakers switch can work).
+    pub fn has_engine(&self) -> bool {
         self.worker.is_some()
+    }
+    /// "Speak out loud (speakers)": `[voice] enabled`, live.
+    pub fn enabled(&self) -> bool {
+        self.shared.enabled.load(Ordering::SeqCst)
+    }
+
+    /// Live speakers switch. Off cuts the current line and clears the
+    /// queue; text elsewhere (speech bubble, chat) is unaffected.
+    pub fn set_enabled(&mut self, on: bool) {
+        self.cfg.enabled = on;
+        self.shared.enabled.store(on, Ordering::SeqCst);
+        if !on {
+            if let Ok(mut s) = self.shared.state.lock() {
+                s.queue.clear();
+                s.interrupt = true;
+            }
+        }
+        self.shared.cv.notify_all();
     }
     pub fn config(&self) -> &VoiceConfig {
         &self.cfg
@@ -275,7 +318,32 @@ impl Voice {
 
     /// [`Voice::say`] at an explicit clock value (seconds; tests).
     pub fn say_at(&mut self, text: &str, urgency: Urgency, now: f64) -> Result<(), Dropped> {
-        if !self.cfg.enabled {
+        let max = self.cfg.max_chars;
+        self.enqueue(text, urgency, now, max)
+    }
+
+    /// Reads a finished chat reply aloud (`chat.end`): cuts whatever plays,
+    /// skips the cooldown, and allows up to [`REPLY_MAX_CHARS`]. Nothing
+    /// happens while the speakers are off or muted.
+    pub fn say_reply(&mut self, text: &str) -> Result<(), Dropped> {
+        let now = self.t0.elapsed().as_secs_f64();
+        self.say_reply_at(text, now)
+    }
+
+    /// [`Voice::say_reply`] at an explicit clock value (tests).
+    pub fn say_reply_at(&mut self, text: &str, now: f64) -> Result<(), Dropped> {
+        let max = self.cfg.max_chars.max(REPLY_MAX_CHARS);
+        self.enqueue(text, Urgency::Interrupt, now, max)
+    }
+
+    fn enqueue(
+        &mut self,
+        text: &str,
+        urgency: Urgency,
+        now: f64,
+        max_chars: usize,
+    ) -> Result<(), Dropped> {
+        if !self.enabled() {
             return Err(Dropped::Disabled);
         }
         if self.muted() {
@@ -284,7 +352,7 @@ impl Voice {
         if self.worker.is_none() {
             return Err(Dropped::NoEngine);
         }
-        let line = clean_line(text, self.cfg.max_chars);
+        let line = clean_line(text, max_chars);
         if line.is_empty() {
             return Err(Dropped::Empty);
         }
@@ -381,7 +449,7 @@ fn worker(sh: Arc<Shared>, mut engine: Box<dyn Engine>, opts: SpeakOpts) {
                 };
             }
         };
-        if !sh.muted.load(Ordering::SeqCst) {
+        if !sh.silenced() {
             match engine.start(&line, &opts) {
                 Ok(p) => play(&sh, p),
                 Err(e) => {
@@ -413,7 +481,7 @@ fn play(sh: &Shared, mut p: Box<dyn Playback>) {
             p.stop();
             return;
         };
-        if s.shutdown || s.interrupt || sh.muted.load(Ordering::SeqCst) {
+        if s.shutdown || s.interrupt || sh.silenced() {
             drop(s);
             p.stop();
             if let Ok(mut s) = sh.state.lock() {
@@ -503,6 +571,69 @@ mod tests {
             g.admit("Alarm", 102.0, Urgency::Interrupt),
             Err(Dropped::Repeat)
         );
+    }
+
+    #[test]
+    fn speakers_switch_is_live() {
+        let m = Mock::default();
+        m.hold.store(true, Ordering::SeqCst);
+        let mut v = Voice::with_engine(cfg(), Box::new(m.clone()), Box::new(NoLines));
+        v.say("playing", Urgency::Normal).unwrap();
+        wait_until(|| m.started.lock().unwrap().len() == 1);
+        // Off: the playing line is cut and new lines are dropped.
+        v.set_enabled(false);
+        wait_until(|| m.stops.load(Ordering::SeqCst) == 1);
+        assert!(!v.enabled() && !v.is_active() && v.has_engine());
+        assert_eq!(v.say("quiet", Urgency::Normal), Err(Dropped::Disabled));
+        assert_eq!(v.say_reply("quiet reply"), Err(Dropped::Disabled));
+        // On again: speaks without a new Voice (no restart).
+        m.hold.store(false, Ordering::SeqCst);
+        v.set_enabled(true);
+        assert!(v.is_active());
+        v.say("back", Urgency::Normal).unwrap();
+        wait_until(|| v.stats().spoken == 1);
+        assert_eq!(*m.started.lock().unwrap(), ["playing", "back"]);
+    }
+
+    #[test]
+    fn disabled_at_start_can_be_switched_on() {
+        let m = Mock::default();
+        let c = VoiceConfig {
+            enabled: false,
+            ..cfg()
+        };
+        let mut v = Voice::with_engine(c, Box::new(m.clone()), Box::new(NoLines));
+        assert_eq!(v.say("no", Urgency::Normal), Err(Dropped::Disabled));
+        v.set_enabled(true);
+        v.say("yes", Urgency::Normal).unwrap();
+        wait_until(|| v.stats().spoken == 1);
+        assert_eq!(*m.started.lock().unwrap(), ["yes"]);
+    }
+
+    #[test]
+    fn reply_cuts_banter_skips_cooldown_and_keeps_long_text() {
+        let m = Mock::default();
+        m.hold.store(true, Ordering::SeqCst);
+        let c = VoiceConfig {
+            cooldown_s: 60.0,
+            max_chars: 20,
+            ..cfg()
+        };
+        let mut v = Voice::with_engine(c, Box::new(m.clone()), Box::new(NoLines));
+        v.say_at("banter line", Urgency::Normal, 0.0).unwrap();
+        wait_until(|| m.started.lock().unwrap().len() == 1);
+        let reply = "This chat reply is a good deal longer than twenty characters.";
+        v.say_reply_at(reply, 1.0).unwrap();
+        wait_until(|| m.stops.load(Ordering::SeqCst) == 1);
+        m.hold.store(false, Ordering::SeqCst);
+        wait_until(|| m.started.lock().unwrap().len() == 2);
+        assert_eq!(m.started.lock().unwrap()[1], reply, "not cut at max_chars");
+        // Muted: replies stay silent too.
+        v.set_muted(true);
+        assert_eq!(v.say_reply_at("later", 99.0), Err(Dropped::Muted));
+        assert_eq!(v.say_reply("   "), Err(Dropped::Muted));
+        v.set_muted(false);
+        assert_eq!(v.say_reply_at("  ", 99.0), Err(Dropped::Empty));
     }
 
     #[test]
@@ -605,10 +736,8 @@ mod tests {
             Box::new(Mock::default()),
             Box::new(NoLines),
         );
-        assert!(
-            !off.is_active(),
-            "disabled: no worker even with a real engine"
-        );
+        assert!(!off.is_active(), "disabled: silent even with a real engine");
+        assert!(off.has_engine(), "worker kept for the live speakers switch");
         assert_eq!(off.say("hi", Urgency::Normal), Err(Dropped::Disabled));
         drop(v); // no thread to join, must not hang
     }
