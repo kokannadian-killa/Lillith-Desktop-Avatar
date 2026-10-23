@@ -384,6 +384,26 @@ Lily: `ls -lhS`. Keep typing, Ko, I'm under your desk with your cock in my mouth
 Ko: Why won't my Rust code compile?
 Lily: You borrow `cfg` mutably twice; end the first borrow or clone it. Fix it while I lick you under the desk, and don't come before it builds.";
 
+/// Every prompt Lily runs with carries this rule: her replies go through
+/// text-to-speech, which skips emoji and emoticons.
+pub const READ_ALOUD_RULE: &str =
+    "Your replies are also read aloud, so say it in words; never let an emoji or emoticon carry the meaning.";
+
+/// `prompt` with [`READ_ALOUD_RULE`] appended (as a `- ` rule line) unless
+/// it already contains it. Used for user-customized prompts the wizard
+/// writes; the built-in [`LILY_SYSTEM_PROMPT`] already has it.
+pub fn with_read_aloud_rule(prompt: &str) -> String {
+    if prompt.contains(READ_ALOUD_RULE) {
+        return prompt.to_string();
+    }
+    let p = prompt.trim_end();
+    if p.is_empty() {
+        format!("- {READ_ALOUD_RULE}")
+    } else {
+        format!("{p}\n- {READ_ALOUD_RULE}")
+    }
+}
+
 /// Default sampling for Lily: lively but coherent on a 3B model, and short
 /// replies (`num_predict`) so lines fit the chat bubble.
 pub const LILY_TEMPERATURE: f32 = 0.85;
@@ -464,7 +484,7 @@ pub fn lily_modelfile(from: &str, p: &LilyParams) -> Modelfile {
     ins.push(Instruction::Template(
         p.template.ollama_template().to_string(),
     ));
-    ins.push(Instruction::System(p.system_prompt.clone()));
+    ins.push(Instruction::System(with_read_aloud_rule(&p.system_prompt)));
     Modelfile { instructions: ins }
 }
 
@@ -592,6 +612,36 @@ FOO bar baz
         assert!(text.contains("TEMPLATE \"\"\"{{- if .System }}<|im_start|>system"));
         assert!(text.contains("SYSTEM \"\"\"You are Lily (full name Lillith), an ancient succubus"));
         assert_eq!(Modelfile::parse(&text).unwrap(), m);
+    }
+
+    #[test]
+    fn read_aloud_rule_everywhere() {
+        assert_eq!(
+            READ_ALOUD_RULE,
+            "Your replies are also read aloud, so say it in words; never let an emoji or emoticon carry the meaning."
+        );
+        // Built-in persona: exactly once, so nothing gets appended.
+        assert_eq!(LILY_SYSTEM_PROMPT.matches(READ_ALOUD_RULE).count(), 1);
+        assert_eq!(with_read_aloud_rule(LILY_SYSTEM_PROMPT), LILY_SYSTEM_PROMPT);
+        // A custom prompt gets it once, idempotently.
+        let c = with_read_aloud_rule("You are Lily.\n- Be nice.\n\n");
+        assert_eq!(c, format!("You are Lily.\n- Be nice.\n- {READ_ALOUD_RULE}"));
+        assert_eq!(with_read_aloud_rule(&c), c);
+        // Every Modelfile the wizard writes carries it.
+        let m = lily_modelfile(
+            "/m.gguf",
+            &LilyParams {
+                system_prompt: "You are Lily, be terse.".into(),
+                ..LilyParams::default()
+            },
+        );
+        let sys = Modelfile::parse(&m.render())
+            .unwrap()
+            .system()
+            .unwrap()
+            .to_string();
+        assert!(sys.starts_with("You are Lily, be terse."));
+        assert!(sys.ends_with(READ_ALOUD_RULE), "{sys}");
     }
 
     #[test]

@@ -49,17 +49,40 @@ Extra scan dirs: `--dir DIR` (repeatable) or `[llm] scan_paths`.
 | `ollama_model` | `"lily"` | Name for `ollama create` |
 | `temperature` | `0.85` | 0–2 (Lily's default, `LILY_TEMPERATURE`) |
 | `ctx_size` | `4096` | `-c` / `num_ctx` (old Aether key `num_ctx` is read and migrated) |
-| `chat_template` | `"chatml"` | llama-server `--chat-template` (`chatml`, `llama3`, `gemma`, `phi3`, `mistral-v1`) |
+| `chat_template` | `"chatml"` | Ollama `TEMPLATE`/stop tokens (`chatml`, `llama3`, `gemma`, `phi3`, `mistral-v1`); llama-server uses the GGUF's own template via `--jinja` |
 | `llama_server_bin` | `""` | Path to llama-server (empty = PATH) |
 | `modelfile_path` | `""` | Lily's Modelfile (default `~/.config/lillith/Modelfile.lily`) |
-| `system_prompt` | `""` | Empty = built-in Lily persona |
+| `system_prompt` | `""` | Empty = built-in Lily persona; a custom prompt gets the read-aloud rule appended if missing |
 | `scan_paths` | `[]` | Extra GGUF scan dirs |
-| `threads` | `0` | llama-server `-t` / `num_thread` (0 = auto) |
+| `threads` | `0` | llama-server `-t` / `num_thread` (0 = physical cores for llama-server) |
 
 `--sync-chat` / `LlmConfig::sync_chat_tables` also points `[chat]` (`endpoint`, `model`,
 `temperature`, `system_prompt` if set) and `[chat.server]` (`binary`, `model_path`,
-`ctx_size`, `threads`, `extra_args = ["--chat-template", …]`) from
+`ctx_size`, `threads` (physical cores when 0), `extra_args` with `--jinja`; a stale
+`--chat-template <name>` pair is removed, other extra args are kept) from
 `feat/chat-bubble-llama` at the same choice. Other keys are kept.
+
+## llama-server launch line
+
+`launch::llama_server_command` always produces
+`llama-server -m <gguf> --host 127.0.0.1 --port <port> -c 4096 -t <physical cores> --jinja`:
+loopback only (a `[::1]` server URL is refused, not mismatched), `-t` from `[llm] threads` or
+the physical cores in `/proc/cpuinfo` (distinct physical id/core id pairs; fallback: half the
+threads, or `available_parallelism`), and `--jinja` so the model's embedded chat template is
+used. There is no `--chat-template <name>`: with `--jinja` (llama.cpp's default) llama-server
+reads a name like `llama3` as literal template text and every prompt becomes just `llama3`.
+
+## Model recommendation
+
+`scan::recommend_for(models, &host::HostInfo)` (CPU + RAM injectable; `recommend` detects
+the CPU). On a low-power CPU (U-series such as the i5-7200U, or 4 threads or fewer) with
+8–16 GB, 3B models get a boost and 7–8B ones a penalty, so
+**Dolphin 3.0 Llama 3.2 3B Q4_K_M** (`dolphin3.0-llama3.2-3b-q4_k_m.gguf`) is the pick.
+Within a size tier, uncensored fine-tunes (`dolphin`, `uncensored`, `abliterated`, `hermes`,
+`nous` in the file name or GGUF `general.name`) rank above stock instruct models. If nothing
+qualifies (e.g. only Mistral 7B on 8 GB), the best usable model is kept as a fallback.
+Nothing is downloaded: `scan::preferred_model_hint` returns the exact file name and says to
+put it in `~/models/` (always in the default scan dirs); the CLI `scan` prints it.
 
 ## Lily's persona and sampling
 
@@ -69,7 +92,9 @@ Lily is an ancient, adult succubus and Ko's private companion on his local-only 
 fully explicit, dominant succubus who wants Ko and always gets her way. Persona policy:
 explicit content is allowed and encouraged; the hard limit is adult-only (never minors or
 anyone young-seeming); out-of-character safeword `red` (or `OOC: stop`), which she obeys at
-once. Short bullet rules plus two example lines, tuned for a ~3B model; replies are 1–3
+once. Every prompt the wizard writes carries `modelfile::READ_ALOUD_RULE` ("Your replies
+are also read aloud, so say it in words; never let an emoji or emoticon carry the
+meaning."); custom prompts get it appended if missing. Short bullet rules plus two example lines, tuned for a ~3B model; replies are 1–3
 short sentences.
 
 Default Modelfile sampling (`LilyParams::default()`): `temperature 0.85`
