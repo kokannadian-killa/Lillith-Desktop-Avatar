@@ -88,3 +88,23 @@ chat template's stop tokens (ChatML: `<|im_start|>`, `<|im_end|>`).
 - `validate::field(key, value, &ValidateCtx) -> Result<(), FieldError{key, message}>`, `validate_all(&LlmConfig)`, `validate_all_with(.., &ValidateCtx)`.
 - `http::post_json` (loopback-only, request body capped at 256 KB).
 - Example: `wizard check [--config F] [--server-url U] [PROMPT]`.
+
+## Voice and microphone step (lillith-voice kit; docs only, not wired in this crate)
+
+The wizard's voice/mic step should hand off to the offline `lillith-voice` kit rather than reimplement it.
+Nothing here downloads anything; the kit bundles every model.
+
+1. **Is the kit installed?** `lillith-say --status` (JSON) → `"cloned_voice_models": true` means Ko's cloned
+   voice is available; a running daemon answers `{"op":"ping"}` on
+   `$XDG_RUNTIME_DIR/lillith-voice/voiced.sock` (Windows: `\\.\pipe\lillith-voice`).
+2. **Voice test:** `lillith-say "Hiii, it's me."`; offer `lillith-say --bench` and switch to
+   `LILLITH_VOICE_PRESET=lillith_fast` if it reports RTF > 0.9.
+3. **Mic step:** run `lillith-listen --setup` (lists devices, records a 4 s test, shows the level and the
+   local transcript) or, from a GUI, `lillith-listen --devices` + `{"cmd":"listen","timeout":6}` on the socket.
+   The choice is saved to `~/.config/lillith-voice/mic.json` (`device`, `echo`, `barge_in`, `barge_in_dbfs`,
+   `mode` = `ptt` | `always`).
+4. **Config:** write `[voice] engine = "piper"`, `model = "~/.local/share/lillith-voice/lillith.onnx"` (the
+   kit's piper shim) until the app's daemon engine lands.
+
+Safety rules the step should state: a spoken "yes" is never consent (soul contracts / plans need a typed
+confirmation), and the spoken safeword "red" stops her at once.

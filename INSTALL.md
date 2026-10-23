@@ -349,6 +349,31 @@ shows `KWin bridge: window stack received`; `dbus-monitor --session
 second. Script errors land in the journal:
 `journalctl --user -b | grep -i lillith-bridge`.
 
+### Her voice: Ko's cloned voice (lillith-voice kit, optional, fully offline)
+
+The `lillith-voice` kit gives her **Ko's own voice** (cloned with Pocket TTS, CPU-only) and local speech
+recognition for the mic. It ships as `lillith-voice-kit.tar.gz` with every model and Python wheel inside, so
+nothing is downloaded at install or run time.
+
+```fish
+tar xzf lillith-voice-kit.tar.gz; cd lillith-voice-kit
+bash install.sh --systemd --piper-shim   # venv from bundled wheels, daemon (AF_UNIX only), `piper` shim
+lillith-say "Hiii, it's me."             # her voice; lillith-say --bench tells you if lillith_fast is better
+lillith-listen --setup                   # pick and test the microphone
+```
+
+Then point the app at it in `~/.config/lillith/config.toml`:
+
+```toml
+[voice]
+engine = "piper"
+model = "~/.local/share/lillith-voice/lillith.onnx"   # marker file from --piper-shim; 24 kHz
+```
+
+Presets: `lillith` (default, Ko's clone), `lillith_fast` (int8 flow head, a little faster), `p1` (Kokoro fallback), and
+the older `bella` voices. The daemon's JSON-lines protocol (say / stop / mic / lip-sync events) is in the
+kit's `PROTOCOL.md`. Without the kit, `engine = "auto"` uses Piper, espeak-ng or spd-say as before.
+
 ## 6. Troubleshooting
 
 **She doesn't appear / "no manifest.toml found".** Pass `--manifest` or set

@@ -17,6 +17,7 @@
 # enabled = true
 # engine = "auto"        # auto | piper | espeak-ng | spd-say | none   (auto: piper → espeak-ng → spd-say → silent)
 # model = "~/.local/share/lillith/piper/en_US-amy-medium.onnx"
+# model = "~/.local/share/lillith-voice/lillith.onnx"   # Ko's cloned voice (lillith-voice kit, install.sh --piper-shim; engine = "piper")
 # voice = "female1"      # optional (spd-say -t / espeak-ng -v)
 # rate = 1.0             # 0.5..2.0
 # volume = 0.8           # 0..1
