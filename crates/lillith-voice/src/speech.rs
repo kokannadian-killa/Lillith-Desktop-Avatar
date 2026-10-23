@@ -188,20 +188,21 @@ impl Voice {
     /// Detects the engine for `cfg` (logs the choice once) with the
     /// [`DefaultLines`] table.
     pub fn from_config(cfg: VoiceConfig) -> Self {
-        Self::from_config_with(cfg, &crate::engine::which)
+        Self::from_config_with(cfg, &crate::engine::which, &crate::engine::ping_daemon)
     }
 
     fn from_config_with(
         cfg: VoiceConfig,
         lookup: &dyn Fn(&str) -> Option<std::path::PathBuf>,
+        probe: &crate::engine::DaemonProbe,
     ) -> Self {
         // Probe even when the speakers are off so the live toggle can switch
         // them on later without a restart; `enabled` stays as configured.
-        let probe = VoiceConfig {
+        let probe_cfg = VoiceConfig {
             enabled: true,
             ..cfg.clone()
         };
-        let d = crate::engine::detect_with(&probe, lookup);
+        let d = crate::engine::detect_full(&probe_cfg, lookup, probe);
         if d.engine.is_real() && !cfg.enabled {
             tracing::info!("voice: {} (speakers off until toggled on)", d.reason);
         } else if d.engine.is_real() {
@@ -636,7 +637,7 @@ mod tests {
             ..cfg()
         };
         let lookup = |b: &str| (b == "espeak-ng").then(|| std::path::PathBuf::from("/x/espeak-ng"));
-        let mut v = Voice::from_config_with(c, &lookup);
+        let mut v = Voice::from_config_with(c, &lookup, &|_| None);
         assert!(v.has_engine() && !v.enabled() && !v.is_active());
         v.set_enabled(true);
         assert!(v.is_active());
