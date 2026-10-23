@@ -514,8 +514,13 @@ mod tests {
         let mut seen_while_running = false;
         while tab.busy() && t0.elapsed() < std::time::Duration::from_secs(20) {
             tab.tick(&ctx, &mut sh);
-            if tab.busy() && tab.log.contains("first line") && tab.log.contains("to stderr") {
-                assert!(!tab.log.contains("last line"), "{}", tab.log);
+            // Both early lines are in the log while she is still asleep
+            // (before "last line" was even printed).
+            if tab.busy()
+                && tab.log.contains("first line")
+                && tab.log.contains("to stderr")
+                && !tab.log.contains("last line")
+            {
                 seen_while_running = true;
             }
             std::thread::sleep(std::time::Duration::from_millis(20));
