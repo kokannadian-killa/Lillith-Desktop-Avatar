@@ -45,6 +45,10 @@
 //! # optional blend-helper metadata (transition clips between two clips):
 //! # blend = { from = "idle", to = "wave", from_frame = 9, to_frame = 0,
 //! #           blend_t = [0.2, 0.4, 0.6, 0.8], easing = "smoothstep" }
+//! # optional MP4 source (alpha-packed H.264, see `crate::video`): played
+//! # instead of `page` when present and decodable; `page` stays the fallback.
+//! # Frame i of the video is frame i of the clip; all cells share one size.
+//! # video = "wake/wake.mp4"
 //! frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
 //! ```
 
@@ -213,6 +217,11 @@ pub struct Clip {
     /// (`lip_flap.recommended_rate.mouth_shape_change_ms`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mouth_shape_ms: Option<(u32, u32)>,
+    /// Optional alpha-packed MP4 (relative to the manifest's directory, or
+    /// absolute) the frames are played from; [`Clip::page`] is the fallback
+    /// when ffmpeg is missing or the video fails (see [`crate::video`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video: Option<String>,
     pub frames: Vec<FrameRect>,
 }
 
@@ -268,6 +277,7 @@ impl Default for Clip {
             mouth_patches: BTreeMap::new(),
             mouth_angle_deg: Vec::new(),
             mouth_shape_ms: None,
+            video: None,
             frames: Vec::new(),
         }
     }
@@ -285,6 +295,16 @@ impl Clip {
     /// Resolves [`Clip::page`] against the manifest's directory.
     pub fn page_path(&self, manifest_dir: &Path) -> PathBuf {
         manifest_dir.join(&self.page)
+    }
+
+    /// Resolves [`Clip::video`] against the manifest's directory.
+    pub fn video_path(&self, manifest_dir: &Path) -> Option<PathBuf> {
+        self.video.as_ref().map(|v| manifest_dir.join(v))
+    }
+
+    /// Cell size shared by every frame (video clips need one size).
+    pub fn cell_size(&self) -> (u32, u32) {
+        self.frames.first().map_or((0, 0), |f| (f.w, f.h))
     }
 
     /// Per-frame durations in seconds: `frame_durations_ms` if present,
@@ -451,6 +471,15 @@ impl Clip {
         }
         if let Err(g) = SpringMask::from_groups(&self.disable_springs) {
             return Err(bad(format!("disable_springs: unknown spring group `{g}`")));
+        }
+        if let Some(v) = &self.video {
+            if v.is_empty() {
+                return Err(bad("video is empty".into()));
+            }
+            let (w, h) = self.cell_size();
+            if self.frames.iter().any(|f| (f.w, f.h) != (w, h)) {
+                return Err(bad("video clips need one cell size for every frame".into()));
+            }
         }
         if let Some((x0, x1)) = self.seat_x_range {
             if x0 > x1 {
@@ -806,6 +835,7 @@ mod tests {
                     blend_t: Some(vec![0.5]),
                     easing: Some("smoothstep".into()),
                 }),
+                video: Some("a/a.mp4".into()),
                 frames: vec![FrameRect {
                     x: 0,
                     y: 0,
@@ -926,5 +956,28 @@ mod tests {
         // jiggle sibling 36 f).
         let loops = "[clips.e]\npage = \"e.png\"\njiggle_variant = \"idle\"\nframes = [ { x = 0, y = 0, w = 1, h = 1 }, { x = 1, y = 0, w = 1, h = 1 } ]";
         assert!(Manifest::from_toml_str(&format!("{base}\n{loops}")).is_ok());
+    }
+
+    #[test]
+    fn video_source_field() {
+        let m = Manifest::from_toml_str(
+            r#"
+            [clips.pose]
+            page = "pose/pose_sheet.png"
+            video = "pose/pose.mp4"
+            frames = [ { x = 0, y = 0, w = 4, h = 4 }, { x = 4, y = 0, w = 4, h = 4 } ]
+            "#,
+        )
+        .unwrap();
+        let c = &m.clips["pose"];
+        assert_eq!(
+            c.video_path(Path::new("/a")),
+            Some(PathBuf::from("/a/pose/pose.mp4"))
+        );
+        assert_eq!(c.cell_size(), (4, 4));
+        let mixed = "[clips.e]\npage = \"e.png\"\nvideo = \"e.mp4\"\nframes = [ { x = 0, y = 0, w = 4, h = 4 }, { x = 4, y = 0, w = 5, h = 4 } ]";
+        assert!(Manifest::from_toml_str(mixed).is_err());
+        let empty = "[clips.e]\npage = \"e.png\"\nvideo = \"\"\nframes = [ { x = 0, y = 0, w = 4, h = 4 } ]";
+        assert!(Manifest::from_toml_str(empty).is_err());
     }
 }

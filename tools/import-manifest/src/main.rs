@@ -62,8 +62,16 @@
 //! - a jiggle variant's feet anchor is taken from its clean clip (same frames
 //!   warped in place), with a warning when the JSON disagrees.
 //!
+//! Pose videos: an entry's `video` (path of the alpha-packed MP4, relative
+//! to the manifest like `sheet`, written by `tools/video-pipeline/pack_mp4.py`)
+//! becomes the clip's `video`; the sheet stays as the PNG fallback.
+//!
 //! With `--check`, the written manifest is re-loaded through
 //! `Manifest::load` + `load_page` and every frame rect is bounds-checked.
+//! Every `video` is probed (H.264, yuv420p, `2W x H`, frame count = clip
+//! frames), decoded like the engine does, and its alpha compared with the
+//! PNG page frame by frame (catches a stale, misordered or alpha-less
+//! MP4). `--no-video-check` skips that (e.g. a box without ffmpeg).
 
 use anyhow::{bail, ensure, Context, Result};
 use clap::Parser;
@@ -89,6 +97,9 @@ struct Args {
     /// After writing, load the manifest and every page and verify all frames.
     #[arg(long)]
     check: bool,
+    /// With --check: don't probe/decode the MP4s.
+    #[arg(long)]
+    no_video_check: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,6 +223,7 @@ fn convert(
     anim: &JsonAnim,
     side: Option<&Map<String, Value>>,
     page: String,
+    video: Option<String>,
     extra_tags: &[String],
 ) -> Result<Clip> {
     ensure!(anim.frame_count > 0, "{}: frame_count is 0", anim.name);
@@ -427,6 +439,7 @@ fn convert(
         mouth_patches,
         mouth_angle_deg,
         mouth_shape_ms,
+        video,
         frames,
     })
 }
@@ -562,7 +575,16 @@ fn build(json: &JsonManifest, in_dir: &Path, out_dir: &Path, tags: &[String]) ->
             Some(rel) => read_side_json(&in_dir.join(rel))?,
             None => None,
         };
-        let clip = convert(anim, side.as_ref(), page, tags)?;
+        let video: Option<String> = typed_field(&anim.name, &anim.extra, None, "video")?;
+        let video = video.map(|v| {
+            if relative {
+                v
+            } else {
+                let p = in_dir.join(&v);
+                p.canonicalize().unwrap_or(p).to_string_lossy().into_owned()
+            }
+        });
+        let clip = convert(anim, side.as_ref(), page, video, tags)?;
         if m.clips.insert(anim.name.clone(), clip).is_some() {
             bail!("duplicate animation name {}", anim.name);
         }
@@ -661,10 +683,147 @@ fn read_side_json(path: &Path) -> Result<Option<Map<String, Value>>> {
     }
 }
 
-/// Loads `path` like the engine does and bounds-checks every frame.
-fn check(path: &Path) -> Result<()> {
+/// ffprobe facts about a pose video.
+#[derive(Debug, PartialEq)]
+struct Probe {
+    codec: String,
+    pix_fmt: String,
+    width: u32,
+    height: u32,
+    frames: usize,
+}
+
+fn ffprobe(ffmpeg: &Path, video: &Path) -> Result<Probe> {
+    // ffprobe next to ffmpeg (same install), else on PATH.
+    let probe = ffmpeg
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .map(|d| d.join("ffprobe"))
+        .filter(|p| p.is_file())
+        .unwrap_or_else(|| PathBuf::from("ffprobe"));
+    let out = std::process::Command::new(probe)
+        .args([
+            "-v",
+            "error",
+            "-protocol_whitelist",
+            "file",
+            "-select_streams",
+            "v:0",
+            "-count_packets",
+            "-show_entries",
+            "stream=codec_name,pix_fmt,width,height,nb_read_packets",
+            "-of",
+            "json",
+        ])
+        .arg(video)
+        .output()
+        .context("running ffprobe")?;
+    ensure!(
+        out.status.success(),
+        "ffprobe {video:?}: {}",
+        String::from_utf8_lossy(&out.stderr).trim()
+    );
+    let v: Value = serde_json::from_slice(&out.stdout)?;
+    let s = v
+        .pointer("/streams/0")
+        .with_context(|| format!("{video:?}: no video stream"))?;
+    let txt = |k: &str| s.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    let num = |k: &str| {
+        s.get(k)
+            .and_then(|x| {
+                x.as_u64()
+                    .or_else(|| x.as_str().and_then(|t| t.parse().ok()))
+            })
+            .unwrap_or(0)
+    };
+    Ok(Probe {
+        codec: txt("codec_name"),
+        pix_fmt: txt("pix_fmt"),
+        width: num("width") as u32,
+        height: num("height") as u32,
+        frames: num("nb_read_packets") as usize,
+    })
+}
+
+/// Checks one clip's MP4 against its manifest entry and PNG page; returns
+/// a short summary.
+fn check_video(
+    ffmpeg: &Path,
+    name: &str,
+    clip: &Clip,
+    video: &Path,
+    page: &image::RgbaImage,
+) -> Result<String> {
+    use lillith_anim::video::decode_all;
+    let (w, h) = clip.cell_size();
+    let n = clip.frames.len();
+    let p = ffprobe(ffmpeg, video).with_context(|| format!("{name}: {video:?}"))?;
+    ensure!(
+        p.codec == "h264" && matches!(p.pix_fmt.as_str(), "yuv420p" | "yuvj420p"),
+        "{name}: {video:?} is {} {}, want h264 yuv(j)420p",
+        p.codec,
+        p.pix_fmt
+    );
+    ensure!(
+        (p.width, p.height) == (2 * w, h),
+        "{name}: video is {}x{}, want {}x{} (colour | alpha)",
+        p.width,
+        p.height,
+        2 * w,
+        h
+    );
+    ensure!(
+        p.frames == n,
+        "{name}: video has {} frames, clip has {n}",
+        p.frames
+    );
+    let frames = decode_all(ffmpeg, video, w, h).with_context(|| format!("{name}: decode"))?;
+    ensure!(
+        frames.len() == n,
+        "{name}: decoded {} frames, clip has {n}",
+        frames.len()
+    );
+    let (mut clear, mut solid, mut worst) = (false, false, 0.0f64);
+    for (i, (f, r)) in frames.iter().zip(&clip.frames).enumerate() {
+        let mut diff = 0u64;
+        for (k, px) in f.pixels().iter().enumerate() {
+            let (x, y) = (r.x + (k as u32 % w), r.y + (k as u32 / w));
+            let a = px.alpha();
+            clear |= a == 0;
+            solid |= a == 255;
+            diff += (a as i32 - page.get_pixel(x, y).0[3] as i32).unsigned_abs() as u64;
+        }
+        let mae = diff as f64 / (w * h) as f64;
+        ensure!(
+            mae <= 3.0,
+            "{name} frame {i}: video alpha differs from the PNG by {mae:.2}/255 on average \
+             (stale or misordered MP4? re-run pack_mp4.py)"
+        );
+        worst = worst.max(mae);
+    }
+    ensure!(
+        clear && solid,
+        "{name}: video alpha has no transparent or no opaque pixels (alpha missing?)"
+    );
+    Ok(format!(
+        "video {}x{} h264 {n} f, alpha vs PNG max {worst:.2}/255",
+        p.width, p.height
+    ))
+}
+
+/// Loads `path` like the engine does and bounds-checks every frame (and,
+/// with `videos`, validates every MP4).
+fn check(path: &Path, videos: bool) -> Result<()> {
     let m = Manifest::load(path).with_context(|| format!("Manifest::load {path:?}"))?;
     let dir = dir_of(path);
+    let ffmpeg = if videos && m.clips.values().any(|c| c.video.is_some()) {
+        Some(lillith_anim::video::find_ffmpeg().context(
+            "clips have `video` but ffmpeg does not run (install it or pass --no-video-check)",
+        )?)
+    } else {
+        None
+    };
+    let mut video_ok = 0usize;
     for (name, clip) in &m.clips {
         let page_path = clip.page_path(&dir);
         let page = load_page(&page_path).with_context(|| format!("{name}: {page_path:?}"))?;
@@ -735,6 +894,13 @@ fn check(path: &Path) -> Result<()> {
                 clip.seat_y, clip.seat_x_range, clip.feet_lowest_y
             );
         }
+        if let Some(v) = clip.video_path(&dir) {
+            ensure!(v.is_file(), "{name}: video {v:?} missing");
+            if let Some(ff) = &ffmpeg {
+                println!("   {}", check_video(ff, name, clip, &v, &page)?);
+                video_ok += 1;
+            }
+        }
         let cell = clip.frames[0];
         for (pname, &(px, py)) in &clip.points {
             let inside = px >= 0 && py >= 0 && (px as u32) < cell.w && (py as u32) < cell.h;
@@ -776,6 +942,15 @@ fn check(path: &Path) -> Result<()> {
         "  tags: {allure} allure, {idle_var} idle_variant (incl. jiggle variants); \
          {timed} with per-frame durations"
     );
+    let with_video = count(&|c| c.video.is_some());
+    println!(
+        "  videos: {with_video} clip(s) with an MP4 source ({video_ok} probed + decoded OK{})",
+        if ffmpeg.is_none() && with_video > 0 {
+            ", check skipped"
+        } else {
+            ""
+        }
+    );
     Ok(())
 }
 
@@ -805,7 +980,7 @@ fn main() -> Result<()> {
     );
 
     if args.check {
-        check(&output)?;
+        check(&output, !args.no_video_check)?;
     }
     Ok(())
 }
@@ -833,6 +1008,29 @@ mod tests {
             &["canonical".to_string()],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn carries_video_relative_to_the_manifest() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [ { "name": "pose", "sheet": "pose/pose_sheet.png",
+                 "video": "pose/pose.mp4", "frame_count": 2, "fps": 12, "loop": true } ] }"#,
+        )
+        .unwrap();
+        let d = std::env::temp_dir();
+        let m = build(&json, &d, &d, &[]).unwrap();
+        assert_eq!(m.clips["pose"].video.as_deref(), Some("pose/pose.mp4"));
+        let other = d.join(format!("im-video-{}", std::process::id()));
+        std::fs::create_dir_all(&other).unwrap();
+        let m = build(&json, &d, &other, &[]).unwrap();
+        assert!(Path::new(m.clips["pose"].video.as_deref().unwrap()).is_absolute());
+        let _ = std::fs::remove_dir_all(&other);
+        let bad: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [ { "name": "p", "sheet": "p.png", "video": 3,
+                 "frame_count": 1, "fps": 12 } ] }"#,
+        )
+        .unwrap();
+        assert!(build(&bad, &d, &d, &[]).is_err());
     }
 
     #[test]
@@ -877,7 +1075,7 @@ mod tests {
                  "gait": { "cycle_s": 1.15, "duty_factor": 0.6, "per_frame": [] } } ] }"#,
         )
         .unwrap();
-        let clip = convert(&json.animations[0], None, "w.png".into(), &[]).unwrap();
+        let clip = convert(&json.animations[0], None, "w.png".into(), None, &[]).unwrap();
         assert!(clip.tags.contains(&"move_speed_px_s:134".to_string()));
         assert_eq!(clip.move_speed_px_s(), Some(134.0));
         let side: Value = serde_json::from_str(r#"{ "move_speed_px_s": 346.5 }"#).unwrap();
@@ -886,7 +1084,14 @@ mod tests {
                  "fps": 9, "anchor": [200, 392] } ] }"#,
         )
         .unwrap();
-        let clip = convert(&json.animations[0], side.as_object(), "r.png".into(), &[]).unwrap();
+        let clip = convert(
+            &json.animations[0],
+            side.as_object(),
+            "r.png".into(),
+            None,
+            &[],
+        )
+        .unwrap();
         assert_eq!(clip.move_speed_px_s(), Some(346.5));
     }
 
@@ -904,7 +1109,14 @@ mod tests {
                  "palette": ["#fff", "#000"], "feet_off_ground_px": 16 }"##,
         )
         .unwrap();
-        let clip = convert(&json.animations[0], side.as_object(), "d.png".into(), &[]).unwrap();
+        let clip = convert(
+            &json.animations[0],
+            side.as_object(),
+            "d.png".into(),
+            None,
+            &[],
+        )
+        .unwrap();
         // Entry wins over side JSON; anchor, non-point pairs and non-integer
         // pairs are skipped.
         assert_eq!(clip.point("grab_point"), Some((200, 76)));
@@ -944,7 +1156,14 @@ mod tests {
                    "recommended_rate": { "mouth_shape_change_ms": [200, 260] } } }"#,
         )
         .unwrap();
-        let clip = convert(&json.animations[0], side.as_object(), "t.png".into(), &[]).unwrap();
+        let clip = convert(
+            &json.animations[0],
+            side.as_object(),
+            "t.png".into(),
+            None,
+            &[],
+        )
+        .unwrap();
         assert_eq!(clip.mouth_patches.len(), 2);
         assert_eq!(
             clip.mouth_patches["open"],
@@ -987,15 +1206,15 @@ mod tests {
         let mut m = Manifest::default();
         m.clips.insert(
             "ev".into(),
-            convert(&a[0], ev_side.as_object(), "e.png".into(), &[]).unwrap(),
+            convert(&a[0], ev_side.as_object(), "e.png".into(), None, &[]).unwrap(),
         );
         m.clips.insert(
             "ev_jiggle".into(),
-            convert(&a[1], jig_side.as_object(), "j.png".into(), &[]).unwrap(),
+            convert(&a[1], jig_side.as_object(), "j.png".into(), None, &[]).unwrap(),
         );
         m.clips.insert(
             "think".into(),
-            convert(&a[2], None, "t.png".into(), &[]).unwrap(),
+            convert(&a[2], None, "t.png".into(), None, &[]).unwrap(),
         );
         let notes = map_jiggle_frames(&mut m).unwrap();
         assert!(notes.is_empty(), "{notes:?}");
@@ -1051,9 +1270,9 @@ mod tests {
         )
         .unwrap();
         let a = &json.animations;
-        let think = convert(&a[0], None, "t.png".into(), &[]).unwrap();
-        let ev = convert(&a[1], ev_side.as_object(), "e.png".into(), &[]).unwrap();
-        let sit = convert(&a[2], seat_side.as_object(), "s.png".into(), &[]).unwrap();
+        let think = convert(&a[0], None, "t.png".into(), None, &[]).unwrap();
+        let ev = convert(&a[1], ev_side.as_object(), "e.png".into(), None, &[]).unwrap();
+        let sit = convert(&a[2], seat_side.as_object(), "s.png".into(), None, &[]).unwrap();
         assert_eq!(ev.event.as_deref(), Some("wifi"));
         assert_eq!(ev.base_clip.as_deref(), Some("think"));
         assert_eq!(ev.base_frames.as_deref(), Some(&[2, 0][..]));
@@ -1088,7 +1307,7 @@ mod tests {
                  "fps": 8, "seat_x_range": [1, 2, 3] } ] }"#,
         )
         .unwrap();
-        assert!(convert(&json.animations[0], None, "s.png".into(), &[]).is_err());
+        assert!(convert(&json.animations[0], None, "s.png".into(), None, &[]).is_err());
     }
 
     #[test]
@@ -1127,9 +1346,9 @@ mod tests {
         )
         .unwrap();
         let a = &json.animations;
-        let idle = convert(&a[0], idle_side.as_object(), "i.png".into(), &[]).unwrap();
-        let wave = convert(&a[1], wave_side.as_object(), "w.png".into(), &[]).unwrap();
-        let bl = convert(&a[2], blend_side.as_object(), "b.png".into(), &[]).unwrap();
+        let idle = convert(&a[0], idle_side.as_object(), "i.png".into(), None, &[]).unwrap();
+        let wave = convert(&a[1], wave_side.as_object(), "w.png".into(), None, &[]).unwrap();
+        let bl = convert(&a[2], blend_side.as_object(), "b.png".into(), None, &[]).unwrap();
         assert_eq!(idle.point("chest_point"), Some((240, 130)));
         assert_eq!(
             idle.frame_points["chest_point"],
@@ -1166,12 +1385,20 @@ mod tests {
         .unwrap();
         let short: Value =
             serde_json::from_str(r#"{ "frame_points": { "hip_point": [[1, 1]] } }"#).unwrap();
-        assert!(convert(&json.animations[0], short.as_object(), "x.png".into(), &[]).is_err());
+        assert!(convert(
+            &json.animations[0],
+            short.as_object(),
+            "x.png".into(),
+            None,
+            &[]
+        )
+        .is_err());
         let partial: Value = serde_json::from_str(r#"{ "blend": true, "from": "idle" }"#).unwrap();
         assert!(convert(
             &json.animations[0],
             partial.as_object(),
             "x.png".into(),
+            None,
             &[]
         )
         .is_err());
@@ -1232,12 +1459,26 @@ mod tests {
         ] {
             let side: Value = serde_json::from_str(bad).unwrap();
             assert!(
-                convert(&json.animations[0], side.as_object(), "x.png".into(), &[]).is_err(),
+                convert(
+                    &json.animations[0],
+                    side.as_object(),
+                    "x.png".into(),
+                    None,
+                    &[]
+                )
+                .is_err(),
                 "{bad}"
             );
         }
         let ok: Value = serde_json::from_str(r#"{ "engine_springs": ["pig", "hips"] }"#).unwrap();
-        let c = convert(&json.animations[0], ok.as_object(), "x.png".into(), &[]).unwrap();
+        let c = convert(
+            &json.animations[0],
+            ok.as_object(),
+            "x.png".into(),
+            None,
+            &[],
+        )
+        .unwrap();
         assert_eq!(c.disable_springs, ["pigtails", "hip"]);
     }
 }

@@ -438,5 +438,25 @@
       22,
       392
     ]
-  ]
+  ],
+  "video": {
+    "file": "blink_wink.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 48,
+    "fps": 12.0,
+    "bytes": 451994,
+    "quality": {
+      "edge_mae": 2.401,
+      "edge_p99": 19.0,
+      "halo_dark": 0.061,
+      "halo_light": -0.144,
+      "alpha_mae": 0.0583
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

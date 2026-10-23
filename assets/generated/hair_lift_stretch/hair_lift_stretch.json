@@ -1,0 +1,597 @@
+{
+  "name": "hair_lift_stretch",
+  "placeholder": false,
+  "frame_count": 36,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "hair_lift_stretch_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/hair_lift_stretch/hair_lift_stretch_v3_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 71,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (lowest opaque pixel -> 392, finalize_keyframed_loop.py)",
+  "body_point_src_x": [
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 728,
+    "ref_hue_median": 281.9,
+    "mean_hue_shift_deg_per_frame": [
+      0.2,
+      0.4,
+      0.1,
+      -0.8,
+      0.5,
+      0.7,
+      1.2,
+      0.9,
+      2.3,
+      2.7,
+      2.4,
+      1.4,
+      -4.9,
+      -6.7,
+      -9.9,
+      -10.9,
+      -13.8,
+      -14.1,
+      -13.8,
+      -13.2,
+      -14.2,
+      -13.6,
+      -12.5,
+      -10.9,
+      -10.5,
+      -8.9,
+      -7.4,
+      -4.9,
+      -2.6,
+      -2.7,
+      -0.1,
+      1.2,
+      1.3,
+      2.0,
+      0.9,
+      0.8
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Bold pose (batch bold_poses): first=last video frame = shared v2 base still; pose key still pinned at 1.5 s (_stills/bold_poses/). Video frame 73 dropped as duplicate of frame 1.",
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_ab_of": "generated_v2/hair_lift_stretch/",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -141,
+        6,
+        0.0254
+      ],
+      [
+        -141,
+        6,
+        0.026
+      ],
+      [
+        -141,
+        6,
+        0.0245
+      ],
+      [
+        -141,
+        6,
+        0.0265
+      ],
+      [
+        -141,
+        6,
+        0.0268
+      ],
+      [
+        -141,
+        6,
+        0.0272
+      ],
+      [
+        -141,
+        6,
+        0.0252
+      ],
+      [
+        -141,
+        6,
+        0.0241
+      ],
+      [
+        -141,
+        6,
+        0.0242
+      ],
+      [
+        -141,
+        6,
+        0.0265
+      ],
+      [
+        -141,
+        6,
+        0.0271
+      ],
+      [
+        -141,
+        6,
+        0.0205
+      ],
+      [
+        -141,
+        6,
+        0.0189
+      ],
+      [
+        -141,
+        6,
+        0.0206
+      ],
+      [
+        -141,
+        6,
+        0.0168
+      ],
+      [
+        -141,
+        6,
+        0.0178
+      ],
+      [
+        -141,
+        6,
+        0.0172
+      ],
+      [
+        -141,
+        6,
+        0.0171
+      ],
+      [
+        -141,
+        6,
+        0.0237
+      ],
+      [
+        -141,
+        6,
+        0.0169
+      ],
+      [
+        -141,
+        6,
+        0.0224
+      ],
+      [
+        -141,
+        6,
+        0.0235
+      ],
+      [
+        -141,
+        6,
+        0.0203
+      ],
+      [
+        -141,
+        6,
+        0.0234
+      ],
+      [
+        -141,
+        6,
+        0.0224
+      ],
+      [
+        -141,
+        6,
+        0.0231
+      ],
+      [
+        -141,
+        6,
+        0.0223
+      ],
+      [
+        -141,
+        6,
+        0.0239
+      ],
+      [
+        -141,
+        6,
+        0.024
+      ],
+      [
+        -141,
+        6,
+        0.023
+      ],
+      [
+        -141,
+        6,
+        0.0245
+      ],
+      [
+        -141,
+        6,
+        0.024
+      ],
+      [
+        -141,
+        6,
+        0.0302
+      ],
+      [
+        -141,
+        6,
+        0.0227
+      ],
+      [
+        -141,
+        6,
+        0.0223
+      ],
+      [
+        -141,
+        6,
+        0.0203
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
+  "tags": [
+    "baked_motion"
+  ],
+  "zoom_fix_scale_per_frame": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    0.998,
+    0.9901,
+    0.9777,
+    0.9674,
+    0.9624,
+    0.9611,
+    0.9611,
+    0.9611,
+    0.9611,
+    0.9611,
+    0.9624,
+    0.9643,
+    0.9636,
+    0.9618,
+    0.9611,
+    0.9611,
+    0.9611,
+    0.9618,
+    0.963,
+    0.963,
+    0.9618,
+    0.9611,
+    0.9611,
+    0.9618,
+    0.9636,
+    0.9687,
+    0.9783,
+    0.9887,
+    0.9953,
+    0.998,
+    0.9993
+  ],
+  "finalize_tool": "generated_v2/_tools/finalize_keyframed_loop.py",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      140,
+      277,
+      21,
+      392
+    ],
+    [
+      137,
+      279,
+      21,
+      392
+    ],
+    [
+      131,
+      283,
+      21,
+      392
+    ],
+    [
+      119,
+      297,
+      22,
+      392
+    ],
+    [
+      107,
+      315,
+      22,
+      392
+    ],
+    [
+      100,
+      320,
+      22,
+      392
+    ],
+    [
+      106,
+      313,
+      21,
+      392
+    ],
+    [
+      123,
+      316,
+      21,
+      392
+    ],
+    [
+      135,
+      316,
+      20,
+      392
+    ],
+    [
+      130,
+      315,
+      20,
+      392
+    ],
+    [
+      128,
+      312,
+      21,
+      392
+    ],
+    [
+      128,
+      308,
+      21,
+      392
+    ],
+    [
+      129,
+      303,
+      21,
+      392
+    ],
+    [
+      130,
+      297,
+      21,
+      392
+    ],
+    [
+      131,
+      292,
+      21,
+      392
+    ],
+    [
+      132,
+      286,
+      21,
+      392
+    ],
+    [
+      132,
+      282,
+      21,
+      392
+    ],
+    [
+      131,
+      278,
+      21,
+      392
+    ],
+    [
+      129,
+      275,
+      20,
+      392
+    ],
+    [
+      128,
+      272,
+      21,
+      392
+    ],
+    [
+      127,
+      269,
+      21,
+      392
+    ],
+    [
+      127,
+      266,
+      21,
+      392
+    ],
+    [
+      127,
+      266,
+      21,
+      392
+    ],
+    [
+      127,
+      268,
+      21,
+      392
+    ],
+    [
+      126,
+      271,
+      21,
+      392
+    ],
+    [
+      123,
+      274,
+      20,
+      392
+    ],
+    [
+      121,
+      277,
+      21,
+      392
+    ],
+    [
+      116,
+      282,
+      21,
+      392
+    ],
+    [
+      109,
+      292,
+      20,
+      392
+    ],
+    [
+      111,
+      297,
+      21,
+      392
+    ],
+    [
+      104,
+      307,
+      20,
+      392
+    ],
+    [
+      94,
+      320,
+      21,
+      392
+    ],
+    [
+      93,
+      324,
+      21,
+      392
+    ],
+    [
+      99,
+      315,
+      21,
+      392
+    ],
+    [
+      112,
+      298,
+      21,
+      392
+    ],
+    [
+      126,
+      279,
+      21,
+      392
+    ]
+  ],
+  "video": {
+    "file": "hair_lift_stretch.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 36,
+    "fps": 12.0,
+    "bytes": 444125,
+    "quality": {
+      "edge_mae": 1.918,
+      "edge_p99": 15.0,
+      "halo_dark": 0.035,
+      "halo_light": -0.055,
+      "alpha_mae": 0.0851
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
+}

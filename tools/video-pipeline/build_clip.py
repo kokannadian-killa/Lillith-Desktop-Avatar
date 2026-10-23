@@ -32,7 +32,7 @@ def extract(video):
     d = f'/tmp/lillith_frames/{os.path.splitext(os.path.basename(video))[0]}'
     if not glob.glob(f'{d}/f_*.png'):
         os.makedirs(d, exist_ok=True)
-        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', video, f'{d}/f_%03d.png'], check=True)
+        subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', '-protocol_whitelist', 'file,pipe', '-i', os.path.abspath(video), f'{d}/f_%03d.png'], check=True)
     return d
 
 def body_x(alpha):

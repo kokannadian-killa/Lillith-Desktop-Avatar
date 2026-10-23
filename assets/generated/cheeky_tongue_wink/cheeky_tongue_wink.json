@@ -273,5 +273,25 @@
       21,
       392
     ]
-  ]
+  ],
+  "video": {
+    "file": "cheeky_tongue_wink.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 24,
+    "fps": 6.0,
+    "bytes": 326062,
+    "quality": {
+      "edge_mae": 2.068,
+      "edge_p99": 16.98,
+      "halo_dark": 0.071,
+      "halo_light": -0.137,
+      "alpha_mae": 0.0558
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }

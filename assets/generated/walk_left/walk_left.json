@@ -167,5 +167,25 @@
       20,
       392
     ]
-  ]
+  ],
+  "video": {
+    "file": "walk_left.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 14,
+    "fps": 12.0,
+    "bytes": 183630,
+    "quality": {
+      "edge_mae": 2.45,
+      "edge_p99": 17.0,
+      "halo_dark": 0.058,
+      "halo_light": -0.228,
+      "alpha_mae": 0.0812
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
 }
