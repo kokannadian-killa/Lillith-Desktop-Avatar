@@ -28,6 +28,7 @@ lillith-theme.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tiny-skia.workspace = true
+regex.workspace = true
 smithay-client-toolkit = { workspace = true, optional = true }
 wayland-client = { workspace = true, optional = true }
 winit = { workspace = true, optional = true }

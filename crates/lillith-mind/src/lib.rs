@@ -16,6 +16,7 @@
 //! - [`tools`]: read-only system tools (summary, disk, top procs, …) with
 //!   an approval gate for anything else (README-DK model).
 
+pub mod capabilities;
 pub mod chat;
 pub mod fstools;
 pub mod knowledge;

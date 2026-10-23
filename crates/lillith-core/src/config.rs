@@ -110,6 +110,13 @@ pub struct OverlayPos {
     pub margin_bottom: i32,
     /// Output (monitor) name, e.g. `eDP-1`; `None` = compositor's choice.
     pub output: Option<String>,
+    /// Before her first frame, check KDE Plasma's KWin for effects that blur
+    /// every window (Better Blur DX "blur all", Force Blur, Blur Plus…) and
+    /// exclude `lillith` from them, so she never shows up as a black box.
+    /// If she can't be excluded, the effect is unloaded for this session
+    /// only and you are told once how to make it permanent. Undo with
+    /// `lillith fix-kwin --revert`.
+    pub auto_fix_kwin: bool,
 }
 
 impl Default for OverlayPos {
@@ -118,6 +125,7 @@ impl Default for OverlayPos {
             margin_left: 80,
             margin_bottom: 48,
             output: None,
+            auto_fix_kwin: true,
         }
     }
 }
@@ -383,6 +391,86 @@ pub struct MindConfig {
     /// Roots that re-open the built-in deny list (secrets dirs, `/etc`) for
     /// the tool API. Use sparingly; `~` is expanded (Phase 2).
     pub unlock_paths: Vec<String>,
+    /// Default-on access to the user's files, programs and commands
+    /// (`[mind.access]`).
+    pub access: AccessConfig,
+}
+
+/// Default roots for `[mind.access] roots`: home plus the usual mount points.
+pub const DEFAULT_ACCESS_ROOTS: &[&str] = &["~", "/mnt", "/media", "/run/media"];
+
+/// `[mind.access]`: what Lillith may do on the machine without being given
+/// each folder by hand. Everything is on by default; any switch can be
+/// turned off here or in the settings GUI (Access tab).
+///
+/// - `files`: list / read / search / find by name under `roots` (secrets dirs
+///   stay denied; `/proc`, `/sys`, `/dev` are never walked).
+/// - `organize`: move / rename / copy / make folders under `roots`. Never
+///   overwrites (auto-renames on conflict), journals every batch for
+///   `lillith undo-organize`.
+/// - `programs`: list installed apps, check if a program is installed, open
+///   an app (optionally with files).
+/// - `commands`: run CLI commands to finish a task.
+///
+/// Every change and every program run is proposed as one Soul Contract plan
+/// (numbered items, full paths, sizes, diffs, exact commands) that Ko
+/// approves in full, in part, or declines; nothing touches disk or launches
+/// before that. Reads, listing, searching and "is it installed?" are free.
+/// Deletes in a plan additionally need the typed phrase (Trash by default);
+/// there is deliberately no auto-approve.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccessConfig {
+    pub files: bool,
+    pub organize: bool,
+    pub programs: bool,
+    pub commands: bool,
+    /// List / read / use the skills in `[mind] skills_dir` on demand.
+    pub skills: bool,
+    /// On startup, copy a `skills` / `lillith-skills` folder found on the
+    /// desktop into `skills_dir` (never overwriting; the original stays).
+    pub import_desktop_skills: bool,
+    /// Directory roots she may browse and organize (`~` expanded).
+    pub roots: Vec<String>,
+    /// Seconds a command may run before it is stopped.
+    pub command_timeout_s: u64,
+}
+
+impl Default for AccessConfig {
+    fn default() -> Self {
+        Self {
+            files: true,
+            organize: true,
+            programs: true,
+            commands: true,
+            skills: true,
+            import_desktop_skills: true,
+            roots: DEFAULT_ACCESS_ROOTS.iter().map(|s| s.to_string()).collect(),
+            command_timeout_s: 30,
+        }
+    }
+}
+
+impl AccessConfig {
+    /// `roots` with `~` expanded; absolute paths kept, blanks dropped.
+    pub fn resolved_roots(&self) -> Vec<PathBuf> {
+        let mut out: Vec<PathBuf> = Vec::new();
+        for r in &self.roots {
+            let p = if r.trim_start().starts_with('~') {
+                expand_tilde(r)
+            } else if r.trim().is_empty() {
+                None
+            } else {
+                Some(PathBuf::from(r.trim()))
+            };
+            if let Some(p) = p {
+                if !out.contains(&p) {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
 }
 
 impl Default for MindConfig {
@@ -396,6 +484,7 @@ impl Default for MindConfig {
             allow_shell: false,
             max_read_bytes: DEFAULT_MIND_MAX_READ_BYTES,
             unlock_paths: Vec::new(),
+            access: AccessConfig::default(),
         }
     }
 }
@@ -445,6 +534,11 @@ impl MindConfig {
         push(self.resolved_skills_dir());
         for raw in &self.allow_paths {
             push(expand_tilde(raw));
+        }
+        if self.access.files {
+            for r in self.access.resolved_roots() {
+                push(Some(r));
+            }
         }
         roots
     }
@@ -757,9 +851,30 @@ pub enum ConfigError {
 /// Writes `pos` into the `[overlay]` table of `path`, creating the file and
 /// its directory if needed. Other keys are kept (comments are not).
 pub fn save_overlay(path: &Path, pos: &OverlayPos) -> Result<(), ConfigError> {
-    let v = toml::Value::try_from(pos)?;
     update_config(path, |t| {
-        t.insert("overlay".into(), v);
+        let entry = t
+            .entry("overlay")
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !entry.is_table() {
+            *entry = toml::Value::Table(toml::Table::new());
+        }
+        let o = entry.as_table_mut().expect("table");
+        o.insert(
+            "margin_left".into(),
+            toml::Value::Integer(pos.margin_left.into()),
+        );
+        o.insert(
+            "margin_bottom".into(),
+            toml::Value::Integer(pos.margin_bottom.into()),
+        );
+        match &pos.output {
+            Some(name) => {
+                o.insert("output".into(), toml::Value::String(name.clone()));
+            }
+            None => {
+                o.remove("output");
+            }
+        }
     })
 }
 
@@ -1091,6 +1206,7 @@ mod tests {
             margin_left: 1234,
             margin_bottom: 7,
             output: Some("eDP-1".into()),
+            ..OverlayPos::default()
         };
         save_overlay(&path, &pos).unwrap();
         let c = Config::load(&path).unwrap();
@@ -1106,6 +1222,19 @@ mod tests {
         let c = Config::load(&path).unwrap();
         assert_eq!(c.overlay, pos2);
         assert_eq!(c.scale, 0.8);
+        // A drag-save keeps Ko's other [overlay] keys (auto_fix_kwin).
+        assert!(c.overlay.auto_fix_kwin, "defaults to on");
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("auto_fix_kwin"), "default not written");
+        std::fs::write(
+            &path,
+            format!("{text}\n").replace("[overlay]", "[overlay]\nauto_fix_kwin = false"),
+        )
+        .unwrap();
+        save_overlay(&path, &pos).unwrap();
+        let c = Config::load(&path).unwrap();
+        assert!(!c.overlay.auto_fix_kwin, "kept across a position save");
+        assert_eq!(c.overlay.margin_left, 1234);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

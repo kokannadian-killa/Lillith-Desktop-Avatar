@@ -11,9 +11,11 @@
 //! - [`bubble_main`] / [`cli_chat`]: the `chat-bubble` and `chat` subcommands.
 
 use anyhow::Result;
+use lillith_core::access::deletion::{DeleteMode, DeletionSignature};
 use lillith_core::config::{ChatConfig, MindConfig};
+use lillith_core::soul_contract::{ContractError, PendingAction, RequestId, SoulContract};
 use lillith_core::Event;
-use lillith_mind::chat::{default_history_path, ChatSession, Outcome};
+use lillith_mind::chat::{default_history_path, ChatSession, Outcome, MAX_TOOL_CHAIN};
 use lillith_mind::server::{already_running, LlamaServer};
 use lillith_overlay::{ChatAnchor, ChatHook};
 use lillith_panel::chat_bubble::{run_chat_bubble, BubbleOptions, Emit, BUBBLE_SIZE};
@@ -323,8 +325,19 @@ pub async fn cli_chat(
             session = session.with_history_file(p);
         }
     }
+    if let Some(d) = lillith_core::config::data_dir() {
+        for note in lillith_core::notes::take(&d) {
+            println!("[lillith] {note}");
+        }
+    }
+    let skills_note = session.import_desktop_skills();
     match message {
         Some(m) => {
+            if let Some(note) = skills_note {
+                // One-shot mode can't review; drop the plan, copy nothing.
+                let _ = session.take_pending();
+                println!("[skills] {note} — not done (run `lillith chat` or `lillith import-skills` to review).");
+            }
             if let Outcome::Fallback { .. } = ask(&mut session, m).await {
                 anyhow::bail!("no reply from {}", cfg.endpoint);
             }
@@ -334,12 +347,19 @@ pub async fn cli_chat(
                     "[soul contract] she proposed to {} — not done (run `lillith chat` interactively to confirm).",
                     action.summary()
                 );
-            } else if let Some(out) = session.last_tool_output() {
-                println!("[tool] {out}");
+            } else if let Some(fb) = session.take_tool_feedback() {
+                println!("{fb}");
+                // Let her tell what she found (read-only results only).
+                let _ = ask(&mut session, fb).await;
             }
         }
         None => {
             let stdin = std::io::stdin();
+            if let Some(note) = skills_note {
+                println!("[skills] {note}");
+                // Review it now; the answer is not sent to her.
+                let _ = offer_pending(&mut session, &stdin)?;
+            }
             loop {
                 print!("you: ");
                 let _ = std::io::stdout().flush();
@@ -355,7 +375,17 @@ pub async fn cli_chat(
                     break;
                 }
                 ask(&mut session, line).await;
-                offer_pending(&mut session, &stdin)?;
+                // Tool results (and Ko's answers) go back to her so she can
+                // say what happened; she may chain a few tools.
+                for _ in 0..MAX_TOOL_CHAIN {
+                    let Some(feedback) = offer_pending(&mut session, &stdin)? else {
+                        break;
+                    };
+                    ask(&mut session, feedback).await;
+                }
+                if let Some(fb) = offer_pending(&mut session, &stdin)? {
+                    println!("{fb}");
+                }
             }
         }
     }
@@ -363,17 +393,37 @@ pub async fn cli_chat(
 }
 
 /// The console Soul Contract: if her last reply proposed a mutation (skill,
-/// file write, or shell command), ask Yes/No on stdin. Only an explicit yes
-/// (`y`, `yes`, or `/contract yes`; `/skill yes` is an alias) runs it
-/// (audited); anything else discards it (also audited). If she only ran a
-/// read tool, print what it returned.
-fn offer_pending(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<()> {
+/// file write, organize batch, command…), ask Yes/No on stdin. Only an
+/// explicit yes (`y`, `yes`, or `/contract yes`; `/skill yes` is an alias)
+/// runs it (audited); anything else discards it (also audited). A deletion
+/// prints the full list and needs the typed phrase instead (see
+/// [`sign_on_console`]). Returns the message to feed back to her (the tool
+/// result or Ko's answer), if any.
+fn offer_pending(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<Option<String>> {
     let Some(action) = session.take_pending() else {
-        if let Some(out) = session.last_tool_output() {
-            println!("[tool] {out}");
-        }
-        return Ok(());
+        return Ok(session.take_tool_feedback());
     };
+    let mut contract = session.soul_contract();
+    if matches!(action, PendingAction::Plan { .. }) {
+        let id = contract.request(action.clone());
+        let res = review_plan_on_console(&mut contract, id, stdin)?;
+        return Ok(Some(ChatSession::answer_feedback(
+            &action,
+            res.as_deref().map_err(|e| e.as_str()),
+        )));
+    }
+    if matches!(action, PendingAction::DeletePaths { .. }) {
+        let id = contract.request(action.clone());
+        let res = sign_on_console(&mut contract, id, stdin)?;
+        return Ok(Some(ChatSession::answer_feedback(
+            &action,
+            res.as_deref().map_err(|e| e.as_str()),
+        )));
+    }
+    let prompt = action.prompt();
+    if let Some(d) = &prompt.detail {
+        println!("{d}");
+    }
     print!(
         "[soul contract] She wants to {}. Allow? [y/N] ",
         action.summary()
@@ -381,21 +431,200 @@ fn offer_pending(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<()
     let _ = std::io::stdout().flush();
     let mut answer = String::new();
     stdin.lock().read_line(&mut answer)?;
-    let mut contract = session.soul_contract();
-    let id = contract.request(action);
-    if is_yes(&answer) {
-        let done = contract.confirm(id)?;
-        if let Some(p) = &done.path {
-            println!("[soul contract] done: {}", p.display());
-        }
-        if let Some(out) = &done.output {
-            println!("{out}");
+    let id = contract.request(action.clone());
+    let res = if is_yes(&answer) {
+        match contract.confirm(id) {
+            Ok(done) => {
+                let mut out = String::new();
+                if let Some(p) = &done.path {
+                    out.push_str(&format!("done: {}\n", p.display()));
+                }
+                if let Some(o) = &done.output {
+                    out.push_str(o);
+                }
+                println!("[soul contract] {out}");
+                Ok(out)
+            }
+            Err(e) => {
+                println!("[soul contract] failed: {e}");
+                Err(format!("it failed: {e}"))
+            }
         }
     } else {
         contract.deny(id)?;
         println!("[soul contract] discarded; nothing changed.");
+        Err("Ko said no".to_string())
+    };
+    Ok(Some(ChatSession::answer_feedback(
+        &action,
+        res.as_deref().map_err(|e| e.as_str()),
+    )))
+}
+
+/// The console plan review: print every numbered item in full, then Ko
+/// types `all`, a selection like `1,3-5`, or `none` (empty also declines).
+/// If the selection includes deletes, he picks Trash/permanent and types the
+/// phrase. If the disk changed, the new plan is shown and he is asked again.
+pub(crate) fn review_plan_on_console(
+    contract: &mut SoulContract,
+    id: RequestId,
+    stdin: &std::io::Stdin,
+) -> Result<Result<String, String>> {
+    let mut input = stdin.lock();
+    review_plan(contract, id, &mut input, &mut std::io::stdout())
+}
+
+/// [`review_plan_on_console`] over any reader / writer (tested).
+pub(crate) fn review_plan(
+    contract: &mut SoulContract,
+    mut id: RequestId,
+    input: &mut dyn BufRead,
+    out: &mut dyn Write,
+) -> Result<Result<String, String>> {
+    use lillith_core::access::plan::{parse_selection, PlanApproval};
+    loop {
+        let Some(plan) = contract.plan(id).cloned() else {
+            return Ok(Err("the request vanished".into()));
+        };
+        writeln!(
+            out,
+            "[soul contract] REVIEW THE PLAN — nothing has happened yet:"
+        )?;
+        writeln!(out, "{}", plan.listing())?;
+        write!(
+            out,
+            "Approve which? `all`, numbers like `1,3-5`, or `none`: "
+        )?;
+        out.flush()?;
+        let mut line = String::new();
+        input.read_line(&mut line)?;
+        let selected = match parse_selection(&line, plan.len()) {
+            Ok(Some(s)) if !s.is_empty() => s,
+            Ok(_) => {
+                contract.deny(id)?;
+                writeln!(out, "[soul contract] declined; nothing changed.")?;
+                return Ok(Err("Ko declined the whole plan".into()));
+            }
+            Err(e) => {
+                writeln!(out, "[soul contract] {e}; declined, nothing changed.")?;
+                contract.deny(id)?;
+                return Ok(Err("Ko declined the whole plan".into()));
+            }
+        };
+        let approval = PlanApproval::subset(&plan, selected.iter().copied());
+        let mut signature = None;
+        if let Some(manifest) = plan.deletion_manifest(&selected) {
+            writeln!(
+                out,
+                "The approved items include deleting:\n{}",
+                manifest.listing()
+            )?;
+            write!(out, "Where to? [T]rash (default) / type `permanent` to erase for good / `n` cancels everything: ")?;
+            out.flush()?;
+            let mut mode = String::new();
+            input.read_line(&mut mode)?;
+            let mode = match mode.trim().to_ascii_lowercase().as_str() {
+                "" | "t" | "trash" => DeleteMode::Trash,
+                "permanent" => DeleteMode::Permanent,
+                _ => {
+                    contract.deny(id)?;
+                    writeln!(out, "[soul contract] cancelled; nothing changed.")?;
+                    return Ok(Err("Ko cancelled the plan".into()));
+                }
+            };
+            write!(out, "To sign, type exactly: {}\n> ", manifest.phrase())?;
+            out.flush()?;
+            let mut typed = String::new();
+            input.read_line(&mut typed)?;
+            match DeletionSignature::sign(&manifest, &typed, mode) {
+                Ok(sig) => signature = Some(sig),
+                Err(_) => {
+                    contract.deny(id)?;
+                    writeln!(out, "[soul contract] not signed; nothing changed.")?;
+                    return Ok(Err("Ko did not sign, so nothing ran".into()));
+                }
+            }
+        }
+        match contract.approve_plan(id, approval, signature) {
+            Ok(done) => {
+                let text = done.output.unwrap_or_default();
+                writeln!(out, "{text}")?;
+                return Ok(Ok(text));
+            }
+            Err(ContractError::Changed { new_id }) => {
+                writeln!(
+                    out,
+                    "[soul contract] things changed on disk since the plan; here is the new one."
+                )?;
+                id = new_id;
+            }
+            Err(e) => {
+                writeln!(out, "[soul contract] {e}")?;
+                let _ = contract.deny(id);
+                return Ok(Err(e.to_string()));
+            }
+        }
     }
-    Ok(())
+}
+
+/// A deletion on the console: print EVERY file and folder (full paths,
+/// sizes, totals), then Ko types `t` (Trash, default) or `permanent`, then
+/// the exact phrase. If the files changed meanwhile, the new list is shown
+/// and he is asked again. Anything else cancels (audited as DENY).
+fn sign_on_console(
+    contract: &mut SoulContract,
+    mut id: RequestId,
+    stdin: &std::io::Stdin,
+) -> Result<Result<String, String>> {
+    loop {
+        let Some(PendingAction::DeletePaths { manifest }) = contract
+            .pending()
+            .iter()
+            .find(|(i, _)| *i == id)
+            .map(|(_, a)| a.clone())
+        else {
+            return Ok(Err("the request vanished".into()));
+        };
+        println!("[soul contract] She wants to DELETE these — every file and folder:");
+        println!("{}", manifest.listing());
+        print!("Where to? [T]rash (default) / type `permanent` to erase for good / `n` cancels: ");
+        let _ = std::io::stdout().flush();
+        let mut mode = String::new();
+        stdin.lock().read_line(&mut mode)?;
+        let mode = match mode.trim().to_ascii_lowercase().as_str() {
+            "" | "t" | "trash" => DeleteMode::Trash,
+            "permanent" => DeleteMode::Permanent,
+            _ => {
+                contract.deny(id)?;
+                println!("[soul contract] cancelled; nothing deleted.");
+                return Ok(Err("Ko cancelled the deletion".into()));
+            }
+        };
+        print!("To sign, type exactly: {}\n> ", manifest.phrase());
+        let _ = std::io::stdout().flush();
+        let mut typed = String::new();
+        stdin.lock().read_line(&mut typed)?;
+        let Ok(sig) = DeletionSignature::sign(&manifest, &typed, mode) else {
+            contract.deny(id)?;
+            println!("[soul contract] not signed; nothing deleted.");
+            return Ok(Err("Ko did not sign".into()));
+        };
+        match contract.sign_deletion(id, sig) {
+            Ok(done) => {
+                let out = done.output.unwrap_or_default();
+                println!("{out}");
+                return Ok(Ok(out));
+            }
+            Err(ContractError::Changed { new_id }) => {
+                println!("[soul contract] the files changed since the list; here is the new one.");
+                id = new_id;
+            }
+            Err(e) => {
+                println!("[soul contract] {e}");
+                return Ok(Err(e.to_string()));
+            }
+        }
+    }
 }
 
 /// An explicit yes at the console prompt.
@@ -456,5 +685,52 @@ mod tests {
         for n in ["", "n", "no", "/contract no", "yep", "/contract", "sure"] {
             assert!(!is_yes(n), "{n:?}");
         }
+    }
+
+    #[test]
+    fn console_plan_review_runs_only_the_chosen_items_or_nothing() {
+        use lillith_core::access::plan::{ChangePlan, PlanRequest};
+        let dir = std::env::temp_dir().join(format!("lillith-console-plan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let reqs = || {
+            vec![
+                PlanRequest::Mkdir {
+                    path: dir.join("A"),
+                },
+                PlanRequest::Write {
+                    path: dir.join("b.txt"),
+                    body: "b".into(),
+                    skill: false,
+                },
+                PlanRequest::Mkdir {
+                    path: dir.join("C"),
+                },
+            ]
+        };
+        // `none` declines: nothing written.
+        let mut sc = SoulContract::new(None);
+        let id = sc.request(PendingAction::Plan {
+            plan: ChangePlan::build(reqs(), None, None).unwrap(),
+        });
+        let mut out = Vec::new();
+        let r = review_plan(&mut sc, id, &mut "none\n".as_bytes(), &mut out).unwrap();
+        assert!(r.is_err());
+        let shown = String::from_utf8(out).unwrap();
+        assert!(
+            shown.contains("REVIEW THE PLAN") && shown.contains("b.txt"),
+            "{shown}"
+        );
+        assert!(!dir.join("A").exists() && !dir.join("b.txt").exists());
+        // `1,3` runs just those.
+        let id = sc.request(PendingAction::Plan {
+            plan: ChangePlan::build(reqs(), None, None).unwrap(),
+        });
+        let mut out = Vec::new();
+        let r = review_plan(&mut sc, id, &mut "1,3\n".as_bytes(), &mut out).unwrap();
+        assert!(r.is_ok(), "{r:?}");
+        assert!(dir.join("A").is_dir() && dir.join("C").is_dir());
+        assert!(!dir.join("b.txt").exists(), "item 2 was not chosen");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

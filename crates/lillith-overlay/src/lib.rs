@@ -22,6 +22,8 @@
 //!   lip-flap driven by streamed `chat.*` events).
 //! - [`ui`]: right-click menu, Settings, minimize-to-peek and resize, as
 //!   commands from the app's menu/settings windows.
+//! - [`kde_effects`]: window type that keeps KDE blur / rounded-corner
+//!   effects from drawing a dark panel behind her.
 //! - Speech bubbles ([`bubble`], M3), walk/patrol as margin animation (M3).
 //!
 //! Rendering is CPU-side (`tiny-skia`) at 30 Hz; `wgpu` only if effects need it.
@@ -32,6 +34,8 @@ pub mod chat;
 pub mod drag;
 pub mod gravity;
 pub mod input_region;
+pub mod kde_effects;
+pub mod kwin_prestart;
 pub mod menu_popup;
 pub mod pixels;
 pub mod relic;

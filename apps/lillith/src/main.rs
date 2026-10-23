@@ -184,6 +184,38 @@ enum Cmd {
         #[arg(long, conflicts_with = "id")]
         reapply: bool,
     },
+    /// KDE Plasma: keep Better Blur DX / Better Blur ("force blur") from
+    /// drawing a dark blurred panel behind her, by adding her window class
+    /// `lillith` to the effect's excluded window classes in kwinrc (then
+    /// KWin reconfigures). Only touches effects that are enabled.
+    FixKwin {
+        /// Only report what would change.
+        #[arg(long)]
+        check: bool,
+        /// Undo what `fix-kwin` / the start-up check changed in kwinrc.
+        #[arg(long, conflicts_with = "check")]
+        revert: bool,
+    },
+    /// Undo Lillith's last organize batch (moves go back, copies go to the
+    /// Trash, empty folders she made are removed). Nothing is overwritten.
+    UndoOrganize {
+        /// Only list the journal (newest last); undo nothing.
+        #[arg(long)]
+        list: bool,
+    },
+    /// Review copying a skills folder (default: `skills` / `lillith-skills`
+    /// on your desktop) into her skills folder: every copy is listed with
+    /// its exact destination, then you approve `all`, a selection like
+    /// `1,3-5`, or `none`. Never overwrites: a differing file is kept next
+    /// to hers as "name (from desktop).md". The source is never touched.
+    ImportSkills {
+        /// Folder to import (default: look on the desktop).
+        #[arg(long)]
+        from: Option<PathBuf>,
+        /// Exit quietly (0) when no desktop skills folder exists.
+        #[arg(long)]
+        quiet: bool,
+    },
     /// The click-to-chat bubble window (started by the overlay; prints
     /// chat events as JSON lines on stdout).
     #[command(hide = true)]
@@ -315,6 +347,74 @@ async fn main() -> Result<()> {
             }
             chat::cli_chat(cfg, full.mind, message.clone(), spawn_server, no_history).await?;
         }
+        Some(Cmd::UndoOrganize { list }) => {
+            let journal = lillith_core::config::data_dir()
+                .ok_or_else(|| anyhow::anyhow!("no HOME / XDG_DATA_HOME"))?
+                .join("organize-journal");
+            if list {
+                let batches = lillith_core::access::organize::batches(&journal);
+                if batches.is_empty() {
+                    println!("no organize batches in {}", journal.display());
+                }
+                for b in batches {
+                    println!("{}", b.display());
+                    for e in lillith_core::access::organize::read_batch(&b)? {
+                        println!("  {:<5} {} -> {}", e.op, e.from.display(), e.to.display());
+                    }
+                }
+            } else {
+                let r = lillith_core::access::organize::undo_last(&journal)?;
+                println!("{}", r.text());
+            }
+        }
+        Some(Cmd::ImportSkills { ref from, quiet }) => {
+            use lillith_core::access::plan::{ChangePlan, PlanRequest};
+            use lillith_core::access::skill_import;
+            let mind = load_config(&cli).0.mind;
+            let to = mind
+                .resolved_skills_dir()
+                .ok_or_else(|| anyhow::anyhow!("no skills folder (set [mind] skills_dir)"))?;
+            let sources = match from {
+                Some(f) => vec![f.clone()],
+                None => skill_import::find_desktop_skills(),
+            };
+            let mut steps = Vec::new();
+            let mut unchanged = 0;
+            for src in &sources {
+                let p = skill_import::plan_import(src, &to)?;
+                unchanged += p.unchanged.len();
+                steps.extend(p.copies.into_iter().map(|c| PlanRequest::SkillCopy {
+                    from: c.src,
+                    to: c.dest,
+                    conflict_with: c.conflict_with,
+                }));
+            }
+            if !sources.is_empty() && steps.is_empty() {
+                println!("nothing new to import ({unchanged} skill(s) already there)");
+            } else if !steps.is_empty() {
+                let data = lillith_core::config::data_dir();
+                let plan = ChangePlan::build(steps, data.as_deref(), None)
+                    .map_err(|e| anyhow::anyhow!("import-skills: {e}"))?;
+                let audit = data.as_ref().map(|d| d.join("audit.log"));
+                let mut sc = lillith_core::soul_contract::SoulContract::new(audit);
+                let id = sc.request(lillith_core::soul_contract::PendingAction::Plan { plan });
+                let stdin = std::io::stdin();
+                match chat::review_plan_on_console(&mut sc, id, &stdin)? {
+                    Ok(_) => {}
+                    Err(why) => println!("{why}: nothing copied."),
+                }
+            }
+            if sources.is_empty() && !quiet {
+                println!(
+                    "no skills folder on the desktop (looked for skills / lillith-skills in {})",
+                    lillith_core::access::skill_import::desktop_dirs()
+                        .iter()
+                        .map(|d| d.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
         Some(Cmd::Settings {
             ref section,
             ref import,
@@ -371,7 +471,68 @@ async fn main() -> Result<()> {
             no_apply,
             reapply,
         }) => icon_cmd(&cli, id.as_deref(), list, no_apply, reapply)?,
+        Some(Cmd::FixKwin { check, revert }) => {
+            if revert {
+                let data = lillith_core::config::data_dir()
+                    .ok_or_else(|| anyhow::anyhow!("no HOME / XDG_DATA_HOME"))?;
+                let done = lillith_overlay::kwin_prestart::revert(
+                    &data,
+                    &mut lillith_overlay::kwin_prestart::DiskRc,
+                );
+                if done.is_empty() {
+                    println!("Nothing to revert.");
+                } else {
+                    println!(
+                        "Restored the window classes of: {} (KWin reloads them on the next reconfigure).",
+                        done.join(", ")
+                    );
+                }
+            } else {
+                fix_kwin_cmd(check)?
+            }
+        }
         None => run_overlay(&cli, rules.rules.len()).await?,
+    }
+    Ok(())
+}
+
+/// The KWin pre-start check, run before her first surface exists (Wayland
+/// and X11): keeps force-blur effects off her so she never appears as a
+/// dark box. Bounded (~1.5 s); never fails the start. A one-time chat note
+/// is queued if an effect had to be unloaded for this session.
+fn kwin_pre_start(enabled: bool) {
+    let data = lillith_core::config::data_dir();
+    let r = lillith_overlay::kwin_prestart::before_first_frame(enabled, data.as_deref());
+    if let (Some(note), Some(d)) = (&r.notice, &data) {
+        if let Err(e) = lillith_core::notes::push(d, note) {
+            tracing::warn!("couldn't queue the KWin note for chat: {e}");
+        }
+    }
+}
+
+/// `lillith fix-kwin`.
+fn fix_kwin_cmd(check: bool) -> Result<()> {
+    use lillith_overlay::kde_effects::{fix_kwin, FixOutcome};
+    let outcomes = fix_kwin(check)
+        .map_err(|e| anyhow::anyhow!("fix-kwin needs kreadconfig6/kwriteconfig6 (KDE): {e}"))?;
+    if outcomes.is_empty() {
+        println!("No force-blur effect (Better Blur DX / Better Blur) is enabled: nothing to do.");
+    }
+    for o in outcomes {
+        match o {
+            FixOutcome::Excluded { effect, old } => println!(
+                "{effect}: {} `lillith` in its window classes (was: {:?}).",
+                if check { "would exclude" } else { "excluded" },
+                old
+            ),
+            FixOutcome::AlreadyFine { effect } => {
+                println!("{effect}: already leaves Lillith alone.")
+            }
+            FixOutcome::Manual { effect, classes } => println!(
+                "{effect}: a regex in its window classes ({classes:?}) matches `lillith`; \
+                 edit it in System Settings > Desktop Effects > {effect}."
+            ),
+        }
     }
     Ok(())
 }
@@ -590,6 +751,7 @@ fn start_voice(
 async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     let backend = Backend::detect_env(cli.backend);
     let (cfg, config_path) = load_config(cli);
+    kwin_pre_start(cfg.overlay.auto_fix_kwin);
     let manifest = preview::resolve(cli.manifest.clone())?;
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

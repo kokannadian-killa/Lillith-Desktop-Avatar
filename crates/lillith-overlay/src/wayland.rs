@@ -75,10 +75,15 @@ use wayland_client::{
     Connection, QueueHandle,
 };
 
+use crate::kde_effects::{self, WindowRole};
+
 pub use smithay_client_toolkit as sctk;
 pub use wayland_client;
 
-/// Layer-surface namespace (KWin window rules can match it).
+/// Pre-fix layer-surface namespace ([`WindowRole::Normal`]). KWin types a
+/// layer surface by its namespace, and `lillith` made her a *normal*
+/// window that Better Blur / Rounded Corners draw a dark panel behind; the
+/// namespace now comes from [`WindowRole::layer_namespace`] (`dock`).
 pub const NAMESPACE: &str = "lillith";
 
 /// The open right-click menu surface.
@@ -186,8 +191,15 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
     let (w, h) = ctl.stage.size();
 
     let surface = compositor.create_surface(&qh);
-    let layer =
-        layer_shell.create_layer_surface(&qh, surface, Layer::Overlay, Some(NAMESPACE), None);
+    let role = WindowRole::from_env();
+    kde_effects::log_startup(role);
+    let layer = layer_shell.create_layer_surface(
+        &qh,
+        surface,
+        Layer::Overlay,
+        Some(role.layer_namespace()),
+        None,
+    );
     layer.set_anchor(Anchor::BOTTOM | Anchor::LEFT);
     layer.set_exclusive_zone(-1);
     layer.set_keyboard_interactivity(KeyboardInteractivity::OnDemand);

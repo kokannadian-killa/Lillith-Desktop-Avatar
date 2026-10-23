@@ -16,6 +16,26 @@
 //! is never skipped by accident. `/contract yes|no` still works as a typed
 //! alias.
 //!
+//! Every change, launch and command she proposes arrives as ONE Soul
+//! Contract **plan** ([`lillith_theme::egui_plan`]): every numbered item in
+//! full (paths, exact renames, sizes, diffs, delete listings, program, args,
+//! cwd, risky). Ko ticks what he allows and presses APPROVE SELECTED, or
+//! APPROVE ALL, or DECLINE / `Esc`. Only approved items run, through
+//! [`lillith_core::soul_contract::SoulContract::approve_plan`]; if the disk
+//! changed meanwhile, the new plan comes up instead. Deletes among the
+//! approved items need the typed phrase in the same popup.
+//!
+//! Deleting is different: the deletion contract
+//! ([`lillith_theme::egui_deletion`]) lists EVERY file and folder with sizes
+//! and totals, offers Trash (default) or Permanent, and only signs when Ko
+//! types the exact phrase and clicks SIGN. A plain yes never deletes. If the
+//! files changed meanwhile the new list comes up instead.
+//!
+//! Tool results and Ko's answers are fed back to her (up to
+//! [`MAX_TOOL_CHAIN`] steps) so she can say what happened. On open, a
+//! skills folder on the desktop is proposed for import as a plan
+//! (`[mind.access] import_desktop_skills`); nothing is copied unless approved.
+//!
 //! The model call runs on a worker thread (its own tokio runtime) through
 //! [`lillith_mind::chat::ChatSession`]. Every step is also reported through
 //! [`BubbleOptions::emit`] (`chat.start`, `chat.token`, `chat.end`, …) so
@@ -25,9 +45,14 @@
 //! already owns the process's windowing event loop.
 
 use eframe::egui;
+use lillith_core::access::deletion::{DeleteMode, DeletionManifest, DeletionSignature};
+use lillith_core::access::plan::{ChangePlan, PlanApproval};
 use lillith_core::config::{ChatConfig, MindConfig};
-use lillith_core::soul_contract::{ContractPrompt, PendingAction};
-use lillith_mind::chat::{ChatSession, Outcome};
+use lillith_core::soul_contract::{
+    ContractError, ContractPrompt, PendingAction, RequestId, SoulContract,
+};
+use lillith_mind::capabilities::RESULT_OPEN;
+use lillith_mind::chat::{ChatSession, Outcome, MAX_TOOL_CHAIN};
 use lillith_mind::llm::Message;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -73,15 +98,84 @@ enum Req {
     /// Answer the pending Soul Contract (skill, file write, or shell): Yes
     /// (run it) or No (discard).
     Confirm(bool),
+    /// Sign the pending deletion with the typed phrase.
+    SignDeletion {
+        typed: String,
+        permanent: bool,
+    },
+    /// Run exactly these plan items (`typed`/`permanent` sign its deletes).
+    ApprovePlan {
+        items: Vec<usize>,
+        typed: String,
+        permanent: bool,
+    },
+    /// Decline the whole plan.
+    DeclinePlan,
+}
+
+/// What the plan review shows.
+#[derive(Debug, Clone, PartialEq)]
+struct PlanPrompt {
+    rows: Vec<PlanRow>,
+    totals: String,
+    note: Option<String>,
+}
+
+impl PlanPrompt {
+    fn of(plan: &ChangePlan, note: Option<&str>) -> Self {
+        Self {
+            rows: plan
+                .items
+                .iter()
+                .map(|i| PlanRow {
+                    n: i.n,
+                    group: i.group.clone(),
+                    line: i.line.clone(),
+                    fields: i.fields.clone(),
+                    detail: i.detail.clone(),
+                    delete_entries: i.manifest.as_ref().map_or(0, |m| m.entries.len()),
+                    risky: i.risky.is_some(),
+                })
+                .collect(),
+            totals: plan.totals(None),
+            note: note.map(str::to_string),
+        }
+    }
+}
+
+/// What the deletion popup shows.
+#[derive(Debug, Clone, PartialEq)]
+struct DeletionPrompt {
+    listing: String,
+    totals: String,
+    phrase: String,
+    note: Option<String>,
+}
+
+impl DeletionPrompt {
+    fn of(m: &DeletionManifest, note: Option<&str>) -> Self {
+        Self {
+            listing: m.listing(),
+            totals: m.totals(),
+            phrase: m.phrase(),
+            note: note.map(str::to_string),
+        }
+    }
 }
 
 enum Ui {
+    /// A new reply starts streaming (after a tool result was fed back).
+    Begin,
+    /// A deletion is waiting for Ko's signature.
+    Deletion(DeletionPrompt),
     Token(String),
     Done(Outcome),
     /// A system note to show in the bubble (e.g. a skill proposal/result).
     Note(String),
     /// A gated action is waiting: raise the Soul Contract popup.
     Contract(ContractPrompt),
+    /// A plan is waiting for review.
+    Plan(PlanPrompt),
 }
 
 /// Parses the bubble's Soul Contract answer: `/contract yes` (or `y`) →
@@ -129,11 +223,21 @@ struct Bubble {
     contract: Option<ContractPrompt>,
     /// The popup is the `--demo-contract` sample (answers aren't sent).
     contract_demo: bool,
+    /// The deletion contract currently up.
+    deletion: Option<DeletionPrompt>,
+    deletion_state: DeletionState,
+    /// The plan review currently up.
+    plan: Option<PlanPrompt>,
+    plan_state: PlanState,
 }
 
 // lillith-theme's hellforge bubble look (DemonOS palette).
 use lillith_theme::bubble::{self as look, BG, CRIMSON, EMBER, HER_TEXT, ME_TEXT, NEON};
 use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView};
+use lillith_theme::egui_deletion::{
+    deletion_contract_popup, DeletionChoice, DeletionState, DeletionView,
+};
+use lillith_theme::egui_plan::{plan_review_popup, PlanChoice, PlanRow, PlanState, PlanView};
 use lillith_theme::egui_theme as th;
 use lillith_theme::palette as pal;
 
@@ -186,6 +290,7 @@ fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Recei
     if let Some(p) = &opts.history {
         session = session.with_history_file(p.clone());
     }
+    let import = !opts.demo && opts.screenshot.is_none();
     let emit = opts.emit.clone();
     std::thread::Builder::new()
         .name("lillith-chat".into())
@@ -200,90 +305,396 @@ fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Recei
                     return;
                 }
             };
-            // The skill the model last proposed, awaiting a Soul Contract Yes/No.
-            let mut pending: Option<PendingAction> = None;
+            let mut w = Worker {
+                session,
+                rt,
+                ui_tx,
+                emit,
+                ctx,
+                pending: None,
+                deletion: None,
+                plan: None,
+            };
+            if import {
+                // One-time notes from the app (e.g. the KWin start-up check).
+                if let Some(d) = lillith_core::config::data_dir() {
+                    for note in lillith_core::notes::take(&d) {
+                        w.note(format!("🛠 {note}"));
+                    }
+                }
+                if let Some(note) = w.session.import_desktop_skills() {
+                    w.note(format!("📥 {note}"));
+                    w.raise_pending();
+                }
+            }
             while let Ok(req) = req_rx.recv() {
                 match req {
-                    Req::Clear => session.clear(),
+                    Req::Clear => w.session.clear(),
                     Req::Send(text) => {
-                        emit("chat.start", None);
-                        let mut streamed = false;
-                        let out = rt.block_on(session.send(&text, |t| {
-                            streamed = true;
-                            emit("chat.token", Some(t));
-                            let _ = ui_tx.send(Ui::Token(t.to_string()));
-                            ctx.request_repaint();
-                        }));
-                        match &out {
-                            Outcome::Reply(r) => emit("chat.end", Some(r)),
-                            Outcome::Fallback { line, error } => {
-                                // She still says her in-character line on
-                                // the overlay.
-                                if !streamed {
-                                    emit("chat.token", Some(line));
-                                }
-                                emit("chat.error", Some(error));
-                            }
-                        }
-                        let _ = ui_tx.send(Ui::Done(out));
-                        // Did she propose a mutation (skill, file write, or
-                        // shell)? Hold it for the gate; never run it on our own.
-                        if let Some(action) = session.pending_action() {
-                            let summary = action.summary();
-                            pending = Some(action);
-                            emit("chat.contract_proposed", Some(&summary));
-                            let _ = ui_tx.send(Ui::Note(format!(
-                                "📜 Soul Contract: she wants to {summary}. Sign or refuse it (or type /contract yes|no)."
-                            )));
-                            if let Some(action) = &pending {
-                                let _ = ui_tx.send(Ui::Contract(action.prompt()));
-                            }
-                        } else if let Some(out) = session.last_tool_output() {
-                            // A read ran (no popup) or a tool was refused.
-                            let _ = ui_tx.send(Ui::Note(format!("🔎 {out}")));
-                        }
-                        ctx.request_repaint();
+                        let fb = w.turn(&text, false);
+                        w.chain(fb);
                     }
-                    Req::Confirm(yes) => {
-                        let Some(action) = pending.take() else {
-                            let _ = ui_tx.send(Ui::Note(
-                                "Nothing is waiting for a yes/no right now.".into(),
-                            ));
-                            ctx.request_repaint();
-                            continue;
-                        };
-                        let mut sc = session.soul_contract();
-                        let id = sc.request(action);
-                        let note = if yes {
-                            match sc.confirm(id) {
-                                Ok(done) => {
-                                    emit("chat.contract_confirmed", Some(done.action.kind()));
-                                    if let Some(p) = &done.path {
-                                        format!("✅ Done: {}", p.display())
-                                    } else if let Some(out) = &done.output {
-                                        format!("✅ Done:\n{out}")
-                                    } else {
-                                        "✅ Done.".into()
-                                    }
-                                }
-                                Err(e) => {
-                                    emit("chat.contract_error", Some(&e.to_string()));
-                                    format!("Couldn't do that: {e}")
-                                }
-                            }
-                        } else {
-                            let _ = sc.deny(id);
-                            emit("chat.contract_denied", None);
-                            "🚫 Discarded; nothing was changed.".into()
-                        };
-                        let _ = ui_tx.send(Ui::Note(note));
-                        ctx.request_repaint();
-                    }
+                    Req::Confirm(yes) => w.confirm(yes),
+                    Req::SignDeletion { typed, permanent } => w.sign(&typed, permanent),
+                    Req::ApprovePlan {
+                        items,
+                        typed,
+                        permanent,
+                    } => w.approve_plan(&items, &typed, permanent),
+                    Req::DeclinePlan => w.decline_plan(),
                 }
             }
         })
         .expect("spawn chat worker");
     (req_tx, ui_rx)
+}
+
+/// The chat worker's state (lives on its own thread).
+struct Worker {
+    session: ChatSession,
+    rt: tokio::runtime::Runtime,
+    ui_tx: Sender<Ui>,
+    emit: Emit,
+    ctx: egui::Context,
+    /// A gated action (not a deletion) awaiting Yes/No.
+    pending: Option<PendingAction>,
+    /// A deletion awaiting a signature: its contract and request id.
+    deletion: Option<(SoulContract, RequestId)>,
+    /// A plan awaiting review: its contract and request id.
+    plan: Option<(SoulContract, RequestId)>,
+}
+
+impl Worker {
+    fn ui(&self, m: Ui) {
+        let _ = self.ui_tx.send(m);
+        self.ctx.request_repaint();
+    }
+
+    fn note(&self, text: String) {
+        self.ui(Ui::Note(text));
+    }
+
+    /// One model turn. Returns the tool result to feed back, if a read-only
+    /// tool ran (or was refused); gated actions are raised instead.
+    fn turn(&mut self, text: &str, follow_up: bool) -> Option<String> {
+        if follow_up {
+            self.ui(Ui::Begin);
+        }
+        (self.emit)("chat.start", None);
+        let mut streamed = false;
+        let (emit, ui_tx, ctx) = (self.emit.clone(), self.ui_tx.clone(), self.ctx.clone());
+        let out = self.rt.block_on(self.session.send(text, |t| {
+            streamed = true;
+            emit("chat.token", Some(t));
+            let _ = ui_tx.send(Ui::Token(t.to_string()));
+            ctx.request_repaint();
+        }));
+        match &out {
+            Outcome::Reply(r) => (self.emit)("chat.end", Some(r)),
+            Outcome::Fallback { line, error } => {
+                // She still says her in-character line on the overlay.
+                if !streamed {
+                    (self.emit)("chat.token", Some(line));
+                }
+                (self.emit)("chat.error", Some(error));
+            }
+        }
+        self.ui(Ui::Done(out));
+        if let Some(out) = self.session.last_tool_output() {
+            // Free tools ran (or a tool was refused).
+            self.note(format!("🔎 {}", short(out)));
+        }
+        // Did she propose changes? Hold them for review; never run them on
+        // our own.
+        if self.raise_pending() {
+            return None;
+        }
+        self.session.take_tool_feedback()
+    }
+
+    /// Raises her pending proposal (plan, deletion or other gated action)
+    /// for Ko. Returns whether one was raised.
+    fn raise_pending(&mut self) -> bool {
+        if let Some(action) = self.session.take_pending() {
+            let summary = action.summary();
+            (self.emit)("chat.contract_proposed", Some(&summary));
+            if let PendingAction::Plan { plan } = &action {
+                let mut sc = self.session.soul_contract();
+                let prompt = PlanPrompt::of(plan, None);
+                let id = sc.request(action.clone());
+                self.plan = Some((sc, id));
+                self.note(format!(
+                    "📜 Soul Contract plan: {summary}. Nothing has happened yet. Check every step, then approve all, pick the ones you allow, or decline."
+                ));
+                self.ui(Ui::Plan(prompt));
+            } else if let PendingAction::DeletePaths { manifest } = &action {
+                let mut sc = self.session.soul_contract();
+                let prompt = DeletionPrompt::of(manifest, None);
+                let id = sc.request(action.clone());
+                self.deletion = Some((sc, id));
+                self.note(format!(
+                    "📜 Soul Contract: she wants to {summary}. Every item is listed in the popup; type the phrase and sign, or refuse."
+                ));
+                self.ui(Ui::Deletion(prompt));
+            } else {
+                self.note(format!(
+                    "📜 Soul Contract: she wants to {summary}. Sign or refuse it (or type /contract yes|no)."
+                ));
+                self.ui(Ui::Contract(action.prompt()));
+                self.pending = Some(action);
+            }
+            return true;
+        }
+        false
+    }
+
+    fn plan_prompt(&self, note: Option<&str>) -> Option<PlanPrompt> {
+        let (sc, id) = self.plan.as_ref()?;
+        sc.plan(*id).map(|p| PlanPrompt::of(p, note))
+    }
+
+    /// Ko approved `items` in the review: run exactly those (deletes among
+    /// them signed with `typed`).
+    fn approve_plan(&mut self, items: &[usize], typed: &str, permanent: bool) {
+        let Some((mut sc, id)) = self.plan.take() else {
+            self.note("No plan is waiting for review.".into());
+            return;
+        };
+        let Some(plan) = sc.plan(id).cloned() else {
+            return;
+        };
+        let approval = PlanApproval::subset(&plan, items.iter().copied());
+        let mut signature = None;
+        if let Some(m) = plan.deletion_manifest(approval.selected()) {
+            let mode = if permanent {
+                DeleteMode::Permanent
+            } else {
+                DeleteMode::Trash
+            };
+            match DeletionSignature::sign(&m, typed, mode) {
+                Ok(sig) => signature = Some(sig),
+                Err(e) => {
+                    self.plan = Some((sc, id));
+                    self.note(format!("Not signed: {e}. Nothing ran."));
+                    if let Some(p) = self.plan_prompt(Some(&e.to_string())) {
+                        self.ui(Ui::Plan(p));
+                    }
+                    return;
+                }
+            }
+        }
+        let action = PendingAction::Plan { plan };
+        match sc.approve_plan(id, approval, signature) {
+            Ok(done) => {
+                (self.emit)("chat.contract_confirmed", Some("plan"));
+                let out = done.output.unwrap_or_default();
+                self.note(format!("✅ Plan:\n{}", short(&out)));
+                let fb = ChatSession::answer_feedback(&action, Ok(&out));
+                self.chain(Some(fb));
+            }
+            Err(ContractError::Changed { new_id }) => {
+                self.plan = Some((sc, new_id));
+                let note = "Things changed on disk since you saw the plan — nothing ran. Here is the new plan.";
+                self.note(format!("⚠️ {note}"));
+                if let Some(p) = self.plan_prompt(Some(note)) {
+                    self.ui(Ui::Plan(p));
+                }
+            }
+            Err(e @ (ContractError::NeedsSignature(_) | ContractError::WrongSet)) => {
+                self.plan = Some((sc, id));
+                let note = format!("{e} — nothing ran.");
+                self.note(note.clone());
+                if let Some(p) = self.plan_prompt(Some(&note)) {
+                    self.ui(Ui::Plan(p));
+                }
+            }
+            Err(e) => {
+                let _ = sc.deny(id);
+                (self.emit)("chat.contract_error", Some(&e.to_string()));
+                self.note(format!("Couldn't run the plan: {e}"));
+                let fb = ChatSession::answer_feedback(&action, Err(&e.to_string()));
+                self.chain(Some(fb));
+            }
+        }
+    }
+
+    /// Ko declined the whole plan: nothing runs (audited).
+    fn decline_plan(&mut self) {
+        let Some((mut sc, id)) = self.plan.take() else {
+            return;
+        };
+        let action = sc.deny(id).ok();
+        (self.emit)("chat.contract_denied", None);
+        self.note("🚫 Declined; nothing was changed or run.".into());
+        if let Some(a) = action {
+            let fb = ChatSession::answer_feedback(&a, Err("Ko declined the whole plan"));
+            self.chain(Some(fb));
+        }
+    }
+
+    /// Feeds tool results / answers back to her, a few steps at most.
+    fn chain(&mut self, mut fb: Option<String>) {
+        for _ in 0..MAX_TOOL_CHAIN {
+            let Some(f) = fb.take() else { return };
+            if self.pending.is_some() || self.deletion.is_some() || self.plan.is_some() {
+                return;
+            }
+            fb = self.turn(&f, true);
+        }
+    }
+
+    fn confirm(&mut self, yes: bool) {
+        if self.plan.is_some() {
+            if yes {
+                self.note("✍️ Tick the steps you allow in the plan and press APPROVE (a plain yes isn't an approval).".into());
+                if let Some(p) = self.plan_prompt(None) {
+                    self.ui(Ui::Plan(p));
+                }
+            } else {
+                self.decline_plan();
+            }
+            return;
+        }
+        if self.deletion.is_some() {
+            if yes {
+                self.note("✍️ Deleting needs your signature: type the phrase in the contract and press SIGN.".into());
+                if let Some(p) = self.deletion_prompt(None) {
+                    self.ui(Ui::Deletion(p));
+                }
+            } else {
+                let (mut sc, id) = self.deletion.take().expect("checked");
+                let action = sc.deny(id).ok();
+                (self.emit)("chat.contract_denied", None);
+                self.note("🚫 Refused; nothing was deleted.".into());
+                if let Some(a) = action {
+                    let fb = ChatSession::answer_feedback(&a, Err("Ko refused"));
+                    self.chain(Some(fb));
+                }
+            }
+            return;
+        }
+        let Some(action) = self.pending.take() else {
+            self.note("Nothing is waiting for a yes/no right now.".into());
+            return;
+        };
+        let mut sc = self.session.soul_contract();
+        let id = sc.request(action.clone());
+        let result: Result<String, String> = if yes {
+            match sc.confirm(id) {
+                Ok(done) => {
+                    (self.emit)("chat.contract_confirmed", Some(done.action.kind()));
+                    let mut out = String::new();
+                    if let Some(p) = &done.path {
+                        out.push_str(&format!("{}\n", p.display()));
+                    }
+                    if let Some(o) = &done.output {
+                        out.push_str(o);
+                    }
+                    self.note(if out.is_empty() {
+                        "✅ Done.".into()
+                    } else {
+                        format!("✅ Done:\n{}", short(&out))
+                    });
+                    Ok(out)
+                }
+                Err(e) => {
+                    (self.emit)("chat.contract_error", Some(&e.to_string()));
+                    self.note(format!("Couldn't do that: {e}"));
+                    Err(format!("it failed: {e}"))
+                }
+            }
+        } else {
+            let _ = sc.deny(id);
+            (self.emit)("chat.contract_denied", None);
+            self.note("🚫 Discarded; nothing was changed.".into());
+            Err("Ko said no".into())
+        };
+        let fb = ChatSession::answer_feedback(&action, result.as_deref().map_err(|e| e.as_str()));
+        self.chain(Some(fb));
+    }
+
+    fn deletion_prompt(&self, note: Option<&str>) -> Option<DeletionPrompt> {
+        let (sc, id) = self.deletion.as_ref()?;
+        sc.pending()
+            .iter()
+            .find(|(i, _)| i == id)
+            .and_then(|(_, a)| match a {
+                PendingAction::DeletePaths { manifest } => Some(DeletionPrompt::of(manifest, note)),
+                _ => None,
+            })
+    }
+
+    /// Ko signed in the popup: check the phrase against the exact list and
+    /// delete through the contract (which re-lists first).
+    fn sign(&mut self, typed: &str, permanent: bool) {
+        let Some((mut sc, id)) = self.deletion.take() else {
+            self.note("Nothing is waiting for a signature.".into());
+            return;
+        };
+        let Some(PendingAction::DeletePaths { manifest }) = sc
+            .pending()
+            .iter()
+            .find(|(i, _)| *i == id)
+            .map(|(_, a)| a.clone())
+        else {
+            return;
+        };
+        let mode = if permanent {
+            DeleteMode::Permanent
+        } else {
+            DeleteMode::Trash
+        };
+        let sig = match DeletionSignature::sign(&manifest, typed, mode) {
+            Ok(s) => s,
+            Err(e) => {
+                self.deletion = Some((sc, id));
+                self.note(format!("Not signed: {e}."));
+                if let Some(p) = self.deletion_prompt(Some(&e.to_string())) {
+                    self.ui(Ui::Deletion(p));
+                }
+                return;
+            }
+        };
+        let action = PendingAction::DeletePaths {
+            manifest: manifest.clone(),
+        };
+        match sc.sign_deletion(id, sig) {
+            Ok(done) => {
+                (self.emit)("chat.contract_confirmed", Some("delete_paths"));
+                let out = done.output.unwrap_or_default();
+                self.note(format!("🗑 Done:\n{}", short(&out)));
+                let fb = ChatSession::answer_feedback(&action, Ok(&out));
+                self.chain(Some(fb));
+            }
+            Err(ContractError::Changed { new_id }) => {
+                self.deletion = Some((sc, new_id));
+                let note = "The files changed since you saw the list — nothing was deleted. Here is the new list.";
+                self.note(format!("⚠️ {note}"));
+                if let Some(p) = self.deletion_prompt(Some(note)) {
+                    self.ui(Ui::Deletion(p));
+                }
+            }
+            Err(e) => {
+                (self.emit)("chat.contract_error", Some(&e.to_string()));
+                self.note(format!("Couldn't delete: {e}"));
+                let fb = ChatSession::answer_feedback(&action, Err(&e.to_string()));
+                self.chain(Some(fb));
+            }
+        }
+    }
+}
+
+/// Long tool output shortened for the bubble (the model gets it all).
+fn short(text: &str) -> String {
+    const MAX: usize = 1200;
+    if text.len() <= MAX {
+        return text.to_string();
+    }
+    let mut end = MAX;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &text[..end])
 }
 
 fn history_lines(opts: &BubbleOptions) -> Vec<Line> {
@@ -295,6 +706,8 @@ fn history_lines(opts: &BubbleOptions) -> Vec<Line> {
         .unwrap_or_default();
     h.into_iter()
         .filter(|m| m.role == "user" || m.role == "assistant")
+        // Tool results fed back to her are not Ko's words.
+        .filter(|m| !(m.role == "user" && m.content.starts_with(RESULT_OPEN)))
         .map(|m| Line {
             me: m.role == "user",
             text: m.content,
@@ -345,9 +758,18 @@ impl Bubble {
                     });
                 }
                 Ui::Note(text) => self.lines.push(Line { me: false, text }),
+                Ui::Begin => self.streaming = Some(String::new()),
+                Ui::Deletion(p) => {
+                    self.deletion = Some(p);
+                    self.deletion_state = DeletionState::default();
+                }
                 Ui::Contract(prompt) => {
                     self.contract = Some(prompt);
                     self.contract_demo = false;
+                }
+                Ui::Plan(p) => {
+                    self.plan = Some(p);
+                    self.plan_state = PlanState::default();
                 }
             }
         }
@@ -359,6 +781,10 @@ impl Bubble {
     fn answer_contract(&mut self, yes: bool) {
         let demo = std::mem::take(&mut self.contract_demo);
         self.contract = None;
+        if !yes {
+            self.deletion = None;
+            self.plan = None;
+        }
         if demo {
             self.lines.push(Line {
                 me: false,
@@ -385,6 +811,71 @@ impl Bubble {
             soul_contract_popup(ctx, egui::Id::new("lillith-soul-contract"), &view)
         {
             self.answer_contract(choice == ContractChoice::Yes);
+        }
+    }
+
+    /// Draws the deletion contract if one is pending; routes its answer.
+    fn deletion_popup(&mut self, ctx: &egui::Context) {
+        let Some(p) = &self.deletion else {
+            return;
+        };
+        let view = DeletionView {
+            listing: &p.listing,
+            totals: &p.totals,
+            phrase: &p.phrase,
+            note: p.note.as_deref(),
+        };
+        match deletion_contract_popup(
+            ctx,
+            egui::Id::new("lillith-deletion-contract"),
+            &view,
+            &mut self.deletion_state,
+        ) {
+            Some(DeletionChoice::Sign { typed, permanent }) => {
+                self.deletion = None;
+                let _ = self.tx.send(Req::SignDeletion { typed, permanent });
+            }
+            Some(DeletionChoice::Cancel) => {
+                self.deletion = None;
+                let _ = self.tx.send(Req::Confirm(false));
+            }
+            None => {}
+        }
+    }
+
+    /// Draws the plan review if one is pending; routes its answer.
+    fn plan_popup(&mut self, ctx: &egui::Context) {
+        let Some(p) = &self.plan else {
+            return;
+        };
+        let view = PlanView {
+            rows: &p.rows,
+            totals: &p.totals,
+            note: p.note.as_deref(),
+        };
+        match plan_review_popup(
+            ctx,
+            egui::Id::new("lillith-plan-review"),
+            &view,
+            &mut self.plan_state,
+        ) {
+            Some(PlanChoice::Approve {
+                items,
+                typed,
+                permanent,
+            }) => {
+                self.plan = None;
+                let _ = self.tx.send(Req::ApprovePlan {
+                    items,
+                    typed,
+                    permanent,
+                });
+            }
+            Some(PlanChoice::Decline) => {
+                self.plan = None;
+                let _ = self.tx.send(Req::DeclinePlan);
+            }
+            None => {}
         }
     }
 
@@ -436,7 +927,12 @@ impl eframe::App for Bubble {
             self.had_focus = true;
         }
         let lost = self.had_focus && focused == Some(false) && self.opened.elapsed() > FOCUS_GRACE;
-        if self.screenshot.is_none() && self.contract.is_none() && (esc || lost) {
+        if self.screenshot.is_none()
+            && self.contract.is_none()
+            && self.deletion.is_none()
+            && self.plan.is_none()
+            && (esc || lost)
+        {
             self.close(ctx);
         }
 
@@ -524,7 +1020,10 @@ impl eframe::App for Bubble {
                         .hint_text("Speak, mortal…")
                         .desired_width(f32::INFINITY)
                         .margin(egui::Margin::symmetric(8, 6));
-                    let free = self.streaming.is_none() && self.contract.is_none();
+                    let free = self.streaming.is_none()
+                        && self.contract.is_none()
+                        && self.deletion.is_none()
+                        && self.plan.is_none();
                     let resp = ui.add_enabled(free, edit);
                     if free && resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         self.send();
@@ -543,6 +1042,8 @@ impl eframe::App for Bubble {
                 );
             });
         self.contract_popup(ctx);
+        self.deletion_popup(ctx);
+        self.plan_popup(ctx);
         self.screenshot(ctx);
     }
 
@@ -683,6 +1184,10 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
                 shot_requested: false,
                 contract: opts.demo_contract.then(demo_contract),
                 contract_demo: opts.demo_contract,
+                deletion: None,
+                deletion_state: DeletionState::default(),
+                plan: None,
+                plan_state: PlanState::default(),
             }))
         }),
     )
@@ -731,6 +1236,10 @@ mod tests {
             shot_requested: false,
             contract,
             contract_demo: demo,
+            deletion: None,
+            deletion_state: DeletionState::default(),
+            plan: None,
+            plan_state: PlanState::default(),
         };
         (b, req_rx)
     }
@@ -811,5 +1320,223 @@ mod tests {
                 assert!(f.has_glyph(&id, c), "no glyph for {c}");
             }
         });
+    }
+
+    fn deletion_prompt() -> DeletionPrompt {
+        DeletionPrompt {
+            listing: "📄 /home/ko/junk.log 3 B".into(),
+            totals: "1 file, 3 B".into(),
+            phrase: "DELETE 1 ITEM".into(),
+            note: None,
+        }
+    }
+
+    #[test]
+    fn deletion_popup_signs_only_with_the_phrase() {
+        let (mut b, req_rx) = test_bubble(None, false);
+        b.deletion = Some(deletion_prompt());
+        let ctx = egui::Context::default();
+        ctx.set_fonts(bubble_fonts());
+        let run = |b: &mut Bubble, ev: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(BUBBLE_SIZE.0, BUBBLE_SIZE.1),
+                )),
+                events: ev,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| b.deletion_popup(ctx));
+        };
+        for _ in 0..3 {
+            run(&mut b, vec![]);
+        }
+        assert!(req_rx.try_recv().is_err());
+        // A typed "/contract yes" is not a signature: the popup stays up.
+        b.input = "/contract yes".into();
+        b.send();
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Confirm(true))));
+        // Esc refuses.
+        run(&mut b, vec![esc()]);
+        assert!(b.deletion.is_none());
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Confirm(false))));
+    }
+
+    #[test]
+    fn tool_results_are_hidden_from_the_history_view() {
+        let dir = std::env::temp_dir().join(format!("lillith-bubble-hist-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("h.json");
+        let msgs = vec![
+            Message::user("tidy my downloads"),
+            Message::assistant("```tool\nsort ~/Downloads by type\n```"),
+            Message::user("[tool result] sort\nmoved 3\n[/tool result]"),
+            Message::assistant("Done, darling."),
+        ];
+        std::fs::write(&path, serde_json::to_string(&msgs).unwrap()).unwrap();
+        let opts = BubbleOptions {
+            pos: None,
+            chat: ChatConfig::default(),
+            mind: MindConfig::default(),
+            offline: true,
+            history: Some(path),
+            emit: Arc::new(|_, _| {}),
+            screenshot: None,
+            demo: false,
+            demo_contract: false,
+        };
+        let lines = history_lines(&opts);
+        assert_eq!(lines.len(), 3);
+        assert!(lines.iter().all(|l| !l.text.starts_with("[tool result]")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn plan_prompt_for(dir: &std::path::Path) -> (ChangePlan, PlanPrompt) {
+        use lillith_core::access::plan::PlanRequest;
+        let plan = ChangePlan::build(
+            vec![
+                PlanRequest::Mkdir {
+                    path: dir.join("A"),
+                },
+                PlanRequest::Mkdir {
+                    path: dir.join("B"),
+                },
+                PlanRequest::Command {
+                    command: format!("touch '{}'", dir.join("ran").display()),
+                    cwd: None,
+                    timeout_s: 5,
+                    shell: false,
+                },
+            ],
+            None,
+            None,
+        )
+        .unwrap();
+        let p = PlanPrompt::of(&plan, None);
+        (plan, p)
+    }
+
+    #[test]
+    fn plan_review_sends_only_the_ticked_items_and_esc_declines() {
+        let dir = std::env::temp_dir().join(format!("lillith-bubble-plan-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (_, prompt) = plan_prompt_for(&dir);
+        assert_eq!(prompt.rows.len(), 3);
+        assert!(
+            prompt.rows[2].fields.iter().any(|(k, _)| k == "program"),
+            "{:?}",
+            prompt.rows[2]
+        );
+        let (mut b, req_rx) = test_bubble(None, false);
+        b.plan = Some(prompt.clone());
+        let ctx = egui::Context::default();
+        ctx.set_fonts(bubble_fonts());
+        let run = |b: &mut Bubble, ev: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(BUBBLE_SIZE.0, BUBBLE_SIZE.1),
+                )),
+                events: ev,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| b.plan_popup(ctx));
+        };
+        let click = |b: &mut Bubble, pos: egui::Pos2| {
+            run(b, vec![egui::Event::PointerMoved(pos)]);
+            for pressed in [true, false] {
+                run(
+                    b,
+                    vec![egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    }],
+                );
+            }
+        };
+        let rect = |key: (&str, usize)| {
+            ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new("lillith-plan-review").with(key)))
+        };
+        let named = |key: &str| {
+            ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new("lillith-plan-review").with(key)))
+                .expect("laid out")
+        };
+        for _ in 0..3 {
+            run(&mut b, vec![]);
+        }
+        assert!(req_rx.try_recv().is_err(), "nothing answered yet");
+        // While the review is up the input is locked and focus loss doesn't close.
+        assert!(b.plan.is_some());
+        // Untick item 2, approve the selection.
+        if let Some(r) = rect(("row", 2)) {
+            click(&mut b, r.center());
+        } else {
+            b.plan_state.checked.remove(&2);
+        }
+        click(&mut b, named("some-rect").center());
+        match req_rx.try_recv() {
+            Ok(Req::ApprovePlan { items, .. }) => assert_eq!(items, vec![1, 3]),
+            _ => panic!("expected ApprovePlan"),
+        }
+        assert!(b.plan.is_none());
+        // Esc declines.
+        b.plan = Some(prompt);
+        b.plan_state = PlanState::default();
+        for _ in 0..2 {
+            run(&mut b, vec![]);
+        }
+        run(&mut b, vec![esc()]);
+        assert!(matches!(req_rx.try_recv(), Ok(Req::DeclinePlan)));
+        assert!(!b.closing);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn worker_runs_only_approved_plan_items_and_decline_runs_nothing() {
+        let dir =
+            std::env::temp_dir().join(format!("lillith-bubble-worker-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (ui_tx, ui_rx) = channel();
+        let mut w = Worker {
+            session: ChatSession::new(&ChatConfig::default(), true),
+            rt: tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap(),
+            ui_tx,
+            emit: Arc::new(|_, _| {}),
+            ctx: egui::Context::default(),
+            pending: None,
+            deletion: None,
+            plan: None,
+        };
+        let file = |w: &mut Worker| {
+            let (plan, _) = plan_prompt_for(&dir);
+            let mut sc = SoulContract::new(None);
+            let id = sc.request(PendingAction::Plan { plan });
+            w.plan = Some((sc, id));
+        };
+        file(&mut w);
+        w.decline_plan();
+        assert!(!dir.join("A").exists() && !dir.join("B").exists() && !dir.join("ran").exists());
+        file(&mut w);
+        w.approve_plan(&[2, 3], "", false);
+        assert!(!dir.join("A").exists(), "item 1 was not approved");
+        assert!(dir.join("B").is_dir());
+        assert!(dir.join("ran").exists(), "approved command ran");
+        assert!(w.plan.is_none());
+        let notes: Vec<String> = ui_rx
+            .try_iter()
+            .filter_map(|m| match m {
+                Ui::Note(t) => Some(t),
+                _ => None,
+            })
+            .collect();
+        assert!(notes.iter().any(|n| n.contains("Declined")), "{notes:?}");
+        assert!(notes.iter().any(|n| n.contains("✅ Plan")), "{notes:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

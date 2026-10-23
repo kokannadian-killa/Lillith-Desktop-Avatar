@@ -91,7 +91,8 @@ pub struct TabRegistry {
 }
 
 impl TabRegistry {
-    /// Companion, Motion, Chat / Brain, Avatar, Icon, Voice, Build, About, Sealed I–II.
+    /// Companion, Motion, Chat / Brain, Avatar, Icon, Voice, Build, About,
+    /// Access (`[mind.access]`, in the first add-in slot), Sealed II.
     pub fn with_defaults(shared: &Shared) -> Self {
         let mut r = Self::default();
         r.register(Box::new(companion::CompanionTab::new(shared)));
@@ -105,6 +106,8 @@ impl TabRegistry {
         for n in 1..=2 {
             r.register(Box::new(sealed::SealedTab::new(n)));
         }
+        // [mind.access] takes the first add-in slot.
+        r.unseal(Box::new(knobs::KnobTab::access()));
         r
     }
 
@@ -181,13 +184,13 @@ pub(crate) mod tests {
                 "voice",
                 "build",
                 "about",
-                "sealed-1",
+                "access",
                 "sealed-2"
             ]
         );
-        assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 2);
-        r.unseal(Box::new(Dummy));
-        assert_eq!(r.index_of("dummy"), Some(8));
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 1);
+        r.unseal(Box::new(Dummy));
+        assert_eq!(r.index_of("dummy"), Some(9));
+        assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 0);
     }
 }

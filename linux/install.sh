@@ -10,6 +10,7 @@
 #   ~/.local/share/applications/lillith.desktop + icons (hicolor, Icon=lillith)
 #   ~/.local/share/lillith/icons/<id>/         the whole icon set (Settings > Icon)
 #   a desktop shortcut, optional autostart, the KWin bridge (Plasma 6)
+#   excludes her from KDE force blur (Better Blur DX), see kwin-blur-exclude.sh
 #   ~/.config/lillith/config.toml              via `lillith setup` (local model)
 #
 # LOCAL ONLY: the only network use is pacman installing distro packages (and
@@ -232,6 +233,10 @@ if [[ $UNINSTALL == 1 ]]; then
       warn "couldn't remove the KWin script"
     fi
     kwin_reconfigure
+  fi
+  # Undo the force-blur exclusion the installer added (only what it changed).
+  if [[ -f "$DATA_DIR/kwin-blur-exclusion.state" ]]; then
+    "$HERE/kwin-blur-exclude.sh" revert && ok "restored the blur effect's window classes"
   fi
   refresh_menus
 
@@ -477,6 +482,31 @@ else
   fi
 fi
 
+# KDE force blur (Better Blur DX on Garuda, Better Blur): it draws a dark,
+# blurred, rounded panel behind every window it targets, including her
+# transparent one (the "black box"). Exclude only her window class; the
+# effect stays on for everything else. Undone by --uninstall.
+if have kreadconfig6 && have kwriteconfig6; then
+  if ! "$HERE/kwin-blur-exclude.sh" check >/dev/null 2>&1; then
+    "$HERE/kwin-blur-exclude.sh" check || true
+    if ask "Exclude Lillith from the blur effect (fixes the dark box around her; other windows keep their blur)?" y; then
+      "$HERE/kwin-blur-exclude.sh" apply
+      if "$HERE/kwin-blur-exclude.sh" check >/dev/null 2>&1; then
+        ok "Lillith excluded from force blur (undo: ./linux/kwin-blur-exclude.sh revert)"
+      elif ask "Her class can't be excluded automatically (a /regex/ matches it). Turn the blur effect off instead (uninstall turns it back on)?" y; then
+        "$HERE/kwin-blur-exclude.sh" disable
+        ok "blur effect turned off (undo: ./linux/kwin-blur-exclude.sh revert)"
+      else
+        warn "edit the window classes in System Settings → Desktop Effects → Better Blur DX"
+      fi
+    else
+      warn "left as is; fix later with: ./linux/kwin-blur-exclude.sh apply   (or: lillith fix-kwin)"
+    fi
+  else
+    ok "no KDE force-blur effect targets her"
+  fi
+fi
+
 # ── 7. local brain ──────────────────────────────────────────────────
 step "7/8  Lily's brain (a local GGUF model; nothing is downloaded)"
 LILLITH="$BIN_DIR/lillith"
@@ -561,6 +591,28 @@ if [[ -f $CONFIG_FILE ]]; then
   sed -i -E "s/^autostart = (true|false)\$/autostart = $want/" "$CONFIG_FILE"
 fi
 
+# Her skills: a `skills` / `lillith-skills` folder on your desktop can be
+# COPIED into her skills folder. You review the exact plan first (every copy,
+# its destination, any "(from desktop)" rename) and approve all, some, or
+# none. Hers are never overwritten and the original is never touched. She
+# also proposes this at start ([mind.access] import_desktop_skills).
+desk="$(desktop_dir)"
+skills_src=""
+for n in skills Skills lillith-skills Lillith-skills lillith_skills "Lillith Skills" lily-skills; do
+  if [[ -d $desk/$n ]]; then skills_src="$desk/$n"; break; fi
+done
+if [[ -n $skills_src ]]; then
+  if [[ -t 0 && -t 1 ]]; then
+    if RUST_LOG=warn "$LILLITH" --config "$CONFIG_FILE" import-skills --from "$skills_src"; then
+      ok "skills import reviewed ($skills_src)"
+    else
+      warn "couldn't review $skills_src; she'll propose it when she starts"
+    fi
+  else
+    ok "found $skills_src; she'll show you the import plan when you chat (or run: lillith import-skills)"
+  fi
+fi
+
 # ── 8. check + start ────────────────────────────────────────────────
 step "8/8  Checking the install"
 "$LILLITH" --help >/dev/null || die "$LILLITH --help failed"
@@ -594,5 +646,7 @@ cat <<DONE
   Settings:   right-click her > Settings, or 'lillith-settings'
   Icon:       right-click her > Icon…, or 'lillith icon --list' / 'lillith icon ID'
   Model:      lillith setup --gguf FILE.gguf --llama-server /usr/bin/llama-server
+  Skills:     drop a 'skills' folder on your desktop; she copies it in at start
+              (or: lillith import-skills). Undo her tidying: lillith undo-organize
   Uninstall:  ./linux/uninstall.sh   (keeps GGUF models; asks about settings)
 DONE
