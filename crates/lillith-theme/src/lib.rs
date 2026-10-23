@@ -35,6 +35,8 @@ pub mod bubble;
 #[cfg(feature = "egui")]
 pub mod egui_contract;
 #[cfg(feature = "egui")]
+pub mod egui_deletion;
+#[cfg(feature = "egui")]
 pub mod egui_theme;
 
 pub use accent::Accent;

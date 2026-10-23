@@ -172,6 +172,70 @@ impl KnobTab {
         }
     }
 
+    /// `[mind.access]`: her default-on hands on the machine. Deleting is not
+    /// a switch here: it always needs a signed Soul Contract.
+    pub fn access() -> Self {
+        let b = |path: &'static [&'static str], label, help, default: fn(&Config) -> bool| Knob {
+            path,
+            label,
+            help,
+            kind: Kind::Bool { default },
+        };
+        Self {
+            id: "access",
+            title: "Access",
+            rune: 7,
+            intro: "What Lillith may do on this computer. All local; nothing leaves the machine. Deleting always needs your signature on a Soul Contract that lists every file and folder — there is no switch to skip it. Changes apply to the next chat.",
+            groups: vec![
+                Group {
+                    title: "HANDS · FILES & PROGRAMS",
+                    tag: "[mind.access]",
+                    knobs: vec![
+                        b(&["mind", "enabled"], "Her mind", "Master switch: tools, skills and knowledge", |c| c.mind.enabled),
+                        b(&["mind", "access", "files"], "Your files", "Browse, read and search home and mounted drives (secrets stay hidden)", |c| c.mind.access.files),
+                        b(&["mind", "access", "organize"], "Organize", "Move, rename, copy, make folders, sort. Never overwrites; undo with `lillith undo-organize`", |c| c.mind.access.organize),
+                        b(&["mind", "access", "programs"], "Programs", "See installed apps and open them (with files)", |c| c.mind.access.programs),
+                        b(&["mind", "access", "commands"], "Commands", "Run commands for a task; anything risky asks you first", |c| c.mind.access.commands),
+                        b(&["mind", "allow_shell"], "Raw shell", "Let her propose raw shell scripts (always asks)", |c| c.mind.allow_shell),
+                        Knob {
+                            path: &["mind", "access", "preview_over"],
+                            label: "Ask above",
+                            help: "Organize batches bigger than this show the plan first",
+                            kind: Kind::Int { min: 0, max: 10000, unit: "steps", default: 10 },
+                        },
+                        Knob {
+                            path: &["mind", "access", "command_timeout_s"],
+                            label: "Command limit",
+                            help: "Commands are stopped after this long",
+                            kind: Kind::Int { min: 1, max: 3600, unit: "s", default: 30 },
+                        },
+                    ],
+                },
+                Group {
+                    title: "SKILLS",
+                    tag: "[mind]",
+                    knobs: vec![
+                        b(&["mind", "access", "skills"], "Use skills", "List, read and follow the recipes in her skills folder", |c| c.mind.access.skills),
+                        b(&["mind", "access", "import_desktop_skills"], "Import from desktop", "Copy a `skills` / `lillith-skills` folder on your desktop into hers at start (never overwrites, never deletes the original)", |c| c.mind.access.import_desktop_skills),
+                        Knob {
+                            path: &["mind", "skills_dir"],
+                            label: "Skills folder",
+                            help: "Empty = ~/.local/share/lillith/skills",
+                            kind: Kind::Text { hint: "~/.local/share/lillith/skills" },
+                        },
+                        Knob {
+                            path: &["mind", "knowledge_dir"],
+                            label: "Knowledge folder",
+                            help: "Empty = ~/.local/share/lillith/knowledge",
+                            kind: Kind::Text { hint: "~/.local/share/lillith/knowledge" },
+                        },
+                    ],
+                },
+            ],
+            text_buf: Default::default(),
+        }
+    }
+
     pub fn voice() -> Self {
         Self {
             id: "voice",

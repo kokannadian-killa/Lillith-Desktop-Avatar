@@ -64,7 +64,16 @@ pub struct ChatSession {
     /// Output from a read tool that ran this turn (reads need no popup), or a
     /// one-line note when a tool was refused.
     last_tool_output: Option<String>,
+    /// Which tool produced `last_tool_output`.
+    last_tool_op: Option<&'static str>,
 }
+
+/// Most tool calls chained after one message of Ko's (each tool result is fed
+/// back to her; she may ask for another tool, up to this many).
+pub const MAX_TOOL_CHAIN: usize = 3;
+
+/// Most bytes of a tool result fed back to the model.
+pub const TOOL_RESULT_MAX: usize = 6000;
 
 /// Most messages kept on disk.
 const MAX_SAVED: usize = 200;
@@ -113,6 +122,7 @@ impl ChatSession {
             tools: None,
             pending_tool: None,
             last_tool_output: None,
+            last_tool_op: None,
         }
     }
 
@@ -133,10 +143,71 @@ impl ChatSession {
     /// The persona system prompt, with any relevant knowledge/skill context
     /// for `user` appended (within the configured token budget).
     fn system_with_context(&self, user: &str) -> String {
-        match self.knowledge.as_ref().and_then(|kb| kb.context_for(user)) {
-            Some(ctx) => format!("{}\n\n{}", self.system_prompt, ctx),
-            None => self.system_prompt.clone(),
+        let mut s = self.system_prompt.clone();
+        let has_kb = self
+            .knowledge
+            .as_ref()
+            .map(|kb| kb.is_enabled())
+            .unwrap_or(false);
+        if let Some(caps) = crate::capabilities::section(self.tools.as_ref(), has_kb) {
+            s.push_str("\n\n");
+            s.push_str(&caps);
         }
+        if let Some(ctx) = self.knowledge.as_ref().and_then(|kb| kb.context_for(user)) {
+            s.push_str("\n\n");
+            s.push_str(&ctx);
+        }
+        s
+    }
+
+    /// The full system prompt as sent for `user` (persona + the tools section
+    /// + any matching knowledge). For tests and `--print-prompt`-style checks.
+    pub fn full_system_prompt(&self, user: &str) -> String {
+        self.system_with_context(user)
+    }
+
+    /// The last tool result as the message to feed back to her (and clears
+    /// it), so she can tell Ko what she found. `None` when no tool ran.
+    pub fn take_tool_feedback(&mut self) -> Option<String> {
+        let out = self.last_tool_output.take()?;
+        let op = self.last_tool_op.take().unwrap_or("tool");
+        Some(crate::capabilities::result_message(
+            op,
+            &out,
+            TOOL_RESULT_MAX,
+        ))
+    }
+
+    /// The message that tells her how Ko answered a Soul Contract card.
+    pub fn answer_feedback(action: &PendingAction, result: Result<&str, &str>) -> String {
+        let text = match result {
+            Ok(out) => format!("Ko said YES to: {}\n{out}", action.summary()),
+            Err(why) => format!("{}: {}\nNothing was done.", action.summary(), why),
+        };
+        crate::capabilities::result_message(action.kind(), &text, TOOL_RESULT_MAX)
+    }
+
+    /// Copies a `skills` / `lillith-skills` folder from Ko's desktop into her
+    /// skills folder (`[mind.access] import_desktop_skills`, default on).
+    /// Never overwrites, never touches the original. Returns a report when
+    /// something new came in (so she can tell Ko), else `None`.
+    pub fn import_desktop_skills(&self) -> Option<String> {
+        let tools = self.tools.as_ref()?;
+        let a = tools.access();
+        if !a.skills || !a.import_desktop_skills {
+            return None;
+        }
+        let dir = tools.skills_dir()?;
+        let log = tools.data_dir().map(|d| d.join("skills-import.log"));
+        let mut out = Vec::new();
+        for r in lillith_core::access::skill_import::import_from_desktop(dir, log.as_deref()) {
+            match r {
+                Ok(r) if r.changed() => out.push(r.text()),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("skills import: {e}"),
+            }
+        }
+        (!out.is_empty()).then(|| out.join("\n"))
     }
 
     /// A skill the model proposed in its last reply, if any (awaiting Yes/No).
@@ -301,17 +372,21 @@ impl ChatSession {
     fn handle_tool_request(&mut self, reply: &str) {
         self.pending_tool = None;
         self.last_tool_output = None;
+        self.last_tool_op = None;
         // Resolve everything that borrows `self.tools` before mutating fields.
         let planned = self.tools.as_ref().and_then(|tools| {
             parse_tool_request(reply).map(|req| {
                 let audit = tools.audit_log().map(|p| p.to_path_buf());
-                (audit, tools.plan(req))
+                let op = req.op();
+                (audit, op, tools.plan(req))
             })
         });
-        let Some((audit, result)) = planned else {
+        let Some((audit, op, result)) = planned else {
             return;
         };
+        self.last_tool_op = Some(op);
         match result {
+            Ok(Planned::Info(text)) => self.last_tool_output = Some(text),
             Ok(Planned::Read(action)) => {
                 let mut sc = SoulContract::new(audit);
                 match sc.run_now(action) {
@@ -698,6 +773,125 @@ mod tests {
         assert!(audit.contains("AUTO\tread_file"), "{audit}");
         assert!(audit.contains("CONFIRM\twrite_file"), "{audit}");
         std::env::remove_var("XDG_DATA_HOME");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn system_prompt_lists_tools_when_enabled_and_omits_them_when_disabled() {
+        use crate::capabilities::HEADING;
+        let dir = std::env::temp_dir().join(format!("lillith-chat-caps-{}", std::process::id()));
+        let mk = |enabled: bool, access: lillith_core::config::AccessConfig| {
+            lillith_core::config::MindConfig {
+                enabled,
+                knowledge_dir: dir.join("knowledge").to_string_lossy().into_owned(),
+                skills_dir: dir.join("skills").to_string_lossy().into_owned(),
+                access,
+                ..Default::default()
+            }
+        };
+        let on =
+            ChatSession::new(&ChatConfig::default(), true).with_mind(&mk(true, Default::default()));
+        let p = on.request_messages("hi")[0].content.clone();
+        assert!(
+            p.starts_with(persona::DEFAULT_SYSTEM_PROMPT),
+            "persona text untouched"
+        );
+        assert!(p.contains(HEADING));
+        for t in [
+            "list <folder>",
+            "locate <folder>",
+            "move <from>",
+            "sort <folder>",
+            "undo",
+            "delete <path>",
+            "open <app> -> <file>",
+            "installed <name>",
+            "run <command>",
+            "list_skills",
+            "read_skill <name>",
+            "import_skills",
+            "```skill",
+        ] {
+            assert!(p.contains(t), "{t} missing from the system prompt");
+        }
+        assert!(p.contains(&dir.join("skills").display().to_string()));
+
+        let off = lillith_core::config::AccessConfig {
+            organize: false,
+            programs: false,
+            commands: false,
+            skills: false,
+            ..Default::default()
+        };
+        let p = ChatSession::new(&ChatConfig::default(), true)
+            .with_mind(&mk(true, off))
+            .request_messages("hi")[0]
+            .content
+            .clone();
+        assert!(p.contains(HEADING));
+        for t in [
+            "sort <folder>",
+            "open <app>",
+            "run <command>",
+            "list_skills",
+        ] {
+            assert!(!p.contains(t), "{t} should be gone when switched off");
+        }
+        let p = ChatSession::new(&ChatConfig::default(), true)
+            .with_mind(&mk(false, Default::default()))
+            .request_messages("hi")[0]
+            .content
+            .clone();
+        assert!(!p.contains(HEADING), "mind off: no tools section");
+        let p = ChatSession::new(&ChatConfig::default(), true).request_messages("hi")[0]
+            .content
+            .clone();
+        assert!(!p.contains(HEADING));
+    }
+
+    #[tokio::test]
+    async fn tool_results_flow_back_to_her() {
+        let dir = std::env::temp_dir().join(format!("lillith-chat-loop-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("skills")).unwrap();
+        std::fs::write(
+            dir.join("skills/tidy.md"),
+            "# Tidy downloads\nSort by type.\n",
+        )
+        .unwrap();
+        let mind = lillith_core::config::MindConfig {
+            enabled: true,
+            knowledge_dir: dir.join("knowledge").to_string_lossy().into_owned(),
+            skills_dir: dir.join("skills").to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        let (url, mut reqs) = fake_server(vec![
+            sse_reply(&["let me check my skills~\n```tool\nlist_skills\n```"]),
+            sse_reply(&["I have a tidy-downloads skill, darling."]),
+        ])
+        .await;
+        let mut s = ChatSession::new(&cfg(&url), false).with_mind(&mind);
+        s.send("what skills do you have?", |_| {}).await;
+        let _ = reqs.recv().await.unwrap();
+        let fb = s.take_tool_feedback().expect("the listing is fed back");
+        assert!(fb.starts_with("[tool result] list_skills"), "{fb}");
+        assert!(fb.contains("tidy.md — Tidy downloads"), "{fb}");
+        assert!(s.take_tool_feedback().is_none(), "taken once");
+        let out = s.send(&fb, |_| {}).await;
+        assert_eq!(out.text(), "I have a tidy-downloads skill, darling.");
+        let r2 = reqs.recv().await.unwrap();
+        assert!(
+            r2.contains("[tool result] list_skills"),
+            "the model saw the result"
+        );
+        // A refused tool comes back too, so she can explain.
+        let action = PendingAction::RunCommand {
+            command: "sudo pacman -Syu".into(),
+            cwd: None,
+            timeout_s: 5,
+        };
+        let no = ChatSession::answer_feedback(&action, Err("Ko said no"));
+        assert!(no.contains("sudo pacman -Syu") && no.contains("Nothing was done"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

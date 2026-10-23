@@ -377,4 +377,22 @@ mod tests {
         let core = lillith_core::config::Config::from_toml_str(&out).unwrap();
         assert_eq!(core.springs.bounce.intensity, 2.5);
     }
+
+    #[test]
+    fn access_switches_land_in_mind_access() {
+        let p = tmp("access");
+        let _ = std::fs::remove_file(&p);
+        let mut s = ConfigStore::load(&p);
+        s.set_bool(&["mind", "access", "commands"], false);
+        s.set_bool(&["mind", "access", "import_desktop_skills"], false);
+        s.set_str(&["mind", "skills_dir"], "/home/ko/skills");
+        s.save().unwrap();
+        let cfg =
+            lillith_core::config::Config::from_toml_str(&std::fs::read_to_string(&p).unwrap())
+                .unwrap();
+        assert!(!cfg.mind.access.commands);
+        assert!(!cfg.mind.access.import_desktop_skills);
+        assert!(cfg.mind.access.files, "untouched switches stay on");
+        assert_eq!(cfg.mind.skills_dir, "/home/ko/skills");
+    }
 }

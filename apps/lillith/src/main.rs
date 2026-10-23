@@ -193,6 +193,25 @@ enum Cmd {
         #[arg(long)]
         check: bool,
     },
+    /// Undo Lillith's last organize batch (moves go back, copies go to the
+    /// Trash, empty folders she made are removed). Nothing is overwritten.
+    UndoOrganize {
+        /// Only list the journal (newest last); undo nothing.
+        #[arg(long)]
+        list: bool,
+    },
+    /// Copy a skills folder (default: `skills` / `lillith-skills` on your
+    /// desktop) into her skills folder. Never overwrites: a differing file
+    /// is kept next to hers as "name (from desktop).md". The source is
+    /// never touched.
+    ImportSkills {
+        /// Folder to import (default: look on the desktop).
+        #[arg(long)]
+        from: Option<PathBuf>,
+        /// Exit quietly (0) when no desktop skills folder exists.
+        #[arg(long)]
+        quiet: bool,
+    },
     /// The click-to-chat bubble window (started by the overlay; prints
     /// chat events as JSON lines on stdout).
     #[command(hide = true)]
@@ -323,6 +342,56 @@ async fn main() -> Result<()> {
                 cfg.endpoint = e.clone();
             }
             chat::cli_chat(cfg, full.mind, message.clone(), spawn_server, no_history).await?;
+        }
+        Some(Cmd::UndoOrganize { list }) => {
+            let journal = lillith_core::config::data_dir()
+                .ok_or_else(|| anyhow::anyhow!("no HOME / XDG_DATA_HOME"))?
+                .join("organize-journal");
+            if list {
+                let batches = lillith_core::access::organize::batches(&journal);
+                if batches.is_empty() {
+                    println!("no organize batches in {}", journal.display());
+                }
+                for b in batches {
+                    println!("{}", b.display());
+                    for e in lillith_core::access::organize::read_batch(&b)? {
+                        println!("  {:<5} {} -> {}", e.op, e.from.display(), e.to.display());
+                    }
+                }
+            } else {
+                let r = lillith_core::access::organize::undo_last(&journal)?;
+                println!("{}", r.text());
+            }
+        }
+        Some(Cmd::ImportSkills { ref from, quiet }) => {
+            let mind = load_config(&cli).0.mind;
+            let to = mind
+                .resolved_skills_dir()
+                .ok_or_else(|| anyhow::anyhow!("no skills folder (set [mind] skills_dir)"))?;
+            let log = lillith_core::config::data_dir().map(|d| d.join("skills-import.log"));
+            let results = match from {
+                Some(f) => vec![lillith_core::access::skill_import::import(
+                    f,
+                    &to,
+                    log.as_deref(),
+                )],
+                None => {
+                    lillith_core::access::skill_import::import_from_desktop(&to, log.as_deref())
+                }
+            };
+            if results.is_empty() && !quiet {
+                println!(
+                    "no skills folder on the desktop (looked for skills / lillith-skills in {})",
+                    lillith_core::access::skill_import::desktop_dirs()
+                        .iter()
+                        .map(|d| d.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            for r in results {
+                println!("{}", r?.text());
+            }
         }
         Some(Cmd::Settings {
             ref section,

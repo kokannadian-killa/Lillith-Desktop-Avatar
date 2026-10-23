@@ -591,6 +591,28 @@ if [[ -f $CONFIG_FILE ]]; then
   sed -i -E "s/^autostart = (true|false)\$/autostart = $want/" "$CONFIG_FILE"
 fi
 
+# Her skills: a `skills` / `lillith-skills` folder on your desktop is COPIED
+# into her skills folder (never overwrites hers, never touches the original;
+# she also does this at every start, see [mind.access] import_desktop_skills).
+desk="$(desktop_dir)"
+skills_src=""
+for n in skills Skills lillith-skills Lillith-skills lillith_skills "Lillith Skills" lily-skills; do
+  if [[ -d $desk/$n ]]; then skills_src="$desk/$n"; break; fi
+done
+if [[ -n $skills_src ]]; then
+  if "$LILLITH" --config "$CONFIG_FILE" import-skills --help >/dev/null 2>&1; then
+    if RUST_LOG=warn "$LILLITH" --config "$CONFIG_FILE" import-skills --from "$skills_src" | sed 's/^/  /'; then
+      ok "skills imported from $skills_src"
+    else
+      warn "couldn't import $skills_src; she'll try again when she starts"
+    fi
+  else
+    mkdir -p "$DATA_DIR/skills"
+    # -n: never overwrite a skill she already has.
+    cp -Rn -- "$skills_src/." "$DATA_DIR/skills/" && ok "skills copied from $skills_src to $DATA_DIR/skills"
+  fi
+fi
+
 # ── 8. check + start ────────────────────────────────────────────────
 step "8/8  Checking the install"
 "$LILLITH" --help >/dev/null || die "$LILLITH --help failed"
@@ -624,5 +646,7 @@ cat <<DONE
   Settings:   right-click her > Settings, or 'lillith-settings'
   Icon:       right-click her > Icon…, or 'lillith icon --list' / 'lillith icon ID'
   Model:      lillith setup --gguf FILE.gguf --llama-server /usr/bin/llama-server
+  Skills:     drop a 'skills' folder on your desktop; she copies it in at start
+              (or: lillith import-skills). Undo her tidying: lillith undo-organize
   Uninstall:  ./linux/uninstall.sh   (keeps GGUF models; asks about settings)
 DONE

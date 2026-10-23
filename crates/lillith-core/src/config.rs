@@ -383,6 +383,89 @@ pub struct MindConfig {
     /// Roots that re-open the built-in deny list (secrets dirs, `/etc`) for
     /// the tool API. Use sparingly; `~` is expanded (Phase 2).
     pub unlock_paths: Vec<String>,
+    /// Default-on access to the user's files, programs and commands
+    /// (`[mind.access]`).
+    pub access: AccessConfig,
+}
+
+/// Default roots for `[mind.access] roots`: home plus the usual mount points.
+pub const DEFAULT_ACCESS_ROOTS: &[&str] = &["~", "/mnt", "/media", "/run/media"];
+
+/// `[mind.access]`: what Lillith may do on the machine without being given
+/// each folder by hand. Everything is on by default; any switch can be
+/// turned off here or in the settings GUI (Access tab).
+///
+/// - `files`: list / read / search / find by name under `roots` (secrets dirs
+///   stay denied; `/proc`, `/sys`, `/dev` are never walked).
+/// - `organize`: move / rename / copy / make folders under `roots`. Never
+///   overwrites (auto-renames on conflict), journals every batch for
+///   `lillith undo-organize`; batches over `preview_over` items need a Yes.
+/// - `programs`: list installed apps, check if a program is installed, open
+///   an app (optionally with files).
+/// - `commands`: run CLI commands to finish a task. Read-only commands run
+///   straight away (output goes back into chat); anything that could change
+///   or kill something, or uses sudo/pkexec, needs a Yes on a card showing the
+///   exact command. File removal is never a command: it goes through the
+///   delete Soul Contract.
+///
+/// Deleting is not a switch: it always needs a signed Soul Contract that
+/// lists every file and folder, and there is deliberately no auto-approve.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccessConfig {
+    pub files: bool,
+    pub organize: bool,
+    pub programs: bool,
+    pub commands: bool,
+    /// List / read / use the skills in `[mind] skills_dir` on demand.
+    pub skills: bool,
+    /// On startup, copy a `skills` / `lillith-skills` folder found on the
+    /// desktop into `skills_dir` (never overwriting; the original stays).
+    pub import_desktop_skills: bool,
+    /// Directory roots she may browse and organize (`~` expanded).
+    pub roots: Vec<String>,
+    /// Organize batches with more items than this show a plan and need a Yes.
+    pub preview_over: usize,
+    /// Seconds a command may run before it is stopped.
+    pub command_timeout_s: u64,
+}
+
+impl Default for AccessConfig {
+    fn default() -> Self {
+        Self {
+            files: true,
+            organize: true,
+            programs: true,
+            commands: true,
+            skills: true,
+            import_desktop_skills: true,
+            roots: DEFAULT_ACCESS_ROOTS.iter().map(|s| s.to_string()).collect(),
+            preview_over: 10,
+            command_timeout_s: 30,
+        }
+    }
+}
+
+impl AccessConfig {
+    /// `roots` with `~` expanded; absolute paths kept, blanks dropped.
+    pub fn resolved_roots(&self) -> Vec<PathBuf> {
+        let mut out: Vec<PathBuf> = Vec::new();
+        for r in &self.roots {
+            let p = if r.trim_start().starts_with('~') {
+                expand_tilde(r)
+            } else if r.trim().is_empty() {
+                None
+            } else {
+                Some(PathBuf::from(r.trim()))
+            };
+            if let Some(p) = p {
+                if !out.contains(&p) {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
 }
 
 impl Default for MindConfig {
@@ -396,6 +479,7 @@ impl Default for MindConfig {
             allow_shell: false,
             max_read_bytes: DEFAULT_MIND_MAX_READ_BYTES,
             unlock_paths: Vec::new(),
+            access: AccessConfig::default(),
         }
     }
 }
@@ -445,6 +529,11 @@ impl MindConfig {
         push(self.resolved_skills_dir());
         for raw in &self.allow_paths {
             push(expand_tilde(raw));
+        }
+        if self.access.files {
+            for r in self.access.resolved_roots() {
+                push(Some(r));
+            }
         }
         roots
     }

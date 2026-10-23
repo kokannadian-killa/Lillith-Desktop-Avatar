@@ -23,6 +23,7 @@
 //! - [`state`]: the M3 behaviour state machine ([`state::Brain`]): input
 //!   mapping, moods, mischief, sleep/wake, Wander/Stay, pose cycle, rules.
 
+pub mod access;
 pub mod bag;
 pub mod bounce;
 pub mod build;
