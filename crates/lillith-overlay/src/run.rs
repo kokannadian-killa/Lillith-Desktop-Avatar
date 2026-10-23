@@ -12,6 +12,7 @@ use crate::settings_window::{Launch, SettingsWindow};
 use crate::stage::{Changed, Stage, StageError};
 use crate::ui::{Command, PEEK_SCALE};
 use lillith_anim::animator::{AnimatorConfig, Dir};
+use lillith_anim::atlas::{Clip, Manifest};
 use lillith_anim::avatar::AvatarStore;
 use lillith_core::config::{save_overlay, MoveMode, OverlayPos};
 use lillith_core::config::{Config, JiggleMode};
@@ -79,10 +80,41 @@ impl std::fmt::Debug for SinkHandle {
 /// (hover, idle poses); system alerts and clicks still play.
 pub const TALK_INTERRUPT_PRIORITY: u8 = 60;
 
-/// Seated base clip for perching on a window edge; its `variant_of:sit_swing`
-/// takes (`sit_heel_kick`, `sit_cross_legged_bob`, `sit_bored_chin`,
-/// `sit_stretch_yawn`) play from it through the animator's variants.
+/// Default (and fallback) seated base clip for perching on a window edge; its
+/// `variant_of:sit_swing` takes (`sit_heel_kick`, `sit_cross_legged_bob`,
+/// `sit_bored_chin`, `sit_stretch_yawn`) play from it through the animator's
+/// variants.
 pub const SIT_CLIP: &str = "sit_swing";
+
+/// Clip tag: another seated base a perch may pick (e.g. `perch_sit`), next to
+/// [`SIT_CLIP`]. Its own `variant_of:<clip>` takes play from it.
+pub const SIT_BASE_TAG: &str = "sit_base";
+
+/// Seated bases a perch picks from: [`SIT_CLIP`] and the clips tagged
+/// [`SIT_BASE_TAG`], each only with `seat_y` (sorted; empty without any).
+pub fn sit_clips(m: &Manifest) -> Vec<String> {
+    m.clips
+        .iter()
+        .filter(|(n, c)| c.seat_y.is_some() && (n.as_str() == SIT_CLIP || c.has_tag(SIT_BASE_TAG)))
+        .map(|(n, _)| n.clone())
+        .collect()
+}
+
+/// Px her window drops so `clip`'s seat (`seat_y`) rests on the edge her
+/// feet (first frame's anchor) stood on; `None` without seat data.
+pub fn seat_drop_px(clip: &Clip, scale: f32) -> Option<i32> {
+    let seat = clip.seat_y?;
+    let feet = clip.frames.first()?.anchor.1;
+    let d = ((feet - seat) as f32 * scale).round() as i32;
+    (d > 0).then_some(d)
+}
+
+/// Half of `clip`'s seat width (`seat_x_range`) in screen px (0 without it).
+pub fn half_seat_px(clip: &Clip, scale: f32) -> i32 {
+    clip.seat_x_range
+        .map_or(0.0, |(a, b)| (b - a).abs() as f32 * 0.5 * scale)
+        .round() as i32
+}
 
 /// Px of her window kept on screen when dragging off an edge.
 pub const KEEP_ON_SCREEN: i32 = 64;
@@ -645,29 +677,15 @@ impl Controller {
         }
     }
 
-    /// Feet kept this far inside a window top: half her seat width (so a
-    /// sit fits), at least 16 px.
+    /// Feet kept this far inside a window top: half the widest seat of the
+    /// [`sit_clips`] (so any sit fits), at least 16 px.
     fn perch_margin(&self) -> i32 {
         let scale = self.stage.scale();
-        let half_seat = self
-            .stage
-            .animator()
-            .manifest()
-            .clips
-            .get(SIT_CLIP)
-            .and_then(|c| c.seat_x_range)
-            .map_or(0.0, |(a, b)| (b - a).abs() as f32 * 0.5 * scale);
-        (half_seat.round() as i32).max(16)
-    }
-
-    /// Px the window drops so her seat (`seat_y` of [`SIT_CLIP`]) rests on
-    /// the edge her feet stood on; `None` without the clip or seat data.
-    fn seat_drop(&self) -> Option<i32> {
-        let clip = self.stage.animator().manifest().clips.get(SIT_CLIP)?;
-        let seat = clip.seat_y?;
-        let feet = clip.frames.first()?.anchor.1;
-        let d = ((feet - seat) as f32 * self.stage.scale()).round() as i32;
-        (d > 0).then_some(d)
+        let m = self.stage.animator().manifest();
+        sit_clips(m)
+            .iter()
+            .map(|n| half_seat_px(&m.clips[n], scale))
+            .fold(16, i32::max)
     }
 
     /// `true` while gravity may move her (a screen is known, `g_px_s2 > 0`,
@@ -678,32 +696,45 @@ impl Controller {
 
     /// Re-check her footing next tick (resize, reset, restore).
     fn resettle(&mut self) {
-        self.stand_up();
+        self.stand_up(false);
         if !matches!(self.gravity.mode, Mode::Held | Mode::Falling(_)) {
             self.gravity.mode = Mode::Settle { wait: 0.0 };
         }
     }
 
-    /// Ends a sit on the edge: back on her feet on top of the window.
-    fn stand_up(&mut self) {
+    /// Ends a sit on the edge: back on her feet on top of the window. With
+    /// `blend` (the sit ran out) a `<sit> -> idle` blend plays and her window
+    /// rises with it; otherwise she is up at once.
+    fn stand_up(&mut self, blend: bool) {
         let Mode::Perched(p) = &mut self.gravity.mode else {
             return;
         };
         let Some(sit) = p.sit.take() else { return };
         let next = self.gravity.sit_pause();
+        let anim = self.stage.animator_mut();
+        let mut rise_s = None;
+        if anim.base() == sit.clip {
+            if blend {
+                rise_s = anim.stand_blended();
+            } else {
+                anim.stand();
+            }
+        }
+        let up = sit.applied_px();
+        let mut now = up;
         if let Mode::Perched(p) = &mut self.gravity.mode {
             p.next_sit_s = next;
-        }
-        let anim = self.stage.animator_mut();
-        if anim.base().starts_with("sit_") {
-            anim.stand();
+            if let Some(secs) = rise_s.filter(|&s| s > 0.0) {
+                p.rise = Some(gravity::Ease::new(up, secs));
+                now = 0;
+            }
         }
         let cur = self.pending_move.unwrap_or(self.placement);
         self.pending_move = Some(Placement {
             left: cur.left,
-            bottom: cur.bottom + sit.drop_px,
+            bottom: cur.bottom + now,
         });
-        tracing::debug!("perch: stood up");
+        tracing::debug!(clip = %sit.clip, "perch: stood up");
     }
 
     /// Starts a fall from `from` (her footing went away).
@@ -807,9 +838,9 @@ impl Controller {
             }
             Mode::Perched(p) => match gravity::check_perch(&desk, &p, fx) {
                 PerchCheck::Lost(why) => {
-                    let drop = p.sit.map_or(0, |s| s.drop_px);
+                    let drop = p.lowered_px();
                     let anim = self.stage.animator_mut();
-                    if anim.base().starts_with("sit_") {
+                    if p.sit.as_ref().is_some_and(|s| anim.base() == s.clip) {
                         anim.stand();
                     }
                     let from = Placement {
@@ -840,18 +871,40 @@ impl Controller {
             return;
         };
         let anim = self.stage.animator();
-        if let Some(sit) = p.sit {
-            let interrupted = !anim.base().starts_with("sit_") || anim.overlay_clip().is_some();
-            if interrupted || sit.left_s - dt <= 0.0 {
-                self.stand_up();
-            } else if let Mode::Perched(p) = &mut self.gravity.mode {
+        if let Some(mut sit) = p.sit.clone() {
+            // Its own sit-down blend (`blend_<from>_to_<clip>`) is not an
+            // interruption.
+            let interrupted = anim.base() != sit.clip
+                || anim.overlay_clip().is_some_and(|o| {
+                    !(o.starts_with("blend_") && o.ends_with(&format!("_to_{}", sit.clip)))
+                });
+            if let Some(e) = &mut sit.sink {
+                self.shift_by(-e.step(dt));
+                if e.done() {
+                    sit.sink = None;
+                }
+            }
+            if let Mode::Perched(p) = &mut self.gravity.mode {
                 p.sit = Some(Sit {
                     left_s: sit.left_s - dt,
-                    ..sit
+                    ..sit.clone()
                 });
+            }
+            if interrupted {
+                self.stand_up(false);
+            } else if sit.left_s - dt <= 0.0 {
+                self.stand_up(true);
             }
             return;
         }
+        if let Some(mut e) = p.rise {
+            self.shift_by(e.step(dt));
+            if let Mode::Perched(p) = &mut self.gravity.mode {
+                p.rise = (!e.done()).then_some(e);
+            }
+            return;
+        }
+        let anim = self.stage.animator();
         let calm = self.brain.phase() == Phase::Idle
             && anim.overlay_clip().is_none()
             && anim.queued() == 0
@@ -869,22 +922,47 @@ impl Controller {
             }
             return;
         }
-        let Some(drop_px) = self.seat_drop() else {
+        let scale = self.stage.scale();
+        let m = self.stage.animator().manifest();
+        let seated: Vec<(String, i32)> = sit_clips(m)
+            .into_iter()
+            .filter_map(|n| seat_drop_px(&m.clips[&n], scale).map(|d| (n, d)))
+            .collect();
+        let Some(i) = self.gravity.pick_sit(seated.len()) else {
             return;
         };
-        if self.stage.animator_mut().set_base(SIT_CLIP, false).is_err() {
+        let (clip, drop_px) = seated[i].clone();
+        let Ok(blend_s) = self.stage.animator_mut().sit_down(&clip) else {
             return;
-        }
+        };
         let left_s = self.gravity.sit_length();
+        // Through a blend the window sinks with it; else all at once.
+        let sink = blend_s
+            .filter(|&s| s > 0.0)
+            .map(|s| gravity::Ease::new(drop_px, s));
+        let now = if sink.is_some() { 0 } else { drop_px };
+        tracing::debug!(left_s, clip = %clip, blend = blend_s.is_some(), "perch: sitting on the edge");
         if let Mode::Perched(p) = &mut self.gravity.mode {
-            p.sit = Some(Sit { left_s, drop_px });
+            p.sit = Some(Sit {
+                clip,
+                left_s,
+                drop_px,
+                sink,
+            });
+        }
+        self.shift_by(-now);
+    }
+
+    /// Moves her window down (`dy < 0`) or up by `dy` px this tick.
+    fn shift_by(&mut self, dy: i32) {
+        if dy == 0 {
+            return;
         }
         let cur = self.pending_move.unwrap_or(self.placement);
         self.pending_move = Some(Placement {
             left: cur.left,
-            bottom: cur.bottom - drop_px,
+            bottom: cur.bottom + dy,
         });
-        tracing::debug!(left_s, "perch: sitting on the edge");
     }
 
     /// Logs once that without the bridge she only knows the floor.
@@ -2434,6 +2512,142 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         run_frames(&mut c, 2.0);
         assert_eq!(c.placement.bottom, 36);
         assert_eq!(c.gravity.mode, Mode::Floor);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn sit_clips_take_tagged_bases_and_fall_back_to_sit_swing() {
+        let one = r#"page = "p.png"
+frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+"#;
+        let m = |extra: &str| {
+            lillith_anim::atlas::Manifest::from_toml_str(&format!("[clips.idle]\n{one}\n{extra}"))
+                .unwrap()
+        };
+        let swing = format!("[clips.sit_swing]\nseat_y = 20\n{one}\n");
+        let perch = format!("[clips.perch_sit]\nseat_y = 18\ntags = [\"sit_base\"]\n{one}\n");
+        // A variant take with seat data is drawn from its base, not picked.
+        let variant = format!(
+            "[clips.sit_bored_chin]\nseat_y = 20\ntags = [\"variant_of:sit_swing\"]\n{one}\n"
+        );
+        let untagged = format!("[clips.sit_lean]\nseat_y = 20\n{one}\n");
+        let no_seat = format!("[clips.perch_peek]\ntags = [\"sit_base\"]\n{one}\n");
+        // Default: sit_swing only.
+        assert_eq!(
+            sit_clips(&m(&format!("{swing}{variant}{untagged}"))),
+            [SIT_CLIP]
+        );
+        // Tagged seated bases join it.
+        assert_eq!(
+            sit_clips(&m(&format!("{swing}{perch}{no_seat}"))),
+            ["perch_sit", "sit_swing"]
+        );
+        // Without sit_swing the tagged base alone; without either nothing.
+        assert_eq!(sit_clips(&m(&perch)), ["perch_sit"]);
+        assert!(sit_clips(&m(&no_seat)).is_empty());
+        assert!(sit_clips(&m("")).is_empty());
+    }
+
+    #[test]
+    fn seat_math_uses_each_clips_own_seat() {
+        let m = lillith_anim::atlas::Manifest::from_toml_str(
+            r#"[clips.sit_swing]
+page = "p.png"
+seat_y = 230
+seat_x_range = [136, 279]
+frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
+[clips.perch_sit]
+page = "p.png"
+seat_y = 250
+seat_x_range = [150, 222]
+frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
+[clips.odd]
+page = "p.png"
+seat_y = 395
+frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
+"#,
+        )
+        .unwrap();
+        let c = |n: &str| &m.clips[n];
+        assert_eq!(seat_drop_px(c("sit_swing"), 0.5), Some(81));
+        assert_eq!(seat_drop_px(c("perch_sit"), 0.5), Some(71));
+        assert_eq!(seat_drop_px(c("perch_sit"), 1.0), Some(142));
+        // Seat at/below the feet, or no seat: no drop.
+        assert_eq!(seat_drop_px(c("odd"), 1.0), None);
+        assert_eq!(half_seat_px(c("sit_swing"), 1.0), 72);
+        assert_eq!(half_seat_px(c("perch_sit"), 0.5), 18);
+        assert_eq!(half_seat_px(c("odd"), 1.0), 0);
+    }
+
+    #[test]
+    fn perches_on_a_tagged_sit_clip_through_its_blends() {
+        use lillith_core::desktop::{DeskWindow, Rect};
+        // No sit_swing: the tagged base is the only sit. Seat 18 cell px
+        // above the feet: 36 px at scale 2. Blends: 4 frames at 8 fps.
+        let clip = |name: &str, extra: &str| {
+            format!(
+                "[clips.{name}]\npage = \"idle.png\"\nfps = 8.0\n{extra}frames = [ {f}, {f}, {f}, {f} ]\n",
+                f = "{ x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }"
+            )
+        };
+        let mut sit = clip(
+            "perch_sit",
+            "mode = \"loop\"\nseat_y = 20\nseat_x_range = [14, 26]\ntags = [\"sit_base\"]\n",
+        );
+        for (from, to) in [("idle", "perch_sit"), ("perch_sit", "idle")] {
+            let n = format!("blend_{from}_to_{to}");
+            sit.push_str(&clip(&n, "mode = \"once\"\n"));
+            sit.push_str(&format!(
+                "[clips.{n}.blend]\nfrom = \"{from}\"\nto = \"{to}\"\nfrom_frame = 0\nto_frame = 0\n"
+            ));
+        }
+        let (dir, mut c) = m3_controller_with("grav_perch_tag", MoveMode::Stay, &sit);
+        c.gravity.cfg.sit_for_s = (2.0, 2.0);
+        c.set_screen((1200, 800));
+        let mut d = Desktop::default();
+        d.set_area(Rect::new(0, 0, 1200, 800), Rect::new(0, 0, 1200, 760));
+        d.set_windows(vec![DeskWindow {
+            id: "w0".into(),
+            class: "kate".into(),
+            rect: Rect::new(50, 300, 600, 400),
+        }]);
+        c.set_desktop(Some(d));
+        drag_drop(&mut c, 0.0, -650.0);
+        run_frames(&mut c, 2.0);
+        assert_eq!(c.placement.bottom, 496);
+        // Wait for the sit to start.
+        let mut waited = 0.0;
+        while !c.gravity.sitting() {
+            run_frames(&mut c, 1.0 / 60.0);
+            waited += 1.0 / 60.0;
+            assert!(waited < 25.0, "never sat");
+        }
+        assert_eq!(c.stage.animator().base(), "perch_sit");
+        assert_eq!(
+            c.stage.animator().overlay_clip(),
+            Some("blend_idle_to_perch_sit")
+        );
+        // The window sinks with the 0.5 s blend instead of jumping.
+        let down = run_frames(&mut c, 0.6);
+        assert!(down.len() > 10, "{down:?}");
+        assert!(down.windows(2).all(|w| w[1] <= w[0] && w[0] - w[1] < 36));
+        assert_eq!(c.placement.bottom, 496 - 36);
+        assert!(c.gravity.sitting(), "the own blend is no interruption");
+        assert_eq!(c.stage.animator().overlay_clip(), None);
+        // The sit runs out: up through the stand blend, rising with it.
+        while c.gravity.sitting() {
+            run_frames(&mut c, 1.0 / 60.0);
+        }
+        assert_eq!(c.stage.animator().base(), "idle");
+        assert_eq!(
+            c.stage.animator().overlay_clip(),
+            Some("blend_perch_sit_to_idle")
+        );
+        let up = run_frames(&mut c, 0.6);
+        assert!(up.len() > 10, "{up:?}");
+        assert!(up.windows(2).all(|w| w[1] >= w[0] && w[1] - w[0] < 36));
+        assert_eq!(c.placement.bottom, 496);
+        assert!(matches!(&c.gravity.mode, Mode::Perched(p) if p.rise.is_none()));
         let _ = std::fs::remove_dir_all(dir);
     }
 
