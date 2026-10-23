@@ -143,6 +143,18 @@ PNG sheet stays the fallback and the bounds-check reference.
   dir. `assets/generated/` went from 381 MiB (sheets 185 + frames 195) to about 246 MiB
   (sheets 205 incl. the 8 new poses + MP4s 33.5). Dropping the sheets as well would save another
   205 MiB, but it would lose the ffmpeg-free fallback and the `--check` reference, so they stay.
+- **Measured** (8-core box, release build):
+  - `cargo run --release -p lillith-anim --example video_bench` over 143 clip videos (3060 frames):
+    - PNG sheet load+crop per clip: median 32 ms, p95 144 ms.
+    - MP4 first frame on clip change: median 65 ms, p95 110 ms.
+    - Whole clip: median 114 ms, p95 239 ms (5.9 ms/frame).
+    - Playing every clip under the 192 MB budget leaves 18 clips / 191 MiB resident with 0 failures.
+  - Overlay on Xvfb + picom at scale 1.0 (overlay + its ffmpeg child):
+    - About 4% of one core idle and about 9% while a pose plays.
+    - Idle RSS is 152 MiB with PNG and 154 MiB with MP4, plus about 46 MiB for the standby ffmpeg.
+      After about 5 minutes of poses, RSS is about 260 MiB with a full 187 MiB video cache.
+  - On-screen frame timing (x11grab at 30 fps, matched to decoded frames) follows the JSON durations
+    within the 33 ms capture step, including holds, and is the same as the PNG path.
 - **New pose in one command:** `tools/video-pipeline/new_pose.py`. See `tools/video-pipeline/README_MP4.md`.
 - **Bold allure poses:** 8 poses come from `generated_v2` (approved), each 36 frames, 12 fps, loop, and
   are listed in `catalog.rs` *Flirty / Allure*: `body_roll_slow`, `arch_back_over_shoulder`,
