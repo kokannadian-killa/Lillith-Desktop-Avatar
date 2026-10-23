@@ -21,9 +21,12 @@
 //! This type owns the request/confirm bookkeeping, the actual IO and the
 //! audit trail. It does **no network** and trusts that paths/commands were
 //! already vetted against the allowlist by the caller (see
-//! `lillith_mind::tools`). The UI that shows the Yes/No prompt lives above it
-//! (the chat bubble / a future overlay popup) and simply calls
-//! `confirm`/`deny`/`run_now`.
+//! `lillith_mind::tools`). The UI that shows the Yes/No prompt lives above it:
+//! every egui surface raises the shared Soul Contract popup
+//! (`lillith_theme::egui_contract`) from a [`ContractPrompt`]
+//! ([`PendingAction::prompt`]) and answers through [`SoulContract::answer`]
+//! (or [`decide`]): **Yes** runs the action and audits `CONFIRM`, **No**
+//! discards it and audits `DENY`.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -158,6 +161,45 @@ impl PendingAction {
         }
     }
 
+    /// Short upper-case heading for the confirmation popup.
+    pub fn title(&self) -> &'static str {
+        match self {
+            PendingAction::WriteSkill { .. } => "WRITE SKILL",
+            PendingAction::ListDir { .. } => "LIST FOLDER",
+            PendingAction::ReadFile { .. } => "READ FILE",
+            PendingAction::SearchFiles { .. } => "SEARCH FILES",
+            PendingAction::WriteFile { .. } => "WRITE FILE",
+            PendingAction::RunShell { .. } => "RUN SHELL",
+            PendingAction::ScaffoldProject { .. } => "SCAFFOLD PROJECT",
+            PendingAction::BuildProject { .. } => "BUILD PROJECT",
+            PendingAction::RunProject { .. } => "RUN PROJECT",
+        }
+    }
+
+    /// The toolkit-free text a Yes/No popup shows for this action: heading,
+    /// one-line summary, the touched path and a capped preview of what would
+    /// be written / run. Callers may swap in a richer preview with
+    /// [`ContractPrompt::with_detail`] (the Build tab shows the exact
+    /// commands).
+    pub fn prompt(&self) -> ContractPrompt {
+        let detail = match self {
+            PendingAction::WriteSkill { body, .. } | PendingAction::WriteFile { body, .. } => {
+                Some(cap_preview(body, PROMPT_DETAIL_MAX))
+            }
+            PendingAction::RunShell { command } => {
+                Some(format!("$ {}", cap_preview(command, PROMPT_DETAIL_MAX)))
+            }
+            _ => None,
+        };
+        ContractPrompt {
+            kind: self.kind(),
+            title: self.title(),
+            summary: self.summary(),
+            target: self.target_path().map(|p| p.display().to_string()),
+            detail,
+        }
+    }
+
     /// Performs the action's IO and returns the written path (for writes) and
     /// any textual output (for reads and shell). The caller must have already
     /// vetted the path/command against the allowlist.
@@ -193,6 +235,76 @@ impl PendingAction {
             }
         }
     }
+}
+
+/// Longest preview (bytes) a [`ContractPrompt`] carries for a body / command.
+pub const PROMPT_DETAIL_MAX: usize = 1200;
+
+/// `text` cut to at most `max` bytes on a char boundary, with a note of how
+/// much was left out.
+fn cap_preview(text: &str, max: usize) -> String {
+    if text.len() <= max {
+        return text.to_string();
+    }
+    let mut end = max;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}\n…[{} more bytes]", &text[..end], text.len() - end)
+}
+
+/// What the Yes/No popup shows for a [`PendingAction`] (see
+/// [`PendingAction::prompt`]). Plain text only, so any toolkit can draw it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractPrompt {
+    /// The audit tag ([`PendingAction::kind`]).
+    pub kind: &'static str,
+    /// Upper-case heading ([`PendingAction::title`]).
+    pub title: &'static str,
+    /// One-line description ([`PendingAction::summary`]).
+    pub summary: String,
+    /// The path the action touches, if any.
+    pub target: Option<String>,
+    /// What would be written / run, capped at [`PROMPT_DETAIL_MAX`].
+    pub detail: Option<String>,
+}
+
+impl ContractPrompt {
+    /// Replaces the preview (e.g. the Build tab's exact command list).
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        let d = detail.into();
+        self.detail = (!d.trim().is_empty()).then_some(d);
+        self
+    }
+}
+
+/// The human's answer to a Soul Contract prompt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Answer {
+    /// Run it (audits `CONFIRM`).
+    Yes,
+    /// Discard it (audits `DENY`).
+    No,
+}
+
+impl Answer {
+    /// `true` → [`Answer::Yes`].
+    pub fn from_yes(yes: bool) -> Self {
+        if yes {
+            Answer::Yes
+        } else {
+            Answer::No
+        }
+    }
+}
+
+/// How an answered request ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Verdict {
+    /// Yes: the action ran (and was audited `CONFIRM`).
+    Confirmed(Confirmed),
+    /// No: the action was discarded (and audited `DENY`).
+    Denied(PendingAction),
 }
 
 /// Opaque id for a filed request.
@@ -324,6 +436,15 @@ impl SoulContract {
         Ok(action)
     }
 
+    /// Answers the popup: [`Answer::Yes`] is [`confirm`](Self::confirm),
+    /// [`Answer::No`] is [`deny`](Self::deny). There is no third path.
+    pub fn answer(&mut self, id: RequestId, answer: Answer) -> Result<Verdict, ContractError> {
+        match answer {
+            Answer::Yes => self.confirm(id).map(Verdict::Confirmed),
+            Answer::No => self.deny(id).map(Verdict::Denied),
+        }
+    }
+
     /// Appends `<rfc3339>\t<decision>\t<kind>\t<path>` to the audit log.
     /// A logging failure is reported but never blocks the decision.
     fn audit(&self, decision: &str, action: &PendingAction) {
@@ -341,6 +462,19 @@ impl SoulContract {
             );
         }
     }
+}
+
+/// One-shot gate for a UI that held `action` behind the popup: files it with
+/// a contract bound to `audit_log` and answers it straight away. Yes runs it
+/// and audits `CONFIRM`; No discards it and audits `DENY`.
+pub fn decide(
+    audit_log: Option<PathBuf>,
+    action: PendingAction,
+    answer: Answer,
+) -> Result<Verdict, ContractError> {
+    let mut sc = SoulContract::new(audit_log);
+    let id = sc.request(action);
+    sc.answer(id, answer)
 }
 
 /// Atomic file write: `path.tmp` then rename, creating the parent directory.
@@ -787,6 +921,133 @@ mod tests {
         let audit = std::fs::read_to_string(&log).unwrap();
         assert!(audit.contains("CONFIRM\tscaffold_project\t"), "{audit}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn answer_routes_yes_to_confirm_and_no_to_deny() {
+        let dir = tmpdir("answer");
+        let log = dir.join("audit.log");
+        let yes_path = dir.join("yes.txt");
+        let no_path = dir.join("no.txt");
+        let mut sc = SoulContract::new(Some(log.clone())).with_clock(fixed(0));
+        let y = sc.request(PendingAction::WriteFile {
+            path: yes_path.clone(),
+            body: "y".into(),
+        });
+        let n = sc.request(PendingAction::WriteFile {
+            path: no_path.clone(),
+            body: "n".into(),
+        });
+        assert!(!yes_path.exists() && !no_path.exists());
+        match sc.answer(n, Answer::No).unwrap() {
+            Verdict::Denied(a) => assert_eq!(a.kind(), "write_file"),
+            v => panic!("{v:?}"),
+        }
+        assert!(!no_path.exists(), "No must not write");
+        match sc.answer(y, Answer::Yes).unwrap() {
+            Verdict::Confirmed(c) => assert_eq!(c.path.as_deref(), Some(yes_path.as_path())),
+            v => panic!("{v:?}"),
+        }
+        assert_eq!(std::fs::read_to_string(&yes_path).unwrap(), "y");
+        let audit = std::fs::read_to_string(&log).unwrap();
+        let lines: Vec<&str> = audit.lines().collect();
+        assert_eq!(lines.len(), 2, "{audit}");
+        assert!(lines[0].contains("\tDENY\twrite_file\t"), "{audit}");
+        assert!(lines[1].contains("\tCONFIRM\twrite_file\t"), "{audit}");
+        // Answered ids are gone: a second answer is refused.
+        assert!(matches!(
+            sc.answer(y, Answer::Yes),
+            Err(ContractError::Unknown(_))
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn decide_is_a_one_shot_gate() {
+        let dir = tmpdir("decide");
+        let log = dir.join("audit.log");
+        let action = PendingAction::RunShell {
+            command: "echo popup".into(),
+        };
+        let v = decide(Some(log.clone()), action.clone(), Answer::No).unwrap();
+        assert_eq!(v, Verdict::Denied(action.clone()));
+        let v = decide(Some(log.clone()), action, Answer::Yes).unwrap();
+        match v {
+            Verdict::Confirmed(c) => assert!(c.output.unwrap().contains("popup")),
+            v => panic!("{v:?}"),
+        }
+        let audit = std::fs::read_to_string(&log).unwrap();
+        assert!(audit.contains("DENY\trun_shell"), "{audit}");
+        assert!(audit.contains("CONFIRM\trun_shell"), "{audit}");
+        assert_eq!(Answer::from_yes(true), Answer::Yes);
+        assert_eq!(Answer::from_yes(false), Answer::No);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn prompt_describes_every_gated_action() {
+        use crate::build::Language;
+        let w = PendingAction::WriteFile {
+            path: PathBuf::from("/tmp/x/notes.txt"),
+            body: "hello".into(),
+        }
+        .prompt();
+        assert_eq!((w.kind, w.title), ("write_file", "WRITE FILE"));
+        assert_eq!(w.target.as_deref(), Some("/tmp/x/notes.txt"));
+        assert_eq!(w.detail.as_deref(), Some("hello"));
+        let s = PendingAction::RunShell {
+            command: "ls -la".into(),
+        }
+        .prompt();
+        assert_eq!(s.title, "RUN SHELL");
+        assert_eq!(s.target, None);
+        assert_eq!(s.detail.as_deref(), Some("$ ls -la"));
+        let k = PendingAction::WriteSkill {
+            path: PathBuf::from("/tmp/skills/greet.md"),
+            body: "# Greet".into(),
+        }
+        .prompt();
+        assert_eq!(k.title, "WRITE SKILL");
+        let b = PendingAction::BuildProject {
+            dir: PathBuf::from("/tmp/builds/demo"),
+            language: Language::Rust,
+        }
+        .prompt();
+        assert_eq!(b.title, "BUILD PROJECT");
+        assert!(b.detail.is_none());
+        let b = b.with_detail("cargo build --offline");
+        assert_eq!(b.detail.as_deref(), Some("cargo build --offline"));
+        assert!(b.clone().with_detail("  ").detail.is_none());
+        for a in [
+            PendingAction::ScaffoldProject {
+                dir: PathBuf::from("/tmp/builds/demo"),
+                language: Language::Python,
+                template: "script".into(),
+            },
+            PendingAction::RunProject {
+                dir: PathBuf::from("/tmp/builds/demo"),
+                language: Language::Fish,
+            },
+        ] {
+            let p = a.prompt();
+            assert!(a.needs_confirmation());
+            assert!(p.title.ends_with("PROJECT"), "{}", p.title);
+            assert_eq!(p.summary, a.summary());
+        }
+    }
+
+    #[test]
+    fn prompt_detail_is_capped_on_a_char_boundary() {
+        let body = "é".repeat(PROMPT_DETAIL_MAX); // 2 bytes each
+        let p = PendingAction::WriteFile {
+            path: PathBuf::from("/tmp/big.txt"),
+            body: body.clone(),
+        }
+        .prompt();
+        let d = p.detail.unwrap();
+        assert!(d.len() < body.len());
+        assert!(d.contains("more bytes]"), "{}", &d[d.len() - 30..]);
+        assert_eq!(cap_preview("short", 10), "short");
     }
 
     #[test]

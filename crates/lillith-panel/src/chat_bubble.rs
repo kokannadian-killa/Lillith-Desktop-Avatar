@@ -7,6 +7,15 @@
 //! one-line input (Enter sends), streams her reply as it arrives, and closes
 //! on `Esc` or as soon as it loses focus (a click anywhere outside it).
 //!
+//! When she proposes a gated action (skill write, file write/edit, shell),
+//! the shared Soul Contract popup ([`lillith_theme::egui_contract`]) takes
+//! over the bubble: **Yes** runs it through
+//! [`lillith_core::soul_contract::SoulContract::confirm`] (audited `CONFIRM`),
+//! **No** or `Esc` discards it (audited `DENY`). While it is up the chat
+//! input is disabled and the bubble stays open on focus loss, so the answer
+//! is never skipped by accident. `/contract yes|no` still works as a typed
+//! alias.
+//!
 //! The model call runs on a worker thread (its own tokio runtime) through
 //! [`lillith_mind::chat::ChatSession`]. Every step is also reported through
 //! [`BubbleOptions::emit`] (`chat.start`, `chat.token`, `chat.end`, …) so
@@ -17,7 +26,7 @@
 
 use eframe::egui;
 use lillith_core::config::{ChatConfig, MindConfig};
-use lillith_core::soul_contract::PendingAction;
+use lillith_core::soul_contract::{ContractPrompt, PendingAction};
 use lillith_mind::chat::{ChatSession, Outcome};
 use lillith_mind::llm::Message;
 use std::path::PathBuf;
@@ -53,6 +62,9 @@ pub struct BubbleOptions {
     pub screenshot: Option<PathBuf>,
     /// Show a canned sample conversation instead of the history (previews).
     pub demo: bool,
+    /// Show a sample Soul Contract popup (previews only: answering it just
+    /// dismisses it; nothing is filed, run, or audited).
+    pub demo_contract: bool,
 }
 
 enum Req {
@@ -68,6 +80,8 @@ enum Ui {
     Done(Outcome),
     /// A system note to show in the bubble (e.g. a skill proposal/result).
     Note(String),
+    /// A gated action is waiting: raise the Soul Contract popup.
+    Contract(ContractPrompt),
 }
 
 /// Parses the bubble's Soul Contract answer: `/contract yes` (or `y`) →
@@ -109,10 +123,15 @@ struct Bubble {
     emit: Emit,
     screenshot: Option<PathBuf>,
     shot_requested: bool,
+    /// The Soul Contract popup currently up (a pending gated action).
+    contract: Option<ContractPrompt>,
+    /// The popup is the `--demo-contract` sample (answers aren't sent).
+    contract_demo: bool,
 }
 
 // lillith-theme's hellforge bubble look (DemonOS palette).
 use lillith_theme::bubble::{self as look, BG, CRIMSON, EMBER, HER_TEXT, ME_TEXT, NEON};
+use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView};
 use lillith_theme::egui_theme as th;
 use lillith_theme::palette as pal;
 
@@ -125,6 +144,16 @@ pub fn emblem(ui: &mut egui::Ui, flicker: f32) -> egui::Response {
         ui.allocate_exact_size(egui::vec2(EMBLEM_PX, EMBLEM_PX), egui::Sense::hover());
     th::hellforge_emblem(ui.painter(), rect.center(), EMBLEM_PX, flicker);
     resp
+}
+
+/// The sample Soul Contract for previews (`--demo-contract`).
+pub fn demo_contract() -> ContractPrompt {
+    PendingAction::WriteFile {
+        path: PathBuf::from("~/lillith/projects/hellforge/src/main.rs"),
+        body: "fn main() {\n    let souls = 666;\n    println!(\"the forge burns with {souls} souls\");\n}\n"
+            .into(),
+    }
+    .prompt()
 }
 
 /// A canned exchange for previews (`--demo`).
@@ -196,8 +225,11 @@ fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Recei
                             pending = Some(action);
                             emit("chat.contract_proposed", Some(&summary));
                             let _ = ui_tx.send(Ui::Note(format!(
-                                "📜 Soul Contract: she wants to {summary}. Type /contract yes to allow, /contract no to discard."
+                                "📜 Soul Contract: she wants to {summary}. Sign or refuse it (or type /contract yes|no)."
                             )));
+                            if let Some(action) = &pending {
+                                let _ = ui_tx.send(Ui::Contract(action.prompt()));
+                            }
                         } else if let Some(out) = session.last_tool_output() {
                             // A read ran (no popup) or a tool was refused.
                             let _ = ui_tx.send(Ui::Note(format!("🔎 {out}")));
@@ -277,7 +309,7 @@ impl Bubble {
             let _ = self.tx.send(Req::Clear);
         } else if let Some(yes) = parse_confirm_command(&text) {
             // Soul Contract answer: nothing runs unless this is a yes.
-            let _ = self.tx.send(Req::Confirm(yes));
+            self.answer_contract(yes);
         } else {
             self.lines.push(Line {
                 me: true,
@@ -305,7 +337,46 @@ impl Bubble {
                     });
                 }
                 Ui::Note(text) => self.lines.push(Line { me: false, text }),
+                Ui::Contract(prompt) => {
+                    self.contract = Some(prompt);
+                    self.contract_demo = false;
+                }
             }
+        }
+    }
+
+    /// Answers the Soul Contract (popup or typed alias) and takes the popup
+    /// down. The worker does the gating: Yes → `confirm` (`CONFIRM`), No →
+    /// `deny` (`DENY`); with nothing pending it only says so.
+    fn answer_contract(&mut self, yes: bool) {
+        let demo = std::mem::take(&mut self.contract_demo);
+        self.contract = None;
+        if demo {
+            self.lines.push(Line {
+                me: false,
+                text: "(preview contract: nothing was filed or run)".into(),
+            });
+        } else {
+            let _ = self.tx.send(Req::Confirm(yes));
+        }
+    }
+
+    /// Draws the Soul Contract popup if one is pending; routes its answer.
+    fn contract_popup(&mut self, ctx: &egui::Context) {
+        let Some(p) = &self.contract else {
+            return;
+        };
+        let view = ContractView {
+            title: p.title,
+            summary: &p.summary,
+            target: p.target.as_deref(),
+            detail: p.detail.as_deref(),
+            busy: false,
+        };
+        if let Some(choice) =
+            soul_contract_popup(ctx, egui::Id::new("lillith-soul-contract"), &view)
+        {
+            self.answer_contract(choice == ContractChoice::Yes);
         }
     }
 
@@ -348,14 +419,16 @@ impl eframe::App for Bubble {
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
         self.drain();
-        // Esc, or a click outside (focus lost) closes the bubble.
+        // Esc, or a click outside (focus lost) closes the bubble, unless a
+        // Soul Contract is up: then Esc means No (the popup handles it) and
+        // the bubble waits for an answer.
         let (esc, focused) =
             ctx.input(|i| (i.key_pressed(egui::Key::Escape), i.viewport().focused));
         if focused == Some(true) {
             self.had_focus = true;
         }
         let lost = self.had_focus && focused == Some(false) && self.opened.elapsed() > FOCUS_GRACE;
-        if self.screenshot.is_none() && (esc || lost) {
+        if self.screenshot.is_none() && self.contract.is_none() && (esc || lost) {
             self.close(ctx);
         }
 
@@ -447,11 +520,12 @@ impl eframe::App for Bubble {
                         .hint_text("Speak, mortal…")
                         .desired_width(f32::INFINITY)
                         .margin(egui::Margin::symmetric(8, 6));
-                    let resp = ui.add_enabled(self.streaming.is_none(), edit);
-                    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    let free = self.streaming.is_none() && self.contract.is_none();
+                    let resp = ui.add_enabled(free, edit);
+                    if free && resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         self.send();
                         resp.request_focus();
-                    } else if !resp.has_focus() && self.streaming.is_none() && !self.closing {
+                    } else if !resp.has_focus() && free && !self.closing {
                         resp.request_focus();
                     }
                 });
@@ -464,6 +538,7 @@ impl eframe::App for Bubble {
                     3.0,
                 );
             });
+        self.contract_popup(ctx);
         self.screenshot(ctx);
     }
 
@@ -592,6 +667,8 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
                 emit: opts.emit.clone(),
                 screenshot: opts.screenshot.clone(),
                 shot_requested: false,
+                contract: opts.demo_contract.then(demo_contract),
+                contract_demo: opts.demo_contract,
             }))
         }),
     )
@@ -619,6 +696,88 @@ mod tests {
         assert_eq!(parse_confirm_command("/skill yes please"), None);
         assert_eq!(parse_confirm_command("contract yes"), None);
         assert_eq!(parse_confirm_command("yes"), None);
+    }
+
+    fn test_bubble(contract: Option<ContractPrompt>, demo: bool) -> (Bubble, Receiver<Req>) {
+        let (tx, req_rx) = channel();
+        let (_ui_tx, rx) = channel();
+        let b = Bubble {
+            lines: Vec::new(),
+            streaming: None,
+            input: String::new(),
+            tx,
+            rx,
+            opened: Instant::now(),
+            had_focus: false,
+            closing: false,
+            asked_focus: true,
+            emit: Arc::new(|_, _| {}),
+            screenshot: None,
+            shot_requested: false,
+            contract,
+            contract_demo: demo,
+        };
+        (b, req_rx)
+    }
+
+    fn popup_frame(ctx: &egui::Context, b: &mut Bubble, events: Vec<egui::Event>) {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(BUBBLE_SIZE.0, BUBBLE_SIZE.1),
+            )),
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| b.contract_popup(ctx));
+    }
+
+    fn esc() -> egui::Event {
+        egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    #[test]
+    fn escape_on_contract_popup_sends_no() {
+        let (mut b, req_rx) = test_bubble(Some(demo_contract()), false);
+        let ctx = egui::Context::default();
+        ctx.set_fonts(bubble_fonts());
+        for _ in 0..3 {
+            popup_frame(&ctx, &mut b, vec![]);
+        }
+        assert!(req_rx.try_recv().is_err(), "nothing answered yet");
+        popup_frame(&ctx, &mut b, vec![esc()]);
+        assert!(b.contract.is_none());
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Confirm(false))));
+        assert!(
+            !b.closing,
+            "Esc answers the contract; it doesn't close the bubble"
+        );
+    }
+
+    #[test]
+    fn typed_alias_answers_and_drops_the_popup() {
+        let (mut b, req_rx) = test_bubble(Some(demo_contract()), false);
+        b.input = "/contract yes".into();
+        b.send();
+        assert!(b.contract.is_none());
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Confirm(true))));
+    }
+
+    #[test]
+    fn demo_contract_never_reaches_the_worker() {
+        let (mut b, req_rx) = test_bubble(Some(demo_contract()), true);
+        b.answer_contract(true);
+        assert!(b.contract.is_none());
+        assert!(req_rx.try_recv().is_err(), "preview answers aren't sent");
+        let p = demo_contract();
+        assert_eq!(p.kind, "write_file");
+        assert!(p.detail.is_some());
     }
 
     #[test]

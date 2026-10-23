@@ -165,6 +165,10 @@ enum Cmd {
         /// Show a sample conversation instead of the history (previews).
         #[arg(long)]
         demo: bool,
+        /// Show a sample Soul Contract popup (previews; answering it only
+        /// dismisses it, nothing runs).
+        #[arg(long)]
+        demo_contract: bool,
     },
 }
 
@@ -289,6 +293,7 @@ async fn main() -> Result<()> {
             offline,
             ref screenshot,
             demo,
+            demo_contract,
         }) => {
             let full = load_config(&cli).0;
             let pos = x.zip(y);
@@ -299,6 +304,7 @@ async fn main() -> Result<()> {
                 offline || cli.no_llm,
                 screenshot.clone(),
                 demo,
+                demo_contract,
             )?;
         }
         None => run_overlay(&cli, rules.rules.len()).await?,
