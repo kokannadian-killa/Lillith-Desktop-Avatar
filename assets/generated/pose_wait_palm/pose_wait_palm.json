@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "pose_wait_palm_sheet.png",
   "frames_dir": "frames/",
-  "fps": 12.0,
+  "fps": 10.0,
   "loop": true,
   "baseline_y": 392,
   "anchor": [
@@ -103,7 +103,7 @@
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
-      127,
+      128,
       274,
       20,
       392
@@ -133,7 +133,7 @@
       392
     ],
     [
-      127,
+      128,
       274,
       35,
       392
@@ -169,7 +169,7 @@
       392
     ],
     [
-      123,
+      124,
       275,
       19,
       392
@@ -181,19 +181,19 @@
       392
     ],
     [
-      133,
+      134,
       274,
       19,
       392
     ],
     [
-      123,
+      124,
       275,
       20,
       392
     ],
     [
-      119,
+      120,
       276,
       20,
       392
@@ -201,7 +201,7 @@
     [
       132,
       277,
-      25,
+      26,
       392
     ],
     [
@@ -225,11 +225,11 @@
     [
       128,
       274,
-      33,
+      34,
       392
     ],
     [
-      123,
+      124,
       277,
       26,
       392
@@ -256,14 +256,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 24,
-    "fps": 12.0,
-    "bytes": 277408,
+    "fps": 10.0,
+    "bytes": 310827,
     "quality": {
-      "edge_mae": 2.298,
-      "edge_p99": 17.0,
-      "halo_dark": 0.063,
-      "halo_light": -0.141,
-      "alpha_mae": 0.0658
+      "edge_mae": 2.248,
+      "edge_p99": 16.05,
+      "halo_dark": 0.051,
+      "halo_light": -0.129,
+      "alpha_mae": 0.0623
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

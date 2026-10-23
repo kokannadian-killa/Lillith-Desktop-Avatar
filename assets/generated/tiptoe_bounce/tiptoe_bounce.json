@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "tiptoe_bounce_sheet.png",
   "frames_dir": "frames/",
-  "fps": 12.0,
+  "fps": 8.0,
   "loop": true,
   "baseline_y": 392,
   "anchor": [
@@ -75,7 +75,7 @@
     [
       142,
       270,
-      38,
+      39,
       392
     ],
     [
@@ -104,7 +104,7 @@
     ],
     [
       135,
-      271,
+      270,
       24,
       387
     ],
@@ -136,14 +136,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 9,
-    "fps": 12.0,
-    "bytes": 121525,
+    "fps": 8.0,
+    "bytes": 140029,
     "quality": {
-      "edge_mae": 2.338,
-      "edge_p99": 17.91,
-      "halo_dark": 0.072,
-      "halo_light": -0.186,
-      "alpha_mae": 0.066
+      "edge_mae": 2.195,
+      "edge_p99": 16.65,
+      "halo_dark": 0.058,
+      "halo_light": -0.152,
+      "alpha_mae": 0.0559
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

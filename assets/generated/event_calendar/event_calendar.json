@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_calendar_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -154,13 +154,13 @@
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
-      155,
+      154,
       324,
-      23,
+      22,
       392
     ],
     [
-      157,
+      158,
       320,
       20,
       392
@@ -172,7 +172,7 @@
       392
     ],
     [
-      153,
+      152,
       316,
       20,
       392
@@ -190,7 +190,7 @@
       392
     ],
     [
-      154,
+      155,
       323,
       21,
       392
@@ -223,14 +223,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 10.0,
-    "bytes": 129944,
+    "fps": 8.0,
+    "bytes": 144647,
     "quality": {
-      "edge_mae": 2.363,
-      "edge_p99": 16.15,
-      "halo_dark": 0.086,
-      "halo_light": -0.168,
-      "alpha_mae": 0.0768
+      "edge_mae": 2.336,
+      "edge_p99": 17.0,
+      "halo_dark": 0.066,
+      "halo_light": -0.144,
+      "alpha_mae": 0.0707
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

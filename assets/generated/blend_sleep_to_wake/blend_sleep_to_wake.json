@@ -71,19 +71,19 @@
       116,
       295,
       209,
-      389
+      388
     ],
     [
       111,
       296,
-      199,
-      390
+      201,
+      389
     ],
     [
       114,
       296,
-      198,
-      389
+      199,
+      388
     ],
     [
       114,
@@ -102,13 +102,13 @@
     "height": 400,
     "frame_count": 5,
     "fps": 8.0,
-    "bytes": 45288,
+    "bytes": 47574,
     "quality": {
-      "edge_mae": 2.4,
-      "edge_p99": 19.0,
-      "halo_dark": 0.062,
-      "halo_light": -0.163,
-      "alpha_mae": 0.0348
+      "edge_mae": 2.401,
+      "edge_p99": 18.6,
+      "halo_dark": 0.045,
+      "halo_light": -0.136,
+      "alpha_mae": 0.0343
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

@@ -73,8 +73,8 @@
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
-      127,
-      255,
+      151,
+      254,
       18,
       392
     ],
@@ -115,13 +115,13 @@
       392
     ],
     [
-      111,
-      261,
+      112,
+      260,
       17,
       392
     ],
     [
-      127,
+      149,
       251,
       17,
       392
@@ -137,13 +137,13 @@
     "height": 400,
     "frame_count": 9,
     "fps": 12.0,
-    "bytes": 115014,
+    "bytes": 120630,
     "quality": {
-      "edge_mae": 2.462,
-      "edge_p99": 16.6,
-      "halo_dark": 0.051,
-      "halo_light": -0.218,
-      "alpha_mae": 0.0792
+      "edge_mae": 2.512,
+      "edge_p99": 17.78,
+      "halo_dark": 0.047,
+      "halo_light": -0.205,
+      "alpha_mae": 0.0797
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

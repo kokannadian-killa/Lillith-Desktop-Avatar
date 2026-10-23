@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_brightness_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -155,62 +155,62 @@
   "bbox_per_frame": [
     [
       127,
-      315,
+      318,
       24,
       392
     ],
     [
       127,
-      316,
+      319,
       19,
       391
     ],
     [
-      129,
-      317,
+      128,
+      320,
       18,
       389
     ],
     [
       131,
-      326,
-      25,
+      334,
+      18,
       391
     ],
     [
       132,
-      338,
-      18,
+      347,
+      8,
       392
     ],
     [
       131,
-      342,
-      11,
+      354,
+      7,
       392
     ],
     [
       128,
-      342,
-      6,
+      354,
+      1,
       391
     ],
     [
       127,
-      343,
-      2,
+      354,
+      0,
       388
     ],
     [
       127,
-      343,
-      3,
+      354,
+      0,
       389
     ],
     [
       127,
-      343,
-      4,
+      354,
+      0,
       392
     ]
   ],
@@ -223,14 +223,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 10.0,
-    "bytes": 163362,
+    "fps": 8.0,
+    "bytes": 180807,
     "quality": {
-      "edge_mae": 1.911,
-      "edge_p99": 16.0,
-      "halo_dark": 0.036,
-      "halo_light": -0.061,
-      "alpha_mae": 0.1275
+      "edge_mae": 1.905,
+      "edge_p99": 17.0,
+      "halo_dark": 0.032,
+      "halo_light": -0.062,
+      "alpha_mae": 0.1114
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

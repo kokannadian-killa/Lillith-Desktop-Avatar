@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_wifi_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -155,43 +155,43 @@
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
-      155,
-      310,
-      23,
-      392
-    ],
-    [
-      157,
-      306,
-      20,
-      392
-    ],
-    [
-      153,
+      154,
       310,
       22,
       392
     ],
     [
+      158,
+      307,
+      20,
+      392
+    ],
+    [
       153,
-      310,
+      312,
+      22,
+      392
+    ],
+    [
+      152,
+      312,
       20,
       392
     ],
     [
       143,
-      320,
+      321,
       22,
       392
     ],
     [
       151,
-      323,
+      325,
       24,
       392
     ],
     [
-      154,
+      155,
       324,
       21,
       392
@@ -204,13 +204,13 @@
     ],
     [
       151,
-      327,
+      328,
       22,
       392
     ],
     [
       152,
-      327,
+      328,
       20,
       392
     ]
@@ -224,14 +224,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 10.0,
-    "bytes": 131558,
+    "fps": 8.0,
+    "bytes": 146493,
     "quality": {
-      "edge_mae": 2.37,
+      "edge_mae": 2.32,
       "edge_p99": 17.0,
-      "halo_dark": 0.083,
-      "halo_light": -0.174,
-      "alpha_mae": 0.0782
+      "halo_dark": 0.048,
+      "halo_light": -0.149,
+      "alpha_mae": 0.0726
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

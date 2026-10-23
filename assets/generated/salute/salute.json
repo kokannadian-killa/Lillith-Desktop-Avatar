@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "salute_sheet.png",
   "frames_dir": "frames/",
-  "fps": 12.0,
+  "fps": 8.0,
   "loop": true,
   "baseline_y": 392,
   "anchor": [
@@ -77,14 +77,14 @@
     [
       127,
       273,
-      23,
+      24,
       392
     ],
     [
       127,
       272,
       19,
-      392
+      391
     ],
     [
       128,
@@ -93,10 +93,10 @@
       389
     ],
     [
-      130,
-      267,
+      131,
+      266,
       24,
-      392
+      391
     ],
     [
       132,
@@ -144,14 +144,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 12.0,
-    "bytes": 133163,
+    "fps": 8.0,
+    "bytes": 153946,
     "quality": {
-      "edge_mae": 2.47,
-      "edge_p99": 17.87,
-      "halo_dark": 0.077,
-      "halo_light": -0.214,
-      "alpha_mae": 0.0786
+      "edge_mae": 2.272,
+      "edge_p99": 17.0,
+      "halo_dark": 0.052,
+      "halo_light": -0.15,
+      "alpha_mae": 0.0655
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

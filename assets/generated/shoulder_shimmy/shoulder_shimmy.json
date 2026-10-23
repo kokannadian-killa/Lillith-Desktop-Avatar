@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "shoulder_shimmy_sheet.png",
   "frames_dir": "frames/",
-  "fps": 12.0,
+  "fps": 8.0,
   "loop": true,
   "baseline_y": 392,
   "anchor": [
@@ -102,18 +102,18 @@
   "bbox_per_frame": [
     [
       119,
-      294,
+      292,
       21,
       392
     ],
     [
       121,
-      291,
+      289,
       21,
       392
     ],
     [
-      125,
+      126,
       296,
       21,
       392
@@ -133,7 +133,7 @@
     [
       131,
       311,
-      23,
+      24,
       392
     ],
     [
@@ -248,14 +248,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 23,
-    "fps": 12.0,
-    "bytes": 319067,
+    "fps": 8.0,
+    "bytes": 373621,
     "quality": {
-      "edge_mae": 2.476,
-      "edge_p99": 17.0,
-      "halo_dark": 0.073,
-      "halo_light": -0.203,
-      "alpha_mae": 0.0872
+      "edge_mae": 2.286,
+      "edge_p99": 16.56,
+      "halo_dark": 0.05,
+      "halo_light": -0.152,
+      "alpha_mae": 0.0738
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

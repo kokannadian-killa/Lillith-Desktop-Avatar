@@ -2,7 +2,7 @@
 
 [clips.arch_back_over_shoulder]
 page = "arch_back_over_shoulder/arch_back_over_shoulder_sheet.png"
-fps = 12.0
+fps = 11.5
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -3271,7 +3271,7 @@ anchor = [200, 392]
 
 [clips.blend_idle_to_knife_tap]
 page = "blend_idle_to_knife_tap/blend_idle_to_knife_tap_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.538
@@ -3328,7 +3328,7 @@ anchor = [200, 392]
 
 [clips.blend_idle_to_sit_swing]
 page = "blend_idle_to_sit_swing/blend_idle_to_sit_swing_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.52
@@ -3385,7 +3385,7 @@ anchor = [200, 392]
 
 [clips.blend_idle_to_walk_left]
 page = "blend_idle_to_walk_left/blend_idle_to_walk_left_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -3443,7 +3443,7 @@ anchor = [200, 392]
 
 [clips.blend_idle_to_walk_right]
 page = "blend_idle_to_walk_right/blend_idle_to_walk_right_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -3501,7 +3501,7 @@ anchor = [200, 392]
 
 [clips.blend_idle_to_wave]
 page = "blend_idle_to_wave/blend_idle_to_wave_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.535
@@ -3544,7 +3544,7 @@ anchor = [200, 392]
 
 [clips.blend_knife_tap_to_idle]
 page = "blend_knife_tap_to_idle/blend_knife_tap_to_idle_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.538
@@ -3601,7 +3601,7 @@ anchor = [200, 392]
 
 [clips.blend_sit_swing_to_idle]
 page = "blend_sit_swing_to_idle/blend_sit_swing_to_idle_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.52
@@ -3765,7 +3765,7 @@ anchor = [200, 392]
 
 [clips.blend_walk_left_to_idle]
 page = "blend_walk_left_to_idle/blend_walk_left_to_idle_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -3823,7 +3823,7 @@ anchor = [200, 392]
 
 [clips.blend_walk_right_to_idle]
 page = "blend_walk_right_to_idle/blend_walk_right_to_idle_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -3881,7 +3881,7 @@ anchor = [200, 392]
 
 [clips.blend_wave_to_idle]
 page = "blend_wave_to_idle/blend_wave_to_idle_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.535
@@ -8047,7 +8047,7 @@ anchor = [200, 392]
 
 [clips.dance]
 page = "dance/dance_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -8392,7 +8392,7 @@ anchor = [200, 392]
 
 [clips.drag_held]
 page = "drag_held/drag_held_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -8540,7 +8540,7 @@ anchor = [200, 392]
 
 [clips.event_approval_needed]
 page = "event_approval_needed/event_approval_needed_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -8720,7 +8720,7 @@ anchor = [200, 392]
 
 [clips.event_battery_low]
 page = "event_battery_low/event_battery_low_sheet.png"
-fps = 10.0
+fps = 8.5
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -8823,7 +8823,7 @@ anchor = [200, 392]
 
 [clips.event_bluetooth]
 page = "event_bluetooth/event_bluetooth_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.533
@@ -8912,7 +8912,7 @@ anchor = [200, 392]
 
 [clips.event_brightness]
 page = "event_brightness/event_brightness_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -9001,7 +9001,7 @@ anchor = [200, 392]
 
 [clips.event_browser_bookmark]
 page = "event_browser_bookmark/event_browser_bookmark_sheet.png"
-fps = 10.0
+fps = 8.5
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -9090,7 +9090,7 @@ anchor = [200, 392]
 
 [clips.event_browser_history]
 page = "event_browser_history/event_browser_history_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -9179,7 +9179,7 @@ anchor = [200, 392]
 
 [clips.event_calendar]
 page = "event_calendar/event_calendar_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.528
@@ -9268,7 +9268,7 @@ anchor = [200, 392]
 
 [clips.event_clipboard]
 page = "event_clipboard/event_clipboard_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.533
@@ -9357,7 +9357,7 @@ anchor = [200, 392]
 
 [clips.event_clipboard_cut]
 page = "event_clipboard_cut/event_clipboard_cut_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -9448,7 +9448,7 @@ anchor = [200, 392]
 
 [clips.event_cloud_sync]
 page = "event_cloud_sync/event_cloud_sync_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -9626,7 +9626,7 @@ anchor = [200, 392]
 
 [clips.event_diagnostics]
 page = "event_diagnostics/event_diagnostics_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.533
@@ -9804,7 +9804,7 @@ anchor = [200, 392]
 
 [clips.event_firewall_block]
 page = "event_firewall_block/event_firewall_block_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.533
@@ -9893,7 +9893,7 @@ anchor = [200, 392]
 
 [clips.event_help]
 page = "event_help/event_help_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.528
@@ -10162,7 +10162,7 @@ anchor = [200, 392]
 
 [clips.event_input_click_double]
 page = "event_input_click_double/event_input_click_double_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.535
@@ -10253,7 +10253,7 @@ anchor = [200, 392]
 
 [clips.event_input_click_right]
 page = "event_input_click_right/event_input_click_right_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -10439,7 +10439,7 @@ anchor = [200, 392]
 
 [clips.event_loading]
 page = "event_loading/event_loading_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.528
@@ -10617,7 +10617,7 @@ anchor = [200, 392]
 
 [clips.event_notification]
 page = "event_notification/event_notification_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -10706,7 +10706,7 @@ anchor = [200, 392]
 
 [clips.event_printing]
 page = "event_printing/event_printing_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.528
@@ -10795,7 +10795,7 @@ anchor = [200, 392]
 
 [clips.event_ram_high]
 page = "event_ram_high/event_ram_high_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -10884,7 +10884,7 @@ anchor = [200, 392]
 
 [clips.event_recycle_bin]
 page = "event_recycle_bin/event_recycle_bin_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.533
@@ -10973,7 +10973,7 @@ anchor = [200, 392]
 
 [clips.event_screenshot]
 page = "event_screenshot/event_screenshot_sheet.png"
-fps = 10.0
+fps = 8.5
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -11062,7 +11062,7 @@ anchor = [200, 392]
 
 [clips.event_search_opened]
 page = "event_search_opened/event_search_opened_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.528
@@ -11151,7 +11151,7 @@ anchor = [200, 392]
 
 [clips.event_start_menu_opened]
 page = "event_start_menu_opened/event_start_menu_opened_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -11244,7 +11244,7 @@ anchor = [200, 392]
 
 [clips.event_timer_fired]
 page = "event_timer_fired/event_timer_fired_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.533
@@ -11426,7 +11426,7 @@ anchor = [200, 392]
 
 [clips.event_usb_added]
 page = "event_usb_added/event_usb_added_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -11517,7 +11517,7 @@ anchor = [200, 392]
 
 [clips.event_usb_eject]
 page = "event_usb_eject/event_usb_eject_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -11606,7 +11606,7 @@ anchor = [200, 392]
 
 [clips.event_volume]
 page = "event_volume/event_volume_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.533
@@ -11695,7 +11695,7 @@ anchor = [200, 392]
 
 [clips.event_vpn_up]
 page = "event_vpn_up/event_vpn_up_sheet.png"
-fps = 10.0
+fps = 8.5
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -11786,7 +11786,7 @@ anchor = [200, 392]
 
 [clips.event_wifi]
 page = "event_wifi/event_wifi_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.528
@@ -11875,7 +11875,7 @@ anchor = [200, 392]
 
 [clips.event_window_close]
 page = "event_window_close/event_window_close_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -11964,7 +11964,7 @@ anchor = [200, 392]
 
 [clips.event_window_minimize]
 page = "event_window_minimize/event_window_minimize_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -12053,7 +12053,7 @@ anchor = [200, 392]
 
 [clips.event_window_open]
 page = "event_window_open/event_window_open_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.535
@@ -12156,7 +12156,7 @@ anchor = [200, 392]
 
 [clips.event_window_opened_browser]
 page = "event_window_opened_browser/event_window_opened_browser_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -12338,7 +12338,7 @@ anchor = [200, 392]
 
 [clips.event_window_opened_media]
 page = "event_window_opened_media/event_window_opened_media_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -12429,7 +12429,7 @@ anchor = [200, 392]
 
 [clips.event_window_opened_terminal]
 page = "event_window_opened_terminal/event_window_opened_terminal_sheet.png"
-fps = 10.0
+fps = 8.0
 mode = "once"
 baseline_y = 392
 scale = 0.53
@@ -12615,9 +12615,9 @@ anchor = [200, 392]
 
 [clips.finger_wag_tease]
 page = "lean_tease/lean_tease_sheet.png"
-fps = 12.0
+fps = 9.920000076293945
 mode = "once"
-frame_durations_ms = [67, 67, 67, 67, 67, 67, 179, 179, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 141, 141, 420]
+frame_durations_ms = [81, 81, 81, 81, 81, 81, 217, 217, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 171, 171, 508]
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:3/4 front", "baked_motion", "allure"]
@@ -12971,7 +12971,7 @@ anchor = [200, 392]
 
 [clips.hair_lift_stretch]
 page = "hair_lift_stretch/hair_lift_stretch_sheet.png"
-fps = 12.0
+fps = 11.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -15323,7 +15323,7 @@ anchor = [200, 392]
 
 [clips.hip_sway]
 page = "hip_sway/hip_sway_sheet.png"
-fps = 12.0
+fps = 9.5
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -15493,7 +15493,7 @@ anchor = [200, 392]
 
 [clips.idle]
 page = "idle_a/idle_a_sheet.png"
-fps = 12.0
+fps = 11.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -16006,7 +16006,7 @@ anchor = [200, 392]
 
 [clips.idle_a]
 page = "idle_a/idle_a_sheet.png"
-fps = 12.0
+fps = 11.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -16519,7 +16519,7 @@ anchor = [200, 392]
 
 [clips.idle_b]
 page = "idle_b/idle_b_sheet.png"
-fps = 12.0
+fps = 9.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -17118,7 +17118,7 @@ anchor = [200, 392]
 
 [clips.idle_flirt_foot_tap]
 page = "idle_flirt_foot_tap/idle_flirt_foot_tap_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -17794,7 +17794,7 @@ anchor = [200, 392]
 
 [clips.idle_flirt_hands_behind_sway]
 page = "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway_sheet.png"
-fps = 12.0
+fps = 10.5
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -20920,7 +20920,7 @@ anchor = [200, 392]
 
 [clips.idle_tail_fidget]
 page = "idle_tail_fidget/idle_tail_fidget_sheet.png"
-fps = 12.0
+fps = 11.5
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -21596,7 +21596,7 @@ anchor = [200, 392]
 
 [clips.kneel_hands_on_thighs]
 page = "kneel_hands_on_thighs/kneel_hands_on_thighs_sheet.png"
-fps = 12.0
+fps = 9.5
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -23135,7 +23135,7 @@ anchor = [200, 392]
 
 [clips.knife_tap]
 page = "knife_tap/knife_tap_sheet.png"
-fps = 12.0
+fps = 10.5
 mode = "loop"
 baseline_y = 392
 scale = 0.535
@@ -23412,9 +23412,9 @@ anchor = [200, 392]
 
 [clips.lean_tease]
 page = "lean_tease/lean_tease_sheet.png"
-fps = 12.0
+fps = 9.920000076293945
 mode = "once"
-frame_durations_ms = [67, 67, 67, 67, 67, 67, 179, 179, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 141, 141, 420]
+frame_durations_ms = [81, 81, 81, 81, 81, 81, 217, 217, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 171, 171, 508]
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:3/4 front", "baked_motion", "allure"]
@@ -23590,7 +23590,7 @@ anchor = [200, 392]
 
 [clips.nod]
 page = "nod/nod_sheet.png"
-fps = 12.0
+fps = 11.5
 mode = "once"
 baseline_y = 392
 scale = 0.54
@@ -24129,7 +24129,7 @@ anchor = [200, 392]
 
 [clips.point]
 page = "point/point_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.533
@@ -24208,7 +24208,7 @@ anchor = [200, 392]
 
 [clips.pose_clutch_head]
 page = "pose_clutch_head/pose_clutch_head_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -24385,7 +24385,7 @@ anchor = [200, 392]
 
 [clips.pose_hacking]
 page = "pose_hacking/pose_hacking_sheet.png"
-fps = 12.0
+fps = 11.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -24739,7 +24739,7 @@ anchor = [200, 392]
 
 [clips.pose_present]
 page = "pose_present/pose_present_sheet.png"
-fps = 12.0
+fps = 10.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -24916,7 +24916,7 @@ anchor = [200, 392]
 
 [clips.pose_shush]
 page = "pose_shush/pose_shush_sheet.png"
-fps = 12.0
+fps = 11.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -25093,7 +25093,7 @@ anchor = [200, 392]
 
 [clips.pose_vsign]
 page = "pose_vsign/pose_vsign_sheet.png"
-fps = 12.0
+fps = 9.5
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -25270,7 +25270,7 @@ anchor = [200, 392]
 
 [clips.pose_wait_palm]
 page = "pose_wait_palm/pose_wait_palm_sheet.png"
-fps = 12.0
+fps = 10.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -25607,7 +25607,7 @@ anchor = [231, 392]
 
 [clips.salute]
 page = "salute/salute_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -25686,7 +25686,7 @@ anchor = [200, 392]
 
 [clips.shoulder_roll]
 page = "shoulder_roll/shoulder_roll_sheet.png"
-fps = 12.0
+fps = 11.5
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -25856,7 +25856,7 @@ anchor = [200, 392]
 
 [clips.shoulder_shimmy]
 page = "shoulder_shimmy/shoulder_shimmy_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -26026,7 +26026,7 @@ anchor = [200, 392]
 
 [clips.shrug]
 page = "shrug/shrug_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.528
@@ -27137,7 +27137,7 @@ anchor = [200, 392]
 
 [clips.sit_heel_kick]
 page = "sit_heel_kick/sit_heel_kick_sheet.png"
-fps = 12.0
+fps = 10.0
 mode = "loop"
 baseline_y = 392
 scale = 0.5
@@ -27819,7 +27819,7 @@ anchor = [200, 392]
 
 [clips.sit_swing]
 page = "sit_swing/sit_swing_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.5
@@ -28092,7 +28092,7 @@ anchor = [200, 392]
 
 [clips.slow_turn_spin_tease]
 page = "slow_turn_spin_tease/slow_turn_spin_tease_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -29816,9 +29816,9 @@ anchor = [200, 392]
 
 [clips.stretch_arch]
 page = "stretch_arch/stretch_arch_sheet.png"
-fps = 12.0
+fps = 10.34000015258789
 mode = "once"
-frame_durations_ms = [64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 169, 169, 169, 133, 133, 64, 64, 64, 64, 64, 64, 64, 64, 143]
+frame_durations_ms = [74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 196, 196, 196, 154, 154, 74, 74, 74, 74, 74, 74, 74, 74, 166]
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
@@ -30140,7 +30140,7 @@ anchor = [200, 392]
 
 [clips.sway_dance]
 page = "sway_dance/sway_dance_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -30861,7 +30861,7 @@ anchor = [200, 392]
 
 [clips.tail_wag]
 page = "tail_wag/tail_wag_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -31301,7 +31301,7 @@ anchor = [200, 392]
 
 [clips.tiptoe_bounce]
 page = "tiptoe_bounce/tiptoe_bounce_sheet.png"
-fps = 12.0
+fps = 8.0
 mode = "loop"
 baseline_y = 392
 scale = 0.531
@@ -31373,9 +31373,9 @@ anchor = [200, 392]
 
 [clips.twirl]
 page = "twirl/twirl_sheet.png"
-fps = 12.0
+fps = 9.770000457763672
 mode = "once"
-frame_durations_ms = [79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 79, 184, 520]
+frame_durations_ms = [97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 226, 639]
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
@@ -34251,7 +34251,7 @@ anchor = [200, 392]
 
 [clips.wave]
 page = "wave/wave_sheet.png"
-fps = 12.0
+fps = 8.5
 mode = "loop"
 baseline_y = 392
 scale = 0.53
