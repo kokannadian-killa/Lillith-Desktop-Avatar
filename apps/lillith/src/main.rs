@@ -340,12 +340,20 @@ async fn main() -> Result<()> {
             no_history,
             ref endpoint,
         }) => {
-            let full = load_config(&cli).0;
+            let (full, config_path) = load_config(&cli);
             let mut cfg = full.chat;
             if let Some(e) = endpoint {
                 cfg.endpoint = e.clone();
             }
-            chat::cli_chat(cfg, full.mind, message.clone(), spawn_server, no_history).await?;
+            chat::cli_chat(
+                cfg,
+                full.mind,
+                config_path,
+                message.clone(),
+                spawn_server,
+                no_history,
+            )
+            .await?;
         }
         Some(Cmd::UndoOrganize { list }) => {
             let journal = lillith_core::config::data_dir()
@@ -439,11 +447,12 @@ async fn main() -> Result<()> {
             demo,
             demo_contract,
         }) => {
-            let full = load_config(&cli).0;
+            let (full, config_path) = load_config(&cli);
             let pos = x.zip(y);
             chat::bubble_main(
                 full.chat,
                 full.mind,
+                config_path,
                 pos,
                 offline || cli.no_llm,
                 screenshot.clone(),

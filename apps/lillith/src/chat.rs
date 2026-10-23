@@ -250,6 +250,21 @@ async fn wait_for_signal() {
     }
 }
 
+/// A chat session for `lillith chat`: `[mind]` attached, and the system
+/// prompt resolved against `config_path` (`--config` or the default path),
+/// so a custom config file's `[llm] system_prompt` applies too.
+fn new_session(
+    cfg: &ChatConfig,
+    mind: &MindConfig,
+    config_path: Option<&std::path::Path>,
+) -> ChatSession {
+    let mut session = ChatSession::new(cfg, false);
+    if let Some(p) = config_path {
+        session = session.with_config_file(&cfg.system_prompt, p);
+    }
+    session.with_mind(mind)
+}
+
 fn history_path(cfg: &ChatConfig) -> Option<PathBuf> {
     cfg.save_history.then(default_history_path).flatten()
 }
@@ -266,9 +281,11 @@ pub fn stdout_emit() -> Emit {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn bubble_main(
     cfg: ChatConfig,
     mind: MindConfig,
+    config_path: Option<PathBuf>,
     pos: Option<(i32, i32)>,
     offline: bool,
     screenshot: Option<PathBuf>,
@@ -281,6 +298,7 @@ pub fn bubble_main(
         history: if demo { None } else { history_path(&cfg) },
         chat: cfg,
         mind,
+        config_path,
         offline,
         emit,
         screenshot,
@@ -295,6 +313,7 @@ pub fn bubble_main(
 pub async fn cli_chat(
     cfg: ChatConfig,
     mind: MindConfig,
+    config_path: Option<PathBuf>,
     message: Option<String>,
     spawn_server: bool,
     no_history: bool,
@@ -319,7 +338,7 @@ pub async fn cli_chat(
     } else {
         None
     };
-    let mut session = ChatSession::new(&cfg, false).with_mind(&mind);
+    let mut session = new_session(&cfg, &mind, config_path.as_deref());
     if !no_history {
         if let Some(p) = history_path(&cfg) {
             session = session.with_history_file(p);
@@ -657,6 +676,29 @@ async fn ask(session: &mut ChatSession, text: String) -> Outcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_config_path_system_prompt_reaches_cli_chat_session() {
+        let dir =
+            std::env::temp_dir().join(format!("lillith-cli-cfgprompt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("custom.toml");
+        std::fs::write(
+            &path,
+            "[chat]\nenabled = true\n[llm]\nsystem_prompt = \"Custom-path persona.\"\n",
+        )
+        .unwrap();
+        // Load it the way main.rs does for `--config <path>`.
+        let full = lillith_core::config::Config::load(&path).unwrap();
+        let s = new_session(&full.chat, &full.mind, Some(&path));
+        assert_eq!(s.system_prompt(), "Custom-path persona.");
+        let mut chat = full.chat.clone();
+        chat.system_prompt = "Chat wins.".into();
+        let s = new_session(&chat, &full.mind, Some(&path));
+        assert_eq!(s.system_prompt(), "Chat wins.");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn protocol_round_trip() {
