@@ -326,12 +326,14 @@ pub async fn cli_chat(
             if let Outcome::Fallback { .. } = ask(&mut session, m).await {
                 anyhow::bail!("no reply from {}", cfg.endpoint);
             }
-            // One-shot mode can't ask; never write without an answer.
-            if let Some(action) = session.pending_skill_action() {
+            // One-shot mode can't ask; never write or run without an answer.
+            if let Some(action) = session.pending_action() {
                 println!(
-                    "[soul contract] she proposed to {} — not saved (run `lillith chat` interactively to confirm).",
+                    "[soul contract] she proposed to {} — not done (run `lillith chat` interactively to confirm).",
                     action.summary()
                 );
+            } else if let Some(out) = session.last_tool_output() {
+                println!("[tool] {out}");
             }
         }
         None => {
@@ -351,21 +353,25 @@ pub async fn cli_chat(
                     break;
                 }
                 ask(&mut session, line).await;
-                offer_skill(&mut session, &stdin)?;
+                offer_pending(&mut session, &stdin)?;
             }
         }
     }
     Ok(())
 }
 
-/// The console Soul Contract: if her last reply proposed a skill, ask
-/// Yes/No on stdin. Only an explicit yes writes (atomically, audited);
-/// anything else discards it (also audited).
-fn offer_skill(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<()> {
-    let Some(action) = session.pending_skill_action() else {
+/// The console Soul Contract: if her last reply proposed a mutation (skill,
+/// file write, or shell command), ask Yes/No on stdin. Only an explicit yes
+/// (`y`, `yes`, or `/contract yes`; `/skill yes` is an alias) runs it
+/// (audited); anything else discards it (also audited). If she only ran a
+/// read tool, print what it returned.
+fn offer_pending(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<()> {
+    let Some(action) = session.take_pending() else {
+        if let Some(out) = session.last_tool_output() {
+            println!("[tool] {out}");
+        }
         return Ok(());
     };
-    session.take_pending_skill();
     print!(
         "[soul contract] She wants to {}. Allow? [y/N] ",
         action.summary()
@@ -375,16 +381,30 @@ fn offer_skill(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<()> 
     stdin.lock().read_line(&mut answer)?;
     let mut contract = session.soul_contract();
     let id = contract.request(action);
-    if matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+    if is_yes(&answer) {
         let done = contract.confirm(id)?;
-        if let Some(p) = done.path {
-            println!("[soul contract] saved {}", p.display());
+        if let Some(p) = &done.path {
+            println!("[soul contract] done: {}", p.display());
+        }
+        if let Some(out) = &done.output {
+            println!("{out}");
         }
     } else {
         contract.deny(id)?;
-        println!("[soul contract] discarded; nothing written.");
+        println!("[soul contract] discarded; nothing changed.");
     }
     Ok(())
+}
+
+/// An explicit yes at the console prompt.
+fn is_yes(answer: &str) -> bool {
+    let a = answer.trim().to_ascii_lowercase();
+    let a = a
+        .strip_prefix("/contract")
+        .or_else(|| a.strip_prefix("/skill"))
+        .unwrap_or(&a)
+        .trim();
+    matches!(a, "y" | "yes")
 }
 
 async fn ask(session: &mut ChatSession, text: String) -> Outcome {
@@ -424,5 +444,15 @@ mod tests {
             "settings.changed"
         );
         assert!(decode(&encode("menu.pose", Some("wave"))).is_none());
+    }
+
+    #[test]
+    fn console_yes_is_explicit() {
+        for y in ["y", "YES\n", " /contract yes ", "/skill y"] {
+            assert!(is_yes(y), "{y:?}");
+        }
+        for n in ["", "n", "no", "/contract no", "yep", "/contract", "sure"] {
+            assert!(!is_yes(n), "{n:?}");
+        }
     }
 }

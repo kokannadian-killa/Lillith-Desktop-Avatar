@@ -5,6 +5,7 @@
 //! turns every failure into an in-character line so the bubble never shows
 //! a raw error. The history can be persisted as JSON between bubble openings.
 
+use crate::fstools::{parse_tool_request, MindTools, Planned};
 use crate::knowledge::{parse_skill_proposal, KnowledgeBase, SkillDraft};
 use crate::llm::{ChatOptions, Flavor, LlmClient, LlmError, Message};
 use crate::persona;
@@ -52,6 +53,17 @@ pub struct ChatSession {
     /// A skill the model proposed in the last reply, awaiting a Soul Contract
     /// Yes/No. Never written on its own.
     pending_skill: Option<SkillDraft>,
+    /// The scoped file/shell tool API (Phase 2). `None` until [`with_mind`]
+    /// attaches an enabled `[mind]`.
+    ///
+    /// [`with_mind`]: ChatSession::with_mind
+    tools: Option<MindTools>,
+    /// A mutating tool (write/shell) the model proposed last reply, awaiting a
+    /// Soul Contract Yes/No. Never run on its own.
+    pending_tool: Option<PendingAction>,
+    /// Output from a read tool that ran this turn (reads need no popup), or a
+    /// one-line note when a tool was refused.
+    last_tool_output: Option<String>,
 }
 
 /// Most messages kept on disk.
@@ -98,6 +110,9 @@ impl ChatSession {
             skills_dir: None,
             audit_log: None,
             pending_skill: None,
+            tools: None,
+            pending_tool: None,
+            last_tool_output: None,
         }
     }
 
@@ -110,6 +125,7 @@ impl ChatSession {
         if cfg.enabled {
             self.skills_dir = cfg.resolved_skills_dir();
             self.audit_log = cfg.audit_log_path();
+            self.tools = Some(MindTools::from_mind(cfg));
         }
         self
     }
@@ -150,6 +166,42 @@ impl ChatSession {
     /// files the pending action, shows a Yes/No prompt, then confirms/denies.
     pub fn soul_contract(&self) -> SoulContract {
         SoulContract::new(self.audit_log.clone())
+    }
+
+    /// The scoped tool API, if `[mind]` is enabled.
+    pub fn tools(&self) -> Option<&MindTools> {
+        self.tools.as_ref()
+    }
+
+    /// A mutating tool (write/shell) the model proposed, awaiting Yes/No.
+    pub fn pending_tool(&self) -> Option<&PendingAction> {
+        self.pending_tool.as_ref()
+    }
+
+    /// Output a read tool produced this turn, or a note about a refused tool.
+    pub fn last_tool_output(&self) -> Option<&str> {
+        self.last_tool_output.as_deref()
+    }
+
+    /// The single action currently awaiting a Soul Contract Yes/No: a pending
+    /// tool (write/shell) if any, otherwise a pending skill resolved into the
+    /// skills folder. This is what a generic `/contract yes|no` acts on.
+    pub fn pending_action(&self) -> Option<PendingAction> {
+        self.pending_tool
+            .clone()
+            .or_else(|| self.pending_skill_action())
+    }
+
+    /// Removes and returns the action awaiting Yes/No (tool first, then skill).
+    pub fn take_pending(&mut self) -> Option<PendingAction> {
+        if let Some(a) = self.pending_tool.take() {
+            return Some(a);
+        }
+        let action = self.pending_skill_action();
+        if action.is_some() {
+            self.pending_skill = None;
+        }
+        action
     }
 
     /// Re-resolves the system prompt against the config file at `path`
@@ -232,10 +284,43 @@ impl ChatSession {
                 // A reply may propose a skill; hold it for the Soul Contract
                 // gate (never written here).
                 self.pending_skill = parse_skill_proposal(&reply);
+                // A reply may also ask for a file/shell tool. Reads run now
+                // (no popup, but audited); writes/shell are held for the gate.
+                self.handle_tool_request(&reply);
                 Outcome::Reply(reply)
             }
             Ok(_) => self.fallback(LlmError::Response("empty reply".into()), &mut on_token),
             Err(e) => self.fallback(e, &mut on_token),
+        }
+    }
+
+    /// Parses a tool request from `reply` and either runs the read straight
+    /// away (auditing an `AUTO` line) or holds the mutation for a Soul Contract
+    /// Yes. A refused or out-of-scope request becomes a one-line note. Never
+    /// mutates the machine here.
+    fn handle_tool_request(&mut self, reply: &str) {
+        self.pending_tool = None;
+        self.last_tool_output = None;
+        // Resolve everything that borrows `self.tools` before mutating fields.
+        let planned = self.tools.as_ref().and_then(|tools| {
+            parse_tool_request(reply).map(|req| {
+                let audit = tools.audit_log().map(|p| p.to_path_buf());
+                (audit, tools.plan(req))
+            })
+        });
+        let Some((audit, result)) = planned else {
+            return;
+        };
+        match result {
+            Ok(Planned::Read(action)) => {
+                let mut sc = SoulContract::new(audit);
+                match sc.run_now(action) {
+                    Ok(done) => self.last_tool_output = done.output,
+                    Err(e) => self.last_tool_output = Some(format!("(tool error: {e})")),
+                }
+            }
+            Ok(Planned::Confirm(action)) => self.pending_tool = Some(action),
+            Err(e) => self.last_tool_output = Some(format!("(tool refused: {e})")),
         }
     }
 
@@ -465,6 +550,7 @@ mod tests {
             knowledge_dir: dir.join("knowledge").to_string_lossy().into_owned(),
             skills_dir: dir.join("skills").to_string_lossy().into_owned(),
             max_context_tokens: 800,
+            ..Default::default()
         };
         std::fs::create_dir_all(dir.join("skills")).unwrap();
         std::fs::write(
@@ -527,6 +613,83 @@ mod tests {
             "{audit}"
         );
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn with_mind_runs_read_tools_and_gates_write_tools() {
+        let dir = std::env::temp_dir().join(format!("lillith-chat-tools-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // Point the data dir (and thus the audit log) at the temp dir so this
+        // test is hermetic. No other mind test reads XDG_DATA_HOME.
+        std::env::set_var("XDG_DATA_HOME", &dir);
+        let proj = dir.join("Projects");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(proj.join("notes.md"), "# Notes\nremember the milk TODO\n").unwrap();
+        let mind = lillith_core::config::MindConfig {
+            enabled: true,
+            knowledge_dir: dir.join("knowledge").to_string_lossy().into_owned(),
+            skills_dir: dir.join("skills").to_string_lossy().into_owned(),
+            max_context_tokens: 800,
+            allow_paths: vec![proj.to_string_lossy().into_owned()],
+            allow_shell: true,
+            ..Default::default()
+        };
+
+        // 1) A reply asking to READ an allowlisted file runs now, no popup.
+        let read_reply = format!(
+            "let me peek~\n```tool\nread {}\n```",
+            proj.join("notes.md").display()
+        );
+        let write_reply = format!(
+            "writing~\n```tool\nwrite {}\nhello\n```",
+            proj.join("out.txt").display()
+        );
+        let (url, mut reqs) = fake_server(vec![
+            sse_reply(&[&read_reply]),
+            sse_reply(&[&write_reply]),
+            sse_reply(&["outside~\n```tool\nread /etc/passwd\n```"]),
+        ])
+        .await;
+        let mut s = ChatSession::new(&cfg(&url), false).with_mind(&mind);
+
+        s.send("what's in my notes?", |_| {}).await;
+        let _ = reqs.recv().await.unwrap();
+        // Read ran now: output captured, nothing pending.
+        let out = s.last_tool_output().expect("read produced output");
+        assert!(out.contains("remember the milk"), "{out}");
+        assert!(s.pending_tool().is_none());
+        assert!(s.pending_action().is_none());
+
+        // 2) A reply asking to WRITE is gated (not written until confirm).
+        s.send("save a file", |_| {}).await;
+        let _ = reqs.recv().await.unwrap();
+        let out_file = proj.join("out.txt");
+        let action = s.pending_action().expect("a write is pending");
+        assert_eq!(action.target_path(), Some(out_file.as_path()));
+        assert!(action.needs_confirmation());
+        assert!(!out_file.exists(), "nothing written before confirm");
+        // Confirm through the session's contract: now it lands + is audited.
+        let mut sc = s.soul_contract();
+        let id = sc.request(s.take_pending().unwrap());
+        sc.confirm(id).unwrap();
+        assert_eq!(std::fs::read_to_string(&out_file).unwrap(), "hello");
+        assert!(s.pending_action().is_none(), "cleared after take");
+
+        // 3) A read OUTSIDE the allowlist is refused (noted, not run).
+        s.send("read etc passwd", |_| {}).await;
+        let _ = reqs.recv().await.unwrap();
+        let refused = s.last_tool_output().expect("a refusal note");
+        assert!(
+            refused.contains("refused") || refused.contains("outside"),
+            "{refused}"
+        );
+        assert!(s.pending_tool().is_none());
+
+        let audit = std::fs::read_to_string(dir.join("lillith/audit.log")).unwrap();
+        assert!(audit.contains("AUTO\tread_file"), "{audit}");
+        assert!(audit.contains("CONFIRM\twrite_file"), "{audit}");
+        std::env::remove_var("XDG_DATA_HOME");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -336,6 +336,11 @@ impl Default for AnimConfig {
 /// into a chat turn (see [`MindConfig::max_context_tokens`]).
 pub const DEFAULT_MIND_CONTEXT_TOKENS: usize = 800;
 
+/// Default cap (bytes) on a single tool-driven file read (see
+/// [`MindConfig::max_read_bytes`]). Keeps a huge file from flooding the
+/// prompt or the audit trail.
+pub const DEFAULT_MIND_MAX_READ_BYTES: usize = 64 * 1024;
+
 /// Knowledge + skills folders Lillith may read, and the skill-authoring
 /// gate (`[mind]`, Phase 1 of the companion plan).
 ///
@@ -359,6 +364,20 @@ pub struct MindConfig {
     pub skills_dir: String,
     /// Rough token budget for injected material per turn (~4 chars/token).
     pub max_context_tokens: usize,
+    /// Extra folders Lillith's scoped file/tool API may touch, on top of the
+    /// always-allowed config dir, `knowledge_dir` and `skills_dir` (Phase 2).
+    /// Each entry is a directory root; `~` is expanded. Reads inside these
+    /// roots run without a popup (but are audited); writes always need a Soul
+    /// Contract Yes. Example: `["~/Projects"]`.
+    pub allow_paths: Vec<String>,
+    /// Whether she may propose shell commands at all. Even when `true`, every
+    /// shell run still needs an explicit Soul Contract Yes (Phase 2).
+    pub allow_shell: bool,
+    /// Cap (bytes) on a single tool-driven file read.
+    pub max_read_bytes: usize,
+    /// Roots that re-open the built-in deny list (secrets dirs, `/etc`) for
+    /// the tool API. Use sparingly; `~` is expanded (Phase 2).
+    pub unlock_paths: Vec<String>,
 }
 
 impl Default for MindConfig {
@@ -368,6 +387,10 @@ impl Default for MindConfig {
             knowledge_dir: String::new(),
             skills_dir: String::new(),
             max_context_tokens: DEFAULT_MIND_CONTEXT_TOKENS,
+            allow_paths: Vec::new(),
+            allow_shell: false,
+            max_read_bytes: DEFAULT_MIND_MAX_READ_BYTES,
+            unlock_paths: Vec::new(),
         }
     }
 }
@@ -394,6 +417,41 @@ impl MindConfig {
     pub fn context_budget(&self) -> usize {
         self.max_context_tokens.max(1)
     }
+
+    /// Clamped read cap (at least 1 byte).
+    pub fn read_cap(&self) -> usize {
+        self.max_read_bytes.max(1)
+    }
+
+    /// The directory roots the tool API may touch: the config dir, the
+    /// resolved knowledge and skills folders, plus every `allow_paths` entry
+    /// (with `~` expanded). Deduplicated, order preserved.
+    pub fn resolved_allow_roots(&self) -> Vec<PathBuf> {
+        let mut roots: Vec<PathBuf> = Vec::new();
+        let mut push = |p: Option<PathBuf>| {
+            if let Some(p) = p {
+                if !roots.contains(&p) {
+                    roots.push(p);
+                }
+            }
+        };
+        push(config_dir());
+        push(self.resolved_knowledge_dir());
+        push(self.resolved_skills_dir());
+        for raw in &self.allow_paths {
+            push(expand_tilde(raw));
+        }
+        roots
+    }
+
+    /// Extra roots that re-open the built-in deny list (`unlock_paths`, with
+    /// `~` expanded).
+    pub fn resolved_unlock_roots(&self) -> Vec<PathBuf> {
+        self.unlock_paths
+            .iter()
+            .filter_map(|r| expand_tilde(r))
+            .collect()
+    }
 }
 
 /// An override (used verbatim if non-empty) or `<data>/lillith/<name>`.
@@ -412,6 +470,34 @@ pub fn data_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
     Some(base.join("lillith"))
+}
+
+/// `$XDG_CONFIG_HOME/lillith`, else `~/.config/lillith`. This is the folder
+/// `config.toml` lives in; the tool API always allows it.
+pub fn config_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    Some(base.join("lillith"))
+}
+
+/// Expands a leading `~` or `~/` to `$HOME` and trims surrounding whitespace.
+/// An empty string (after trimming) yields `None`.
+pub fn expand_tilde(raw: &str) -> Option<PathBuf> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return None;
+    }
+    if t == "~" {
+        return std::env::var_os("HOME").map(PathBuf::from);
+    }
+    if let Some(rest) = t.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return Some(PathBuf::from(home).join(rest));
+        }
+    }
+    Some(PathBuf::from(t))
 }
 
 /// `[avatar]`: custom (single-image) avatars, animated procedurally.
@@ -789,6 +875,50 @@ mod tests {
         // folder name when a data dir exists).
         if let Some(sk) = c.resolved_skills_dir() {
             assert!(sk.ends_with("lillith/skills"));
+        }
+
+        // Phase 2 tool-API defaults.
+        assert!(d.allow_paths.is_empty());
+        assert!(!d.allow_shell, "shell is off by default");
+        assert_eq!(d.max_read_bytes, DEFAULT_MIND_MAX_READ_BYTES);
+        assert!(d.unlock_paths.is_empty());
+        assert_eq!(
+            MindConfig {
+                max_read_bytes: 0,
+                ..MindConfig::default()
+            }
+            .read_cap(),
+            1
+        );
+
+        // Phase 2 keys parse; `~` expands against the current HOME (read, never
+        // mutated, so parallel tests are unaffected); old configs that omit
+        // these keys still load with the defaults asserted above.
+        let c2 = Config::from_toml_str(
+            "[mind]\nallow_shell = true\nmax_read_bytes = 2048\n\
+             allow_paths = [\"~/Projects\", \"/srv/data\"]\n\
+             unlock_paths = [\"~/.secrets\"]\n",
+        )
+        .unwrap()
+        .mind;
+        assert!(c2.allow_shell);
+        assert_eq!(c2.max_read_bytes, 2048);
+        let roots = c2.resolved_allow_roots();
+        assert!(roots.contains(&PathBuf::from("/srv/data")), "{roots:?}");
+        // The config dir is always allowed.
+        assert!(
+            roots.iter().any(|r| r.ends_with("lillith")),
+            "config dir allowed: {roots:?}"
+        );
+        if let Some(home) = std::env::var_os("HOME") {
+            assert!(
+                roots.contains(&PathBuf::from(&home).join("Projects")),
+                "~ expands: {roots:?}"
+            );
+            assert_eq!(
+                c2.resolved_unlock_roots(),
+                vec![PathBuf::from(&home).join(".secrets")]
+            );
         }
     }
 

@@ -650,6 +650,7 @@ mod tests {
             knowledge_dir: base.join("k").to_string_lossy().into_owned(),
             skills_dir: base.join("s").to_string_lossy().into_owned(),
             max_context_tokens: 800,
+            ..MindConfig::default()
         };
         // Folders don't exist yet; load creates them.
         let kb = KnowledgeBase::load(&cfg);
