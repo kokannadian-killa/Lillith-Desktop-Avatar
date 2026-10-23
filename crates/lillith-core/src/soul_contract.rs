@@ -63,6 +63,25 @@ pub enum PendingAction {
     /// Run `command` through `sh -c` and capture its output (mutating; needs a
     /// Yes). Only ever filed when `[mind] allow_shell` is set.
     RunShell { command: String },
+    /// Scaffold a new local project into `dir` (mutating; needs a Yes). Uses
+    /// offline, already-installed tools only; see [`crate::build`]. The caller
+    /// confines `dir` to the projects root (see [`crate::build::resolve_project_dir`]).
+    ScaffoldProject {
+        dir: PathBuf,
+        language: crate::build::Language,
+        template: String,
+    },
+    /// Build (compile / syntax-check) the local project in `dir`, offline
+    /// (mutating — it can touch `target/` / `__pycache__`; needs a Yes).
+    BuildProject {
+        dir: PathBuf,
+        language: crate::build::Language,
+    },
+    /// Run the local project in `dir`, offline (mutating; needs a Yes).
+    RunProject {
+        dir: PathBuf,
+        language: crate::build::Language,
+    },
 }
 
 impl PendingAction {
@@ -75,6 +94,9 @@ impl PendingAction {
             PendingAction::SearchFiles { .. } => "search_files",
             PendingAction::WriteFile { .. } => "write_file",
             PendingAction::RunShell { .. } => "run_shell",
+            PendingAction::ScaffoldProject { .. } => "scaffold_project",
+            PendingAction::BuildProject { .. } => "build_project",
+            PendingAction::RunProject { .. } => "run_project",
         }
     }
 
@@ -86,6 +108,9 @@ impl PendingAction {
             | PendingAction::ReadFile { path, .. }
             | PendingAction::SearchFiles { path, .. }
             | PendingAction::WriteFile { path, .. } => Some(path),
+            PendingAction::ScaffoldProject { dir, .. }
+            | PendingAction::BuildProject { dir, .. }
+            | PendingAction::RunProject { dir, .. } => Some(dir),
             PendingAction::RunShell { .. } => None,
         }
     }
@@ -98,6 +123,9 @@ impl PendingAction {
             PendingAction::WriteSkill { .. }
                 | PendingAction::WriteFile { .. }
                 | PendingAction::RunShell { .. }
+                | PendingAction::ScaffoldProject { .. }
+                | PendingAction::BuildProject { .. }
+                | PendingAction::RunProject { .. }
         )
     }
 
@@ -116,6 +144,17 @@ impl PendingAction {
                 format!("Write file {} ({} bytes)", path.display(), body.len())
             }
             PendingAction::RunShell { command } => format!("Run shell: {command}"),
+            PendingAction::ScaffoldProject {
+                dir,
+                language,
+                template,
+            } => crate::build::scaffold_summary(dir, *language, template),
+            PendingAction::BuildProject { dir, language } => {
+                crate::build::build_summary(dir, *language)
+            }
+            PendingAction::RunProject { dir, language } => {
+                crate::build::run_summary(dir, *language)
+            }
         }
     }
 
@@ -138,6 +177,20 @@ impl PendingAction {
                 max_bytes,
             } => Ok((None, Some(search_files(path, query, *max_bytes)?))),
             PendingAction::RunShell { command } => Ok((None, Some(run_shell(command)?))),
+            PendingAction::ScaffoldProject {
+                dir,
+                language,
+                template,
+            } => Ok((
+                Some(dir.clone()),
+                Some(crate::build::scaffold(dir, *language, template)?),
+            )),
+            PendingAction::BuildProject { dir, language } => {
+                Ok((None, Some(crate::build::build(dir, *language)?)))
+            }
+            PendingAction::RunProject { dir, language } => {
+                Ok((None, Some(crate::build::run(dir, *language)?)))
+            }
         }
     }
 }
@@ -701,6 +754,38 @@ mod tests {
         assert!(done.path.is_none());
         let audit = std::fs::read_to_string(&log).unwrap();
         assert!(audit.contains("CONFIRM\trun_shell\t"), "{audit}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scaffold_project_needs_confirm_and_runs_on_yes() {
+        use crate::build::Language;
+        let dir = tmpdir("scaffold");
+        let log = dir.join("audit.log");
+        let project = dir.join("builds").join("demo");
+        let action = PendingAction::ScaffoldProject {
+            dir: project.clone(),
+            language: Language::Python,
+            template: "script".into(),
+        };
+        assert!(action.needs_confirmation());
+        assert_eq!(action.kind(), "scaffold_project");
+        assert_eq!(action.target_path(), Some(project.as_path()));
+        let mut sc = SoulContract::new(Some(log.clone()));
+        // run_now refuses a mutation.
+        assert!(matches!(
+            sc.run_now(action.clone()),
+            Err(ContractError::NeedsConfirmation(_))
+        ));
+        assert!(!project.exists(), "run_now must not scaffold");
+        // Gated path: nothing until confirm.
+        let id = sc.request(action);
+        assert!(!project.exists());
+        let done = sc.confirm(id).unwrap();
+        assert_eq!(done.path.as_deref(), Some(project.as_path()));
+        assert!(project.join("main.py").exists(), "scaffold wrote main.py");
+        let audit = std::fs::read_to_string(&log).unwrap();
+        assert!(audit.contains("CONFIRM\tscaffold_project\t"), "{audit}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

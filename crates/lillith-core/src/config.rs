@@ -500,6 +500,53 @@ pub fn expand_tilde(raw: &str) -> Option<PathBuf> {
     Some(PathBuf::from(t))
 }
 
+/// `[build]`: the settings-GUI **Build** tab (Phase 3) — local, offline
+/// project scaffolding and building ("vibe coding", but entirely on-box).
+///
+/// Everything the tab does is gated by the Soul Contract and confined to
+/// [`BuildConfig::resolved_projects_dir`]. No network, no cloud: see
+/// [`crate::build`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BuildConfig {
+    /// Master switch for the Build tab.
+    pub enabled: bool,
+    /// Root every scaffolded project lives under. Empty = the default
+    /// `~/Projects/lillith-builds`. `~` is expanded.
+    pub projects_dir: String,
+    /// Language preselected in the tab (`rust` / `python` / `fish`).
+    pub default_language: String,
+}
+
+impl Default for BuildConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            projects_dir: String::new(),
+            default_language: "rust".into(),
+        }
+    }
+}
+
+impl BuildConfig {
+    /// The resolved projects root: the configured override, else the default
+    /// `~/Projects/lillith-builds` (`None` only if `$HOME` is unset and no
+    /// override is given).
+    pub fn resolved_projects_dir(&self) -> Option<PathBuf> {
+        let o = self.projects_dir.trim();
+        if !o.is_empty() {
+            return expand_tilde(o);
+        }
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Projects/lillith-builds"))
+    }
+
+    /// The preselected language, defaulting to Rust on an unknown token.
+    pub fn resolved_default_language(&self) -> crate::build::Language {
+        crate::build::Language::parse(&self.default_language)
+            .unwrap_or(crate::build::Language::Rust)
+    }
+}
+
 /// `[avatar]`: custom (single-image) avatars, animated procedurally.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -572,6 +619,8 @@ pub struct Config {
     pub anim: AnimConfig,
     /// Knowledge + skills folders and the skill-authoring gate (`[mind]`).
     pub mind: MindConfig,
+    /// Local project scaffolding/building (`[build]`, Phase 3).
+    pub build: BuildConfig,
 }
 
 impl Default for Config {
@@ -604,6 +653,7 @@ impl Default for Config {
             chat: ChatConfig::default(),
             anim: AnimConfig::default(),
             mind: MindConfig::default(),
+            build: BuildConfig::default(),
         }
     }
 }
@@ -844,6 +894,44 @@ mod tests {
         assert!(!c.overlay_speech && !c.talk_jiggle);
         // Serialises (tables after plain keys).
         assert!(toml::to_string(&Config::default()).is_ok());
+    }
+
+    #[test]
+    fn build_table_defaults_and_override() {
+        use crate::build::Language;
+        // Defaults: enabled, empty projects_dir (= ~/Projects/lillith-builds),
+        // rust preselected. Old configs that omit [build] still parse.
+        let d = Config::default().build;
+        assert!(d.enabled);
+        assert!(d.projects_dir.is_empty());
+        assert_eq!(d.resolved_default_language(), Language::Rust);
+        if let Some(root) = d.resolved_projects_dir() {
+            assert!(root.ends_with("Projects/lillith-builds"), "{root:?}");
+        }
+
+        // Overrides parse and are used verbatim.
+        let c = Config::from_toml_str(
+            "[build]\nenabled = false\nprojects_dir = \"/srv/builds\"\ndefault_language = \"python\"\n",
+        )
+        .unwrap()
+        .build;
+        assert!(!c.enabled);
+        assert_eq!(
+            c.resolved_projects_dir(),
+            Some(PathBuf::from("/srv/builds"))
+        );
+        assert_eq!(c.resolved_default_language(), Language::Python);
+
+        // An unknown language falls back to Rust.
+        let bad = BuildConfig {
+            default_language: "klingon".into(),
+            ..BuildConfig::default()
+        };
+        assert_eq!(bad.resolved_default_language(), Language::Rust);
+
+        // A config with no [build] table still loads with build defaults.
+        let none = Config::from_toml_str("mode = \"stay\"\n").unwrap();
+        assert!(none.build.enabled);
     }
 
     #[test]
