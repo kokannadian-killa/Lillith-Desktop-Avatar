@@ -165,8 +165,8 @@ PNG sheet stays the fallback and the bounds-check reference.
   - Each `_long` variant is a 15 s take with a ~10 s living peak hold: 180 frames at 12 fps, loop,
     with chest, pigtail and hip jiggle baked into the pixels. The importer tags these
     `disable_springs`, so the engine springs stay off.
-  - `body_roll_slow_long` is registered and appears in *Flirty / Allure*. Its MP4 is 1.4 MiB and the
-    sheet is 12 MiB.
+  - `body_roll_slow_long` and `arch_back_over_shoulder_long` are registered and appear in
+    *Flirty / Allure*. Each MP4 is about 1.5 MiB and each sheet 12–14 MiB.
   - Decoded, a 180-frame clip takes about 110 MB of the 192 MB video cache. Two long clips playing
     back to back evict each other. Each re-decode streams in the background, about 1 s for 180
     frames with the first frame after about 65 ms, so playback does not stall.

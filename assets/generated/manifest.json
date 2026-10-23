@@ -4664,6 +4664,34 @@
    ],
    "allure": true,
    "video": "body_roll_slow_long/body_roll_slow_long.mp4"
+  },
+  {
+   "name": "arch_back_over_shoulder_long",
+   "frame_count": 180,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "arch_back_over_shoulder_long/",
+   "sheet": "arch_back_over_shoulder_long/arch_back_over_shoulder_long_sheet.png",
+   "manifest": "arch_back_over_shoulder_long/arch_back_over_shoulder_long.json",
+   "preview": "arch_back_over_shoulder_long/arch_back_over_shoulder_long_preview.gif",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "arch_back_over_shoulder_long/arch_back_over_shoulder_long.mp4"
   }
  ]
 }
