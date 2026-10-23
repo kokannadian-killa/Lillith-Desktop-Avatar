@@ -147,14 +147,28 @@ def pack_one(d, a):
                    'crf': a.crf, 'edge_bleed_px': a.bleed, 'width': 2 * W, 'height': H,
                    'frame_count': len(cells), 'fps': fps, 'bytes': size, 'quality': m,
                    'tool': 'tools/video-pipeline/pack_mp4.py'}
+    indent = json_indent(jp, 2)
     with open(jp, 'w') as f:
-        json.dump(js, f, indent=2)
+        json.dump(js, f, indent=indent)
     print(f'{clip:<28} {len(cells):>3}f {size/1024:7.1f} KiB  edge_mae {m["edge_mae"]:.2f} p99 {m["edge_p99"]:.1f} '
           f'halo dark {m["halo_dark"]:+.2f} light {m["halo_light"]:+.2f}  alpha_mae {m["alpha_mae"]:.3f}', flush=True)
     return clip, m, size
 
 
+def json_indent(path, default=1):
+    """Indent width the file already uses, so a rewrite keeps the diff small."""
+    try:
+        with open(path) as f:
+            f.readline()
+            line = f.readline()
+        n = len(line) - len(line.lstrip(' '))
+        return n or default
+    except OSError:
+        return default
+
+
 def register(manifest, clip):
+    indent = json_indent(manifest)
     mj = json.load(open(manifest))
     hit = False
     for e in mj['animations']:
@@ -165,7 +179,7 @@ def register(manifest, clip):
     if not hit:
         print(f'warning: {clip} has no entry in {manifest}', file=sys.stderr)
     with open(manifest, 'w') as f:
-        json.dump(mj, f, indent=2)
+        json.dump(mj, f, indent=indent)
         f.write('\n')
 
 
