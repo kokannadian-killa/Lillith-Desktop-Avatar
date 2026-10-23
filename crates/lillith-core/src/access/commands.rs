@@ -605,10 +605,15 @@ fn run_child_ungated(
 fn kill_tree(child: &mut std::process::Child) {
     #[cfg(unix)]
     {
-        // Kill the whole process group we started.
+        // Kill the whole process group we started. `-s KILL -- -<pgid>` is
+        // the POSIX form; procps-ng 4.0.x mis-parses `kill -KILL -<pgid>`
+        // (exit 1, and on the GitHub runner the group survived, so a
+        // grandchild kept the output pipe open until it exited).
         let _ = std::process::Command::new("kill")
-            .arg("-KILL")
-            .arg(format!("-{}", child.id()))
+            .args(["-s", "KILL", "--", &format!("-{}", child.id())])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status();
     }
     #[cfg(windows)]

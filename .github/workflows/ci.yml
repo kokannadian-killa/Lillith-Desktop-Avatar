@@ -31,13 +31,22 @@ jobs:
       - name: List Git LFS objects
         run: git lfs ls-files --long | cut -d' ' -f1 | sort > .lfs-assets-id
       - name: Restore Git LFS cache
-        uses: actions/cache@v6
+        id: lfs-cache
+        uses: actions/cache/restore@v6
         with:
           path: .git/lfs
           key: lfs-${{ hashFiles('.lfs-assets-id') }}
           restore-keys: lfs-
       - name: Fetch Git LFS art
         run: git lfs pull
+      # Save right away (not in a post step) so a later test failure doesn't
+      # throw away the ~460 MB download.
+      - name: Save Git LFS cache
+        if: steps.lfs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
       - uses: ./.github/actions/setup-lillith
         with:
           cache-key: default
@@ -48,7 +57,7 @@ jobs:
       - name: cargo build
         run: cargo build --workspace --locked
       - name: cargo test
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
 
   full-features:
     name: clippy (all features, system libs)
