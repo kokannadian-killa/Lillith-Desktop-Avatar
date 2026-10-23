@@ -146,6 +146,9 @@ struct App {
     conn: Connection,
     ctl: Controller,
     configured: bool,
+    /// Size last requested with `set_size`, always together with a buffer
+    /// of that size (see [`App::apply_resize`]).
+    surface_size: (u32, u32),
     /// Placement waiting to be committed (drag).
     pending: Option<Placement>,
     mask_dirty: bool,
@@ -243,6 +246,7 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
         conn,
         ctl,
         configured: false,
+        surface_size: (w, h),
         pending: None,
         mask_dirty: true,
         pixels_dirty: true,
@@ -331,8 +335,9 @@ impl App {
         if !self.ctl.take_resized() {
             return;
         }
-        let (w, h) = self.ctl.stage.size();
-        self.layer.set_size(w, h);
+        // The new size is requested in `draw`, in the same commit as the
+        // first buffer of that size: the surface never shows a size whose
+        // pixels were not drawn yet (undefined / black on some compositors).
         self.pending.get_or_insert(self.ctl.placement);
         if let Err(e) = self.ctl.stage.render() {
             tracing::warn!("render after resize: {e}");
@@ -559,6 +564,10 @@ impl App {
                     if let Err(e) = buffer.attach_to(&surface) {
                         tracing::warn!("attach: {e}");
                     }
+                    if self.surface_size != (w, h) {
+                        self.layer.set_size(w, h);
+                        self.surface_size = (w, h);
+                    }
                     self.pixels_dirty = false;
                 }
                 // Pool busy (compositor still holds buffers): try next tick.
@@ -687,7 +696,7 @@ impl LayerShellHandler for App {
         if layer.wl_surface() != self.layer.wl_surface() {
             return;
         }
-        let want = self.ctl.stage.size();
+        let want = self.surface_size;
         if let Some(got) = size_mismatch(want, cfg.new_size) {
             // A buffer smaller than the configured surface can leave the
             // rest undefined (black on some compositors): ask again.
