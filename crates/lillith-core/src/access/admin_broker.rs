@@ -220,6 +220,7 @@ mod imp {
         // Take the session out of the mutex for the whole write/read so
         // force_kill's try_lock soft-Stop never waits on us. The out-of-band
         // path (PROC + TerminateProcess) does not need SESSION at all.
+        let epoch = crate::access::kill_switch::epoch();
         let mut session = {
             let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
             g.take()
@@ -239,6 +240,11 @@ mod imp {
                 Reply::Err { id: rid, message } if rid == id => Err(std::io::Error::other(message)),
                 _ => Err(std::io::Error::other("admin helper: id mismatch")),
             },
+            // The safeword killed the helper mid-command: report it as
+            // stopped (audited RESULT-STOPPED), not as a pipe error.
+            Err(_) if crate::access::kill_switch::stopped_since(epoch) => {
+                Ok(crate::access::commands::STOPPED_LINE.to_string())
+            }
             Err(e) => Err(e),
         };
 
