@@ -112,6 +112,7 @@ impl ChatSession {
             opts: ChatOptions {
                 temperature: cfg.temperature,
                 max_tokens: cfg.max_tokens.max(1),
+                ..ChatOptions::default()
             },
             history_turns: cfg.history_turns,
             history: Vec::new(),

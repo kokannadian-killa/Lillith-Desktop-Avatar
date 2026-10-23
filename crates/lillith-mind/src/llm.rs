@@ -117,18 +117,33 @@ pub enum Flavor {
     OpenAiCompat,
 }
 
-/// Sampling options for one request.
+/// Sampling options for one request. Sent in the llama-server
+/// `/v1/chat/completions` body and as Ollama `options`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ChatOptions {
     pub temperature: f32,
+    /// Reply cap (`max_tokens`; Ollama `num_predict`).
     pub max_tokens: u32,
+    pub top_p: f32,
+    pub min_p: f32,
+    pub repeat_penalty: f32,
+    /// Tokens the repeat penalty looks back over.
+    pub repeat_last_n: u32,
 }
 
 impl Default for ChatOptions {
+    /// Lily's sampling (`lillith_setup::modelfile::LILY_*`): temperature
+    /// 0.95, min_p 0.1, top_p 0.95, repeat_penalty 1.1, repeat_last_n 256,
+    /// 160 tokens.
     fn default() -> Self {
+        use lillith_setup::modelfile as m;
         Self {
-            temperature: lillith_setup::modelfile::LILY_TEMPERATURE,
-            max_tokens: 320,
+            temperature: m::LILY_TEMPERATURE,
+            max_tokens: m::LILY_NUM_PREDICT,
+            top_p: m::LILY_TOP_P,
+            min_p: m::LILY_MIN_P,
+            repeat_penalty: m::LILY_REPEAT_PENALTY,
+            repeat_last_n: m::LILY_REPEAT_LAST_N,
         }
     }
 }
@@ -203,21 +218,48 @@ impl LlmClient {
             "messages": messages,
             "temperature": opts.temperature,
             "max_tokens": opts.max_tokens,
+            "top_p": opts.top_p,
+            "min_p": opts.min_p,
+            "repeat_penalty": opts.repeat_penalty,
+            "repeat_last_n": opts.repeat_last_n,
             "stream": stream,
         })
     }
 
-    /// Sends a chat and returns the full reply text.
+    /// Request body for Ollama's `/api/chat`; sampling goes in `options`.
+    pub fn ollama_body(&self, messages: &[Message], opts: ChatOptions) -> serde_json::Value {
+        serde_json::json!({
+            "model": self.model,
+            "messages": messages,
+            "stream": false,
+            "options": {
+                "temperature": opts.temperature,
+                "num_predict": opts.max_tokens,
+                "top_p": opts.top_p,
+                "min_p": opts.min_p,
+                "repeat_penalty": opts.repeat_penalty,
+                "repeat_last_n": opts.repeat_last_n,
+            },
+        })
+    }
+
+    /// Sends a chat with Lily's default sampling and returns the full reply.
     pub async fn chat(&self, messages: &[Message]) -> Result<String, LlmError> {
+        self.chat_with(messages, ChatOptions::default()).await
+    }
+
+    /// Sends a chat with `opts` and returns the full reply text.
+    pub async fn chat_with(
+        &self,
+        messages: &[Message],
+        opts: ChatOptions,
+    ) -> Result<String, LlmError> {
         let base = self.base()?;
         let (url, body) = match self.flavor {
-            Flavor::Ollama => (
-                format!("{base}/api/chat"),
-                serde_json::json!({ "model": self.model, "messages": messages, "stream": false }),
-            ),
+            Flavor::Ollama => (format!("{base}/api/chat"), self.ollama_body(messages, opts)),
             Flavor::OpenAiCompat => (
                 format!("{base}/v1/chat/completions"),
-                self.openai_body(messages, ChatOptions::default(), false),
+                self.openai_body(messages, opts, false),
             ),
         };
         let resp = self.post(url).json(&body).send().await?;
@@ -242,7 +284,7 @@ impl LlmClient {
         mut on_token: F,
     ) -> Result<String, LlmError> {
         if self.flavor == Flavor::Ollama {
-            let all = self.chat(messages).await?;
+            let all = self.chat_with(messages, opts).await?;
             on_token(&all);
             return Ok(all);
         }
@@ -434,6 +476,7 @@ mod tests {
             ChatOptions {
                 temperature: 0.3,
                 max_tokens: 64,
+                ..ChatOptions::default()
             },
             true,
         );
@@ -441,6 +484,39 @@ mod tests {
         assert_eq!(b["max_tokens"], 64);
         assert!((b["temperature"].as_f64().unwrap() - 0.3).abs() < 1e-6);
         assert_eq!(b["messages"][0]["role"], "user");
+    }
+
+    fn close(v: &serde_json::Value, want: f64) -> bool {
+        (v.as_f64().unwrap() - want).abs() < 1e-6
+    }
+
+    #[test]
+    fn default_sampling_is_lily_and_sent_to_both_backends() {
+        let d = ChatOptions::default();
+        assert_eq!(
+            (d.temperature, d.min_p, d.top_p, d.repeat_penalty),
+            (0.95, 0.1, 0.95, 1.1)
+        );
+        assert_eq!((d.repeat_last_n, d.max_tokens), (256, 160));
+        let c = LlmClient::new(Flavor::OpenAiCompat, "http://127.0.0.1:8080", "local");
+        let b = c.openai_body(&[Message::user("hi")], d, false);
+        assert!(close(&b["temperature"], 0.95));
+        assert!(close(&b["top_p"], 0.95));
+        assert!(close(&b["min_p"], 0.1));
+        assert!(close(&b["repeat_penalty"], 1.1));
+        assert_eq!(b["repeat_last_n"], 256);
+        assert_eq!(b["max_tokens"], 160);
+        let o = LlmClient::new(Flavor::Ollama, "http://127.0.0.1:11434", "lily");
+        let b = o.ollama_body(&[Message::user("hi")], d);
+        let opt = &b["options"];
+        assert!(close(&opt["temperature"], 0.95));
+        assert!(close(&opt["top_p"], 0.95));
+        assert!(close(&opt["min_p"], 0.1));
+        assert!(close(&opt["repeat_penalty"], 1.1));
+        assert_eq!(opt["repeat_last_n"], 256);
+        assert_eq!(opt["num_predict"], 160);
+        assert_eq!(b["stream"], false);
+        assert_eq!(b["model"], "lily");
     }
 
     #[test]

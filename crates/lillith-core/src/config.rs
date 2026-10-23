@@ -303,7 +303,7 @@ impl Default for ChatConfig {
             system_prompt: String::new(),
             // Matches lillith_setup::modelfile::LILY_TEMPERATURE (pinned by a
             // test in lillith-mind, which depends on both crates).
-            temperature: 0.85,
+            temperature: 0.95,
             max_tokens: 320,
             history_turns: 12,
             timeout_s: 120.0,
