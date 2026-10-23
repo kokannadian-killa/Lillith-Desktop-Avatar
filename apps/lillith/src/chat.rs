@@ -11,7 +11,7 @@
 //! - [`bubble_main`] / [`cli_chat`]: the `chat-bubble` and `chat` subcommands.
 
 use anyhow::Result;
-use lillith_core::config::ChatConfig;
+use lillith_core::config::{ChatConfig, MindConfig};
 use lillith_core::Event;
 use lillith_mind::chat::{default_history_path, ChatSession, Outcome};
 use lillith_mind::server::{already_running, LlamaServer};
@@ -266,6 +266,7 @@ pub fn stdout_emit() -> Emit {
 
 pub fn bubble_main(
     cfg: ChatConfig,
+    mind: MindConfig,
     pos: Option<(i32, i32)>,
     offline: bool,
     screenshot: Option<PathBuf>,
@@ -276,6 +277,7 @@ pub fn bubble_main(
         pos,
         history: if demo { None } else { history_path(&cfg) },
         chat: cfg,
+        mind,
         offline,
         emit,
         screenshot,
@@ -288,6 +290,7 @@ pub fn bubble_main(
 /// (one message, or a prompt loop on stdin). Streams to stdout.
 pub async fn cli_chat(
     cfg: ChatConfig,
+    mind: MindConfig,
     message: Option<String>,
     spawn_server: bool,
     no_history: bool,
@@ -312,7 +315,7 @@ pub async fn cli_chat(
     } else {
         None
     };
-    let mut session = ChatSession::new(&cfg, false);
+    let mut session = ChatSession::new(&cfg, false).with_mind(&mind);
     if !no_history {
         if let Some(p) = history_path(&cfg) {
             session = session.with_history_file(p);
@@ -322,6 +325,13 @@ pub async fn cli_chat(
         Some(m) => {
             if let Outcome::Fallback { .. } = ask(&mut session, m).await {
                 anyhow::bail!("no reply from {}", cfg.endpoint);
+            }
+            // One-shot mode can't ask; never write without an answer.
+            if let Some(action) = session.pending_skill_action() {
+                println!(
+                    "[soul contract] she proposed to {} — not saved (run `lillith chat` interactively to confirm).",
+                    action.summary()
+                );
             }
         }
         None => {
@@ -341,8 +351,38 @@ pub async fn cli_chat(
                     break;
                 }
                 ask(&mut session, line).await;
+                offer_skill(&mut session, &stdin)?;
             }
         }
+    }
+    Ok(())
+}
+
+/// The console Soul Contract: if her last reply proposed a skill, ask
+/// Yes/No on stdin. Only an explicit yes writes (atomically, audited);
+/// anything else discards it (also audited).
+fn offer_skill(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<()> {
+    let Some(action) = session.pending_skill_action() else {
+        return Ok(());
+    };
+    session.take_pending_skill();
+    print!(
+        "[soul contract] She wants to {}. Allow? [y/N] ",
+        action.summary()
+    );
+    let _ = std::io::stdout().flush();
+    let mut answer = String::new();
+    stdin.lock().read_line(&mut answer)?;
+    let mut contract = session.soul_contract();
+    let id = contract.request(action);
+    if matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+        let done = contract.confirm(id)?;
+        if let Some(p) = done.path {
+            println!("[soul contract] saved {}", p.display());
+        }
+    } else {
+        contract.deny(id)?;
+        println!("[soul contract] discarded; nothing written.");
     }
     Ok(())
 }

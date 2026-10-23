@@ -14,6 +14,7 @@
 //!   an approval gate for anything else (README-DK model).
 
 pub mod chat;
+pub mod knowledge;
 pub mod llm;
 pub mod memory;
 pub mod persona;

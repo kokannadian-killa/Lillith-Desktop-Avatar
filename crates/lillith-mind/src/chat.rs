@@ -5,9 +5,11 @@
 //! turns every failure into an in-character line so the bubble never shows
 //! a raw error. The history can be persisted as JSON between bubble openings.
 
+use crate::knowledge::{parse_skill_proposal, KnowledgeBase, SkillDraft};
 use crate::llm::{ChatOptions, Flavor, LlmClient, LlmError, Message};
 use crate::persona;
-use lillith_core::config::ChatConfig;
+use lillith_core::config::{ChatConfig, MindConfig};
+use lillith_core::soul_contract::{PendingAction, SoulContract};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -40,6 +42,16 @@ pub struct ChatSession {
     history: Vec<Message>,
     save_path: Option<PathBuf>,
     salt: usize,
+    /// Knowledge + skills she may read and inject (Phase 1). `None` until
+    /// [`ChatSession::with_mind`] is called.
+    knowledge: Option<KnowledgeBase>,
+    /// Where confirmed skills are written (the skills folder).
+    skills_dir: Option<PathBuf>,
+    /// Where skill writes/denials are logged.
+    audit_log: Option<PathBuf>,
+    /// A skill the model proposed in the last reply, awaiting a Soul Contract
+    /// Yes/No. Never written on its own.
+    pending_skill: Option<SkillDraft>,
 }
 
 /// Most messages kept on disk.
@@ -82,7 +94,62 @@ impl ChatSession {
             history: Vec::new(),
             save_path: None,
             salt: std::process::id() as usize,
+            knowledge: None,
+            skills_dir: None,
+            audit_log: None,
+            pending_skill: None,
         }
+    }
+
+    /// Attaches the knowledge/skills base from `[mind]`: indexes both folders
+    /// (creating them) and remembers the skills folder + audit log for gated
+    /// skill writes. A disabled config attaches an inert base (no injection,
+    /// no authoring).
+    pub fn with_mind(mut self, cfg: &MindConfig) -> Self {
+        self.knowledge = Some(KnowledgeBase::load(cfg));
+        if cfg.enabled {
+            self.skills_dir = cfg.resolved_skills_dir();
+            self.audit_log = cfg.audit_log_path();
+        }
+        self
+    }
+
+    /// The persona system prompt, with any relevant knowledge/skill context
+    /// for `user` appended (within the configured token budget).
+    fn system_with_context(&self, user: &str) -> String {
+        match self.knowledge.as_ref().and_then(|kb| kb.context_for(user)) {
+            Some(ctx) => format!("{}\n\n{}", self.system_prompt, ctx),
+            None => self.system_prompt.clone(),
+        }
+    }
+
+    /// A skill the model proposed in its last reply, if any (awaiting Yes/No).
+    pub fn pending_skill(&self) -> Option<&SkillDraft> {
+        self.pending_skill.as_ref()
+    }
+
+    /// Removes and returns the pending skill draft.
+    pub fn take_pending_skill(&mut self) -> Option<SkillDraft> {
+        self.pending_skill.take()
+    }
+
+    /// The skills folder confirmed writes land in.
+    pub fn skills_dir(&self) -> Option<&Path> {
+        self.skills_dir.as_deref()
+    }
+
+    /// The gated [`PendingAction`] for the pending skill, resolved into the
+    /// skills folder. `None` if there is no draft or no skills folder.
+    pub fn pending_skill_action(&self) -> Option<PendingAction> {
+        let draft = self.pending_skill.as_ref()?;
+        let dir = self.skills_dir.as_ref()?;
+        Some(draft.to_action(dir))
+    }
+
+    /// A fresh [`SoulContract`] bound to this session's audit log. The caller
+    /// files the pending action, shows a Yes/No prompt, then confirms/denies.
+    pub fn soul_contract(&self) -> SoulContract {
+        SoulContract::new(self.audit_log.clone())
     }
 
     /// Re-resolves the system prompt against the config file at `path`
@@ -128,7 +195,7 @@ impl ChatSession {
         let keep = self.history_turns.saturating_mul(2);
         let start = self.history.len().saturating_sub(keep);
         let mut m = Vec::with_capacity(keep + 2);
-        m.push(Message::system(self.system_prompt.clone()));
+        m.push(Message::system(self.system_with_context(user)));
         m.extend(
             self.history[start..]
                 .iter()
@@ -162,6 +229,9 @@ impl ChatSession {
                 self.history.push(Message::user(user));
                 self.history.push(Message::assistant(reply.clone()));
                 self.save();
+                // A reply may propose a skill; hold it for the Soul Contract
+                // gate (never written here).
+                self.pending_skill = parse_skill_proposal(&reply);
                 Outcome::Reply(reply)
             }
             Ok(_) => self.fallback(LlmError::Response("empty reply".into()), &mut on_token),
@@ -383,6 +453,80 @@ mod tests {
             ChatSession::new(&ChatConfig::default(), true).request_messages("x")[0].content,
             persona::DEFAULT_SYSTEM_PROMPT
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn with_mind_injects_skill_context_and_gates_authoring() {
+        let dir = std::env::temp_dir().join(format!("lillith-chat-mind-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mind = lillith_core::config::MindConfig {
+            enabled: true,
+            knowledge_dir: dir.join("knowledge").to_string_lossy().into_owned(),
+            skills_dir: dir.join("skills").to_string_lossy().into_owned(),
+            max_context_tokens: 800,
+        };
+        std::fs::create_dir_all(dir.join("skills")).unwrap();
+        std::fs::write(
+            dir.join("skills/rebase.md"),
+            "# Git rebase\nRun git rebase -i main, then fixup.\n",
+        )
+        .unwrap();
+
+        // The reply proposes a skill via a fenced ```skill block.
+        let reply = "Here you go~\n```skill brew.md\n# Brew\nUse a 1:16 ratio.\n```\nSave it?";
+        let (url, mut reqs) = fake_server(vec![sse_reply(&[reply])]).await;
+        let mut s = ChatSession::new(&cfg(&url), false).with_mind(&mind);
+
+        // The relevant skill is injected into the system message for this turn.
+        let msgs = s.request_messages("how do I rebase in git?");
+        assert!(
+            msgs[0].content.contains("Skill: Git rebase"),
+            "{}",
+            msgs[0].content
+        );
+        // An unrelated query injects nothing extra.
+        let none = s.request_messages("what is the weather");
+        assert!(!none[0].content.contains("Skill: Git rebase"));
+
+        // Sending records a pending skill draft but writes nothing yet.
+        let out = s.send("make me a brew skill", |_| {}).await;
+        assert!(matches!(out, Outcome::Reply(_)));
+        let _ = reqs.recv().await.unwrap();
+        let draft = s.pending_skill().cloned().expect("a skill was proposed");
+        assert_eq!(draft.filename, "brew.md");
+        let brew = dir.join("skills/brew.md");
+        assert!(!brew.exists(), "nothing is written before confirmation");
+
+        // The gated action points into the skills folder.
+        let action = s.pending_skill_action().unwrap();
+        assert_eq!(action.target_path(), Some(brew.as_path()));
+
+        // `soul_contract()` is wired to the session's audit log; here we use an
+        // explicit temp audit path so the assertions stay hermetic.
+        let _ = s.soul_contract();
+        let audit_path = dir.join("audit.log");
+
+        // Deny: still not written, audit records the refusal.
+        let mut sc = lillith_core::soul_contract::SoulContract::new(Some(audit_path.clone()));
+        let id = sc.request(action.clone());
+        sc.deny(id).unwrap();
+        assert!(!brew.exists());
+
+        // Confirm a fresh request: now it is written and audited.
+        let mut sc = lillith_core::soul_contract::SoulContract::new(Some(audit_path.clone()));
+        let id = sc.request(action);
+        sc.confirm(id).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&brew).unwrap(),
+            "# Brew\nUse a 1:16 ratio."
+        );
+        let audit = std::fs::read_to_string(&audit_path).unwrap();
+        assert!(
+            audit.contains("DENY") && audit.contains("CONFIRM"),
+            "{audit}"
+        );
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -332,6 +332,88 @@ impl Default for AnimConfig {
     }
 }
 
+/// Default budget (in rough tokens) for knowledge/skill material injected
+/// into a chat turn (see [`MindConfig::max_context_tokens`]).
+pub const DEFAULT_MIND_CONTEXT_TOKENS: usize = 800;
+
+/// Knowledge + skills folders Lillith may read, and the skill-authoring
+/// gate (`[mind]`, Phase 1 of the companion plan).
+///
+/// Everything here is local-only: plain files under her data dir. On each
+/// chat turn she indexes the markdown/text in [`MindConfig::knowledge_dir`]
+/// and [`MindConfig::skills_dir`] and injects the most relevant snippets
+/// into the prompt, capped at [`MindConfig::max_context_tokens`]. She can
+/// *draft* a new skill, but it is only written after a Soul Contract
+/// confirmation (see [`crate::soul_contract`]); nothing here writes on its
+/// own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MindConfig {
+    /// Master switch for knowledge/skills injection and skill authoring.
+    pub enabled: bool,
+    /// Folder of reference knowledge (`.md`/`.markdown`/`.txt`). Empty =
+    /// the default `<data>/lillith/knowledge`.
+    pub knowledge_dir: String,
+    /// Folder of how-to skills she can read and (gated) write. Empty =
+    /// the default `<data>/lillith/skills`.
+    pub skills_dir: String,
+    /// Rough token budget for injected material per turn (~4 chars/token).
+    pub max_context_tokens: usize,
+}
+
+impl Default for MindConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            knowledge_dir: String::new(),
+            skills_dir: String::new(),
+            max_context_tokens: DEFAULT_MIND_CONTEXT_TOKENS,
+        }
+    }
+}
+
+impl MindConfig {
+    /// Resolved knowledge folder: the configured override, else the default
+    /// `<data>/lillith/knowledge` (`None` only if no data dir can be found).
+    pub fn resolved_knowledge_dir(&self) -> Option<PathBuf> {
+        resolve_dir(&self.knowledge_dir, "knowledge")
+    }
+
+    /// Resolved skills folder: the configured override, else the default
+    /// `<data>/lillith/skills`.
+    pub fn resolved_skills_dir(&self) -> Option<PathBuf> {
+        resolve_dir(&self.skills_dir, "skills")
+    }
+
+    /// Where skill writes and denials are logged (`<data>/lillith/audit.log`).
+    pub fn audit_log_path(&self) -> Option<PathBuf> {
+        data_dir().map(|d| d.join("audit.log"))
+    }
+
+    /// Clamped token budget (at least 1).
+    pub fn context_budget(&self) -> usize {
+        self.max_context_tokens.max(1)
+    }
+}
+
+/// An override (used verbatim if non-empty) or `<data>/lillith/<name>`.
+fn resolve_dir(override_path: &str, name: &str) -> Option<PathBuf> {
+    let o = override_path.trim();
+    if !o.is_empty() {
+        return Some(PathBuf::from(o));
+    }
+    data_dir().map(|d| d.join(name))
+}
+
+/// `$XDG_DATA_HOME/lillith`, else `~/.local/share/lillith`.
+pub fn data_dir() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_DATA_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
+    Some(base.join("lillith"))
+}
+
 /// `[avatar]`: custom (single-image) avatars, animated procedurally.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -402,6 +484,8 @@ pub struct Config {
     pub chat: ChatConfig,
     /// Animation pacing (`[anim]`).
     pub anim: AnimConfig,
+    /// Knowledge + skills folders and the skill-authoring gate (`[mind]`).
+    pub mind: MindConfig,
 }
 
 impl Default for Config {
@@ -433,6 +517,7 @@ impl Default for Config {
             monitor: MonitorConfig::default(),
             chat: ChatConfig::default(),
             anim: AnimConfig::default(),
+            mind: MindConfig::default(),
         }
     }
 }
@@ -673,6 +758,53 @@ mod tests {
         assert!(!c.overlay_speech && !c.talk_jiggle);
         // Serialises (tables after plain keys).
         assert!(toml::to_string(&Config::default()).is_ok());
+    }
+
+    #[test]
+    fn mind_table_defaults_and_override() {
+        // Defaults: enabled, empty (= default) dirs, ~800 token budget.
+        let d = Config::default().mind;
+        assert!(d.enabled);
+        assert_eq!(d.max_context_tokens, DEFAULT_MIND_CONTEXT_TOKENS);
+        assert!(d.knowledge_dir.is_empty() && d.skills_dir.is_empty());
+        assert_eq!(d.context_budget(), DEFAULT_MIND_CONTEXT_TOKENS);
+
+        // Empty budget is clamped to at least 1.
+        let zeroed = MindConfig {
+            max_context_tokens: 0,
+            ..MindConfig::default()
+        };
+        assert_eq!(zeroed.context_budget(), 1);
+
+        // Overrides parse and are used verbatim.
+        let c = Config::from_toml_str(
+            "[mind]\nenabled = false\nknowledge_dir = \"/srv/kb\"\nmax_context_tokens = 256\n",
+        )
+        .unwrap()
+        .mind;
+        assert!(!c.enabled);
+        assert_eq!(c.max_context_tokens, 256);
+        assert_eq!(c.resolved_knowledge_dir(), Some(PathBuf::from("/srv/kb")));
+        // skills_dir left empty -> default under the data dir (ends with the
+        // folder name when a data dir exists).
+        if let Some(sk) = c.resolved_skills_dir() {
+            assert!(sk.ends_with("lillith/skills"));
+        }
+    }
+
+    #[test]
+    fn mind_default_dirs_follow_xdg_data_home() {
+        // resolve against an explicit XDG_DATA_HOME so the test is hermetic.
+        let tmp = std::env::temp_dir().join(format!("lillith-mind-xdg-{}", std::process::id()));
+        std::env::set_var("XDG_DATA_HOME", &tmp);
+        let c = MindConfig::default();
+        assert_eq!(
+            c.resolved_knowledge_dir(),
+            Some(tmp.join("lillith/knowledge"))
+        );
+        assert_eq!(c.resolved_skills_dir(), Some(tmp.join("lillith/skills")));
+        assert_eq!(c.audit_log_path(), Some(tmp.join("lillith/audit.log")));
+        std::env::remove_var("XDG_DATA_HOME");
     }
 
     #[test]
