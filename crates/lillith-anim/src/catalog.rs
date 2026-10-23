@@ -47,6 +47,7 @@ const ALLURE: &[&str] = &[
     "kneel_hands_on_thighs_long",
     "wall_lean_invisible_long",
     "blow_kiss_hip_pop_long",
+    "hair_lift_stretch_long",
 ];
 const FUN: &[&str] = &[
     "dance",
@@ -161,6 +162,7 @@ mod tests {
         assert_eq!(category_of("bend_forward_wink"), 0);
         assert_eq!(category_of("body_roll_slow_long"), 0);
         assert_eq!(category_of("arch_back_over_shoulder_long"), 0);
+        assert_eq!(category_of("hair_lift_stretch_long"), 0);
         assert_eq!(category_of("blow_kiss_hip_pop_long"), 0);
         assert_eq!(category_of("wall_lean_invisible_long"), 0);
         assert_eq!(category_of("kneel_hands_on_thighs_long"), 0);

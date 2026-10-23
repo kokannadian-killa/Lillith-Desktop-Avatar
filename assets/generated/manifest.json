@@ -4776,6 +4776,34 @@
    ],
    "allure": true,
    "video": "blow_kiss_hip_pop_long/blow_kiss_hip_pop_long.mp4"
+  },
+  {
+   "name": "hair_lift_stretch_long",
+   "frame_count": 180,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "hair_lift_stretch_long/",
+   "sheet": "hair_lift_stretch_long/hair_lift_stretch_long_sheet.png",
+   "manifest": "hair_lift_stretch_long/hair_lift_stretch_long.json",
+   "preview": "hair_lift_stretch_long/hair_lift_stretch_long_preview.gif",
+   "tags": [
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "hair_lift_stretch_long/hair_lift_stretch_long.mp4"
   }
  ]
 }
