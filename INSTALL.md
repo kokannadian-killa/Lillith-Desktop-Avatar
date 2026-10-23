@@ -365,6 +365,34 @@ says which backend was chosen. Use `--backend x11` to force the fallback.
 *Keep above* for window class `lillith` (System Settings → Window Management →
 Window Rules). KWin rules don't apply to layer-shell surfaces.
 
+**A dark, rounded, see-through box around her (KDE Plasma).** That panel is
+drawn by a KDE *force blur* effect, usually **Better Blur DX** (Garuda's
+default, plugin `better_blur_dx`) or **Better Blur** (`forceblur`), when its
+window-class list covers her. She now opens as a *dock*-type surface, which
+these effects skip by default, and `install.sh` excludes her class `lillith`
+from the effect (other windows keep their blur; `--uninstall` undoes it). To do
+it by hand on an existing install:
+
+```fish
+lillith fix-kwin --check          # report only
+lillith fix-kwin                  # add `lillith` to the effect's excluded classes
+./linux/kwin-blur-exclude.sh apply    # same, from the repo; `revert` undoes it
+```
+
+Or in System Settings → Desktop Effects → Better Blur DX: with "Blur all
+except matching", add `lillith` to the window classes; with "Blur only
+matching", remove it. As a last resort turn the effect off:
+
+```fish
+qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect better_blur_dx
+kwriteconfig6 --file kwinrc --group Plugins --key better_blur_dxEnabled false
+```
+
+The startup log says which window type she uses (`LILLITH_WINDOW_TYPE=dock`,
+the default, `utility` or `normal` overrides it) and warns when an enabled
+force-blur effect still targets her. The KDE blur protocol can't opt her out:
+force blur ignores the blur region a window asks for.
+
 **A black box around her.** Her window is transparent only while a
 compositor blends it. On Wayland (layer-shell) KWin always does. On X11 the
 startup log has a `transparency:` line: `alpha=Composited` means a 32-bit ARGB

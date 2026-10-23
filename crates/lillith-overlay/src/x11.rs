@@ -2,7 +2,9 @@
 //! automatically when there is no `WAYLAND_DISPLAY` / no layer-shell).
 //!
 //! - Undecorated, transparent (32-bit ARGB visual), `AlwaysOnTop`,
-//!   `_NET_WM_WINDOW_TYPE_UTILITY`, skip taskbar/pager, all desktops.
+//!   `_NET_WM_WINDOW_TYPE_DOCK` (see [`crate::kde_effects`]: keeps KDE's
+//!   Better Blur / Rounded Corners panel off her), skip taskbar/pager,
+//!   all desktops.
 //! - Click-through: the X Shape extension **input** shape is set to the
 //!   frame's mask rectangles, so the X server itself routes clicks on
 //!   transparent pixels to the window below (winit's
@@ -30,6 +32,7 @@
 
 use crate::drag::{Placement, Release};
 use crate::input_region::mask_rects;
+use crate::kde_effects::{self, WindowRole};
 use crate::menu_popup::MenuKey;
 use crate::pixels::{rgba_to_argb_u32, rgba_to_opaque_u32, SHAPE_ALPHA};
 use crate::run::{period, Controller, OverlayError, OverlayOptions, KEEP_ON_SCREEN};
@@ -411,6 +414,8 @@ impl App {
         self.ctl.brain.set_position(p.left as f32);
         self.ctl.set_screen((monitor.2, monitor.3));
         let (x, y) = p.to_xy(h, monitor.3);
+        let role = WindowRole::from_env();
+        kde_effects::log_startup(role);
         let attrs = Window::default_attributes()
             .with_title("Lillith")
             .with_name("lillith", "Lillith")
@@ -422,7 +427,7 @@ impl App {
             } else {
                 WindowLevel::Normal
             })
-            .with_x11_window_type(vec![WindowType::Utility])
+            .with_x11_window_type(vec![x11_window_type(role)])
             .with_inner_size(PhysicalSize::new(w, h))
             .with_position(PhysicalPosition::new(monitor.0 + x, monitor.1 + y));
         let window = Rc::new(
@@ -960,6 +965,15 @@ impl App {
     }
 }
 
+/// `_NET_WM_WINDOW_TYPE` for her window: `DOCK` by default, which KDE's
+/// Better Blur (force blur) and Rounded Corners effects skip.
+pub fn x11_window_type(role: WindowRole) -> WindowType {
+    match role {
+        WindowRole::Dock => WindowType::Dock,
+        WindowRole::Utility | WindowRole::Normal => WindowType::Utility,
+    }
+}
+
 /// One startup line saying which transparency path runs (for bug reports).
 fn log_alpha(depth: u8, visual: u32, compositor: bool, alpha: AlphaMode, shape: bool) {
     let argb = depth == 32;
@@ -996,6 +1010,12 @@ fn log_alpha(depth: u8, visual: u32, compositor: bool, alpha: AlphaMode, shape: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dock_type_by_default() {
+        assert_eq!(x11_window_type(WindowRole::default()), WindowType::Dock);
+        assert_eq!(x11_window_type(WindowRole::Utility), WindowType::Utility);
+    }
 
     #[test]
     fn alpha_mode_needs_argb_and_a_compositor() {

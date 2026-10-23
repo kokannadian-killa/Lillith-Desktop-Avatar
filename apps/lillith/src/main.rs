@@ -184,6 +184,15 @@ enum Cmd {
         #[arg(long, conflicts_with = "id")]
         reapply: bool,
     },
+    /// KDE Plasma: keep Better Blur DX / Better Blur ("force blur") from
+    /// drawing a dark blurred panel behind her, by adding her window class
+    /// `lillith` to the effect's excluded window classes in kwinrc (then
+    /// KWin reconfigures). Only touches effects that are enabled.
+    FixKwin {
+        /// Only report what would change.
+        #[arg(long)]
+        check: bool,
+    },
     /// The click-to-chat bubble window (started by the overlay; prints
     /// chat events as JSON lines on stdout).
     #[command(hide = true)]
@@ -371,7 +380,35 @@ async fn main() -> Result<()> {
             no_apply,
             reapply,
         }) => icon_cmd(&cli, id.as_deref(), list, no_apply, reapply)?,
+        Some(Cmd::FixKwin { check }) => fix_kwin_cmd(check)?,
         None => run_overlay(&cli, rules.rules.len()).await?,
+    }
+    Ok(())
+}
+
+/// `lillith fix-kwin`.
+fn fix_kwin_cmd(check: bool) -> Result<()> {
+    use lillith_overlay::kde_effects::{fix_kwin, FixOutcome};
+    let outcomes = fix_kwin(check)
+        .map_err(|e| anyhow::anyhow!("fix-kwin needs kreadconfig6/kwriteconfig6 (KDE): {e}"))?;
+    if outcomes.is_empty() {
+        println!("No force-blur effect (Better Blur DX / Better Blur) is enabled: nothing to do.");
+    }
+    for o in outcomes {
+        match o {
+            FixOutcome::Excluded { effect, old } => println!(
+                "{effect}: {} `lillith` in its window classes (was: {:?}).",
+                if check { "would exclude" } else { "excluded" },
+                old
+            ),
+            FixOutcome::AlreadyFine { effect } => {
+                println!("{effect}: already leaves Lillith alone.")
+            }
+            FixOutcome::Manual { effect, classes } => println!(
+                "{effect}: a regex in its window classes ({classes:?}) matches `lillith`; \
+                 edit it in System Settings > Desktop Effects > {effect}."
+            ),
+        }
     }
     Ok(())
 }

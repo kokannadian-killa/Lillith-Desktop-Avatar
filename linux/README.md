@@ -33,7 +33,12 @@ in place. `./linux/install.sh --yes` takes every default without asking.
 5. **Desktop shortcut** (default yes) in your desktop folder (`xdg-user-dir
    DESKTOP`), marked trusted. **Autostart** (default no).
 6. **KWin bridge** (window perching) via `kpackagetool6` + `kwriteconfig6`.
-   Skipped quietly when you're not on Plasma 6.
+   Skipped quietly when you're not on Plasma 6. Then, if a KDE force-blur
+   effect (Better Blur DX `better_blur_dx`, Better Blur `forceblur`) is on and
+   would blur her, asks (default yes) to **exclude her window class `lillith`**
+   from it via `kwin-blur-exclude.sh apply`; this is what draws the dark box
+   around her. Only if that is impossible (a `/regex/` in its class list) does
+   it offer to turn the effect off. Both are undone by `--uninstall`.
 7. **Brain**: finds a `.gguf` under `~` (Dolphin 3.0 Llama 3.2 3B Q4_K_M first)
    and `llama-server`, then runs `lillith setup`. The endpoint is fixed to
    `http://127.0.0.1:8080`. Nothing is downloaded, and no model is ever fetched.
@@ -85,7 +90,26 @@ git lfs install; git lfs pull
 ```
 
 This removes the binaries, art, icons, menu entry, desktop shortcut, autostart
-entry and KWin script. It never touches your `.gguf` models or `llama-server`.
+entry and KWin script, and reverts the Better Blur DX exclusion it added
+(state in `~/.local/share/lillith/kwin-blur-exclusion.state`).
+
+## Dark box around her (KDE Better Blur DX)
+
+```fish
+lillith fix-kwin --check               # does a force-blur effect target her?
+lillith fix-kwin                       # exclude `lillith` from it (kwinrc)
+./linux/kwin-blur-exclude.sh apply     # same; `revert` undoes it, `disable` turns the effect off
+# last resort, turns it off for every window:
+qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect better_blur_dx
+kwriteconfig6 --file kwinrc --group Plugins --key better_blur_dxEnabled false
+```
+
+kwinrc keys (from `src/blur.kcfg` of xarblu/kwin-effects-better-blur-dx and
+taj-ny/kwin-effects-forceblur): `[Plugins] better_blur_dxEnabled` /
+`forceblurEnabled`; class list `WindowClasses` (one per line) in
+`[Effect-better-blur-dx]` (older Better Blur DX and Better Blur:
+`[Effect-blurplus]`); `BlurMatching=false` means "blur all except listed".
+Tests: `bash linux/tests/kwin-blur-exclude-test.sh`. It never touches your `.gguf` models or `llama-server`.
 
 ## App icon
 
