@@ -139,40 +139,46 @@ impl Fall {
     }
 }
 
-/// A vertical shift (px) spread over `left_s` seconds, e.g. lowering her
-/// window while a sit-down blend plays so the seat meets the edge as the
-/// blend ends.
+/// Progress of a blend her window height follows (sit-down / stand-up), so
+/// the seat meets the edge as the blend ends instead of jumping.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Ease {
-    /// Px still to move.
-    pub left_px: i32,
     /// Seconds left.
     pub left_s: f32,
+    /// Blend length (s).
+    pub total_s: f32,
 }
 
 impl Ease {
-    pub fn new(px: i32, secs: f32) -> Self {
+    pub fn new(secs: f32) -> Self {
+        let s = secs.max(0.0);
         Self {
-            left_px: px,
-            left_s: secs.max(0.0),
+            left_s: s,
+            total_s: s,
         }
     }
 
-    /// Px to move this tick (linear); the last step takes the rest.
-    pub fn step(&mut self, dt: f32) -> i32 {
-        let d = if self.left_s <= dt || self.left_s <= 0.0 {
-            self.left_px
-        } else {
-            (self.left_px as f32 * dt / self.left_s).round() as i32
-        };
-        self.left_px -= d;
+    pub fn step(&mut self, dt: f32) {
         self.left_s = (self.left_s - dt).max(0.0);
-        d
+    }
+
+    /// Part done, 0..=1 (linear).
+    pub fn fraction(&self) -> f32 {
+        if self.total_s <= 0.0 {
+            1.0
+        } else {
+            (1.0 - self.left_s / self.total_s).clamp(0.0, 1.0)
+        }
     }
 
     pub fn done(&self) -> bool {
-        self.left_px == 0
+        self.left_s <= 0.0
     }
+}
+
+/// Screen px for `cell` px at overlay `scale`, times `part` (0..=1).
+pub fn scaled_px(cell: i32, scale: f32, part: f32) -> i32 {
+    (cell as f32 * scale * part).round() as i32
 }
 
 /// A sit on the window edge in progress.
@@ -182,17 +188,29 @@ pub struct Sit {
     pub clip: String,
     /// Seconds left.
     pub left_s: f32,
-    /// How far (px) the window goes down to put her seat on the edge.
-    pub drop_px: i32,
-    /// Part of `drop_px` not applied yet (a sit-down blend is playing).
+    /// Seat line above the feet anchor in cell px (`anchor y - seat_y`):
+    /// her window goes down this much (× scale) to put the seat on the edge.
+    pub seat_cell: i32,
+    /// A sit-down blend is playing: the drop follows it.
     pub sink: Option<Ease>,
 }
 
 impl Sit {
-    /// Px the window is lowered right now.
-    pub fn applied_px(&self) -> i32 {
-        self.drop_px - self.sink.map_or(0, |e| e.left_px)
+    /// Px her window is lowered at `scale` right now.
+    pub fn lowered_px(&self, scale: f32) -> i32 {
+        scaled_px(
+            self.seat_cell,
+            scale,
+            self.sink.map_or(1.0, |e| e.fraction()),
+        )
     }
+}
+
+/// Standing back up through a blend: the rest of a sit's drop going away.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Rise {
+    pub seat_cell: i32,
+    pub ease: Ease,
 }
 
 /// Standing (or sitting) on top of a window.
@@ -205,13 +223,23 @@ pub struct Perch {
     /// Seconds of calm until the next sit.
     pub next_sit_s: f32,
     /// Raising her back up while a stand-up blend plays.
-    pub rise: Option<Ease>,
+    pub rise: Option<Rise>,
 }
 
 impl Perch {
-    /// Px her window is below standing height (a sit, or a rise in progress).
-    pub fn lowered_px(&self) -> i32 {
-        self.sit.as_ref().map_or(0, Sit::applied_px) + self.rise.map_or(0, |e| e.left_px)
+    /// Px her window is below standing height at `scale` (a sit, or a rise
+    /// in progress).
+    pub fn lowered_px(&self, scale: f32) -> i32 {
+        self.sit.as_ref().map_or(0, |s| s.lowered_px(scale))
+            + self.rise.map_or(0, |r| {
+                scaled_px(r.seat_cell, scale, 1.0 - r.ease.fraction())
+            })
+    }
+
+    /// The `bottom` margin that rests her on this window at `scale`: feet on
+    /// its top, or (sitting) the seat line on it.
+    pub fn bottom(&self, frame: &Frame, scale: f32) -> i32 {
+        frame.bottom_for_feet(self.rect.y) - self.lowered_px(scale)
     }
 }
 
@@ -521,31 +549,57 @@ mod tests {
     }
 
     #[test]
-    fn eases_spread_the_shift_and_land_exactly() {
-        let mut e = Ease::new(100, 1.0);
-        let steps: Vec<i32> = (0..4).map(|_| e.step(0.25)).collect();
-        assert_eq!(steps.iter().sum::<i32>(), 100);
-        assert!(steps.iter().all(|&d| d > 0 && d <= 34), "{steps:?}");
-        assert!(e.done());
-        assert_eq!(e.step(0.25), 0);
-        // No time left (or a zero-length blend): all at once.
-        assert_eq!(Ease::new(36, 0.0).step(1.0 / 60.0), 36);
-        // A sit that is still sinking counts only what was applied.
-        let sit = Sit {
+    fn eases_and_seat_drops_follow_the_scale() {
+        let mut e = Ease::new(0.5);
+        assert_eq!(e.fraction(), 0.0);
+        e.step(0.25);
+        assert!((e.fraction() - 0.5).abs() < 1e-6);
+        e.step(1.0);
+        assert!(e.done() && e.fraction() == 1.0);
+        assert_eq!(Ease::new(0.0).fraction(), 1.0);
+        // Seat 162 cell px above the feet (sit_swing: 392 - 230).
+        let mut sit = Sit {
             clip: "sit_swing".into(),
             left_s: 5.0,
-            drop_px: 80,
-            sink: Some(Ease::new(30, 0.5)),
+            seat_cell: 162,
+            sink: None,
         };
-        assert_eq!(sit.applied_px(), 50);
-        let p = Perch {
+        assert_eq!(sit.lowered_px(0.55), 89);
+        assert_eq!(sit.lowered_px(1.0), 162);
+        sit.sink = Some(Ease {
+            left_s: 0.25,
+            total_s: 1.0,
+        });
+        assert_eq!(sit.lowered_px(1.0), 122);
+        // Window top at y 300 of an 800 px output, feet 4 px above the
+        // window bottom: standing bottom 496; seated at 0.55 / 1.0.
+        let frame = Frame {
+            origin: (0, 0),
+            screen_h: 800,
+            feet: (20, 4),
+        };
+        let mut p = Perch {
             id: "a".into(),
-            rect: Rect::new(0, 0, 10, 10),
-            sit: Some(sit),
+            rect: Rect::new(0, 300, 600, 400),
+            sit: None,
             next_sit_s: 1.0,
-            rise: Some(Ease::new(7, 0.2)),
+            rise: None,
         };
-        assert_eq!(p.lowered_px(), 57);
+        assert_eq!(p.bottom(&frame, 0.55), 496);
+        assert_eq!(p.bottom(&frame, 1.0), 496);
+        p.sit = Some(Sit { sink: None, ..sit });
+        assert_eq!(p.bottom(&frame, 0.55), 496 - 89);
+        assert_eq!(p.bottom(&frame, 1.0), 496 - 162);
+        // Rising: the part of the drop not yet undone.
+        p.sit = None;
+        p.rise = Some(Rise {
+            seat_cell: 162,
+            ease: Ease {
+                left_s: 0.25,
+                total_s: 1.0,
+            },
+        });
+        assert_eq!(p.lowered_px(1.0), 41);
     }
 
     #[test]
