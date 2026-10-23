@@ -320,7 +320,6 @@ status = "PY (X11 wmctrl)"
 event = "window.opened.terminal"
 pose = "hacking"
 gesture = "salute"
-line = "Let's hack! 💻"
 mood = "Playful"
 sfx = "hover"
 priority = 35
@@ -414,7 +413,6 @@ status = "ART"
 [[rule]]
 event = "focus.long_work"
 pose = "code_inspect"
-line = "You've been at it a while. Stretch, drink some water?"
 sfx = "soft"
 priority = 50
 cooldown_s = 3000.0
@@ -431,11 +429,14 @@ source = "process spawn (sysinfo diff)"
 status = "ART"
 
 # ── Idle / presence ───────────────────────────────────────────────────────
+# Rules without a `line` speak from Lily's canned banter pools
+# (crates/lillith-core/src/banter.rs): pokes, double taps, drags, drops,
+# pats (hover_long), greetings, wake-ups, idle.long, good-nights,
+# focus.long_work and terminals. A `line` here overrides the pool.
 [[rule]]
 event = "idle.long"
 pose = "sitting"
 gesture = "float"
-line = "You've been quiet. I'll stay close."
 mood = "Sleepy"
 priority = 10
 source = "ext-idle-notify-v1 / org.freedesktop.ScreenSaver"

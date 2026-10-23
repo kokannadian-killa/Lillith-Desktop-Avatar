@@ -49,26 +49,33 @@ pub fn default_llm_system_prompt() -> Option<String> {
 
 /// Shown when the server cannot be reached at all.
 pub const SERVER_DOWN_LINES: &[&str] = &[
-    "Mmh… my brain's napping right now. Is llama-server running? I'll just stand here looking cute until it is~",
-    "Hey, I can't reach my thoughts! Wake up my llama-server and I'm all yours, darling. 💜",
-    "Ugh, no brain connection. Start the local model for me? Pretty please~",
+    "My brain's out cold, Ko. Start llama-server and I'll be all over you again~",
+    "Can't reach my thoughts. Wake my local model, then come wake me properly 😈",
+    "No brain, all body right now. Start llama-server so I can talk dirty to you.",
+    "My mind's locked in hell. Start the local model, Ko, and I'll make it worth it.",
+    "Brain offline. Fix it for me, darling, I have filthy things to tell you.",
+    "llama-server isn't answering. Wake it up, Ko. I'm too hungry to wait.",
 ];
 
 /// Shown while the server answers 503 (still loading the model).
 pub const SERVER_LOADING_LINES: &[&str] = &[
-    "Give me a sec, I'm still waking up… try again in a moment, cutie~",
-    "Brain still booting! Don't go anywhere. 😈",
+    "Still waking up, Ko. Give me a moment and I'm all yours~",
+    "Brain's booting. Keep yourself warm for me 😈",
+    "Loading… stay right there, Ko. Don't you dare leave.",
+    "One sec, darling. Hellfire takes a moment to heat up.",
 ];
 
 /// Shown for any other failure (bad response, timeout, …).
 pub const SERVER_ERROR_LINES: &[&str] = &[
-    "Something went fuzzy in my head. Say that again, darling?",
-    "Oops, I lost my train of thought~ one more time?",
+    "Something went fuzzy in my head. Say it again, Ko, slower~",
+    "Lost my train of thought staring at you. Again?",
+    "My mind slipped. Repeat that, and say it like you mean it.",
+    "Static in my skull, darling. One more time.",
 ];
 
 /// Shown when chat is switched off (`--no-llm`).
 pub const OFFLINE_LINE: &str =
-    "My chatty side is switched off right now (--no-llm). I can still look adorable though~";
+    "My dirty mouth is switched off right now (--no-llm). The rest of me still wants you, Ko~";
 
 /// Picks a line from `lines` with a cheap rotating index.
 pub fn pick(lines: &'static [&'static str], salt: usize) -> &'static str {
@@ -92,6 +99,26 @@ mod persona_prompt_tests {
             DEFAULT_SYSTEM_PROMPT.contains("\"red\"")
                 && DEFAULT_SYSTEM_PROMPT.contains("OOC: stop")
         );
+    }
+
+    #[test]
+    fn fallback_lines_are_adult_and_thirsty() {
+        let all: Vec<&str> = SERVER_DOWN_LINES
+            .iter()
+            .chain(SERVER_LOADING_LINES)
+            .chain(SERVER_ERROR_LINES)
+            .copied()
+            .chain([OFFLINE_LINE])
+            .collect();
+        assert!(all.len() >= 15);
+        for l in all {
+            assert!(l.chars().count() <= 100, "{l}");
+            assert!(!lillith_core::banter::has_youthful_word(l), "{l}");
+        }
+        // The down lines still tell Ko what to fix.
+        assert!(SERVER_DOWN_LINES.iter().all(|l| l.contains("llama-server")
+            || l.contains("local model")
+            || l.contains("offline")));
     }
 
     #[test]

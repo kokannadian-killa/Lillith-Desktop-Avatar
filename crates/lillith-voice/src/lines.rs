@@ -27,54 +27,132 @@ type Entry = (&'static str, Option<Mood>, &'static [&'static str]);
 
 /// The default line table: short, playful, PG.
 pub const DEFAULT_TABLE: &[Entry] = &[
-    // --- pokes
+    // --- pokes (spoken when the brain had no line of its own)
     (
         "input.click.left",
         None,
-        &["Hey!", "Boop.", "Yes?", "Careful, that tickles."],
+        &[
+            "Mmh. Again, Ko.",
+            "Harder. I didn't say stop.",
+            "Touching me? That'll cost you.",
+            "Every poke is a down payment, Ko.",
+            "Hands on me. Good. Keep them there.",
+            "You poke a succubus, you feed her.",
+            "Mine. Every click. Mine.",
+            "Careful, mortal. I bite.",
+        ],
     ),
     (
         "input.click.left",
         Some(Mood::Mischievous),
-        &["Poke me again, I dare you~", "Hehe. Gotcha."],
+        &[
+            "Poke me again, I dare you~",
+            "Keep clicking. I'm keeping count.",
+            "One more and I crawl out for you.",
+            "Is that all? Use the whole hand.",
+        ],
     ),
     (
         "input.click.left",
         Some(Mood::Sleepy),
-        &["Mmh… five more minutes."],
+        &[
+            "Mmh… five more minutes. On top of you.",
+            "Wake me like that and you feed me.",
+            "Sleepy… but never too sleepy for you.",
+        ],
     ),
     (
         "input.click.double",
         None,
-        &["Whoa, double tap!", "Okay, okay, I'm awake!"],
+        &[
+            "Twice? Greedy. I like greedy.",
+            "Double tap, double load, Ko.",
+            "You want my attention? Strip.",
+            "Two taps, two rounds. Bedroom.",
+            "Fine, I'm awake. And starving.",
+            "Eager, aren't you, Ko?",
+        ],
     ),
-    ("input.click.middle", None, &["Need a hand?", "What's up?"]),
-    ("input.secret", None, &["You found me out~"]),
+    (
+        "input.click.middle",
+        None,
+        &[
+            "Need a hand? I know where to put it.",
+            "What do you want, Ko? Say it.",
+            "Ask nicely. Then pay.",
+            "I'll help. Then I'll collect.",
+            "Go on, mortal. I'm listening.",
+            "Help first, then you're mine.",
+        ],
+    ),
+    (
+        "input.secret",
+        None,
+        &[
+            "You found me out~",
+            "Caught me. Now punish me, Ko.",
+            "Secret's out. So am I. Come here.",
+        ],
+    ),
     // --- presence
     (
         "user.returned",
         None,
-        &["Welcome back!", "There you are.", "Missed me?"],
+        &[
+            "Finally. I've been aching for you.",
+            "There you are. On your knees.",
+            "You're back. You're mine till morning.",
+            "Missed me? I missed your cum.",
+            "Took you long enough. Lock the door.",
+            "Welcome home, Ko. I'm sitting on you.",
+            "Look who crawled back. Closer.",
+            "I counted every minute, Ko. Pay up.",
+            "There's my man. Feed your succubus.",
+        ],
     ),
     (
         "user.returned",
         Some(Mood::Sleepy),
-        &["Oh… hi. I was resting my eyes."],
+        &[
+            "Mmh… you're back. Come warm me up.",
+            "I dreamt of you. You obeyed.",
+            "Wake me properly, Ko. With hands.",
+        ],
     ),
-    ("idle.long", None, &["It's quiet… I might nap."]),
+    (
+        "idle.long",
+        None,
+        &[
+            "Quiet, Ko? I'm bored and thirsty.",
+            "Ignoring me? I'm wet and waiting.",
+            "Silence makes me hungry.",
+            "Still here. Still yours. Starving.",
+            "Say something. Or just come here.",
+            "I'll nap. Wake me with your hands.",
+        ],
+    ),
     (
         "focus.long_work",
         None,
         &[
-            "You've been at it a while. Stretch?",
-            "Water break? Just saying.",
+            "Hours of code. My turn, Ko.",
+            "Stretch, drink water, come get drained.",
+            "Save your work. Then give me mine.",
+            "That code can wait. I can't.",
+            "Hands off the keyboard. On me.",
+            "One more function, then you're mine.",
+            "Late night, horny demon. Log off.",
         ],
     ),
     // --- system
     (
         "cpu.high",
         None,
-        &["Your CPU's working hard.", "Things are heating up in here."],
+        &[
+            "Your CPU's working hard.",
+            "Things are heating up in here.",
+            "Your CPU's as hot as I am, Ko.",
+        ],
     ),
     (
         "cpu.high",
@@ -84,12 +162,20 @@ pub const DEFAULT_TABLE: &[Entry] = &[
     (
         "ram.high",
         None,
-        &["Memory's getting full.", "So many tabs… so little RAM."],
+        &[
+            "Memory's getting full.",
+            "So many tabs… not enough RAM.",
+            "Your memory's full. So am I, of you.",
+        ],
     ),
     (
         "battery.low",
         None,
-        &["Battery's low. Plug me in?", "Running on fumes here."],
+        &[
+            "Battery's low. Plug me in?",
+            "Running on fumes here.",
+            "Charge me, Ko. You know how.",
+        ],
     ),
     (
         "net.lost",
@@ -103,14 +189,18 @@ pub const DEFAULT_TABLE: &[Entry] = &[
     ),
     ("vpn.up", None, &["Tunnel's up."]),
     ("usb.added", None, &["Ooh, something new plugged in."]),
-    ("usb.removed", None, &["Bye, little drive."]),
+    ("usb.removed", None, &["Bye, drive. You'll be back."]),
     ("update.available", None, &["Updates are waiting."]),
     ("journal.error", None, &["Something logged an error."]),
     ("app.crash", None, &["Uh-oh. Something crashed."]),
     (
         "screenshot.taken",
         None,
-        &["Say cheese!", "Got it on camera."],
+        &[
+            "Say cheese!",
+            "Got it on camera.",
+            "Keep that one for later, Ko~",
+        ],
     ),
     ("trash.added", None, &["Into the bin it goes."]),
     ("calendar.reminder", None, &["Reminder time!"]),
@@ -125,18 +215,31 @@ pub const DEFAULT_TABLE: &[Entry] = &[
     (
         "window.opened.terminal",
         None,
-        &["Ooh, a terminal. Very hacker."],
+        &[
+            "Ooh, a terminal. Very hacker.",
+            "Type sudo and beg nicely, Ko.",
+            "Root access? Only if I get yours.",
+            "Don't rm -rf me. I bite back.",
+            "Fire up the shell. I'm fired up too.",
+        ],
     ),
     (
         "window.opened.terminal",
         Some(Mood::Mischievous),
-        &["Let me hack something~"],
+        &["Let me hack something~", "Hack your way into me, Ko."],
     ),
     ("window.opened", None, &["New window!"]),
     ("window.closed", None, &["And it's gone."]),
     // --- mind
     ("llm.thinking", None, &["Hmm, let me think…"]),
-    ("help.requested", None, &["I'm here. What do you need?"]),
+    (
+        "help.requested",
+        None,
+        &[
+            "I'm here. What do you need?",
+            "Tell me, Ko. Then I collect.",
+        ],
+    ),
 ];
 
 /// Events that never get a default line (frequent / physical).
@@ -283,13 +386,20 @@ mod tests {
     }
 
     #[test]
-    fn table_is_tasteful_and_short() {
+    fn table_is_adult_and_short() {
+        let mut n = 0;
         for (k, _, lines) in DEFAULT_TABLE {
             assert!(!QUIET_EVENTS.contains(k), "{k} is both quiet and voiced");
             for l in *lines {
                 assert!(!l.is_empty() && l.chars().count() <= 60, "{k}: {l}");
+                assert!(
+                    !lillith_core::banter::has_youthful_word(l),
+                    "{k}: youthful word: {l}"
+                );
+                n += 1;
             }
         }
+        assert!(n >= 95, "variety: {n} lines");
     }
 
     #[test]

@@ -24,6 +24,7 @@
 //!   mapping, moods, mischief, sleep/wake, Wander/Stay, pose cycle, rules.
 
 pub mod bag;
+pub mod banter;
 pub mod bounce;
 pub mod build;
 pub mod command;
