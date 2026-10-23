@@ -8,7 +8,7 @@ Windows 10 or 11, 64-bit. No admin rights needed.
    yet, so SmartScreen may say "Windows protected your PC". Click
    **More info ▸ Run anyway**.
 2. Pick the options you want:
-   - **Desktop shortcut** (off by default).
+   - **Desktop shortcut** (on by default; untick it if you don't want one).
    - **Start Lillith when I sign in** (off by default). This puts a
      shortcut in your Startup folder.
 3. The default install folder is `%LOCALAPPDATA%\Programs\Lillith`.

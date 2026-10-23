@@ -3,6 +3,9 @@ package com.kokannadian.lillith;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutManager;
+import android.graphics.drawable.Icon;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Typeface;
@@ -27,7 +30,9 @@ import java.io.OutputStream;
 /**
  * First-run setup: overlay permission, notifications, the local GGUF model
  * (side-loaded by the user, copied into app storage; nothing is downloaded),
- * her size, then start/hide the overlay.
+ * her size, then start/hide the overlay. Also offers a pinned home-screen
+ * shortcut (once, after her first start; plus a button) where the launcher
+ * supports it.
  */
 public final class SetupActivity extends Activity {
     private static final int REQ_PICK_MODEL = 10;
@@ -120,6 +125,9 @@ public final class SetupActivity extends Activity {
         startBtn = button("Start Lillith", v -> toggle());
         col.addView(startBtn);
         col.addView(button("Chat with Lily", v -> startActivity(new Intent(this, ChatActivity.class))));
+        if (canPinShortcut()) {
+            col.addView(button("Add Lillith to the home screen", v -> requestPinShortcut()));
+        }
 
         ScrollView sv = new ScrollView(this);
         sv.addView(col);
@@ -149,6 +157,40 @@ public final class SetupActivity extends Activity {
         sizeLabel.setText(String.format("%d%% of the desktop default size", Math.round(Prefs.size(this) * 100)));
         startBtn.setText(OverlayService.running ? "Hide Lillith" : "Start Lillith");
         startBtn.setEnabled(overlay && !busy);
+    }
+
+    /** The launcher can pin shortcuts (ShortcutManager, API 26+, launcher-dependent). */
+    private boolean canPinShortcut() {
+        try {
+            ShortcutManager sm = getSystemService(ShortcutManager.class);
+            return sm != null && sm.isRequestPinShortcutSupported();
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** Asks the launcher to pin a "Lillith" home-screen shortcut (the system shows its own confirm dialog). */
+    private void requestPinShortcut() {
+        if (!canPinShortcut()) return;
+        try {
+            Intent open = new Intent(this, SetupActivity.class).setAction(Intent.ACTION_MAIN);
+            ShortcutInfo info = new ShortcutInfo.Builder(this, "lillith_home")
+                    .setShortLabel("Lillith")
+                    .setLongLabel("Lillith setup")
+                    .setIcon(Icon.createWithResource(this, getApplicationInfo().icon))
+                    .setIntent(open)
+                    .build();
+            getSystemService(ShortcutManager.class).requestPinShortcut(info, null);
+        } catch (RuntimeException e) {
+            // Launcher refused (or no foreground); the app-drawer icon still works.
+        }
+    }
+
+    /** First run only: offer the home-screen shortcut once after she first starts. */
+    private void offerPinShortcutOnce() {
+        if (Prefs.get(this).getBoolean(Prefs.KEY_PIN_OFFERED, false)) return;
+        Prefs.get(this).edit().putBoolean(Prefs.KEY_PIN_OFFERED, true).apply();
+        requestPinShortcut();
     }
 
     private void toggle() {
@@ -183,6 +225,7 @@ public final class SetupActivity extends Activity {
                     Prefs.get(this).edit().putBoolean(Prefs.KEY_SETUP_DONE, true).apply();
                     startForegroundService(new Intent(this, OverlayService.class));
                     OverlayService.running = true;
+                    offerPinShortcutOnce();
                 }
                 refresh();
             });

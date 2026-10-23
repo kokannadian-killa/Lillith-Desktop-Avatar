@@ -125,6 +125,10 @@ Authoritative milestone list and acceptance criteria: [`docs/PLAN.md` §5](docs/
 
 ## Quick start
 
+**Installers:** [`linux/`](linux/README.md) (Arch/Garuda: `./linux/install.sh`),
+[`windows/`](windows/README.md) (setup.exe / portable zip) and
+[`android/`](android/INSTALL-android.md) (APK). Building by hand:
+
 Full setup (system packages for Arch/Garuda and Debian/Ubuntu, config, flags,
 troubleshooting) is in **[INSTALL.md](INSTALL.md)**. The short version:
 

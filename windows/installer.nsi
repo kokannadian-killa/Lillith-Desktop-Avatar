@@ -4,13 +4,15 @@
 ;            -DICON=windows/lillith.ico windows/installer.nsi
 ;
 ; Per-user install (no admin): %LOCALAPPDATA%\Programs\Lillith. Start menu
-; shortcuts, optional desktop + sign-in (autostart) shortcuts, a first-run
+; shortcuts, a desktop shortcut (on by default, untickable), an optional
+; sign-in (autostart) shortcut, a first-run
 ; "Lily's brain" page that points config.toml at a GGUF + llama-server.exe
 ; already on this PC (runs `lillith.exe setup`), and an uninstaller.
 ; Nothing is downloaded, ever: no models, no runtimes, no update checks.
 ;
 ; Silent:  Lillith-setup.exe /S [/GGUF=C:\models\x.gguf] [/LLAMASERVER=C:\llama.cpp\llama-server.exe]
-;          [/AUTOSTART] [/D=C:\path\to\Lillith]   (/D must be last)
+;          [/AUTOSTART] [/NODESKTOP] [/D=C:\path\to\Lillith]   (/D must be last)
+;          The desktop shortcut is created by default (also with /S); /NODESKTOP skips it.
 
 ; 64-bit installer (Lillith is x64-only; also runs under 64-bit-only Wine).
 Target amd64-unicode
@@ -162,7 +164,7 @@ Section "Lillith (required)" SecMain
   Delete "$DESKTOP\Lillith.lnk"
 SectionEnd
 
-Section /o "Desktop shortcut" SecDesktop
+Section "Desktop shortcut" SecDesktop
   CreateShortcut "$DESKTOP\Lillith.lnk" "$INSTDIR\lillith.exe" "" "$INSTDIR\lillith.ico"
 SectionEnd
 
@@ -180,7 +182,7 @@ Section "-SilentBrain"
   ${EndIf}
 SectionEnd
 
-; (after the sections: uses ${SecAutostart})
+; (after the sections: uses ${SecAutostart} and ${SecDesktop})
 Function .onInit
   ${GetParameters} $R0
   ClearErrors
@@ -191,6 +193,11 @@ Function .onInit
   ${GetOptions} $R0 "/AUTOSTART" $R1
   ${IfNot} ${Errors}
     !insertmacro SelectSection ${SecAutostart}
+  ${EndIf}
+  ClearErrors
+  ${GetOptions} $R0 "/NODESKTOP" $R1
+  ${IfNot} ${Errors}
+    !insertmacro UnselectSection ${SecDesktop}
   ${EndIf}
 FunctionEnd
 

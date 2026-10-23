@@ -9,6 +9,7 @@ final class Prefs {
     static final String KEY_MODEL = "model_path";
     static final String KEY_SIZE = "size";
     static final String KEY_SETUP_DONE = "setup_done";
+    static final String KEY_PIN_OFFERED = "pin_shortcut_offered";
 
     private Prefs() {}
 

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Lillith
+GenericName=Desktop companion
+Comment=Your desktop demon: a local-only animated companion
+Exec=lillith
+Icon=lillith
+Terminal=false
+Categories=Utility;
+Keywords=avatar;companion;pet;mascot;
+StartupNotify=false
+Actions=settings;
+
+[Desktop Action settings]
+Name=Lillith Settings
+Exec=lillith-settings

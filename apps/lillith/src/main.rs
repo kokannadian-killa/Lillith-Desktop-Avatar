@@ -58,7 +58,8 @@ struct Cli {
     #[arg(long)]
     baked_jiggle: bool,
     /// manifest.toml of the animation set (default: $LILLITH_MANIFEST,
-    /// ./assets/generated/manifest.toml, ~/.local/share/lillith/generated/manifest.toml).
+    /// ./assets/generated/manifest.toml, ~/.local/share/lillith/generated/manifest.toml,
+    /// then $XDG_DATA_DIRS/lillith/generated/manifest.toml).
     #[arg(long)]
     manifest: Option<PathBuf>,
     /// Config file (default: ~/.config/lillith/config.toml).

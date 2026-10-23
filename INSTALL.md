@@ -4,6 +4,11 @@ This guide covers building Lillith from source, running her, configuring her,
 and fixing the usual overlay problems. For what she does, see the
 [README](README.md).
 
+> **Just want to install?** Use the per-platform installers:
+> [`linux/`](linux/README.md) (Arch/Garuda, one command: `./linux/install.sh`),
+> [`windows/`](windows/README.md) and [`android/`](android/INSTALL-android.md).
+> This guide is for building and running by hand.
+
 - [Tested environment](#tested-environment)
 - [1. Prerequisites](#1-prerequisites)
 - [2. Clone and build](#2-clone-and-build)
@@ -122,6 +127,8 @@ for it in this order:
 2. `$LILLITH_MANIFEST`
 3. `./assets/generated/manifest.toml`
 4. `~/.local/share/lillith/generated/manifest.toml`
+5. `<dir>/lillith/generated/manifest.toml` for each dir in `$XDG_DATA_DIRS`
+   (default `/usr/local/share:/usr/share`; used by the `linux/PKGBUILD` package)
 
 If you only have a `manifest.json` from the image pipeline, convert it first:
 

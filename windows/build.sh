@@ -11,7 +11,7 @@
 #   SHA256SUMS
 #
 # Needs: rustup target x86_64-pc-windows-gnu, mingw-w64 (x86_64-w64-mingw32-gcc),
-# nsis (makensis), python3 + Pillow (icon only). Nothing is downloaded at
+# nsis (makensis), python3 + Pillow (icon only, if windows/lillith.ico is missing). Nothing is downloaded at
 # install or run time; this script only fetches crates if Cargo has to.
 #
 # Env: CARGO (cargo binary, default `cargo`), CARGO_TARGET_DIR, DIST,
@@ -52,7 +52,7 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 cp "$BIN/lillith.exe" "$BIN/lillith-settings.exe" "$STAGE/"
 python3 "$HERE/stage-assets.py" "$STAGE"
-[[ -f "$HERE/lillith.ico" ]] || python3 "$HERE/make-icon.py"
+[[ -f "$HERE/lillith.ico" ]] || python3 "$ROOT/branding/make-icons.py"
 cp "$HERE/lillith.ico" "$STAGE/"
 cp "$HERE/INSTALL-windows.md" "$STAGE/INSTALL-windows.txt"
 cp "$ROOT/LICENSE" "$STAGE/LICENSE.txt"
