@@ -31,7 +31,7 @@ Everything Android-specific lives in this `android/` folder:
       equal to the file size. A 1–4B model at Q4_K_M (0.7–2.5 GB) suits most phones; 7–8B needs 8 GB+ RAM.
       You can skip this: she still plays, she just can't chat.
    4. **Size**: 100% = the desktop default (0.55 × the 400 px clips, in dp, so the same apparent size).
-   5. **Start Lillith**. The first start unpacks her clips (~190 MB, takes a few seconds).
+   5. **Start Lillith**. The first start unpacks her clips (~270 MB, takes a few seconds).
 3. Using her:
    - **Tap** her: the same reactions as a desktop click (double tap etc. go through the same brain).
    - **Hold** (½ s): the menu.
