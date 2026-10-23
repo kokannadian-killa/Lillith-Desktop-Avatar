@@ -141,8 +141,8 @@ PNG sheet stays the fallback and the bounds-check reference.
 - **Repo size:** the per-frame `frames/` PNGs were byte-for-byte copies of the sheet cells (verified
   on all 2690 frames) and nothing read them, so they are no longer committed. They stay in the build
   dir. `assets/generated/` went from 381 MiB (sheets 185 + frames 195) to about 246 MiB
-  (sheets 205 incl. the 8 new poses + MP4s 33.5). The two `_long` clips add 26 MiB, for 268 MiB
-  in total (sheets 229 + MP4s 36.7). Dropping the sheets as well would save another
+  (sheets 205 incl. the 8 new poses + MP4s 33.5). The eight `_long` clips add about 111 MiB, for about
+  348 MiB in total (sheets 302 + MP4s 46.3). Dropping the sheets as well would save another
   205 MiB, but it would lose the ffmpeg-free fallback and the `--check` reference, so they stay.
 - **Measured** (8-core box, release build):
   - `cargo run --release -p lillith-anim --example video_bench` over 143 clip videos (3060 frames):
@@ -166,11 +166,14 @@ PNG sheet stays the fallback and the bounds-check reference.
   - Each `_long` variant is a 15 s take with a ~10 s living peak hold: 180 frames at 12 fps, loop,
     with chest, pigtail and hip jiggle baked into the pixels. The importer tags these
     `disable_springs`, so the engine springs stay off.
-  - `body_roll_slow_long` and `arch_back_over_shoulder_long` are registered and appear in
-    *Flirty / Allure*. Each MP4 is about 1.5 MiB and each sheet 12–14 MiB.
+  - All eight are registered and appear in *Flirty / Allure*: `body_roll_slow_long`,
+    `arch_back_over_shoulder_long`, `kneel_hands_on_thighs_long`, `wall_lean_invisible_long`,
+    `blow_kiss_hip_pop_long`, `hair_lift_stretch_long`, `slow_turn_spin_tease_long` and
+    `bend_forward_wink_long`. They are tagged `baked_motion` + `jiggle_exaggerated` (exaggerated cartoon
+    chest bounce with overshoot, baked in post by `generated_v2/_tools/bake_jiggle_v2.py`). Each MP4 is
+    about 1.3–1.9 MiB and each sheet 11–14 MiB.
   - Decoded, a 180-frame clip takes about 110 MB of the 192 MB video cache. Two long clips playing
     back to back evict each other. Each re-decode streams in the background, about 1 s for 180
     frames with the first frame after about 65 ms, so playback does not stall.
-  - The other `_long` takes in `generated_v2` (the rest of the bold set) are registered with the
-    same command once their matte and finalize steps are done:
-    `new_pose.py <clip>_long --from copy --allure --tag baked_motion`.
+  - New `_long` takes from `generated_v2` are registered once their matte, finalize and jiggle steps
+    are done: `new_pose.py <clip>_long --from copy --allure --tag baked_motion`.
