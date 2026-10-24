@@ -30,6 +30,7 @@ use lillith_overlay::{Backend, OverlayOptions};
 use std::path::PathBuf;
 
 mod chat;
+mod memory_wiring;
 mod preview;
 
 #[derive(Debug, Parser)]
@@ -504,7 +505,14 @@ async fn main() -> Result<()> {
                 .clone()
                 .or_else(Config::default_path)
                 .ok_or_else(|| anyhow::anyhow!("no config directory; pass --config"))?;
-            let msg = setup(&path, gguf.as_deref(), llama_server.as_deref(), ctx_size)?;
+            let msg = match setup(&path, gguf.as_deref(), llama_server.as_deref(), ctx_size) {
+                Ok(m) => m,
+                Err(e) => {
+                    let mem = Config::load(&path).map(|c| c.memory).unwrap_or_default();
+                    memory_wiring::record_setup_failure(&mem, &e.to_string());
+                    return Err(e);
+                }
+            };
             tracing::info!("{msg}");
             println!("{msg}");
         }
@@ -803,10 +811,17 @@ struct VoiceSink {
     daemon: Option<lillith_voice::daemon::DaemonClient>,
     /// Its `subscribe lipsync` stream (audio-driven mouth).
     lipsync: Option<lillith_voice::daemon::LipsyncReader>,
+    /// Error memory for the voice's recovery ladder.
+    memory: std::sync::Arc<lillith_memory::MemoryBridge>,
+    recovery: memory_wiring::VoiceRecovery,
 }
 
 impl VoiceSink {
-    fn new(voice: lillith_voice::Voice, config: Option<std::path::PathBuf>) -> Self {
+    fn new(
+        voice: lillith_voice::Voice,
+        config: Option<std::path::PathBuf>,
+        memory: std::sync::Arc<lillith_memory::MemoryBridge>,
+    ) -> Self {
         let daemon = lillith_voice::daemon::DaemonClient::from_config(voice.config());
         // Only subscribe when the daemon is the engine: espeak/piper have no
         // lip-sync stream (the text lip-flap stays).
@@ -820,21 +835,66 @@ impl VoiceSink {
                     None
                 }
             });
+        let st = voice.stats();
+        let recovery =
+            memory_wiring::VoiceRecovery::new(voice.engine_name(), st.engine_errors, st.spoken);
         Self {
             voice,
             config,
             daemon,
             lipsync,
+            memory,
+            recovery,
         }
+    }
+
+    /// Runs the voice recovery ladder; `false`: do not speak right now.
+    fn recover(&mut self) -> bool {
+        use memory_wiring::VoiceStep;
+        let st = self.voice.stats();
+        match self.recovery.poll(
+            st.engine_errors,
+            st.spoken,
+            std::time::Instant::now(),
+            &self.memory,
+        ) {
+            VoiceStep::Speak => true,
+            VoiceStep::Hold => false,
+            VoiceStep::TextOnly => {
+                if self.voice.enabled() {
+                    // Runtime only: never written to config.toml.
+                    self.voice.set_enabled(false);
+                }
+                false
+            }
+        }
+    }
+
+    fn reset_recovery(&mut self) {
+        let st = self.voice.stats();
+        self.recovery.reset(st.engine_errors, st.spoken);
     }
 }
 
 impl lillith_overlay::ActionSink for VoiceSink {
     fn on_actions(&mut self, actions: &[lillith_core::state::Action]) {
-        self.voice.on_actions(actions);
+        if self.recover() {
+            self.voice.on_actions(actions);
+        } else {
+            // Resting / text only: mute changes still apply, lines are not spoken.
+            let quiet: Vec<_> = actions
+                .iter()
+                .filter(|a| !matches!(a, lillith_core::state::Action::Say(_)))
+                .cloned()
+                .collect();
+            self.voice.on_actions(&quiet);
+        }
     }
 
     fn on_chat_reply(&mut self, reply: &str) {
+        if !self.recover() {
+            return;
+        }
         // Speakers off / muted / no engine: silently skipped (text shows).
         if let Err(why) = self.voice.say_reply(reply) {
             tracing::debug!(?why, "chat reply not spoken");
@@ -847,6 +907,9 @@ impl lillith_overlay::ActionSink for VoiceSink {
 
     fn set_speaker(&mut self, on: bool) {
         self.voice.set_enabled(on);
+        if on {
+            self.reset_recovery();
+        }
         if on && !self.voice.has_engine() {
             tracing::warn!(
                 "speakers on, but no TTS engine is installed (piper / espeak-ng / spd-say)"
@@ -864,6 +927,9 @@ impl lillith_overlay::ActionSink for VoiceSink {
             Ok(v) if v.enabled != self.voice.enabled() => {
                 tracing::info!(on = v.enabled, "speak out loud (speakers), from settings");
                 self.voice.set_enabled(v.enabled);
+                if v.enabled {
+                    self.reset_recovery();
+                }
             }
             Ok(_) => {}
             Err(e) => tracing::warn!("[voice]: {e}"),
@@ -1048,13 +1114,17 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         "Lillith overlay (M4): click/hover/drag her; keys while focused (G wander/stay, S sleep, Q/Esc quit)"
     );
     // One feed for the system monitor and the chat bubble.
-    let (tx, rx) = std::sync::mpsc::channel::<Event>();
+    let (feed, rx) = std::sync::mpsc::channel::<Event>();
+    // Memory learns app habits / errors from the same feed (a non-blocking
+    // tee) and speaks proactive lines back into it (`memory.suggest`).
+    let memory = memory_wiring::start(&cfg.memory, feed.clone());
+    let tx = memory_wiring::tee(feed, &memory);
     let monitor = start_monitor(cli, &cfg, tx.clone());
     let chat_on = cfg.chat.enabled;
     let launcher = chat_on.then(|| chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm));
     // Optional self-spawned llama-server (`[chat.server]`), stopped on exit.
     let server = if chat_on && !cli.no_llm {
-        chat::ServerGuard::start(&cfg.chat).await
+        chat::ServerGuard::start(&cfg.chat, Some(&memory)).await
     } else {
         chat::ServerGuard::default()
     };
@@ -1076,6 +1146,7 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         sink: Some(lillith_overlay::SinkHandle::new(VoiceSink::new(
             voice,
             config_path.clone(),
+            memory.clone(),
         ))),
         ..opts
     };

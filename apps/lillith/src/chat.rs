@@ -165,7 +165,8 @@ impl ServerGuard {
     /// Starts llama-server when `[chat.server]` is configured and nothing
     /// answers at the endpoint yet. Readiness is logged in the background;
     /// until then the bubble answers with an in-character "waking up" line.
-    pub async fn start(cfg: &ChatConfig) -> Self {
+    /// Spawn failures are remembered in `memory` (no automatic fix).
+    pub async fn start(cfg: &ChatConfig, memory: Option<&lillith_memory::MemoryBridge>) -> Self {
         let g = Self::default();
         if !cfg.enabled || !cfg.server.should_spawn() {
             return g;
@@ -213,7 +214,16 @@ impl ServerGuard {
                     std::process::exit(130);
                 });
             }
-            Err(e) => tracing::warn!("not starting llama-server: {e}"),
+            Err(e) => {
+                tracing::warn!("not starting llama-server: {e}");
+                if let Some(m) = memory {
+                    crate::memory_wiring::record_failure(
+                        m,
+                        "llama-server: spawn failed",
+                        "chat.server",
+                    );
+                }
+            }
         }
         g
     }
@@ -330,7 +340,7 @@ pub async fn cli_chat(
     let _server = if spawn_server {
         let mut c = cfg.clone();
         c.enabled = true;
-        let g = ServerGuard::start(&c).await;
+        let g = ServerGuard::start(&c, None).await;
         // Wait for the model before the first message.
         let client = lillith_mind::llm::LlmClient::with_timeout(
             lillith_mind::llm::Flavor::OpenAiCompat,
