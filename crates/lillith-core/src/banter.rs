@@ -361,7 +361,9 @@ pub fn clip_pool(clip: &str) -> Option<&'static [&'static str]> {
         | "idle_flirt_tail_curl"
         | "idle_tail_fidget"
         | "tail_wrap_pull" => TAIL,
-        "blow_kiss" | "blow_kiss_hip_pop" | "seduce_blow_kiss_screen" => KISS,
+        "blow_kiss" | "blow_kiss_hip_pop" | "seduce_blow_kiss_screen" | "kiss_mark_on_glass" => {
+            KISS
+        }
         "bend_forward_wink"
         | "lean_tease"
         | "tease_closeup"
@@ -383,19 +385,20 @@ pub fn clip_pool(clip: &str) -> Option<&'static [&'static str]> {
         | "hair_flip"
         | "hair_twirl"
         | "arch_back_over_shoulder"
-        | "taskbar_lounge_lie" => LOOKS,
+        | "taskbar_lounge_lie"
+        | "lean_doorframe_smolder" => LOOKS,
         "dom_beckon_finger"
         | "seduce_beckon_finger"
         | "kiss_then_come_here"
         | "come_hither_crawl"
         | "kneel_sit_back_beckon" => BECKON,
-        "dom_point_down" | "dom_throne_lean" => COMMAND,
+        "dom_point_down" | "dom_throne_lean" | "dom_snap_kneel_order" => COMMAND,
         "dom_arms_crossed_demand" => DEMAND,
         "smug_smirk" => SMUG,
         "stalk_prowl_right" | "stalk_prowl_left" => PROWL,
         "soul_contract_sign" => CONTRACT,
         "kneel_pout_beg" | "kneel_hands_on_thighs" => BEG,
-        "hug_screen_possessive" | "seduce_tap_glass" => POSSESSIVE,
+        "hug_screen_possessive" | "seduce_tap_glass" | "finger_walk_on_glass" => POSSESSIVE,
         _ => return None,
     })
 }
@@ -618,6 +621,10 @@ mod tests {
             "taskbar_lounge_lie",
             "kneel_sit_back_beckon",
             "dom_throne_lean",
+            "lean_doorframe_smolder",
+            "kiss_mark_on_glass",
+            "dom_snap_kneel_order",
+            "finger_walk_on_glass",
         ] {
             assert!(clip_pool(c).is_some(), "{c}");
         }
