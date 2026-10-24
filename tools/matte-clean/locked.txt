@@ -1,0 +1,7 @@
+# Clips another branch is editing (perch-poses). matte_clean.py audits them but does not write them
+# unless --include-locked. Re-run with --include-locked on top of that branch's final SHA.
+cleavage_beckon
+chest_press_tease
+arch_trace
+blend_drag_held_to_perch_sit
+perch_sit
