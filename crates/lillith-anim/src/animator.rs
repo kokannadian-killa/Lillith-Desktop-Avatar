@@ -294,6 +294,12 @@ pub fn kick_for(name: &str) -> Kick {
     }
 }
 
+/// Walk/run cycles (`walk*`, `run*`, including skips and drawn variants):
+/// smooth mode switches their frames hard instead of cross-fading.
+pub fn is_locomotion_cycle(name: &str) -> bool {
+    name.starts_with("walk") || name.starts_with("run")
+}
+
 /// Footfall impulse for locomotion clips (`None` for non-locomotion).
 /// Values are physics.toml `[walk]` `walk_footfall` / `run_footfall`.
 pub fn footfall_for(name: &str) -> Option<Kick> {
@@ -790,9 +796,12 @@ impl Animator {
         }
     }
 
-    /// Cross-fade target for a player in smooth mode.
-    fn blend_for(&self, p: &ClipPlayer, frames: usize) -> Option<(usize, f32)> {
-        if !self.cfg.smooth_frames || frames < 2 {
+    /// Cross-fade target for a player in smooth mode. Locomotion cycles
+    /// ([`is_locomotion_cycle`]) never cross-fade: every step moves the legs
+    /// far enough that any fade shows two half-drawn legs (a see-through
+    /// ghost on a light desktop), so they switch frames hard.
+    fn blend_for(&self, name: &str, p: &ClipPlayer, frames: usize) -> Option<(usize, f32)> {
+        if !self.cfg.smooth_frames || frames < 2 || is_locomotion_cycle(name) {
             return None;
         }
         let cf = self.cfg.crossfade.clamp(0.0, 1.0);
@@ -1564,7 +1573,7 @@ impl Animator {
                 },
                 transform,
                 mouth: None,
-                blend: self.blend_for(&o.player, clip.frames.len()),
+                blend: self.blend_for(name, &o.player, clip.frames.len()),
             };
         }
         if let Some(bl) = &self.blink {
@@ -1610,7 +1619,7 @@ impl Animator {
         let blend = if self.pinned_base_frame.is_some() {
             None
         } else {
-            self.blend_for(&self.base_player, clip.frames.len())
+            self.blend_for(name, &self.base_player, clip.frames.len())
         };
         // A mouth patch follows the cross-fade (point and tilt in between).
         let mouth = match (mouth, blend) {
@@ -1758,6 +1767,36 @@ mod tests {
         a.stand();
         assert_eq!(a.current().clip_name, "idle");
         assert!(!a.current().flip);
+    }
+
+    #[test]
+    fn smooth_mode_never_cross_fades_walk_or_run_cycles() {
+        let smooth = AnimatorConfig {
+            smooth_frames: true,
+            crossfade: 0.5,
+            ..quiet()
+        };
+        let mut a = Animator::new(manifest(), smooth).unwrap();
+        // idle (10 fps): late in a frame it fades into the next one.
+        run(&mut a, 0.08);
+        assert_eq!(a.current().clip_name, "idle");
+        assert!(matches!(a.current().blend, Some((1, w)) if w > 0.0));
+        for running in [false, true] {
+            a.walk(Dir::Right, running).unwrap();
+            let mut seen = 0;
+            for _ in 0..60 {
+                a.tick(1.0 / 60.0);
+                let f = a.current();
+                if is_locomotion_cycle(f.clip_name) {
+                    seen += 1;
+                    assert_eq!(f.blend, None, "{} frame {}", f.clip_name, f.frame);
+                }
+            }
+            assert!(seen > 30, "walked/ran for most of the second");
+        }
+        assert!(is_locomotion_cycle("walk_skip_left") && is_locomotion_cycle("run_right"));
+        assert!(!is_locomotion_cycle("blend_walk_right_to_idle"));
+        assert!(!is_locomotion_cycle("idle_flirt_hands_behind_sway"));
     }
 
     #[test]
