@@ -157,7 +157,7 @@ pub fn display_available() -> bool {
 /// card approves only on a primary mouse click on its non-focusable Yes.
 /// `None` when the window couldn't open.
 pub fn show_card(action: &PendingAction) -> Option<CardChoice> {
-    use lillith_core::card_process::{ask, CardAnswer, CardText};
+    use lillith_core::card_process::{ask, CardText};
     let p = action.prompt();
     let exe = std::env::current_exe().ok()?;
     let text = CardText {
