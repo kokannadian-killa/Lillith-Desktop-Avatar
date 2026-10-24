@@ -43,3 +43,10 @@
 __pycache__/
 *.pyc
 .venv/
+
+# ── Bundled llama.cpp (fetched by tools/bundle/make-bundle.sh; never commit
+#    binaries or model weights) ─────────────────────────────────────
+/bundle/llama/*/
+/bundle/models/*
+!/bundle/models/README.txt
+/dist/bundle/

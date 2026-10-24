@@ -126,8 +126,15 @@ pub fn detect(opts: &DetectOptions) -> RuntimeReport {
     }
 }
 
-/// `$PATH` + common install locations (+ `extra`), in search order.
+/// Search order: the bundled llama.cpp first ([`crate::bundle::llama_dirs`]:
+/// next to the exe, `bundle/llama/<platform>/`, the installed copy), then
+/// `$PATH` + common install locations (+ `extra`).
 pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
+    search_dirs_with(extra, &crate::bundle::llama_dirs())
+}
+
+/// [`search_dirs`] with the bundled folders given explicitly (testable).
+pub fn search_dirs_with(extra: &[PathBuf], bundled: &[PathBuf]) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = extra.to_vec();
     if let Some(h) = paths::home_dir() {
         for d in [
@@ -156,7 +163,7 @@ pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
             }
         }
     }
-    let mut dirs = Vec::new();
+    let mut dirs: Vec<PathBuf> = bundled.to_vec();
     if let Some(p) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&p));
     }
@@ -522,6 +529,45 @@ mod tests {
         assert_eq!(found, Some(bin));
         assert_eq!(ver.as_deref(), Some("version: 9999 (test)"));
         assert!(find_binary("definitely-not-a-binary-xyz", &dirs).is_none());
+    }
+
+    #[test]
+    #[cfg(unix)] // shell-script stand-ins for llama-server
+    fn bundled_llama_server_wins_over_path_and_extra_dirs() {
+        use std::os::unix::fs::PermissionsExt;
+        let root =
+            std::env::temp_dir().join(format!("lillith-setup-bundled-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let fake = |dir: &Path| {
+            std::fs::create_dir_all(dir).unwrap();
+            let bin = dir.join("llama-server");
+            std::fs::write(&bin, "#!/bin/sh\n").unwrap();
+            std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+            bin
+        };
+        // Portable layout: <pkg>/bin/lillith + <pkg>/bundle/llama/linux-x64/.
+        let pkg = root.join("Lillith");
+        let exe_dir = pkg.join("bin");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        let bundled = fake(&pkg.join("bundle/llama/linux-x64"));
+        let other = fake(&root.join("llama.cpp/build/bin"));
+        let roots = crate::bundle::install_roots_from(Some(&exe_dir), None, &[]);
+        let bdirs = crate::bundle::llama_dirs_from(&roots, Some("linux-x64"));
+        let dirs = search_dirs_with(&[root.join("llama.cpp")], &bdirs);
+        assert_eq!(find_binary("llama-server", &dirs), Some(bundled.clone()));
+        // Right next to the exe beats bundle/llama/<platform>/.
+        let beside = fake(&exe_dir);
+        assert_eq!(find_binary("llama-server", &dirs), Some(beside.clone()));
+        // No bundle: falls back to the existing detection ($PATH, then the
+        // extra llama.cpp root here).
+        std::fs::remove_file(&beside).unwrap();
+        std::fs::remove_file(&bundled).unwrap();
+        let found = find_binary("llama-server", &dirs).expect("fallback");
+        assert!(found == other || !found.starts_with(&root), "{found:?}");
+        std::fs::remove_dir_all(&root).ok();
+        // The bundled folders lead the default search order.
+        let d = search_dirs_with(&[], &bdirs);
+        assert_eq!(&d[..bdirs.len()], &bdirs[..]);
     }
 
     #[test]

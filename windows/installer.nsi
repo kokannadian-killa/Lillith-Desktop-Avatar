@@ -147,7 +147,10 @@ Function GuessServer
   ${If} $Server != ""
     Return
   ${EndIf}
-  ${If} ${FileExists} "$INSTDIR\llama.cpp\llama-server.exe"
+  ; All-in-one installer: its own pinned llama-server comes first.
+  ${If} ${FileExists} "$INSTDIR\bundle\llama\windows-x64\llama-server.exe"
+    StrCpy $Server "$INSTDIR\bundle\llama\windows-x64\llama-server.exe"
+  ${ElseIf} ${FileExists} "$INSTDIR\llama.cpp\llama-server.exe"
     StrCpy $Server "$INSTDIR\llama.cpp\llama-server.exe"
   ${ElseIf} ${FileExists} "$LOCALAPPDATA\Programs\llama.cpp\llama-server.exe"
     StrCpy $Server "$LOCALAPPDATA\Programs\llama.cpp\llama-server.exe"
@@ -218,6 +221,9 @@ SectionEnd
 ; Silent installs: /GGUF= and /LLAMASERVER= replace the brain page.
 Section "-SilentBrain"
   ${If} ${Silent}
+    ${If} $Gguf != ""
+      Call GuessServer ; the bundled llama-server when /LLAMASERVER= is not given
+    ${EndIf}
     ${If} $Gguf != ""
     ${OrIf} $Server != ""
       Call RunSetup
@@ -389,6 +395,11 @@ Section "Uninstall"
   Delete "$INSTDIR\LICENSE.txt"
   Delete "$INSTDIR\LICENSE-ASSETS.txt"
   Delete "$INSTDIR\config.example.toml"
+  ; The bundled llama-server is ours; models in bundle\models stay.
+  RMDir /r "$INSTDIR\bundle\llama"
+  Delete "$INSTDIR\bundle\models\README.txt"
+  RMDir "$INSTDIR\bundle\models"
+  RMDir "$INSTDIR\bundle"
   RMDir /r "$INSTDIR\assets"
   Delete "$INSTDIR\${UNINST}"
   RMDir "$INSTDIR"

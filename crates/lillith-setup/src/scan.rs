@@ -198,8 +198,15 @@ impl Default for ScanOptions {
 }
 
 /// Default search locations, in order. Missing ones are reported, not errors.
+/// A bundled `bundle/models/` next to the install comes first
+/// ([`crate::bundle::model_dirs`], only when it exists), then `~/AI/models`.
 pub fn default_scan_dirs() -> Vec<PathBuf> {
-    let mut v = Vec::new();
+    default_scan_dirs_with(&crate::bundle::model_dirs())
+}
+
+/// [`default_scan_dirs`] with the bundled model folders given explicitly.
+pub fn default_scan_dirs_with(bundled: &[PathBuf]) -> Vec<PathBuf> {
+    let mut v = bundled.to_vec();
     if let Some(h) = paths::home_dir() {
         for d in [
             "AI/models",
@@ -1048,6 +1055,44 @@ mod tests {
         assert_eq!(f.chat_template, ChatTemplate::ChatMl);
         assert!(r.models.iter().any(|m| m.source == ModelSource::OllamaBlob));
         assert!(!r.dirs[1].exists);
+    }
+
+    #[test]
+    fn bundled_models_dir_is_scanned_first() {
+        let root =
+            std::env::temp_dir().join(format!("lillith-setup-bmodels-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let pkg = root.join("Lillith");
+        let exe_dir = pkg.join("bin");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        let roots = crate::bundle::install_roots_from(Some(&exe_dir), None, &[]);
+        // No bundle/models folder: nothing extra, ~/AI/models still leads.
+        let plain = default_scan_dirs_with(&crate::bundle::model_dirs_from(&roots));
+        if let Some(home) = paths::home_dir() {
+            assert_eq!(plain.first(), Some(&home.join("AI/models")));
+            assert!(plain.contains(&home.join("AI/models")));
+        }
+        let models = pkg.join("bundle/models");
+        std::fs::create_dir_all(&models).unwrap();
+        let mut g = build_gguf(&[("general.architecture", TestVal::Str("llama"))]);
+        g.resize(2048, 0);
+        std::fs::write(models.join("dolphin3.0-llama3.2-3b-q4_k_m.gguf"), &g).unwrap();
+        let bundled = crate::bundle::model_dirs_from(&roots);
+        assert_eq!(bundled, vec![models.clone()]);
+        let dirs = default_scan_dirs_with(&bundled);
+        assert_eq!(dirs.first(), Some(&models));
+        if let Some(home) = paths::home_dir() {
+            assert_eq!(dirs.get(1), Some(&home.join("AI/models")));
+        }
+        let r = scan(&ScanOptions {
+            dirs: bundled,
+            max_depth: 4,
+            include_ollama_blobs: false,
+            min_size_bytes: 1,
+        });
+        std::fs::remove_dir_all(&root).ok();
+        assert_eq!(r.models.len(), 1, "{r:#?}");
+        assert_eq!(r.models[0].file_name, "dolphin3.0-llama3.2-3b-q4_k_m.gguf");
     }
 
     fn tree_with_models(tag: &str, n: usize) -> PathBuf {

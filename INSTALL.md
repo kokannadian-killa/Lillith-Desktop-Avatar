@@ -33,7 +33,8 @@ sudo pacman -S --needed unzip ffmpeg libxkbcommon wayland dbus libpulse systemd-
 A normal Plasma desktop already has most of the rest.
 
 For chat you also need llama.cpp's `llama-server` (the `llama.cpp` package,
-from pacman or an AUR helper you run yourself).
+from pacman or an AUR helper you run yourself). The **all-in-one** zip
+(`…-all-in-one.zip`) already has it, see step 3.
 
 ### 2. Unzip and start her
 
@@ -63,6 +64,16 @@ To stop her, click her and press `Q` or `Esc`, or run `pkill lillith`.
 Lillith animates and reacts without a model. To **chat** with her you need a
 GGUF model and `llama-server`, both on your machine.
 
+**All-in-one zip:** `bundle/llama/linux-x64/` holds a prebuilt `llama-server`
+(llama.cpp release pinned in `bundle/llama/llama.lock`, CPU build that picks
+AVX2 etc. at run time). Setup and the Brain tab use it first, so you can skip
+installing llama.cpp: `./run.sh setup --gguf ~/AI/models/<model>.gguf` fills in
+the bundled server by itself. `bundle/llama/linux-x64-vulkan/` is the same
+plus the Vulkan GPU backend (needs `vulkan-icd-loader` and, for Intel HD
+graphics, `vulkan-intel`); pick its `llama-server` in the Brain tab to try it.
+No model is included: drop your `.gguf` into `bundle/models/` or `~/AI/models/`.
+`linux/install.sh` copies the bundled server to `~/.local/share/lillith/llama/`.
+
 1. **Get the model yourself.** Ko uses **Dolphin 3.0 Llama 3.2 3B
    Q4_K_M** (`dolphin3.0-llama3.2-3b-q4_k_m.gguf`). Download the `.gguf` file
    from the model's Hugging Face page in your browser. Lillith never downloads
@@ -90,7 +101,7 @@ GGUF model and `llama-server`, both on your machine.
 
    If you'd rather use the GUI, run `./bin/lillith-settings` and open the
    **Brain** tab. That's the setup wizard, and it can also scan your disks
-   for GGUF files (`~/models`, `~/AI/models`, `~/Downloads`,
+   for GGUF files (the bundle's `bundle/models/`, `~/AI/models`, `~/models`, `~/Downloads`,
    `~/.local/share/lillith/models`, `~/.cache/llama.cpp` and the LM Studio /
    Ollama folders). On a low-power CPU with 8–16 GB of RAM it recommends
    `dolphin3.0-llama3.2-3b-q4_k_m.gguf` and ranks uncensored models above
@@ -242,7 +253,10 @@ low-power CPU with 8–16 GB of RAM it recommends
 `dolphin3.0-llama3.2-3b-q4_k_m.gguf` (Dolphin 3.0 Llama 3.2 3B Q4_K_M), and
 it ranks uncensored models (Dolphin, abliterated, Hermes) above stock ones of
 the same size. A Mistral 7B GGUF still works as a fallback if it's the only one
-you have, but it's slow on that kind of CPU. Unzip a llama.cpp Windows release
+you have, but it's slow on that kind of CPU. The all-in-one installer / zip
+ships llama.cpp's `llama-server.exe` in `bundle\llama\windows-x64\` (CPU,
+AVX2) and pre-selects it; it needs the Microsoft Visual C++ 2015-2022
+Redistributable (x64), which most PCs already have. Otherwise unzip a llama.cpp Windows release
 into `C:\llama.cpp\` or `%LOCALAPPDATA%\Programs\llama.cpp\`, where the Brain
 tab finds it on its own (keep the DLLs next to `llama-server.exe`). Then run:
 

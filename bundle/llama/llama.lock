@@ -1,0 +1,23 @@
+# Pinned llama.cpp prebuilt release for Lillith's all-in-one bundle.
+# Read by tools/bundle/make-bundle.sh on the BUILD machine only; nothing on
+# the user's computer downloads anything. Bump all lines together.
+#
+# Same tag as the Android JNI shim (android/build-apk.sh LLAMA_CPP_TAG).
+tag     b11829
+commit  184f6536024668e8908ab8c86033d56708e62b40
+release https://github.com/ggml-org/llama.cpp/releases/tag/b11829
+
+# asset <bundle dir> <sha256> <bytes> <url>
+#   linux-x64         CPU build; every x86-64 CPU variant (sse42 ... haswell=AVX2
+#                     ... zen4), ggml picks the best one at run time.
+#   linux-x64-vulkan  the same plus libggml-vulkan.so (GPU, e.g. Intel HD 620 via
+#                     Mesa ANV); needs the system Vulkan loader. Optional.
+#   windows-x64       CPU build (same runtime-selected variants, AVX2 included).
+asset linux-x64        281df0193466d75022958c331697ba3d702bbecb62c5c82e09178facbc851f5c 22346390 https://github.com/ggml-org/llama.cpp/releases/download/b11829/llama-b11829-bin-ubuntu-x64.tar.gz
+asset linux-x64-vulkan 656bd1425bdde09565f2191c2a62940a1992441497fc5fb5fd45cdfa337e621f 34989558 https://github.com/ggml-org/llama.cpp/releases/download/b11829/llama-b11829-bin-ubuntu-vulkan-x64.tar.gz
+asset windows-x64      c534f35ce9c842f3bc224fadaecc82e1b49768f63e8320922f6dbd603f66395e 24076171 https://github.com/ggml-org/llama.cpp/releases/download/b11829/llama-b11829-bin-win-cpu-x64.zip
+
+# license <file name in each bundle dir> <sha256> <url>
+# (The Windows zip ships only LICENSE-LLVM-OpenMP, kept as-is; llama.cpp's
+# MIT LICENSE is added from the pinned commit.)
+license LICENSE-llama.cpp 94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d https://raw.githubusercontent.com/ggml-org/llama.cpp/184f6536024668e8908ab8c86033d56708e62b40/LICENSE
