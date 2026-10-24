@@ -70,10 +70,12 @@ def listener(answers, clock=None):
     L = object.__new__(stt.Listener)
     L.speaker, L.emit, L.always, L._mode, L._ptt, L._once = None, (lambda ev: None), False, None, [], None
     L._lock = threading.Lock()
+    L._press_lock, L._press, L._press_seq = threading.Lock(), None, 0
     L.mic = FakeMic()
     L.gate = M.MicGate(mic_argv=lambda: ["/usr/bin/arecord", "-q", "-t", "raw"], ask=ask,
                        clock=clock or time_clock())
     L.vad = type("V", (), {"reset": lambda self: None})()
+    L.transcribe = lambda audio: {"ok": True, "text": "", "samples": len(audio)}   # no models here
     return L, asked
 
 
@@ -153,6 +155,125 @@ L.mic.running = False
 check("listen once: the next listen asks again", L.gate.allow("listen") is None and len(asked) == 2)
 L.gate.revoke()
 
+# ------------------------------------------------------------------ the card belongs to ONE press (race fixes)
+def blocking_listener(answer):
+    """A listener whose card waits until `go` is set, then answers `answer` (unless cancelled meanwhile)."""
+    shown, go = threading.Event(), threading.Event()
+    asked = []
+
+    def ask(kind, *a):
+        asked.append(kind)
+        shown.set()
+        go.wait(5)
+        return answer
+
+    L, _ = listener([])
+    L.gate._ask = ask
+    return L, shown, go, asked
+
+
+def press_async(L):
+    out = {}
+    th = threading.Thread(target=lambda: out.setdefault("r", L.ptt_start()))
+    th.start()
+    return th, out
+
+
+def tags_for(card):
+    return [ln.split("\t")[1] for ln in audit_lines() if f"card={card}" in ln]
+
+
+# release before Yes (the voice bot's repro: card Yes at 3 s, release at 1 s)
+L, shown, go, asked = blocking_listener("yes")
+th, out = press_async(L)
+shown.wait(5)
+rel = L.ptt_stop()
+check("release before Yes: the release is answered at once, nothing captured", rel.get("ok") and rel.get("cancelled")
+      and rel.get("text") == "" and L.mic.starts == 0, str(rel))
+go.set()          # the late Yes
+th.join(5)
+r = out.get("r", {})
+check("release before Yes: a late Yes never opens the mic", r.get("ok") is False and r.get("released")
+      and L.mic.starts == 0 and not L.mic.running, str(r))
+check("release before Yes: the card is audited CANCELLED (not CONFIRM)", tags_for(r.get("card")) == ["PROPOSED", "CANCELLED"],
+      str(tags_for(r.get("card"))))
+check("release before Yes: no capture LAUNCH line", not any("\tmic_capture\t" in ln and r.get("card", "?") in ln
+                                                         for ln in audit_lines()))
+r = L.ptt_start()   # the next press asks again (its own new card)
+check("after a cancelled press the next press shows a new card", len(asked) == 2 and r.get("ok")
+      and L.gate.last_card != out["r"].get("card"), str(r))
+L.ptt_stop()
+
+# safeword before Yes (typed "red" -> {"cmd":"stop","reason":"safeword"} -> cancel_pending)
+L, shown, go, asked = blocking_listener("yes")
+th, out = press_async(L)
+shown.wait(5)
+import time as _t
+t0 = _t.monotonic()
+closed = L.cancel_pending("safeword")
+dt = _t.monotonic() - t0
+check("safeword before Yes closes the open card without blocking", closed and dt < 0.05, f"{dt * 1000:.1f} ms")
+go.set()
+th.join(5)
+r = out.get("r", {})
+check("safeword before Yes: the mic never opens", r.get("ok") is False and L.mic.starts == 0, str(r))
+check("safeword before Yes: audited CANCELLED", tags_for(r.get("card")) == ["PROPOSED", "CANCELLED"],
+      str(tags_for(r.get("card"))))
+L.ptt_stop()
+check("...and the release afterwards still stops (mic off)", not L.mic.running)
+
+# timeout before Yes
+L, shown, go, asked = blocking_listener("timeout")
+go.set()
+r = L.ptt_start()
+check("timeout before Yes: the mic never opens", r.get("ok") is False and r.get("need_card") and L.mic.starts == 0,
+      str(r))
+check("timeout before Yes: audited TIMEOUT", tags_for(r.get("card")) == ["PROPOSED", "TIMEOUT"],
+      str(tags_for(r.get("card"))))
+
+# released after the Yes but before the mic opened (the narrow window): stays shut, audited
+L, _ = listener(["yes"])
+real_allow = L.gate.allow
+
+
+def allow_then_release(*a, **k):
+    res = real_allow(*a, **k)
+    L._press = None          # what ptt_stop does, landing between the Yes and mic.start
+    return res
+
+
+L.gate.allow = allow_then_release
+r = L.ptt_start()
+check("released between Yes and mic start: the mic stays shut", r.get("ok") is False and r.get("released")
+      and L.mic.starts == 0, str(r))
+check("...and it is audited CANCELLED after the CONFIRM", audit_lines()[-1].split("\t")[1] == "CANCELLED"
+      and "\tmic_listen\t" in audit_lines()[-1], audit_lines()[-1])
+
+# the mic always stops on release
+L, _ = listener(["yes"])
+L.ptt_start()
+L._mode = None     # even if the press bookkeeping were off
+L.ptt_stop()
+check("release always stops the mic", not L.mic.running)
+
+# a release only closes its own press's card, not another client's always-listening card
+g = M.MicGate(mic_argv=lambda: ["x"], ask=None)
+g._cancel, g._owner = threading.Event(), None
+check("a release (owner=press) leaves another card open", g.cancel(owner=7) is False and not g._cancel.is_set())
+check("the safeword (no owner) closes any card", g.cancel() is True and g._cancel.is_set())
+
+# a real card helper process is killed when the press is released
+slow = os.path.join(TMP, "slow-card")
+with open(slow, "w") as f:
+    f.write("#!/bin/sh\ncat >/dev/null\nsleep 30\necho yes\n")
+os.chmod(slow, 0o755)
+ev = threading.Event()
+threading.Timer(0.3, ev.set).start()
+t0 = _t.monotonic()
+w = M.run_card(slow, "t", "s", "x", "d", timeout=60, cancel=ev)
+check("run_card: cancel closes a hanging card helper quickly and answers cancelled", w == "cancelled"
+      and _t.monotonic() - t0 < 3, f"{w} {_t.monotonic() - t0:.1f}s")
+
 # tokens
 clock = Clock()
 L, asked = listener(["yes", "yes"], clock)
@@ -212,7 +333,8 @@ tags = [ln.split("\t")[1] for ln in lines]
 check("card decisions are audited", all(t in tags for t in ("PROPOSED", "CONFIRM", "DENY", "TIMEOUT", "CANCELLED",
                                                             "NO_UI")), str(set(tags)))
 check("audit lines carry card=<id> and 6 columns", all(len(ln.split("\t")) == 6 and
-                                                       ln.split("\t")[4].startswith("card=mic-") for ln in lines))
+                                                       ln.split("\t")[4].startswith("card=mic-") for ln in lines
+                                                       if "\tmic_card_ui\t" not in ln))  # helper LAUNCH: no card
 
 # no card helper at all -> no_ui
 check("no card program -> no_ui", M.run_card(None, "t", "s", "x", "d") == "no_ui")
@@ -242,6 +364,24 @@ try:
     r = core.dispatch({"cmd": "mic_card", "kind": "camera"})
     check("daemon mic_card: unknown kind refused", r.get("ok") is False)
     check("daemon mic_revoke", core.dispatch({"cmd": "mic_revoke"}).get("revoked"))
+
+    class _Sp2:
+        voice = None
+        stops = []
+
+        def stop(self, reason="stop"):
+            self.stops.append(reason)
+
+    core.speaker = _Sp2()
+    core.gate._cancel, core.gate._owner = threading.Event(), 3
+    import time as _t2
+    t0 = _t2.monotonic()
+    r = core.dispatch({"cmd": "stop", "reason": "safeword"})
+    check("daemon stop (safeword) is ungated, fast, and closes an open mic card",
+          r.get("ok") and core.gate._cancel.is_set() and _t2.monotonic() - t0 < 0.05 and core.speaker.stops == ["safeword"])
+    core.gate._cancel = threading.Event()
+    core.dispatch({"cmd": "stop"})
+    check("a plain stop (not the safeword) leaves a mic card alone", not core.gate._cancel.is_set())
     check("PROTOCOL documents the gate", "mic_card" in D.PROTOCOL and "token" in D.PROTOCOL)
 except ImportError as e:   # the daemon needs the TTS stack only for Speaker; tolerate a missing optional dep
     print(f"SKIP daemon dispatch ({e})")

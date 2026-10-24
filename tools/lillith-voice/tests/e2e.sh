@@ -35,6 +35,10 @@ echo "== mic gate + launch guards (no models)"
 "$VPY" "$HERE/micgate_test.py" >"$OUT/micgate.log" 2>&1 && ok "mic gate: $(grep -c '^PASS' "$OUT/micgate.log") checks (card/token gate, MIC_CMD allowlist, echo, audit)" \
   || no "mic gate: $(grep -E '^FAIL|Error' "$OUT/micgate.log" | head -3)"
 
+echo "== push-to-talk races (real card + capture processes: release / safeword / timeout before Yes)"
+"$VPY" "$HERE/ptt_race_test.py" >"$OUT/ptt_race.log" 2>&1 && ok "ptt races: $(grep -c '^PASS' "$OUT/ptt_race.log") checks (a late Yes never opens the mic)" \
+  || no "ptt races: $(grep -E '^FAIL|Error' "$OUT/ptt_race.log" | head -3)"
+
 echo "== transport (fake core, no models)"
 "$VPY" "$HERE/transport_test.py" >"$OUT/transport.log" 2>&1 && ok "transport: $(grep -c '^PASS' "$OUT/transport.log") checks (framing, 24 clients, subscriber + say, stop on 2nd conn)" \
   || no "transport: $(grep -E '^FAIL|Error' "$OUT/transport.log" | head -3)"

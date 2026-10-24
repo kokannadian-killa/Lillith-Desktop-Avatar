@@ -75,6 +75,10 @@ speak_into_mic(os.path.join(OUT, "q.wav"))
 time.sleep(wav_s(os.path.join(OUT, "q.wav")) + 0.6)
 r = call(c, op="listen", action="stop")
 check("push-to-talk start/stop", r1.get("listening") and sim(r.get("text", ""), Q) >= 0.6, f"heard={r.get('text')!r}")
+r2 = call(c, op="listen", action="start")
+call(c, op="listen", action="stop")
+check("push-to-talk: every press has its own card", r2.get("listening") and r1.get("card") and r2.get("card")
+      and r1["card"] != r2["card"], f"{r1.get('card')} / {r2.get('card')}")
 
 # 4. barge-in: she talks (real-time fake player), user speaks -> she stops, his words are transcribed
 ev = conn()

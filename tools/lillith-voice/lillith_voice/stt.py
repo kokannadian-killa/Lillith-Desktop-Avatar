@@ -461,6 +461,9 @@ class Listener:
         self._barged = False
         self._pre = []             # ~0.5 s pre-roll kept while muted (so a barge-in's first word survives)
         self.always = False
+        self._press_lock = threading.Lock()
+        self._press = None         # id of the push-to-talk press that is held now (None: released)
+        self._press_seq = 0
 
     # ---------------------------------------------------------------- audio path
     def _playing(self):
@@ -513,6 +516,8 @@ class Listener:
             return
         info = {"ev": "transcript", "text": text, "audio_s": round(len(seg) / RATE, 2),
                 "stt_s": round(time.time() - t0, 2), **classify(text, sp)}
+        if info["safeword"]:
+            self.cancel_pending("safeword")      # a mic card still waiting for its Yes closes too
         if info["safeword"] and self.speaker:
             self.speaker.stop(reason="safeword")
             self.emit({"ev": "safeword", "text": text})
@@ -523,29 +528,69 @@ class Listener:
 
     # ---------------------------------------------------------------- API
     def ptt_start(self, token=None):
+        """One press. Its card belongs to this press only: released (ptt_stop) or safeword before Yes ->
+        the card is closed (CANCELLED) and the mic never opens, even for a late Yes."""
+        with self._press_lock:
+            self._press_seq += 1
+            press = self._press = self._press_seq
+        lock = self._press_lock
+
+        def held():
+            return self._press == press
+
+        card = self.gate.last_card
         # Every press needs a fresh card Yes (or one-time token). Only a mic already open under an
         # always-listening Yes is reused; a mic left open by an earlier press is not.
         if not (self.always and self.mic.running):
-            refused = self.gate.allow("listen", token)
+            refused = self.gate.allow("listen", token, wanted=held, owner=press)
             if refused is not None:
-                return refused
-        if self._playing() or (self.speaker and self.speaker.busy()):
-            self._barge("ptt")          # pressing talk always interrupts her
-        with self._lock:
-            self._ptt = []
-            self._mode = "ptt"
-        self.mic.start(card=self.gate.last_card)
+                with lock:
+                    released = self._press != press
+                    if not released:
+                        self._press = None
+                return {**refused, "released": True} if released else refused
+            card = self.gate.last_card
+        with lock:
+            if self._press != press:
+                # Released (or the safeword) after the Yes but before the mic opened: it stays shut.
+                G.audit("CANCELLED", "mic_listen", self.gate.mic_argv(), card, self.gate.log)
+                return {"ok": False, "released": True, "need_card": True,
+                        "error": "push-to-talk was released before the microphone opened"}
+            if self._playing() or (self.speaker and self.speaker.busy()):
+                self._barge("ptt")          # pressing talk always interrupts her
+            with self._lock:
+                self._ptt = []
+                self._mode = "ptt"
+            self.mic.start(card=card)
         self.emit({"ev": "listening", "mode": "ptt"})
-        return {"ok": True, "listening": True}
+        return {"ok": True, "listening": True, "card": card}
 
     def ptt_stop(self):
-        with self._lock:
-            audio = np.concatenate(self._ptt) if self._ptt else np.zeros(0, np.float32)
-            self._ptt = []
-            self._mode = "always" if self.always else None
-        if not self.always:
-            self.mic.stop()
+        """Release: the press ends now. A card still open for it is closed (CANCELLED); the mic always stops
+        (unless always-listening owns it)."""
+        with self._press_lock:
+            press, self._press = self._press, None
+            with self._lock:
+                opened = self._mode == "ptt"
+                audio = np.concatenate(self._ptt) if (opened and self._ptt) else np.zeros(0, np.float32)
+                self._ptt = []
+                if opened:
+                    self._mode = "always" if self.always else None
+            if not self.always:
+                self.mic.stop()
+        if press is not None:
+            self.gate.cancel(owner=press)
+        if not opened:
+            return {"ok": True, "text": "", "cancelled": True, **classify("")}
         return self.transcribe(audio)
+
+    def cancel_pending(self, why="safeword"):
+        """The safeword (or a stop with reason safeword): close any open mic card (CANCELLED) and forget a
+        press still waiting for its Yes, so a late Yes never opens the mic. Never blocks on the card."""
+        with self._press_lock:
+            if self._press is not None and self._mode != "ptt":
+                self._press = None
+        return self.gate.cancel()
 
     def transcribe(self, audio):
         """VAD-trim then transcribe (used for PTT buffers and WAV files)."""
@@ -562,6 +607,8 @@ class Listener:
         text = self.rec.transcribe(speech, voiced_s) if len(speech) else ""
         info = {"ok": True, "text": text, "audio_s": round(len(audio) / RATE, 2), "speech_s": round(len(speech) / RATE, 2),
                 "stt_s": round(time.time() - t0, 2), **classify(text, voiced_s)}
+        if info["safeword"]:
+            self.cancel_pending("safeword")      # a mic card still waiting for its Yes closes too
         if info["safeword"] and self.speaker:
             self.speaker.stop(reason="safeword")
             self.emit({"ev": "safeword", "text": text})

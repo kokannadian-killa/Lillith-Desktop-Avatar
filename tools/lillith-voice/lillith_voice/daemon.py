@@ -72,6 +72,12 @@ class Core:
                     "listening_always": bool(self._listener and self._listener.always)}
         if cmd == "stop":
             sp.stop(reason=r.get("reason", "stop"))
+            if r.get("reason") == "safeword":
+                # A mic card still waiting for its Yes is closed (CANCELLED); the mic never opens for it.
+                if self._listener is not None:
+                    self._listener.cancel_pending("safeword")
+                else:
+                    self.gate.cancel()
             return {"ok": True}
         if cmd == "shutdown":
             sp.stop()
