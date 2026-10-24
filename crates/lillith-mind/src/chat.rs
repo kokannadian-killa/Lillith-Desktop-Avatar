@@ -11,9 +11,9 @@ use crate::llm::{ChatOptions, Flavor, LlmClient, LlmError, Message};
 use crate::persona;
 use lillith_core::access::plan::PlanRequest;
 use lillith_core::config::{ChatConfig, MemoryConfig, MindConfig};
-use lillith_core::soul_contract::{PendingAction, SoulContract};
+use lillith_core::soul_contract::{Answer, PendingAction, SoulContract};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// An edit applied to both the in-memory and on-disk chat history.
 type HistoryRewrite<'a> = dyn Fn(&mut Vec<Message>) + 'a;
@@ -41,11 +41,17 @@ impl Outcome {
 #[derive(Debug)]
 pub struct ChatSession {
     client: Option<LlmClient>,
-    /// `[chat]` when it may (re)spawn llama-server itself (`[chat.server]`
-    /// configured): the restart recovery step. `None`: never restarts.
+    /// `[chat]` when `[chat.server]` is configured: the (re)start recovery
+    /// step may *ask* (Soul Contract card) to start llama-server. `None`:
+    /// never asks, never starts.
     restart: Option<ChatConfig>,
-    /// A llama-server this session restarted (stopped with the session).
+    /// A llama-server this session started after a Yes (stopped with the
+    /// session).
     own_server: Option<crate::server::LlamaServer>,
+    /// The "Restart local model server?" Soul Contract card.
+    server_card: ServerCard,
+    /// A reply came back in this session (the card then says "Restart").
+    server_seen: bool,
     /// Pauses before each retry of an unreachable / loading server.
     retry_backoff: Vec<Duration>,
     system_prompt: String,
@@ -104,7 +110,43 @@ pub const DEFAULT_RETRY_BACKOFF: [Duration; 2] =
     [Duration::from_millis(400), Duration::from_millis(1200)];
 
 /// Longest wait for a restarted llama-server to load its model.
-const RESTART_WAIT_MAX: Duration = Duration::from_secs(90);
+pub const RESTART_WAIT_MAX: Duration = Duration::from_secs(90);
+
+/// An unanswered model-server card counts as No after this long.
+pub const SERVER_CARD_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// After a No / timeout / no-UI the card is not raised again for this long
+/// (recovery stays text-only + plain retries meanwhile).
+pub const SERVER_CARD_COOLDOWN: Duration = Duration::from_secs(10 * 60);
+
+/// How the model-server card was closed. Only [`CardChoice::Clicked`] with
+/// [`Answer::Yes`] approves; the chat bubble builds it from the popup's Yes
+/// button and nothing else (typed or spoken "yes" never reaches it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CardChoice {
+    /// A click on the card's Yes / No (Esc on the card is No).
+    Clicked(Answer),
+    /// Nobody answered within [`SERVER_CARD_TIMEOUT`].
+    TimedOut,
+    /// Dropped (safeword, bubble closing).
+    Cancelled,
+}
+
+/// State of the model-server Soul Contract card (at most one).
+#[derive(Debug, Default)]
+struct ServerCard {
+    /// A card surface exists (the chat bubble). Without one (CLI, headless)
+    /// every request is audited `NO_UI` and recovery stays text-only.
+    ui: bool,
+    /// The filed request, waiting for a click.
+    action: Option<PendingAction>,
+    /// The UI has taken it (shown).
+    raised: bool,
+    /// Yes was clicked and audited; consumed by the start.
+    approved: bool,
+    /// No new card before this.
+    cooldown_until: Option<Instant>,
+}
 
 impl ChatSession {
     /// Session for `cfg`. `offline` (= `--no-llm`) answers every message
@@ -137,6 +179,8 @@ impl ChatSession {
             client,
             restart,
             own_server: None,
+            server_card: ServerCard::default(),
+            server_seen: false,
             retry_backoff: DEFAULT_RETRY_BACKOFF.to_vec(),
             system_prompt,
             opts: ChatOptions {
@@ -180,6 +224,14 @@ impl ChatSession {
     /// loading (default [`DEFAULT_RETRY_BACKOFF`]; empty = no retries).
     pub fn with_retry_backoff(mut self, backoff: Vec<Duration>) -> Self {
         self.retry_backoff = backoff;
+        self
+    }
+
+    /// Whether a Soul Contract card can be shown for the model-server
+    /// (re)start (the chat bubble: `true`; CLI / headless: `false`, the
+    /// default, so a request is audited `NO_UI` and stays text-only).
+    pub fn with_server_card(mut self, ui: bool) -> Self {
+        self.server_card.ui = ui;
         self
     }
 
@@ -513,6 +565,7 @@ impl ChatSession {
             self.pending_tool = None;
             self.pending_skill = None;
             self.pending_forget = None;
+            self.answer_server_card(CardChoice::Cancelled);
             let line = report.chat_line();
             on_token(&line);
             return Outcome::Reply(line);
@@ -537,6 +590,7 @@ impl ChatSession {
         };
         match result {
             Ok(reply) if !reply.trim().is_empty() => {
+                self.server_seen = true;
                 let reply = reply.trim().to_string();
                 self.history.push(Message::user(user));
                 self.history.push(Message::assistant(reply.clone()));
@@ -624,9 +678,12 @@ impl ChatSession {
     /// One model call with error recovery: when the server is unreachable
     /// or still loading and nothing was streamed yet, the failure is
     /// remembered (stable signature) and the built-in safe fixes are tried
-    /// in the order error memory suggests: retry after a backoff, then (only
-    /// when `[chat.server]` lets her spawn it and nothing answers) restart
-    /// the local llama-server. Each outcome is recorded. Loopback only: the
+    /// in the order error memory suggests: retry after a backoff (no card
+    /// needed: the same loopback server). A (re)start of llama-server is a
+    /// program launch, so it is never done here: when `[chat.server]` is
+    /// configured and nothing answers, the "Restart local model server?"
+    /// Soul Contract card is filed instead (see [`Self::take_server_request`])
+    /// and this returns at once. Each outcome is recorded. Loopback only: the
     /// same endpoint, nothing new is contacted. The first error is returned
     /// when nothing worked, so the fallback line matches what happened.
     async fn stream_recovering<F: FnMut(&str)>(
@@ -661,6 +718,7 @@ impl ChatSession {
             return first;
         }
         let plan = recovery::begin(self.memory.as_ref(), text, "chat.llm", &candidates);
+        let mut ask_restart = false;
         for fix in plan {
             let attempt = match fix {
                 SafeFix::RetryBackoff => {
@@ -686,18 +744,12 @@ impl ChatSession {
                     last
                 }
                 SafeFix::RestartLlamaServer => {
-                    if self.restart_server().await {
-                        Some(
-                            client
-                                .chat_stream(messages, self.opts, &mut |t: &str| {
-                                    streamed = true;
-                                    on_token(t)
-                                })
-                                .await,
-                        )
-                    } else {
-                        None
-                    }
+                    // A program launch: never done here. Once the plain
+                    // retries failed, the Soul Contract card is filed
+                    // (non-blocking); the outcome is recorded only after an
+                    // approved start.
+                    ask_restart = true;
+                    continue;
                 }
                 SafeFix::TextOnly => None,
             };
@@ -709,11 +761,171 @@ impl ChatSession {
                 _ => {}
             }
         }
+        if ask_restart {
+            self.file_server_card();
+        }
         first
     }
 
-    /// Restarts the configured local llama-server (the same spawn path as
-    /// startup) when nothing answers at the endpoint. `true` once it is ready.
+    /// Where the model-server card is audited: `[mind]`'s audit log, else
+    /// the default `audit.log` in the data dir (the card is audited even
+    /// with `[mind]` off).
+    fn server_contract(&self) -> SoulContract {
+        SoulContract::new(
+            self.audit_log
+                .clone()
+                .or_else(|| lillith_core::config::data_dir().map(|d| d.join("audit.log"))),
+        )
+    }
+
+    /// Files the "Restart local model server?" card: at most one at a time,
+    /// none during the cooldown after a No. Audited `PROPOSED`; without a
+    /// card UI also `NO_UI` (text-only, cooldown).
+    fn file_server_card(&mut self) {
+        let Some(cfg) = &self.restart else { return };
+        let card = &self.server_card;
+        if card.action.is_some() || card.approved {
+            tracing::debug!("chat: model-server card already pending");
+            return;
+        }
+        if card.cooldown_until.is_some_and(|t| Instant::now() < t) {
+            tracing::debug!("chat: model-server card cooling down; text-only");
+            return;
+        }
+        let Some(argv) = crate::server::display_argv(cfg) else {
+            return;
+        };
+        let action = PendingAction::StartModelServer {
+            argv,
+            restart: self.server_seen,
+        };
+        let sc = self.server_contract();
+        sc.record("PROPOSED", &action);
+        if !self.server_card.ui {
+            sc.record("NO_UI", &action);
+            tracing::warn!(
+                "chat: no Soul Contract card here; model server not started (text-only)"
+            );
+            self.server_card.cooldown_until = Some(Instant::now() + SERVER_CARD_COOLDOWN);
+            return;
+        }
+        self.server_card.action = Some(action);
+        self.server_card.raised = false;
+    }
+
+    /// The model-server card to show, once (the UI raises it). `None` when
+    /// nothing is pending or it is already up.
+    pub fn take_server_request(&mut self) -> Option<PendingAction> {
+        let card = &mut self.server_card;
+        if card.raised {
+            return None;
+        }
+        let a = card.action.clone()?;
+        card.raised = true;
+        Some(a)
+    }
+
+    /// A model-server card is waiting for a click.
+    pub fn server_card_pending(&self) -> bool {
+        self.server_card.action.is_some()
+    }
+
+    /// Closes the model-server card and audits the decision: Yes →
+    /// `CONFIRM` (returns `true`; then call [`start_approved_server`] or,
+    /// when the app owns the server, [`wait_for_approved_server`]); No →
+    /// `DENY`; timeout → `TIMEOUT`; cancelled → `CANCELLED`. Anything but
+    /// Yes starts the cooldown. `false` (nothing audited) when no card is
+    /// pending.
+    ///
+    /// [`start_approved_server`]: Self::start_approved_server
+    /// [`wait_for_approved_server`]: Self::wait_for_approved_server
+    pub fn answer_server_card(&mut self, choice: CardChoice) -> bool {
+        let Some(action) = self.server_card.action.take() else {
+            return false;
+        };
+        self.server_card.raised = false;
+        let mut sc = self.server_contract();
+        let approved = match choice {
+            CardChoice::Clicked(Answer::Yes) => {
+                let id = sc.request(action);
+                match sc.confirm(id) {
+                    Ok(_) => true,
+                    Err(e) => {
+                        tracing::warn!("chat: model-server approval failed: {e}");
+                        false
+                    }
+                }
+            }
+            CardChoice::Clicked(Answer::No) => {
+                let id = sc.request(action);
+                let _ = sc.deny(id);
+                false
+            }
+            CardChoice::TimedOut => {
+                sc.record("TIMEOUT", &action);
+                false
+            }
+            CardChoice::Cancelled => {
+                sc.record("CANCELLED", &action);
+                false
+            }
+        };
+        self.server_card.approved = approved;
+        if !approved {
+            self.server_card.cooldown_until = Some(Instant::now() + SERVER_CARD_COOLDOWN);
+        }
+        approved
+    }
+
+    /// After a clicked Yes: starts the configured llama-server owned by this
+    /// session (stopped with it) and waits for it. `false` without an
+    /// approval (nothing is started) or when it didn't come up. The outcome
+    /// is remembered as the `restart_llama_server` fix.
+    pub async fn start_approved_server(&mut self) -> bool {
+        if !std::mem::take(&mut self.server_card.approved) {
+            return false;
+        }
+        let ok = self.restart_server().await;
+        self.record_restart(ok);
+        ok
+    }
+
+    /// After a clicked Yes when the app (not this session) spawns the
+    /// server: only waits (plain loopback health checks, no card needed)
+    /// up to `timeout`. `false` without an approval.
+    pub async fn wait_for_approved_server(&mut self, timeout: Duration) -> bool {
+        if !std::mem::take(&mut self.server_card.approved) {
+            return false;
+        }
+        let Some(cfg) = self.restart.clone() else {
+            return false;
+        };
+        let t0 = Instant::now();
+        let mut ok = false;
+        while t0.elapsed() < timeout {
+            if crate::server::already_running(&cfg.endpoint).await {
+                ok = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        self.record_restart(ok);
+        ok
+    }
+
+    fn record_restart(&self, ok: bool) {
+        lillith_memory::recovery::finish(
+            self.memory.as_ref(),
+            "llm: server unreachable",
+            lillith_memory::recovery::SafeFix::RestartLlamaServer,
+            ok,
+        );
+        tracing::info!(worked = ok, "chat: approved model-server start");
+    }
+
+    /// Starts the configured local llama-server (the same spawn path as
+    /// startup) when nothing answers at the endpoint. `true` once it is
+    /// ready. Only reached through [`Self::start_approved_server`].
     async fn restart_server(&mut self) -> bool {
         let Some(cfg) = self.restart.clone() else {
             return false;
@@ -917,7 +1129,17 @@ mod tests {
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        tokio::spawn(async move {
+        tokio::spawn(serve(l, replies, tx));
+        (url, rx)
+    }
+
+    /// Answers one request per reply on `l` (the fake llama-server).
+    async fn serve(
+        l: tokio::net::TcpListener,
+        replies: Vec<String>,
+        tx: tokio::sync::mpsc::UnboundedSender<String>,
+    ) {
+        {
             for reply in replies {
                 let (mut s, _) = l.accept().await.unwrap();
                 let mut req = Vec::new();
@@ -944,12 +1166,11 @@ mod tests {
                         break;
                     }
                 }
-                tx.send(String::from_utf8_lossy(&req).to_string()).unwrap();
+                let _ = tx.send(String::from_utf8_lossy(&req).to_string());
                 s.write_all(reply.as_bytes()).await.unwrap();
                 s.shutdown().await.ok();
             }
-        });
-        (url, rx)
+        }
     }
 
     fn sse_reply(parts: &[&str]) -> String {
@@ -1278,6 +1499,235 @@ mod tests {
             .unwrap()
             .lookup_error("llm: server unreachable")
             .is_none());
+    }
+
+    fn free_port() -> u16 {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    }
+
+    /// A `[chat.server]` whose "llama-server" is a script that only writes
+    /// its arguments to `ran` (so a launch is visible) and exits.
+    #[cfg(unix)]
+    struct FakeLlama {
+        dir: PathBuf,
+        cfg: ChatConfig,
+        ran: PathBuf,
+        audit: PathBuf,
+    }
+
+    #[cfg(unix)]
+    impl FakeLlama {
+        fn new(tag: &str) -> Self {
+            use std::os::unix::fs::PermissionsExt;
+            let dir = std::env::temp_dir().join(format!(
+                "lillith-card-{tag}-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            let ran = dir.join("ran");
+            let bin = dir.join("fake-llama-server");
+            std::fs::write(
+                &bin,
+                format!("#!/bin/sh\necho \"$@\" > '{}'\n", ran.display()),
+            )
+            .unwrap();
+            std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let model = dir.join("m.gguf");
+            std::fs::write(&model, b"").unwrap();
+            let mut cfg = cfg(&format!("http://127.0.0.1:{}", free_port()));
+            cfg.api_key = "sekrit".into();
+            cfg.server.binary = bin.display().to_string();
+            cfg.server.model_path = model.display().to_string();
+            cfg.server.startup_timeout_s = 3.0;
+            let audit = dir.join("audit.log");
+            Self {
+                dir,
+                cfg,
+                ran,
+                audit,
+            }
+        }
+
+        fn session(&self, ui: bool) -> ChatSession {
+            let mut s = ChatSession::new(&self.cfg, false)
+                .with_brain(mem_brain())
+                .with_retry_backoff(Vec::new())
+                .with_server_card(ui);
+            s.audit_log = Some(self.audit.clone());
+            s
+        }
+
+        fn audit(&self) -> String {
+            std::fs::read_to_string(&self.audit).unwrap_or_default()
+        }
+
+        fn count(&self, decision: &str) -> usize {
+            self.audit()
+                .matches(&format!("\t{decision}\tstart_model_server\t"))
+                .count()
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for FakeLlama {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn clicked_yes_restarts_the_server_and_audits_it() {
+        let f = FakeLlama::new("yes");
+        let mut s = f.session(true);
+        let t0 = Instant::now();
+        let out = s.send("hi", |_| {}).await;
+        assert!(matches!(out, Outcome::Fallback { .. }), "{out:?}");
+        assert!(
+            t0.elapsed() < Duration::from_secs(10),
+            "recovery never waits for the card"
+        );
+        assert!(!f.ran.exists(), "nothing starts before the click");
+        let card = s.take_server_request().expect("card raised");
+        let p = card.prompt();
+        assert_eq!(p.kind, "start_model_server");
+        assert!(p.summary.contains("local model server?"), "{}", p.summary);
+        let detail = p.detail.unwrap();
+        assert!(
+            detail.contains("--api-key ***") && !detail.contains("sekrit"),
+            "{detail}"
+        );
+        assert!(s.answer_server_card(CardChoice::Clicked(Answer::Yes)));
+        // The fake exits at once, so it never becomes ready.
+        assert!(!s.start_approved_server().await);
+        let ran = std::fs::read_to_string(&f.ran).expect("the server was started");
+        assert!(ran.contains("--port"), "{ran}");
+        assert_eq!(
+            (f.count("PROPOSED"), f.count("CONFIRM")),
+            (1, 1),
+            "{}",
+            f.audit()
+        );
+        // One approval, one start.
+        assert!(!s.start_approved_server().await);
+        let k = s
+            .memory()
+            .unwrap()
+            .lookup_error("llm: server unreachable")
+            .unwrap();
+        assert!(
+            k.failed_fixes.iter().any(|x| x == "restart_llama_server"),
+            "{k:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn no_timeout_or_no_ui_stay_text_only_and_are_audited() {
+        // No: denied, nothing started, then a cooldown (no new card).
+        let f = FakeLlama::new("no");
+        let mut s = f.session(true);
+        s.send("hi", |_| {}).await;
+        assert!(s.take_server_request().is_some());
+        assert!(!s.answer_server_card(CardChoice::Clicked(Answer::No)));
+        assert!(!s.start_approved_server().await);
+        let out = s.send("still there?", |_| {}).await;
+        assert!(persona::SERVER_DOWN_LINES.contains(&out.text()), "{out:?}");
+        assert!(s.take_server_request().is_none(), "cooldown after No");
+        assert!(!s.server_card_pending());
+        assert_eq!(
+            (f.count("PROPOSED"), f.count("DENY")),
+            (1, 1),
+            "{}",
+            f.audit()
+        );
+        assert!(!f.ran.exists());
+
+        // Timeout: same as No, audited TIMEOUT.
+        let f = FakeLlama::new("timeout");
+        let mut s = f.session(true);
+        s.send("hi", |_| {}).await;
+        assert!(s.take_server_request().is_some());
+        assert!(!s.answer_server_card(CardChoice::TimedOut));
+        assert!(!s.start_approved_server().await);
+        assert_eq!(f.count("TIMEOUT"), 1, "{}", f.audit());
+        assert_eq!(f.count("CONFIRM"), 0);
+        assert!(!f.ran.exists());
+
+        // No card UI (CLI / headless): straight to text-only, audited NO_UI.
+        let f = FakeLlama::new("noui");
+        let mut s = f.session(false);
+        let out = s.send("hi", |_| {}).await;
+        assert!(persona::SERVER_DOWN_LINES.contains(&out.text()), "{out:?}");
+        assert!(s.take_server_request().is_none() && !s.server_card_pending());
+        assert!(!s.answer_server_card(CardChoice::Clicked(Answer::Yes)));
+        assert!(!s.start_approved_server().await);
+        assert_eq!(
+            (f.count("PROPOSED"), f.count("NO_UI")),
+            (1, 1),
+            "{}",
+            f.audit()
+        );
+        s.send("hi again", |_| {}).await;
+        assert_eq!(f.count("PROPOSED"), 1, "cooldown: no audit spam");
+        assert!(!f.ran.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn chat_yes_never_approves_and_only_one_card_is_pending() {
+        let f = FakeLlama::new("chatyes");
+        let mut s = f.session(true);
+        s.send("hi", |_| {}).await;
+        assert!(s.take_server_request().is_some());
+        for text in ["yes", "/contract yes", "Yes, restart it", "y"] {
+            s.send(text, |_| {}).await;
+            assert!(s.server_card_pending(), "{text:?} must not close the card");
+            assert!(
+                s.take_server_request().is_none(),
+                "already up: no second card"
+            );
+        }
+        assert!(!s.start_approved_server().await, "typed yes is no approval");
+        assert!(!s.wait_for_approved_server(Duration::from_millis(10)).await);
+        assert!(!f.ran.exists());
+        assert_eq!(
+            (f.count("PROPOSED"), f.count("CONFIRM")),
+            (1, 0),
+            "{}",
+            f.audit()
+        );
+        // The safeword drops it (audited).
+        s.send("red", |_| {}).await;
+        assert!(!s.server_card_pending());
+        assert_eq!(f.count("CANCELLED"), 1, "{}", f.audit());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn retrying_the_loopback_server_needs_no_card() {
+        let f = FakeLlama::new("retry");
+        let port: u16 = f.cfg.endpoint.rsplit(':').next().unwrap().parse().unwrap();
+        // Down at first, up 150 ms later (the same loopback endpoint).
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            let l = tokio::net::TcpListener::bind(("127.0.0.1", port))
+                .await
+                .unwrap();
+            serve(l, vec![sse_reply(&["Back", "~"])], tx).await;
+        });
+        let mut s = f
+            .session(true)
+            .with_retry_backoff(vec![Duration::from_millis(400)]);
+        let out = s.send("hi", |_| {}).await;
+        assert_eq!(out, Outcome::Reply("Back~".into()));
+        assert!(!s.server_card_pending() && s.take_server_request().is_none());
+        assert_eq!(f.audit(), "", "no card, nothing audited");
+        assert!(!f.ran.exists());
     }
 
     #[tokio::test]

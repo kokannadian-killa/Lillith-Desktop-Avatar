@@ -124,6 +124,12 @@ pub enum PendingAction {
         argv: Vec<String>,
         app: Option<String>,
     },
+    /// (Re)start the configured local llama-server (`[chat.server]`,
+    /// loopback only). Always needs an explicit click on the card's Yes;
+    /// `argv` is shown with any `--api-key` value masked. Confirming only
+    /// records the approval: the app then spawns the server itself (it
+    /// owns and stops it), so nothing is started by the contract.
+    StartModelServer { argv: Vec<String>, restart: bool },
 }
 
 impl PendingAction {
@@ -143,6 +149,7 @@ impl PendingAction {
             PendingAction::DeletePaths { .. } => "delete_paths",
             PendingAction::RunCommand { .. } => "run_command",
             PendingAction::Launch { .. } => "launch",
+            PendingAction::StartModelServer { .. } => "start_model_server",
             PendingAction::Plan { .. } => "plan",
         }
     }
@@ -164,6 +171,8 @@ impl PendingAction {
             | PendingAction::Organize { .. }
             | PendingAction::Plan { .. }
             | PendingAction::Launch { .. } => None,
+            // The binary, so the audit line names what would run.
+            PendingAction::StartModelServer { argv, .. } => argv.first().map(Path::new),
         }
     }
 
@@ -181,7 +190,8 @@ impl PendingAction {
             | PendingAction::Organize { .. }
             | PendingAction::Plan { .. }
             | PendingAction::RunCommand { .. }
-            | PendingAction::Launch { .. } => true,
+            | PendingAction::Launch { .. }
+            | PendingAction::StartModelServer { .. } => true,
             PendingAction::ListDir { .. }
             | PendingAction::ReadFile { .. }
             | PendingAction::SearchFiles { .. } => false,
@@ -228,6 +238,12 @@ impl PendingAction {
                 Some(a) => format!("Open {a}: {}", argv.join(" ")),
                 None => format!("Start program: {}", argv.join(" ")),
             },
+            PendingAction::StartModelServer { restart: true, .. } => {
+                "Restart local model server? (llama-server, loopback only)".into()
+            }
+            PendingAction::StartModelServer { restart: false, .. } => {
+                "Start local model server? (llama-server, loopback only)".into()
+            }
         }
     }
 
@@ -247,6 +263,7 @@ impl PendingAction {
             PendingAction::DeletePaths { .. } => "DELETE — SIGN THE LIST",
             PendingAction::RunCommand { .. } => "RUN COMMAND",
             PendingAction::Launch { .. } => "OPEN PROGRAM",
+            PendingAction::StartModelServer { .. } => "LOCAL MODEL SERVER",
             PendingAction::Plan { .. } => "REVIEW THE PLAN",
         }
     }
@@ -277,6 +294,10 @@ impl PendingAction {
                 Some(format!("$ {command}{why}"))
             }
             PendingAction::Launch { argv, .. } => Some(format!("$ {}", argv.join(" "))),
+            PendingAction::StartModelServer { argv, .. } => Some(format!(
+                "$ {}\n\nOnly a click on Yes starts it; typing or saying yes doesn't.",
+                argv.join(" ")
+            )),
             PendingAction::Organize { plan, .. } => Some(plan.preview()),
             // The full listing: every file and folder, never elided.
             PendingAction::DeletePaths { manifest } => Some(manifest.listing()),
@@ -346,6 +367,11 @@ impl PendingAction {
                     Some(format!("started {} (pid {pid})", argv.join(" "))),
                 ))
             }
+            // The approval itself: the app spawns (and owns) the server.
+            PendingAction::StartModelServer { .. } => Ok((
+                None,
+                Some("approved: the app starts the local model server".into()),
+            )),
             PendingAction::Organize { plan, journal, .. } => {
                 let rep = crate::access::organize::execute(plan, journal, journal.parent())?;
                 Ok((None, Some(rep.text())))
@@ -938,6 +964,9 @@ impl SoulContract {
                 command.clone()
             }
             PendingAction::Launch { argv, .. } => format!("[launch] {}", argv.join(" ")),
+            PendingAction::StartModelServer { argv, .. } => {
+                format!("[model-server] {}", argv.join(" "))
+            }
             _ => return,
         };
         let Some(d) = self.data_dir() else { return };
@@ -947,6 +976,14 @@ impl SoulContract {
             Err(e) => format!("error: {e}"),
         };
         crate::access::commands::log_command(&d.join("commands.log"), decision, &cmd, &result);
+    }
+
+    /// Audits `decision` for `action` without running it or touching the
+    /// queue: a card that was proposed (`PROPOSED`), timed out (`TIMEOUT`),
+    /// could not be shown (`NO_UI`) or was cancelled (`CANCELLED`).
+    pub fn record(&self, decision: &str, action: &PendingAction) {
+        self.audit(decision, action);
+        self.log_command(decision, action, &Ok((None, None)));
     }
 
     /// Answers the popup: [`Answer::Yes`] is [`confirm`](Self::confirm),
@@ -1226,6 +1263,51 @@ mod tests {
         assert_eq!(format_utc(UNIX_EPOCH), "1970-01-01T00:00:00Z");
         // A leap day.
         assert_eq!(civil_from_days(19_782), (2024, 2, 29));
+    }
+
+    #[test]
+    fn model_server_card_starts_nothing_and_audits_every_decision() {
+        let dir = tmpdir("model-server");
+        let log = dir.join("audit.log");
+        let mut sc = SoulContract::new(Some(log.clone())).with_clock(fixed(1_700_000_000));
+        let action = PendingAction::StartModelServer {
+            argv: vec!["/opt/llama-server".into(), "--port".into(), "8080".into()],
+            restart: true,
+        };
+        assert!(action.needs_confirmation());
+        let p = action.prompt();
+        assert_eq!(p.kind, "start_model_server");
+        assert!(
+            p.summary.starts_with("Restart local model server?"),
+            "{}",
+            p.summary
+        );
+        assert_eq!(p.target.as_deref(), Some("/opt/llama-server"));
+        // Reads-only path refuses it.
+        assert!(matches!(
+            sc.run_now(action.clone()),
+            Err(ContractError::NeedsConfirmation(_))
+        ));
+        sc.record("PROPOSED", &action);
+        let id = sc.request(action.clone());
+        let done = sc.confirm(id).unwrap();
+        assert!(done.output.unwrap().contains("approved"));
+        let id = sc.request(action.clone());
+        sc.deny(id).unwrap();
+        sc.record("TIMEOUT", &action);
+        let audit = std::fs::read_to_string(&log).unwrap();
+        for d in ["PROPOSED", "CONFIRM", "DENY", "TIMEOUT"] {
+            assert!(
+                audit.contains(&format!("\t{d}\tstart_model_server\t/opt/llama-server")),
+                "{d}: {audit}"
+            );
+        }
+        let cmds = std::fs::read_to_string(dir.join("commands.log")).unwrap();
+        assert!(
+            cmds.contains("[model-server] /opt/llama-server --port 8080"),
+            "{cmds}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

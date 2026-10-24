@@ -75,6 +75,20 @@ pub fn command_args(
     a
 }
 
+/// The full command line [`LlamaServer::spawn`] would run for `cfg`, for the
+/// Soul Contract card and its audit log (`--api-key` masked). `None` when the
+/// endpoint has no host/port.
+pub fn display_argv(cfg: &ChatConfig) -> Option<Vec<String>> {
+    let (host, port) = host_port(&cfg.endpoint)?;
+    let mut argv = vec![cfg.server.binary.trim().to_string()];
+    let mut mask = false;
+    for a in command_args(&cfg.server, &host, port, &cfg.api_key) {
+        argv.push(if mask { "***".into() } else { a.clone() });
+        mask = a == "--api-key";
+    }
+    Some(argv)
+}
+
 /// A running llama-server child; killed on drop.
 #[derive(Debug)]
 pub struct LlamaServer {
