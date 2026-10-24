@@ -3,7 +3,9 @@
 use crate::decay::{decayed, recency, reinforce};
 use crate::errors::{signature, ErrorRecord, FixOutcome, KnownFix};
 use crate::extract::{intent_key, keywords, Extractor, Fact, Polarity, RuleExtractor};
-use crate::forget::{contains_phrase, content_words, matches_topic, parse_forget, ForgetCmd};
+use crate::forget::{
+    contains_phrase, content_words, matches_topic, parse_forget, same_word, ForgetCmd,
+};
 use crate::habits::{self, EventRow, Prediction};
 use crate::safeword::{is_safeword, mentions_safeword};
 use crate::{schema, Error, Kind};
@@ -164,8 +166,9 @@ pub struct Brain {
     last_retrieved: RefCell<Vec<i64>>,
     local_offset: Cell<Option<i32>>,
     last_maintain: Cell<f64>,
-    /// `audit.log` next to the DB (the data dir by default): one line per
-    /// forget, kind + counts only. `None` for in-memory brains.
+    /// The shared `<data>/lillith/audit.log` (also with a custom
+    /// `db_path`): one line per forget, kind + counts only. Set by
+    /// [`Brain::open`]; `None` for `open_path` / in-memory brains.
     audit_log: Option<PathBuf>,
 }
 
@@ -186,10 +189,13 @@ impl Brain {
             return Ok(Self::disabled(cfg));
         }
         let path = cfg.resolved_db_path().ok_or(Error::NoDataDir)?;
-        Self::open_path(&path, cfg)
+        Ok(Self::open_path(&path, cfg)?.with_audit_log(lillith_core::config::audit_log_path()))
     }
 
-    /// Opens (creating) the DB at `path`. Still honours `cfg.enabled`.
+    /// Opens (creating) the DB at `path`. Still honours `cfg.enabled`. No
+    /// audit file (tests / embedders opt in with
+    /// [`with_audit_log`](Self::with_audit_log)); [`open`](Self::open) uses
+    /// the shared `<data>/lillith/audit.log`.
     pub fn open_path(path: &Path, cfg: &MemoryConfig) -> Result<Self> {
         if !cfg.enabled {
             return Ok(Self::disabled(cfg));
@@ -198,10 +204,6 @@ impl Brain {
         let conn = Connection::open(path)?;
         let mut b = Self::init(conn, cfg)?;
         b.path = Some(path.to_path_buf());
-        b.audit_log = path
-            .parent()
-            .filter(|d| !d.as_os_str().is_empty())
-            .map(|d| d.join("audit.log"));
         Ok(b)
     }
 
@@ -1444,7 +1446,14 @@ impl Brain {
                     })?;
                     for row in rows {
                         let (id, key, label, detail) = row?;
-                        if matches_topic(&[&key, &label, &detail], &words) {
+                        // An attribute whose name IS one of the topic's
+                        // words ("my new job" → `attr:job`) matches too:
+                        // the whole key, never a part of it.
+                        let attr_hit = key.strip_prefix("attr:").is_some_and(|a| {
+                            let a = a.trim().to_lowercase();
+                            words.iter().any(|w| same_word(&a, w))
+                        });
+                        if attr_hit || matches_topic(&[&key, &label, &detail], &words) {
                             ids.push(id);
                             if key.starts_with("attr:") && !detail.trim().is_empty() {
                                 values.push(detail.trim().to_lowercase());
@@ -1728,6 +1737,9 @@ fn forget_kind(cmd: &ForgetCmd) -> &'static str {
 /// Appends `line` to `path`, creating the file 0600 on unix.
 fn append_private(path: &Path, line: &str) -> std::io::Result<()> {
     use std::io::Write;
+    if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)?;
+    }
     let mut o = std::fs::OpenOptions::new();
     o.create(true).append(true);
     #[cfg(unix)]

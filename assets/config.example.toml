@@ -263,7 +263,7 @@
 # "forget about X" and windows longer than an hour ("the last 2 hours",
 # "the last 1000 months") ask first, showing how many memories match plus a
 # few examples: reply "yes" to confirm; anything else cancels. Each forget
-# appends kind + counts (never content) to audit.log next to memory.db.
+# appends kind + counts (never content) to <data dir>/lillith/audit.log.
 # The safeword ("red" / "OOC: stop") is never stored.
 # [memory]
 # enabled = true

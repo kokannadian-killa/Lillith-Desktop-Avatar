@@ -591,7 +591,12 @@ impl ChatSession {
     /// Loads (if present) and keeps saving the history at `path`.
     pub fn with_history_file(mut self, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        match read_history(&path) {
+        // Under the same lock as `persist`, so a corrupt file is moved aside
+        // (and a good one read) while no other window is rewriting it. If
+        // the lock can't be had we start empty; `persist` merges from disk
+        // under the lock later, so nothing on disk is lost.
+        let loaded = HistoryLock::acquire(&path).and_then(|_lock| read_history(&path));
+        match loaded {
             Ok(h) => self.history = h,
             Err(e) => tracing::warn!("{}: {e}; starting a fresh chat", path.display()),
         }
@@ -1506,11 +1511,19 @@ mod tests {
             .unwrap()
             .observe_interaction("my job is barista", "", &now);
         let out = s.send("forget about my new job", |_| {}).await;
-        // The question names how much matches and shows an example.
+        // The question names how much matches and shows an example: the
+        // `attr:job` row (the topic word "job" is the attr key) and the
+        // chat line, never the new wave music.
         assert!(out.text().contains("1 chat message"), "{}", out.text());
+        assert!(out.text().contains("barista"), "{}", out.text());
         assert!(!out.text().contains("wave"), "{}", out.text());
         let out = s.send("yes", |_| {}).await;
         assert!(out.text().contains("Gone"), "{}", out.text());
+        assert!(s
+            .memory()
+            .unwrap()
+            .strength_of(lillith_memory::Kind::Entity, "attr:job", &now)
+            .is_none());
         assert!(s
             .history()
             .iter()
@@ -1529,6 +1542,68 @@ mod tests {
         let out = s.send("forget the news", |_| {}).await;
         assert!(out.text().contains("don't have anything"), "{}", out.text());
         assert!(s.pending_forget().is_none());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[tokio::test]
+    async fn topic_forget_that_only_clears_chat_says_nothing_in_memory_matched() {
+        let d = hist_dir("chatonly");
+        let path = d.join("chat_history.json");
+        seed_history(
+            &path,
+            &[
+                ("user", "my cat Nyx is sick"),
+                ("assistant", "Poor baby."),
+                ("user", "hello"),
+            ],
+        );
+        let mut s = ChatSession::new(&ChatConfig::default(), true)
+            .with_brain(mem_brain())
+            .with_history_file(&path);
+        s.memory().unwrap().observe_interaction(
+            "I love dark synthwave",
+            "",
+            &lillith_memory::Ctx::now(),
+        );
+        let out = s.send("forget about Nyx", |_| {}).await;
+        assert!(out.text().contains("0 memories"), "{}", out.text());
+        assert!(out.text().contains("1 chat message"), "{}", out.text());
+        let out = s.send("yes", |_| {}).await;
+        let t = out.text();
+        assert!(!t.contains("Gone"), "{t}");
+        assert!(t.contains("Nothing in my memory matched nyx"), "{t}");
+        assert!(t.contains("1 chat message"), "{t}");
+        assert!(!s
+            .history()
+            .iter()
+            .any(|m| m.content.contains("Nyx is sick")));
+        assert!(s.history().iter().any(|m| m.content == "hello"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn with_history_file_waits_for_the_lock_before_touching_the_file() {
+        let d = hist_dir("lockfirst");
+        let path = d.join("chat_history.json");
+        std::fs::write(&path, "{ not json").unwrap();
+        let held = HistoryLock::acquire(&path).unwrap();
+        let p2 = path.clone();
+        let t = std::thread::spawn(move || {
+            ChatSession::new(&ChatConfig::default(), true)
+                .with_history_file(&p2)
+                .history()
+                .len()
+        });
+        std::thread::sleep(Duration::from_millis(300));
+        // Still blocked on the lock: the corrupt file has not been moved.
+        assert!(path.exists());
+        assert!(!path.with_extension("json.corrupt").exists());
+        drop(held);
+        assert_eq!(t.join().unwrap(), 0);
+        assert_eq!(
+            std::fs::read_to_string(path.with_extension("json.corrupt")).unwrap(),
+            "{ not json"
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 

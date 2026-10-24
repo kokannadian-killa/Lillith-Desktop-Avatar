@@ -373,25 +373,25 @@
  "canvas_compliant": true,
  "bbox_per_frame": [
   [
-   126,
+   125,
    275,
    47,
    387
   ],
   [
-   127,
+   125,
    274,
-   48,
+   47,
    387
   ],
   [
-   126,
+   125,
    274,
    47,
    388
   ],
   [
-   126,
+   125,
    275,
    47,
    388
@@ -405,7 +405,7 @@
   [
    126,
    276,
-   47,
+   46,
    389
   ],
   [
@@ -417,11 +417,11 @@
   [
    126,
    276,
-   47,
+   46,
    390
   ],
   [
-   129,
+   128,
    276,
    46,
    390
@@ -447,7 +447,7 @@
   [
    140,
    276,
-   47,
+   46,
    389
   ],
   [
@@ -469,7 +469,7 @@
    388
   ],
   [
-   125,
+   124,
    275,
    46,
    387
@@ -482,7 +482,7 @@
   ],
   [
    110,
-   275,
+   276,
    46,
    386
   ],
@@ -501,13 +501,13 @@
   [
    113,
    280,
-   47,
+   45,
    385
   ],
   [
    117,
    278,
-   47,
+   45,
    385
   ],
   [
@@ -525,7 +525,7 @@
   [
    141,
    274,
-   46,
+   45,
    386
   ],
   [
@@ -535,26 +535,20 @@
    386
   ],
   [
-   152,
+   151,
    274,
    45,
    386
   ],
   [
-   153,
-   273,
+   151,
+   274,
    46,
    386
   ],
   [
-   153,
-   273,
-   45,
-   386
-  ],
-  [
    151,
-   273,
+   274,
    45,
    386
   ],
@@ -565,19 +559,25 @@
    386
   ],
   [
-   152,
+   150,
+   274,
+   45,
+   386
+  ],
+  [
+   150,
    273,
    46,
    386
   ],
   [
-   151,
+   150,
    273,
    45,
    386
   ],
   [
-   152,
+   150,
    273,
    45,
    386
@@ -589,7 +589,7 @@
    387
   ],
   [
-   151,
+   150,
    277,
    45,
    387
@@ -597,7 +597,7 @@
   [
    151,
    281,
-   46,
+   45,
    387
   ],
   [
@@ -607,7 +607,7 @@
    387
   ],
   [
-   152,
+   151,
    290,
    46,
    388
@@ -637,14 +637,14 @@
    388
   ],
   [
-   135,
+   134,
    304,
-   50,
+   49,
    389
   ],
   [
    130,
-   302,
+   303,
    49,
    389
   ],
@@ -661,14 +661,14 @@
    389
   ],
   [
-   123,
+   122,
    292,
    48,
    389
   ],
   [
    121,
-   286,
+   287,
    48,
    389
   ],
@@ -688,12 +688,6 @@
    122,
    275,
    47,
-   390
-  ],
-  [
-   123,
-   274,
-   47,
    391
   ],
   [
@@ -703,13 +697,19 @@
    391
   ],
   [
-   124,
+   123,
+   275,
+   47,
+   391
+  ],
+  [
+   123,
    274,
    47,
    392
   ],
   [
-   124,
+   123,
    274,
    47,
    392
@@ -739,7 +739,7 @@
    392
   ],
   [
-   124,
+   123,
    313,
    48,
    392
@@ -765,113 +765,113 @@
   [
    123,
    304,
-   49,
+   48,
    392
   ],
   [
-   124,
+   123,
    301,
    47,
    392
   ],
   [
-   124,
+   123,
    296,
    47,
    392
   ],
   [
-   124,
+   123,
    291,
    46,
    392
   ],
   [
-   124,
+   123,
    284,
    46,
    392
   ],
   [
-   124,
+   123,
    277,
-   47,
+   46,
    392
   ],
   [
-   124,
+   123,
    275,
    46,
    392
   ],
   [
-   124,
+   123,
    277,
    46,
    392
   ],
   [
-   124,
+   123,
    279,
    46,
    392
   ],
   [
-   124,
+   123,
    280,
-   47,
+   46,
    392
   ],
   [
-   124,
+   123,
    282,
-   47,
+   46,
    392
   ],
   [
-   124,
+   123,
    283,
-   47,
+   46,
    392
   ],
   [
-   124,
+   123,
    285,
-   47,
+   46,
    392
   ],
   [
-   124,
+   123,
    288,
    46,
    392
   ],
   [
-   124,
+   123,
    291,
    46,
    392
   ],
   [
-   124,
+   123,
    297,
    46,
    392
   ],
   [
-   124,
+   123,
    302,
    46,
    392
   ],
   [
-   124,
+   123,
    304,
    46,
    392
   ],
   [
-   124,
+   123,
    301,
    47,
    392
@@ -892,13 +892,13 @@
    124,
    274,
    46,
-   391
+   392
   ],
   [
    124,
    275,
    46,
-   391
+   392
   ],
   [
    124,
@@ -908,8 +908,8 @@
   ],
   [
    124,
-   274,
-   48,
+   275,
+   47,
    391
   ],
   [
@@ -926,14 +926,14 @@
   ],
   [
    118,
-   274,
+   275,
    47,
    392
   ],
   [
-   117,
+   116,
    275,
-   48,
+   47,
    392
   ],
   [
@@ -944,7 +944,7 @@
   ],
   [
    125,
-   274,
+   275,
    48,
    392
   ],
@@ -973,15 +973,15 @@
    389
   ],
   [
-   126,
+   125,
    274,
-   48,
+   47,
    388
   ],
   [
-   126,
+   125,
    274,
-   48,
+   47,
    388
   ]
  ],
@@ -1005,20 +1005,20 @@
   "height": 400,
   "frame_count": 102,
   "fps": 12.0,
-  "bytes": 1027964,
+  "bytes": 1028157,
   "quality": {
    "edge_mae": 2.892,
    "edge_p99": 25.0,
    "halo_dark": 0.047,
-   "halo_light": -0.145,
-   "alpha_mae": 0.0482
+   "halo_light": -0.148,
+   "alpha_mae": 0.0484
   },
   "tool": "tools/video-pipeline/pack_mp4.py"
  },
  "matte_clean": {
   "version": 1,
   "tool": "tools/matte-clean/matte_clean.py",
-  "sheet_sha256": "7fbf26828bcf2bf5679782a3513a5b7797bfa5964c676cf0c800c41e62b53e91",
+  "sheet_sha256": "f914be32b2a9f4dc2a0cafb46a6afb9836fc7d9c47f75ef32afc816f2a450085",
   "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
  },
  "source_frame_list": [
@@ -1128,6 +1128,118 @@
  "motion_fix": {
   "what": "leg cross (old f9->f10) and uncross (old f42->f44) snapped in about one frame: the in-between video frames 18, 20, 22, 84, 86, 88 were added (96 -> 102 frames, still 12 fps, so both moves take twice as long). Frame 0, the loop seam, the seat fields and every original frame are unchanged.",
   "built": "same placement as the clip (scale 0.5, cx-src 633.5, ty 45 registered on the neighbouring frames, IoU 0.98), key_combined + horn_fix + deshadow rows 150-262, light-edge recolour, then matte_clean --force on the new frames only; then an edge decontamination on the six new frames (ring 3 px: edge colour lighter than the nearest solid interior by >10 replaced by it; px per frame {\"9\": 978, \"11\": 1059, \"13\": 1132, \"45\": 1028, \"47\": 1086, \"49\": 1101}), as the mp4 fringe QA saw light rims (23-33 px) on them",
-  "tool": "perch_motion_work/psit_build.py + psit_assemble.py (fix/perch-motion)"
+  "tool": "perch_motion_work/psit_build.py + psit_assemble.py (fix/perch-motion)",
+  "timing": "frame_durations_ms restore the original speed of the leg cross/uncross: the original frame before each in-between and the in-between itself play ~41.7 ms (frames [8, 9, 10, 11, 12, 13, 44, 45, 46, 47, 48, 49]), so each 3-frame in-between span takes the time of 1.5 original frames; every other frame keeps 1000/12 ms (83/83/84). Total loop 8000 ms, as the 96-frame original."
+ },
+ "frame_durations_ms": [
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  42,
+  42,
+  41,
+  42,
+  41,
+  42,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  42,
+  42,
+  41,
+  42,
+  41,
+  42,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84,
+  83,
+  83,
+  84
+ ],
+ "tail_fix": {
+  "frames": [
+   99
+  ],
+  "what": "tail spade detached for one frame (old f93 = video 187): the thin tail line between the spade and the right calf was lost in keying (also missing from a fresh key_combined of the source frame, so not a matte_clean loss); restored from the raw source frame (registered, dark low-saturation source pixels in x205-220 y312-330, colour from the nearest opaque tail pixel, alpha only raised): 18 px. Detached islands: 1 -> 0. Also on f99: the 1-px white backdrop sliver trapped between the right thigh and the tail line (x222-226 y255-268, 36 px, pre-existing from old f93) set transparent, same rule as matte_clean's limb-gap pocket pass.",
+  "tool": "perch_motion_work/tail_fix.py (fix/perch-motion-2)"
  }
 }
