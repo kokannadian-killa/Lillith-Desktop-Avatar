@@ -1,8 +1,10 @@
 //! Runs the unit test of `tools/check-release-zip.py` in the cargo gate.
 //! Release zips are packed by hand and ship crate `tests/` folders, so the
 //! script (not this crate) is the guard that keeps the test-only TLS key
-//! (`tests/fixtures/tls/srv.key.der`), other keys, `.gguf` weights,
-//! `master.zip` and `tools/lillith-py` out of a release.
+//! (`tests/fixtures/tls/srv.key.der`), other keys (`.key`, private `.pem`,
+//! `.p12`/`.pfx`, `id_rsa*`), `.gguf`/`.safetensors` weights, `master.zip`
+//! and `tools/lillith-py` out of a release, including inside nested zips
+//! and split `.partN` sets.
 
 use std::path::Path;
 use std::process::Command;
