@@ -405,7 +405,7 @@
   [
    126,
    276,
-   47,
+   46,
    389
   ],
   [
@@ -501,7 +501,7 @@
   [
    113,
    280,
-   46,
+   45,
    385
   ],
   [
@@ -1005,22 +1005,21 @@
   "height": 400,
   "frame_count": 102,
   "fps": 12.0,
-  "bytes": 1039760,
+  "bytes": 1028157,
   "quality": {
-   "edge_mae": 2.887,
+   "edge_mae": 2.892,
    "edge_p99": 25.0,
-   "halo_dark": 0.043,
-   "halo_light": -0.144,
-   "alpha_mae": 0.0489
+   "halo_dark": 0.047,
+   "halo_light": -0.148,
+   "alpha_mae": 0.0484
   },
   "tool": "tools/video-pipeline/pack_mp4.py"
  },
  "matte_clean": {
-  "version": 6,
+  "version": 1,
   "tool": "tools/matte-clean/matte_clean.py",
-  "sheet_sha256": "4dc4366d475296bfd219e1a69e243d569577da7484d2dce730406f79f3732b22",
-  "source_sha256": "f914be32b2a9f4dc2a0cafb46a6afb9836fc7d9c47f75ef32afc816f2a450085",
-  "main_d93ae0c_post_fix": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
+  "sheet_sha256": "f914be32b2a9f4dc2a0cafb46a6afb9836fc7d9c47f75ef32afc816f2a450085",
+  "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
  },
  "source_frame_list": [
   1,

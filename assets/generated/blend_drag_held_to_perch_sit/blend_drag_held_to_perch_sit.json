@@ -333,20 +333,20 @@
  "bbox_per_frame": [
   [
    177,
-   196,
-   30,
+   230,
+   23,
    50
   ],
   [
    177,
    230,
-   38,
+   27,
    83
   ],
   [
-   175,
-   231,
-   56,
+   172,
+   233,
+   22,
    125
   ],
   [
@@ -362,7 +362,7 @@
    192
   ],
   [
-   92,
+   91,
    316,
    21,
    225
@@ -398,7 +398,7 @@
    353
   ],
   [
-   120,
+   119,
    322,
    43,
    366
@@ -434,20 +434,20 @@
    363
   ],
   [
-   121,
+   120,
    283,
    59,
    364
   ],
   [
    122,
-   280,
+   281,
    56,
    364
   ],
   [
    124,
-   277,
+   278,
    54,
    365
   ],
@@ -520,7 +520,7 @@
   [
    129,
    289,
-   45,
+   44,
    372
   ],
   [
@@ -586,7 +586,7 @@
   [
    127,
    297,
-   45,
+   43,
    388
   ],
   [
@@ -610,7 +610,7 @@
   [
    127,
    303,
-   47,
+   46,
    388
   ],
   [
@@ -646,12 +646,6 @@
   [
    127,
    274,
-   49,
-   387
-  ],
-  [
-   127,
-   273,
    48,
    387
   ],
@@ -665,6 +659,12 @@
    127,
    273,
    48,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
    387
   ],
   [
@@ -763,22 +763,21 @@
   "height": 400,
   "frame_count": 70,
   "fps": 12.0,
-  "bytes": 710322,
+  "bytes": 706410,
   "quality": {
-   "edge_mae": 2.417,
-   "edge_p99": 22.98,
-   "halo_dark": 0.041,
-   "halo_light": -0.136,
-   "alpha_mae": 0.0551
+   "edge_mae": 2.372,
+   "edge_p99": 22.55,
+   "halo_dark": 0.048,
+   "halo_light": -0.139,
+   "alpha_mae": 0.0543
   },
   "tool": "tools/video-pipeline/pack_mp4.py"
  },
  "matte_clean": {
-  "version": 6,
+  "version": 1,
   "tool": "tools/matte-clean/matte_clean.py",
-  "sheet_sha256": "d7bd866fbac9bd22d0aa6921bf99230e8c4250a984633191b9847b5ce87e3e31",
-  "source_sha256": "8b2302dd41be4c3601740592ff0ab6ddd659f00cb5e6245e5715e1c0bf36f2f0",
-  "main_d93ae0c_post_fix": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
+  "sheet_sha256": "8b2302dd41be4c3601740592ff0ab6ddd659f00cb5e6245e5715e1c0bf36f2f0",
+  "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
  },
  "start_match": {
   "from": "drag_held",
