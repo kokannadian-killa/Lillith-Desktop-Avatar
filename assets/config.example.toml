@@ -24,6 +24,8 @@
 # voice_enabled = true   # legacy fallback for [voice] enabled
 # icon = "phantomcore-red"  # app icon: menu entry + desktop / Start-menu shortcuts.
 #                         # Settings > Icon, right-click > Icon…, or `lillith icon ID`.
+# seasonal_outfit = "auto"  # auto (by date) | off (base outfit) | an outfit id from
+#                           # assets/seasons.toml. Right-click > Avatar > Outfit…
 #                         # ids: neon-portrait wink-chibi phantomcore-red demonos-green-chibi
 #                         #   neon-sign demonos-emblem hooded-phantom green-hologram chibi-perched
 #                         #   kiss-skullframe winged-sigil pixel-chibi glitch chibi-terminal classic

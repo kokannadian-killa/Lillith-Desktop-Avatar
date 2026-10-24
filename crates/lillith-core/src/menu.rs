@@ -168,6 +168,11 @@ pub enum MenuAction {
     Avatar(u8),
     /// Import a custom image (opens the `lillith-settings` window).
     ImportAvatar,
+    /// Avatar ▸ Outfit… : open the seasonal-outfit page.
+    OutfitPage,
+    /// Seasonal outfit `0` = Auto (by date), `1` = Off (base outfit),
+    /// `n ≥ 2` = [`MenuExtras::outfits`]`[n - 2]`.
+    Outfit(u8),
     /// The `lillith-settings` window (xdg-open config.toml fallback).
     OpenSettings,
     /// The `lillith-settings` window on its Icon tab (app icon picker).
@@ -193,6 +198,21 @@ pub struct PoseGroup {
     pub clips: Vec<(String, String)>,
 }
 
+/// One seasonal outfit as the menu lists it (`assets/seasons.toml`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct OutfitChoice {
+    pub id: String,
+    pub label: String,
+    /// It has clips in the loaded animation set (else "coming soon",
+    /// disabled).
+    pub available: bool,
+}
+
+/// [`MenuAction::Outfit`] index of Auto (by date).
+pub const OUTFIT_AUTO: u8 = 0;
+/// [`MenuAction::Outfit`] index of Off (base outfit).
+pub const OUTFIT_OFF: u8 = 1;
+
 /// Overlay-supplied menu content beyond the brain state.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MenuExtras {
@@ -208,6 +228,14 @@ pub struct MenuExtras {
     /// "Speak out loud (speakers)" state (`None` = no voice wired: the item
     /// is left out).
     pub speaker: Option<bool>,
+    /// Seasonal outfits (non-hidden, file order; empty = no Outfit item).
+    pub outfits: Vec<OutfitChoice>,
+    /// The `seasonal_outfit` setting: `auto` (or empty) / `off` / an id.
+    pub outfit: String,
+    /// Label of the outfit worn now (`None` = base outfit).
+    pub outfit_active: Option<String>,
+    /// Showing the Outfit page instead of the main menu.
+    pub outfit_page: bool,
 }
 
 impl MenuExtras {
@@ -222,6 +250,42 @@ impl MenuExtras {
 
     fn pose_offset(&self, group: usize) -> usize {
         self.poses.iter().take(group).map(|g| g.clips.len()).sum()
+    }
+
+    /// The [`MenuAction::Outfit`] index the setting checks.
+    pub fn outfit_index(&self) -> Option<u8> {
+        use crate::seasons::OutfitSetting;
+        match OutfitSetting::parse(&self.outfit) {
+            OutfitSetting::Auto => Some(OUTFIT_AUTO),
+            OutfitSetting::Off => Some(OUTFIT_OFF),
+            OutfitSetting::Manual(id) => self
+                .outfits
+                .iter()
+                .position(|o| o.id == id)
+                .and_then(|i| u8::try_from(i + 2).ok()),
+        }
+    }
+
+    /// Setting value of [`MenuAction::Outfit`]`(n)` (`None` = no such entry).
+    pub fn outfit_value(&self, n: u8) -> Option<String> {
+        match n {
+            OUTFIT_AUTO => Some(crate::seasons::AUTO.into()),
+            OUTFIT_OFF => Some(crate::seasons::OFF.into()),
+            n => self.outfits.get(n as usize - 2).map(|o| o.id.clone()),
+        }
+    }
+
+    /// Short label of the current choice for the Avatar ▸ Outfit item.
+    pub fn outfit_summary(&self) -> String {
+        match self.outfit_index() {
+            Some(OUTFIT_AUTO) => match &self.outfit_active {
+                Some(a) => format!("Auto: {a}"),
+                None => "Auto".into(),
+            },
+            Some(OUTFIT_OFF) => "Off".into(),
+            Some(n) => self.outfits[n as usize - 2].label.clone(),
+            None => "Off".into(),
+        }
     }
 }
 
@@ -371,6 +435,9 @@ pub fn about_text() -> String {
 /// HOOK 1: the menu for the current state (a Poses page when
 /// `extras.page` is set).
 pub fn build_menu(s: &MenuState) -> Menu {
+    if s.extras.outfit_page {
+        return outfit_page(&s.extras);
+    }
     if let Some(page) = s.extras.page {
         return pose_page(s, page);
     }
@@ -421,6 +488,13 @@ pub fn build_menu(s: &MenuState) -> Menu {
         MenuAction::ImportAvatar,
         Check::None,
     ));
+    if !x.outfits.is_empty() {
+        avatars.push(MenuItem::leaf(
+            format!("Outfit ({}) …", x.outfit_summary()),
+            MenuAction::OutfitPage,
+            Check::None,
+        ));
+    }
     items.push(MenuItem::Submenu {
         label: "Avatar".into(),
         items: avatars,
@@ -563,6 +637,51 @@ fn pose_page(s: &MenuState, page: MenuPage) -> Menu {
     Menu { items }
 }
 
+/// Avatar ▸ Outfit: Back, Auto (by date), Off (base outfit), then every
+/// listed seasonal outfit; outfits without clips yet are disabled
+/// "(coming soon)". The current setting is checked.
+fn outfit_page(x: &MenuExtras) -> Menu {
+    let cur = x.outfit_index();
+    let radio = |n: u8| Check::Radio(cur == Some(n));
+    let mut items = vec![
+        MenuItem::leaf("‹ Back", MenuAction::MenuBack, Check::None),
+        MenuItem::Leaf {
+            label: "Outfit".into(),
+            action: MenuAction::MenuBack,
+            check: Check::None,
+            enabled: false,
+        },
+        MenuItem::Separator,
+        MenuItem::leaf(
+            "Auto (by date)",
+            MenuAction::Outfit(OUTFIT_AUTO),
+            radio(OUTFIT_AUTO),
+        ),
+        MenuItem::leaf(
+            "Off (base outfit)",
+            MenuAction::Outfit(OUTFIT_OFF),
+            radio(OUTFIT_OFF),
+        ),
+    ];
+    if !x.outfits.is_empty() {
+        items.push(MenuItem::Separator);
+    }
+    for (i, o) in x.outfits.iter().enumerate().take(usize::from(u8::MAX) - 2) {
+        let n = i as u8 + 2;
+        items.push(MenuItem::Leaf {
+            label: if o.available {
+                o.label.clone()
+            } else {
+                format!("{} (coming soon)", o.label)
+            },
+            action: MenuAction::Outfit(n),
+            check: radio(n),
+            enabled: o.available,
+        });
+    }
+    Menu { items }
+}
+
 /// Overlay-side work a menu pick needs (beyond brain actions).
 #[derive(Debug, Clone, PartialEq)]
 pub enum MenuEffect {
@@ -596,6 +715,11 @@ pub enum MenuEffect {
     OpenPage(Option<MenuPage>),
     /// Turn TTS on the speakers on/off now and persist `[voice] enabled`.
     SetSpeaker(bool),
+    /// Persist `seasonal_outfit` (`auto` / `off` / an outfit id) and wear
+    /// it now.
+    SetSeasonalOutfit(String),
+    /// Re-open the menu at the Avatar ▸ Outfit page.
+    OpenOutfitPage,
 }
 
 /// What to do after a pick.
@@ -662,6 +786,18 @@ pub fn on_menu_action(action: MenuAction, brain: &mut Brain, state: &MenuState) 
             }
         }
         MenuAction::ImportAvatar => out.effects.push(MenuEffect::ImportAvatar),
+        MenuAction::OutfitPage => out.effects.push(MenuEffect::OpenOutfitPage),
+        MenuAction::Outfit(n) => {
+            let ok = n < 2
+                || state
+                    .extras
+                    .outfits
+                    .get(n as usize - 2)
+                    .is_some_and(|o| o.available);
+            if let Some(v) = state.extras.outfit_value(n).filter(|_| ok) {
+                out.effects.push(MenuEffect::SetSeasonalOutfit(v));
+            }
+        }
         MenuAction::OpenSettings => out.effects.push(MenuEffect::OpenSettings(
             crate::config::Config::default_path(),
         )),
@@ -753,6 +889,13 @@ pub mod wire {
     /// config.toml changed on disk (Motion / Avatar / Chat knobs): the
     /// overlay re-reads it and applies it live.
     pub const RELOAD_CONFIG: &str = "reload_config";
+    /// Avatar ▸ Outfit… (open the outfit page).
+    pub const OUTFIT_PAGE: &str = "outfit_page";
+    /// Seasonal outfit. `value`: `auto` | `off` | an outfit id.
+    pub const SEASONAL_OUTFIT: &str = "seasonal_outfit";
+    /// Outfit by index into the overlay's outfit list (`value`: `n` ≥ 2);
+    /// prefer [`SEASONAL_OUTFIT`].
+    pub const OUTFIT_INDEX: &str = "outfit_index";
     /// `value` of [`AVATAR`] meaning Lillith's own sprites.
     pub const LILLITH: &str = "lillith";
 }
@@ -769,6 +912,9 @@ pub enum MenuPick {
     Avatar(Option<String>),
     /// [`wire::RELOAD_CONFIG`].
     ReloadConfig,
+    /// [`wire::SEASONAL_OUTFIT`] with an outfit id (`auto` / `off` are
+    /// [`MenuAction::Outfit`]).
+    SeasonalOutfit(String),
 }
 
 fn line_of(name: &str, value: Option<&str>) -> String {
@@ -817,6 +963,13 @@ pub fn action_line(a: MenuAction) -> String {
             (AVATAR_INDEX, Some(&owned))
         }
         MenuAction::ImportAvatar => (AVATAR_IMPORT, None),
+        MenuAction::OutfitPage => (OUTFIT_PAGE, None),
+        MenuAction::Outfit(OUTFIT_AUTO) => (SEASONAL_OUTFIT, Some(crate::seasons::AUTO)),
+        MenuAction::Outfit(OUTFIT_OFF) => (SEASONAL_OUTFIT, Some(crate::seasons::OFF)),
+        MenuAction::Outfit(n) => {
+            owned = n.to_string();
+            (OUTFIT_INDEX, Some(&owned))
+        }
         MenuAction::OpenSettings => (OPEN_SETTINGS, None),
         MenuAction::ChooseIcon => (CHOOSE_ICON, None),
         MenuAction::ResetPosition => (RESET_POSITION, None),
@@ -838,6 +991,10 @@ pub fn action_line_in(a: MenuAction, extras: &MenuExtras) -> String {
             Some((id, _)) => pick_line(&MenuPick::Avatar(Some(id.clone()))),
             None => action_line(a),
         },
+        MenuAction::Outfit(n) if n >= 2 => match extras.outfit_value(n) {
+            Some(id) => pick_line(&MenuPick::SeasonalOutfit(id)),
+            None => action_line(a),
+        },
         _ => action_line(a),
     }
 }
@@ -849,6 +1006,7 @@ pub fn pick_line(p: &MenuPick) -> String {
         MenuPick::Pose(clip) => line_of(wire::POSE, Some(clip)),
         MenuPick::Avatar(id) => line_of(wire::AVATAR, Some(id.as_deref().unwrap_or(wire::LILLITH))),
         MenuPick::ReloadConfig => line_of(wire::RELOAD_CONFIG, None),
+        MenuPick::SeasonalOutfit(id) => line_of(wire::SEASONAL_OUTFIT, Some(id)),
     }
 }
 
@@ -902,6 +1060,13 @@ pub fn parse_action_line(line: &str) -> Option<MenuAction> {
         AVATAR if v == Some(LILLITH) || v == Some("") => MenuAction::Avatar(0),
         AVATAR_INDEX => MenuAction::Avatar(u8::try_from(num(v)?).ok().filter(|n| *n > 0)?),
         AVATAR_IMPORT => MenuAction::ImportAvatar,
+        OUTFIT_PAGE => MenuAction::OutfitPage,
+        SEASONAL_OUTFIT => match crate::seasons::OutfitSetting::parse(v?) {
+            crate::seasons::OutfitSetting::Auto => MenuAction::Outfit(OUTFIT_AUTO),
+            crate::seasons::OutfitSetting::Off => MenuAction::Outfit(OUTFIT_OFF),
+            crate::seasons::OutfitSetting::Manual(_) => return None,
+        },
+        OUTFIT_INDEX => MenuAction::Outfit(u8::try_from(num(v)?).ok().filter(|n| *n >= 2)?),
         OPEN_SETTINGS => MenuAction::OpenSettings,
         CHOOSE_ICON => MenuAction::ChooseIcon,
         RESET_POSITION => MenuAction::ResetPosition,
@@ -926,6 +1091,10 @@ pub fn parse_pick(line: &str) -> Option<MenuPick> {
             Some(id) => Some(MenuPick::Avatar(Some(id.to_string()))),
         },
         wire::RELOAD_CONFIG => Some(MenuPick::ReloadConfig),
+        wire::SEASONAL_OUTFIT => match crate::seasons::OutfitSetting::parse(v.as_deref()?) {
+            crate::seasons::OutfitSetting::Manual(id) => Some(MenuPick::SeasonalOutfit(id)),
+            _ => parse_action_line(line).map(MenuPick::Action),
+        },
         _ => parse_action_line(line).map(MenuPick::Action),
     }
 }
@@ -1117,6 +1286,21 @@ mod tests {
             avatar: Some("mug".into()),
             chat: true,
             speaker: Some(true),
+            outfits: vec![
+                OutfitChoice {
+                    id: "halloween".into(),
+                    label: "Micro Witch (Halloween)".into(),
+                    available: true,
+                },
+                OutfitChoice {
+                    id: "xmas".into(),
+                    label: "Santa Bikini (Christmas)".into(),
+                    available: false,
+                },
+            ],
+            outfit: "halloween".into(),
+            outfit_active: Some("Micro Witch (Halloween)".into()),
+            outfit_page: false,
         }
     }
 
@@ -1202,6 +1386,146 @@ mod tests {
         assert_eq!(
             fx(MenuAction::MenuBack, &paged, &mut b),
             [MenuEffect::OpenPage(None)]
+        );
+    }
+
+    fn outfit_radios(m: &Menu) -> Vec<(String, bool, bool)> {
+        m.leaves()
+            .into_iter()
+            .filter_map(|(_, it)| match it {
+                MenuItem::Leaf {
+                    label,
+                    action: MenuAction::Outfit(_),
+                    check: Check::Radio(on),
+                    enabled,
+                } => Some((label.clone(), *on, *enabled)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn outfit_item_page_and_effects() {
+        let mut b = brain();
+        // No outfits: no Outfit item (the base layout is unchanged).
+        let m = build_menu(&state(&b));
+        assert_eq!(m.find(MenuAction::OutfitPage), None);
+        // With outfits: Avatar ▸ Outfit (current) …
+        let s = state(&b).with_extras(extras());
+        let m = build_menu(&s);
+        let (path, item) = m
+            .leaves()
+            .into_iter()
+            .find(|(_, it)| {
+                matches!(
+                    it,
+                    MenuItem::Leaf {
+                        action: MenuAction::OutfitPage,
+                        ..
+                    }
+                )
+            })
+            .expect("outfit item");
+        assert_eq!(path, ["Avatar"]);
+        assert_eq!(item.label(), Some("Outfit (Micro Witch (Halloween)) …"));
+        assert_eq!(
+            on_menu_action(MenuAction::OutfitPage, &mut b, &s).effects,
+            [MenuEffect::OpenOutfitPage]
+        );
+        // The page: Back, title, Auto, Off, outfits; current one checked;
+        // ones without clips disabled "(coming soon)".
+        let page = s.clone().with_extras(MenuExtras {
+            outfit_page: true,
+            ..extras()
+        });
+        let m = build_menu(&page);
+        assert_eq!(m.items[0].label(), Some("‹ Back"));
+        assert_eq!(m.items[1].label(), Some("Outfit"));
+        assert_eq!(
+            outfit_radios(&m),
+            [
+                ("Auto (by date)".into(), false, true),
+                ("Off (base outfit)".into(), false, true),
+                ("Micro Witch (Halloween)".into(), true, true),
+                (
+                    "Santa Bikini (Christmas) (coming soon)".into(),
+                    false,
+                    false
+                ),
+            ]
+        );
+        let fx = |a| on_menu_action(a, &mut brain(), &page).effects;
+        assert_eq!(
+            fx(MenuAction::Outfit(0)),
+            [MenuEffect::SetSeasonalOutfit("auto".into())]
+        );
+        assert_eq!(
+            fx(MenuAction::Outfit(1)),
+            [MenuEffect::SetSeasonalOutfit("off".into())]
+        );
+        assert_eq!(
+            fx(MenuAction::Outfit(2)),
+            [MenuEffect::SetSeasonalOutfit("halloween".into())]
+        );
+        // Coming soon / out of range: nothing.
+        assert!(fx(MenuAction::Outfit(3)).is_empty());
+        assert!(fx(MenuAction::Outfit(9)).is_empty());
+        assert_eq!(fx(MenuAction::MenuBack), [MenuEffect::OpenPage(None)]);
+        // Auto / off / unknown checks and summaries.
+        for (setting, active, checked, summary) in [
+            (
+                "auto",
+                Some("Micro Witch (Halloween)"),
+                0,
+                "Auto: Micro Witch (Halloween)",
+            ),
+            ("", None, 0, "Auto"),
+            ("off", None, 1, "Off"),
+        ] {
+            let x = MenuExtras {
+                outfit: setting.into(),
+                outfit_active: active.map(String::from),
+                outfit_page: true,
+                ..extras()
+            };
+            assert_eq!(x.outfit_summary(), summary);
+            let r = outfit_radios(&build_menu(&state(&b).with_extras(x)));
+            let on: Vec<usize> = (0..r.len()).filter(|&i| r[i].1).collect();
+            assert_eq!(on, [checked], "{setting}");
+        }
+        let unknown = MenuExtras {
+            outfit: "pirate".into(),
+            outfit_page: true,
+            ..extras()
+        };
+        assert!(outfit_radios(&build_menu(&state(&b).with_extras(unknown)))
+            .iter()
+            .all(|r| !r.1));
+        // Wire: auto/off are actions, ids go by name.
+        assert_eq!(
+            action_line(MenuAction::Outfit(0)),
+            r#"{"menu_action":"seasonal_outfit","value":"auto"}"#
+        );
+        assert_eq!(
+            parse_pick(r#"{"menu_action":"seasonal_outfit","value":"off"}"#),
+            Some(MenuPick::Action(MenuAction::Outfit(1)))
+        );
+        assert_eq!(
+            action_line_in(MenuAction::Outfit(2), &extras()),
+            r#"{"menu_action":"seasonal_outfit","value":"halloween"}"#
+        );
+        assert_eq!(
+            parse_pick(r#"{"menu_action":"seasonal_outfit","value":"halloween"}"#),
+            Some(MenuPick::SeasonalOutfit("halloween".into()))
+        );
+        assert_eq!(parse_pick(r#"{"menu_action":"seasonal_outfit"}"#), None);
+        assert_eq!(
+            parse_pick(r#"{"menu_action":"outfit_index","value":"1"}"#),
+            None
+        );
+        assert_eq!(
+            parse_pick(r#"{"menu_action":"outfit_page"}"#),
+            Some(MenuPick::Action(MenuAction::OutfitPage))
         );
     }
 
@@ -1367,8 +1691,16 @@ mod tests {
         let ex = extras();
         // Every leaf of the full menu (poses page included) round-trips,
         // by index and by name.
-        for page in [None, Some(MenuPage { group: 0, page: 1 })] {
-            let s = state(&b).with_extras(MenuExtras { page, ..extras() });
+        for (page, outfit_page) in [
+            (None, false),
+            (Some(MenuPage { group: 0, page: 1 }), false),
+            (None, true),
+        ] {
+            let s = state(&b).with_extras(MenuExtras {
+                page,
+                outfit_page,
+                ..extras()
+            });
             let m = build_menu(&s);
             for (_, it) in m.leaves() {
                 if let MenuItem::Leaf { action, .. } = it {
@@ -1385,6 +1717,11 @@ mod tests {
                             .iter()
                             .position(|a| a.0 == id)
                             .map(|i| MenuAction::Avatar(i as u8 + 1)),
+                        MenuPick::SeasonalOutfit(id) => ex
+                            .outfits
+                            .iter()
+                            .position(|o| o.id == id)
+                            .map(|i| MenuAction::Outfit(i as u8 + 2)),
                         p => panic!("{p:?}"),
                     };
                     assert_eq!(back, Some(*action), "{named}");

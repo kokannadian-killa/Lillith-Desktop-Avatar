@@ -68,6 +68,7 @@ fn main() {
         click_through: false,
         avatars: None,
         avatar: Default::default(),
+        seasonal_outfit: "auto".into(),
     };
     let mut c = Controller::new(&opts).expect("controller");
     let (w, h) = c.stage.size();

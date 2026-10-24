@@ -1231,6 +1231,7 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         click_through: cfg.click_through,
         avatars: lillith_anim::avatar::AvatarStore::for_config(config_path.as_deref()),
         avatar: cfg.avatar.clone(),
+        seasonal_outfit: cfg.seasonal_outfit.clone(),
     };
     tracing::info!(
         ?backend,

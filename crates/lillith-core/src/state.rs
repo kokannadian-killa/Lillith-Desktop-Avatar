@@ -356,6 +356,9 @@ pub struct Brain {
     cfg: BehaviorConfig,
     rules: RuleSet,
     clips: BTreeSet<String>,
+    /// Seasonal clips of outfits not worn now ([`Brain::set_hidden_clips`]):
+    /// never picked at random. They stay in `clips` (nothing is removed).
+    hidden_clips: BTreeSet<String>,
     rng: Rng,
     t: f32,
     phase: Phase,
@@ -409,6 +412,7 @@ impl Brain {
             cfg,
             rules,
             clips: clips.into_iter().collect(),
+            hidden_clips: BTreeSet::new(),
             rng,
             t: 0.0,
             phase: Phase::Idle,
@@ -720,7 +724,22 @@ impl Brain {
     }
 
     fn has(&self, clip: &str) -> bool {
-        self.clips.contains(clip)
+        self.clips.contains(clip) && !self.hidden_clips.contains(clip)
+    }
+
+    /// Clips she must not pick on her own (seasonal clips of an outfit that
+    /// is not worn now). Replaces the previous set; the clips stay known.
+    pub fn set_hidden_clips(&mut self, hidden: BTreeSet<String>) {
+        if hidden != self.hidden_clips {
+            self.hidden_clips = hidden;
+            // The pose-cycle bag is rebuilt from `has` on its next pick.
+            self.cycle_mood = None;
+        }
+    }
+
+    /// The clips hidden by [`Brain::set_hidden_clips`].
+    pub fn hidden_clips(&self) -> &BTreeSet<String> {
+        &self.hidden_clips
     }
 
     /// Clip for a rule event: `[rule_clips]` first, else the rule's pose if
@@ -1121,8 +1140,11 @@ impl Brain {
                 }
                 "random_reaction" => {
                     self.activity(0.0);
-                    let pool: Vec<&String> =
-                        self.clips.iter().filter(|c| !is_base_clip(c)).collect();
+                    let pool: Vec<&String> = self
+                        .clips
+                        .iter()
+                        .filter(|c| !is_base_clip(c) && !self.hidden_clips.contains(*c))
+                        .collect();
                     if !pool.is_empty() {
                         let clip = pool[self.rng.index(pool.len())].clone();
                         self.out.push(Action::React {
@@ -1215,7 +1237,7 @@ impl Brain {
         let fw = self.cfg.idle.flirt_weight;
         let entries: Vec<(String, u32)> = cycle_variants(mood)
             .iter()
-            .filter(|c| self.clips.contains(**c))
+            .filter(|c| self.has(c))
             .map(|c| (c.to_string(), crate::idle::flirt_weight_of(c, fw)))
             .collect();
         let last = self.cycle_bag.last().map(str::to_string);
@@ -1950,6 +1972,35 @@ mod tests {
         assert!(b.input(Input::Key(Key::Escape)).contains(&Action::Quit));
         assert!(b.input(Input::Key(Key::Char('q'))).contains(&Action::Quit));
         assert!(b.input(Input::Key(Key::Enter)).contains(&Action::OpenChat));
+    }
+
+    #[test]
+    fn hidden_seasonal_clips_never_play_at_random() {
+        let witch = ["halloween_hat_tip_wink", "halloween_cape_swirl_arch"];
+        let mut b = Brain::new(
+            cfg(),
+            MoveMode::Stay,
+            RuleSet::bundled(),
+            CLIPS
+                .iter()
+                .map(|s| s.to_string())
+                .chain(witch.map(String::from)),
+            7,
+        );
+        b.set_hidden_clips(witch.iter().map(|s| s.to_string()).collect());
+        assert_eq!(b.hidden_clips().len(), 2);
+        for _ in 0..300 {
+            let a = b.input(Input::Key(Key::Char('r')));
+            let r = reacts(&a);
+            assert!(r.iter().all(|c| !c.starts_with("halloween_")), "{r:?}");
+        }
+        // Worn (not hidden): they can come up again; nothing was removed.
+        b.set_hidden_clips(BTreeSet::new());
+        let seen = (0..600).any(|_| {
+            let a = b.input(Input::Key(Key::Char('r')));
+            reacts(&a).iter().any(|c| c.starts_with("halloween_"))
+        });
+        assert!(seen);
     }
 
     #[test]

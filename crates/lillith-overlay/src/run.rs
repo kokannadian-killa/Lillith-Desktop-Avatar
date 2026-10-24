@@ -20,9 +20,10 @@ use lillith_core::desktop::{Desktop, Landing, Rect};
 use lillith_core::interaction::Button;
 use lillith_core::menu::{
     on_menu_action, settings_template, MenuAction, MenuEffect, MenuExtras, MenuPage, MenuPick,
-    MenuState, PoseGroup,
+    MenuState, OutfitChoice, PoseGroup,
 };
 use lillith_core::rules::RuleSet;
+use lillith_core::seasons::{MonthDay, Outfit, Seasons};
 use lillith_core::state::{Action, BehaviorConfig, Brain, Input, Key, Phase};
 use lillith_core::tease::{fit_peak, keep_on_screen, Tease, TeaseCue, TeasePhase, TeasePlan};
 use lillith_core::Event;
@@ -298,6 +299,9 @@ pub struct OverlayOptions {
     pub avatars: Option<AvatarStore>,
     /// `[avatar]` pace and redraw rate.
     pub avatar: lillith_core::config::AvatarConfig,
+    /// `seasonal_outfit`: `auto` (by date) / `off` / an outfit id
+    /// (`assets/seasons.toml` next to the manifest's `generated/` dir).
+    pub seasonal_outfit: String,
 }
 
 /// Minimized: tiny "peek" icon at the screen edge, restored by a click.
@@ -378,7 +382,22 @@ pub struct Controller {
     /// The running tease: its clips, her normal scale and the window
     /// centre x it grows around.
     tease_run: Option<TeaseRun>,
+    /// `assets/seasons.toml` (bundled copy if the set has none).
+    seasons: Seasons,
+    /// The `seasonal_outfit` setting (`auto` / `off` / an id).
+    outfit_setting: String,
+    /// Outfit worn now (`None` = base outfit): only its seasonal clips show.
+    outfit_active: Option<String>,
+    /// The local date [`Controller::outfit_active`] was picked for.
+    outfit_date: Option<MonthDay>,
+    /// Seconds since the date was last checked (auto mode rolls over).
+    outfit_check_s: f32,
+    /// The last opened menu is the Avatar ▸ Outfit page.
+    menu_outfit_page: bool,
 }
+
+/// How often (s) the overlay re-checks today's date for `auto` outfits.
+const OUTFIT_DATE_CHECK_S: f32 = 60.0;
 
 /// State of a running "come closer" tease in the overlay.
 #[derive(Debug, Clone, PartialEq)]
@@ -491,8 +510,93 @@ impl Controller {
             accent: lillith_theme::Accent::LILLITH,
             tease: Tease::new(opts.behavior.tease.clone(), opts.animator.seed),
             tease_run: None,
+            seasons: Seasons::load_or_bundled(
+                Seasons::path_for_manifest(&opts.manifest).as_deref(),
+            ),
+            outfit_setting: opts.seasonal_outfit.clone(),
+            outfit_active: None,
+            outfit_date: None,
+            outfit_check_s: 0.0,
+            menu_outfit_page: false,
         }
         .with_click_through(opts.click_through)
+        .with_outfit_for(lillith_core::seasons::today())
+    }
+
+    fn with_outfit_for(mut self, date: MonthDay) -> Self {
+        self.refresh_outfit(date);
+        self
+    }
+
+    /// Picks the outfit for `date` and the current setting, and hides every
+    /// other outfit's seasonal clips from her random picks. An outfit
+    /// without clips in this set counts as none (base outfit).
+    pub fn refresh_outfit(&mut self, date: MonthDay) {
+        let m = self.stage.animator().manifest();
+        let active =
+            lillith_anim::catalog::worn_outfit(&self.seasons, m, date, &self.outfit_setting);
+        let id = active.map(|o| o.id.clone());
+        let hidden = lillith_anim::catalog::hidden_seasonal(m, active);
+        self.brain.set_hidden_clips(hidden);
+        if id != self.outfit_active || self.outfit_date.is_none() {
+            tracing::info!(
+                setting = %self.outfit_setting,
+                outfit = ?id,
+                date = %date,
+                "seasonal outfit"
+            );
+        }
+        self.outfit_active = id;
+        self.outfit_date = Some(date);
+        self.outfit_check_s = 0.0;
+    }
+
+    /// Re-picks the outfit if the local date changed (auto mode).
+    fn check_outfit_date(&mut self) {
+        let today = lillith_core::seasons::today();
+        if self.outfit_date != Some(today) {
+            self.refresh_outfit(today);
+        }
+    }
+
+    /// The outfit worn now (`None` = base outfit).
+    pub fn outfit_active(&self) -> Option<&Outfit> {
+        self.seasons.outfit(self.outfit_active.as_deref()?)
+    }
+
+    /// The `seasonal_outfit` setting in effect.
+    pub fn outfit_setting(&self) -> &str {
+        &self.outfit_setting
+    }
+
+    /// Sets `seasonal_outfit` (`auto` / `off` / an id) and wears it now;
+    /// `save` also writes it to config.toml.
+    pub fn set_seasonal_outfit(&mut self, value: &str, save: bool) {
+        let value = lillith_core::seasons::OutfitSetting::parse(value)
+            .key()
+            .to_string();
+        self.outfit_setting = value;
+        let date = self
+            .outfit_date
+            .unwrap_or_else(lillith_core::seasons::today);
+        self.refresh_outfit(date);
+        // Drop queued Show-off clips of an outfit she just took off.
+        let m = self.stage.animator().manifest();
+        let active = self
+            .outfit_active
+            .as_deref()
+            .and_then(|a| self.seasons.outfit(a));
+        self.showoff
+            .retain(|c| lillith_anim::catalog::seasonal_visible(c, m, active));
+        if save {
+            if let Some(path) = &self.config_path {
+                if let Err(e) =
+                    lillith_core::config::save_seasonal_outfit(path, &self.outfit_setting)
+                {
+                    tracing::warn!("could not save seasonal_outfit: {e}");
+                }
+            }
+        }
     }
 
     fn with_click_through(mut self, on: bool) -> Self {
@@ -628,9 +732,11 @@ impl Controller {
             Command::ShowOff => {
                 self.restore();
                 self.retreat_tease();
-                let seq = lillith_anim::catalog::show_off(
+                self.check_outfit_date();
+                let seq = lillith_anim::catalog::show_off_for(
                     self.stage.animator().manifest(),
                     self.seed ^ (self.clock * 1000.0) as u64,
+                    self.outfit_active(),
                 );
                 tracing::info!(?seq, "show off");
                 self.stage.animator_mut().clear_overlays();
@@ -724,6 +830,9 @@ impl Controller {
             self.level = Some(cfg.always_on_top);
         }
         self.avatar_cfg = cfg.avatar.clone();
+        if cfg.seasonal_outfit != self.outfit_setting {
+            self.set_seasonal_outfit(&cfg.seasonal_outfit, false);
+        }
         self.tease.set_config(cfg.behavior.tease.clone());
         if self.peek.is_none() && cfg.scale > 0.0 {
             self.cancel_tease();
@@ -1233,6 +1342,10 @@ impl Controller {
     /// Advances the brain and the stage by `dt` seconds.
     pub fn tick(&mut self, dt: f32) -> Result<Changed, OverlayError> {
         self.clock += dt;
+        self.outfit_check_s += dt;
+        if self.outfit_check_s >= OUTFIT_DATE_CHECK_S {
+            self.check_outfit_date();
+        }
         self.drain_feed();
         self.drain_settings();
         if self.click_gate.poll(self.clock, self.double_click_s) {
@@ -1830,6 +1943,7 @@ impl Controller {
             MenuPick::Pose(clip) => self.command(Command::Pose(clip)),
             MenuPick::Avatar(id) => self.command(Command::Avatar(id)),
             MenuPick::ReloadConfig => self.command(Command::ConfigChanged),
+            MenuPick::SeasonalOutfit(id) => self.set_seasonal_outfit(&id, true),
         }
     }
 
@@ -1945,9 +2059,20 @@ impl Controller {
 
     /// Opens the menu at a Poses page (`None` = the main menu).
     pub fn open_menu_page(&mut self, page: Option<MenuPage>) {
+        self.open_menu_at(page, false);
+    }
+
+    /// Opens the menu at the Avatar ▸ Outfit page.
+    pub fn open_outfit_page(&mut self) {
+        self.open_menu_at(None, true);
+    }
+
+    fn open_menu_at(&mut self, page: Option<MenuPage>, outfit_page: bool) {
+        self.check_outfit_date();
+        self.menu_outfit_page = outfit_page;
         let state = self.menu_state(page);
         self.menu_page = page;
-        tracing::info!(?page, "right-click menu opened");
+        tracing::info!(?page, outfit_page, "right-click menu opened");
         let mut menu = MenuPopup::new(state);
         menu.set_accent(self.accent);
         self.menu = Some(menu);
@@ -1959,7 +2084,8 @@ impl Controller {
     pub fn menu_state(&self, page: Option<MenuPage>) -> MenuState {
         let scale = self.peek.map_or(self.normal_scale(), |p| p.scale);
         let m = self.stage.animator().manifest();
-        let poses = lillith_anim::catalog::grouped(m)
+        let active = self.outfit_active();
+        let poses = lillith_anim::catalog::grouped_for(m, active)
             .into_iter()
             .map(|(label, clips)| PoseGroup {
                 label: label.to_string(),
@@ -1987,6 +2113,18 @@ impl Controller {
             avatar: self.stage.avatar_id().map(str::to_string),
             chat: self.chat.is_some(),
             speaker: self.speaker(),
+            outfits: self
+                .seasons
+                .listed()
+                .map(|o| OutfitChoice {
+                    id: o.id.clone(),
+                    label: o.label().to_string(),
+                    available: o.available(|c| m.clips.contains_key(c)),
+                })
+                .collect(),
+            outfit: self.outfit_setting.clone(),
+            outfit_active: active.map(|o| o.label().to_string()),
+            outfit_page: self.menu_outfit_page,
         })
     }
 
@@ -2088,6 +2226,8 @@ impl Controller {
             // Avatar import lives in the settings window (its Avatar tab).
             MenuEffect::ImportAvatar => self.command(Command::Settings),
             MenuEffect::OpenPage(page) => self.open_menu_page(page),
+            MenuEffect::OpenOutfitPage => self.open_outfit_page(),
+            MenuEffect::SetSeasonalOutfit(v) => self.set_seasonal_outfit(&v, true),
             MenuEffect::SetSpeaker(on) => {
                 tracing::info!(on, "speak out loud (speakers)");
                 if let Some(sink) = &self.sink {
@@ -2301,6 +2441,7 @@ mod tests {
             click_through: false,
             avatars: None,
             avatar: Default::default(),
+            seasonal_outfit: "auto".into(),
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -2645,6 +2786,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             click_through: false,
             avatars: None,
             avatar: Default::default(),
+            seasonal_outfit: "auto".into(),
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -4001,6 +4143,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
             click_through: false,
             avatars: None,
             avatar: Default::default(),
+            seasonal_outfit: "auto".into(),
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -4152,6 +4295,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
             click_through: false,
             avatars: None,
             avatar: Default::default(),
+            seasonal_outfit: "auto".into(),
         };
         let mut stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         if speech {
@@ -4362,6 +4506,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
             click_through: false,
             avatars: None,
             avatar: Default::default(),
+            seasonal_outfit: "auto".into(),
         };
         // Either the backend is not compiled in, or the manifest is missing:
         // both are clean errors, never a panic or a hang.
@@ -4433,6 +4578,98 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         // Close quits.
         c.menu_pick(MenuAction::Quit);
         assert!(c.quit_requested());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn seasonal_outfit_menu_pick_persist_and_live() {
+        let frames = r#"page = "idle.png"
+mode = "loop"
+frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+"#;
+        let mut extra = String::new();
+        for c in ["halloween_hat_tip_wink", "halloween_cape_swirl_arch"] {
+            extra.push_str(&format!(
+                "[clips.{c}]\n{frames}tags = [\"allure\", \"seasonal\", \"season:halloween\", \"outfit:halloween\"]\n"
+            ));
+        }
+        extra.push_str(&format!(
+            "[clips.xmas_bow_wink]\n{frames}tags = [\"seasonal\", \"season:xmas\", \"outfit:xmas\"]\n"
+        ));
+        let (dir, mut c) = m3_controller_with("seasons", MoveMode::Stay, &extra);
+        let cfg = dir.join("cfg/config.toml");
+        c.config_path = Some(cfg.clone());
+        let md = |m, d| MonthDay::new(m, d).unwrap();
+        let flirty = |c: &Controller| -> Vec<String> {
+            c.menu_state(None)
+                .extras
+                .poses
+                .iter()
+                .filter(|g| g.label == lillith_anim::catalog::CATEGORIES[0])
+                .flat_map(|g| g.clips.iter().map(|(n, _)| n.clone()))
+                .collect()
+        };
+        // Auto on Oct 31: the witch outfit; only Christmas clips hidden.
+        c.refresh_outfit(md(10, 31));
+        assert_eq!(c.outfit_active().map(|o| o.id.as_str()), Some("halloween"));
+        assert_eq!(
+            c.brain.hidden_clips().iter().collect::<Vec<_>>(),
+            ["xmas_bow_wink"]
+        );
+        assert_eq!(flirty(&c).len(), 2, "{:?}", flirty(&c));
+        let x = c.menu_state(None).extras;
+        assert_eq!(x.outfits.len(), 6);
+        assert!(x.outfits[0].available && x.outfits.iter().skip(1).all(|o| !o.available));
+        assert_eq!(x.outfit_active.as_deref(), Some("Micro Witch (Halloween)"));
+        // Show off while she wears it includes one of its clips.
+        c.menu_pick(MenuAction::ShowOff);
+        let witch = |n: &str| n.starts_with("halloween_");
+        assert!(
+            c.showoff.iter().any(|n| witch(n))
+                || c.stage.animator().overlay_clip().is_some_and(witch),
+            "{:?}",
+            c.showoff
+        );
+        // Nov 3: none; every seasonal clip hidden, none in the pages.
+        c.refresh_outfit(md(11, 3));
+        assert_eq!(c.outfit_active(), None);
+        assert_eq!(c.brain.hidden_clips().len(), 3);
+        assert!(flirty(&c).is_empty());
+        // Avatar ▸ Outfit opens the page with the current choice checked.
+        c.menu_pick(MenuAction::OutfitPage);
+        let popup = c.menu().expect("outfit page");
+        assert!(popup.state.extras.outfit_page);
+        let page = popup.menu.clone();
+        assert_eq!(
+            page.check_of(MenuAction::Outfit(0)),
+            Some(lillith_core::menu::Check::Radio(true))
+        );
+        c.close_menu();
+        // Manual pick in July: persisted and worn now.
+        c.refresh_outfit(md(7, 15));
+        c.menu_pick(MenuAction::Outfit(2));
+        assert_eq!(c.outfit_setting(), "halloween");
+        assert_eq!(c.outfit_active().map(|o| o.id.as_str()), Some("halloween"));
+        assert_eq!(Config::load(&cfg).unwrap().seasonal_outfit, "halloween");
+        // "Coming soon" outfits can't be picked.
+        c.menu_pick(MenuAction::Outfit(3));
+        assert_eq!(c.outfit_setting(), "halloween");
+        // Off: base outfit, saved.
+        c.menu_pick(MenuAction::Outfit(1));
+        assert_eq!(c.outfit_active(), None);
+        assert_eq!(Config::load(&cfg).unwrap().seasonal_outfit, "off");
+        assert!(c.showoff.iter().all(|n| !n.starts_with("halloween_")));
+        // The settings window sends ids by name.
+        c.settings_pick(MenuPick::SeasonalOutfit("halloween".into()));
+        assert_eq!(c.outfit_active().map(|o| o.id.as_str()), Some("halloween"));
+        // A config reload applies the key live.
+        let mut cf = Config::default();
+        cf.seasonal_outfit = "off".into();
+        c.apply_config(&cf);
+        assert_eq!(c.outfit_active(), None);
+        // No clip was removed from the set.
+        assert!(c.stage.animator().has_clip("xmas_bow_wink"));
+        assert!(c.stage.animator().has_clip("halloween_hat_tip_wink"));
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -2,6 +2,13 @@
 //! grouped into show-and-tell categories, and the "Show off" sequence.
 
 use crate::atlas::Manifest;
+use lillith_core::seasons::Outfit;
+use std::collections::BTreeSet;
+
+/// Manifest tag of a seasonal-outfit clip (`assets/seasons.toml`,
+/// docs/SEASONS.md). Such clips are allure poses that only show while
+/// their outfit is worn.
+pub const SEASONAL_TAG: &str = "seasonal";
 
 /// Menu categories, in display order.
 pub const CATEGORIES: [&str; 6] = [
@@ -137,12 +144,75 @@ pub fn category_of(name: &str) -> usize {
     }
 }
 
-/// `(category, clips)` for every non-empty category, clips sorted.
+/// A seasonal-outfit clip: tagged [`SEASONAL_TAG`] (or `season:<id>` /
+/// `outfit:<id>`).
+pub fn is_seasonal(name: &str, m: &Manifest) -> bool {
+    m.clips.get(name).is_some_and(|c| {
+        c.tags
+            .iter()
+            .any(|t| t == SEASONAL_TAG || t.starts_with("season:") || t.starts_with("outfit:"))
+    })
+}
+
+/// [`category_of`], with the manifest's tags: seasonal clips are
+/// Flirty / Allure (they would land in Gestures by name).
+pub fn category_in(name: &str, m: &Manifest) -> usize {
+    if is_seasonal(name, m) {
+        0
+    } else {
+        category_of(name)
+    }
+}
+
+/// A clip may show / play now: any base clip, or a seasonal clip of the
+/// outfit worn (`active`; `None` = base outfit, no seasonal clip at all).
+pub fn seasonal_visible(name: &str, m: &Manifest, active: Option<&Outfit>) -> bool {
+    if !is_seasonal(name, m) {
+        return true;
+    }
+    match (active, m.clips.get(name)) {
+        (Some(o), Some(c)) => o.owns_clip(name, &c.tags),
+        _ => false,
+    }
+}
+
+/// The outfit worn on `date` for `setting` (`seasons.active_outfit`),
+/// counting only outfits that have clips in `m` (one without clips yet
+/// means her base outfit).
+pub fn worn_outfit<'a>(
+    seasons: &'a lillith_core::seasons::Seasons,
+    m: &Manifest,
+    date: lillith_core::seasons::MonthDay,
+    setting: &str,
+) -> Option<&'a Outfit> {
+    seasons
+        .active_outfit(date, setting)
+        .filter(|o| o.available(|c| m.clips.contains_key(c)))
+}
+
+/// Seasonal clips of outfits that are not worn now (kept out of random
+/// picks; they stay in the manifest).
+pub fn hidden_seasonal(m: &Manifest, active: Option<&Outfit>) -> BTreeSet<String> {
+    m.clips
+        .keys()
+        .filter(|n| !seasonal_visible(n, m, active))
+        .cloned()
+        .collect()
+}
+
+/// `(category, clips)` for every non-empty category, clips sorted; base
+/// outfit only (no seasonal clips, see [`grouped_for`]).
 pub fn grouped(m: &Manifest) -> Vec<(&'static str, Vec<String>)> {
+    grouped_for(m, None)
+}
+
+/// [`grouped`] with the `active` outfit's seasonal clips in Flirty /
+/// Allure.
+pub fn grouped_for(m: &Manifest, active: Option<&Outfit>) -> Vec<(&'static str, Vec<String>)> {
     let mut groups: Vec<Vec<String>> = vec![Vec::new(); CATEGORIES.len()];
     for name in m.clips.keys() {
-        if is_pose(name, m) {
-            groups[category_of(name)].push(name.clone());
+        if is_pose(name, m) && seasonal_visible(name, m, active) {
+            groups[category_in(name, m)].push(name.clone());
         }
     }
     CATEGORIES
@@ -157,17 +227,36 @@ pub fn grouped(m: &Manifest) -> Vec<(&'static str, Vec<String>)> {
 }
 
 /// A random "Show off" sequence: 4–6 distinct once-clips from
-/// Flirty / Allure (looping idle_flirt clips are skipped).
+/// Flirty / Allure (looping idle_flirt clips are skipped). Base outfit
+/// only; see [`show_off_for`].
 pub fn show_off(m: &Manifest, seed: u64) -> Vec<String> {
+    show_off_for(m, seed, None)
+}
+
+/// [`show_off`] while `active` is worn: its seasonal clips join the pool
+/// (they play once each, whatever their loop mode) and at least one of
+/// them is in the sequence. Other outfits' clips never are.
+pub fn show_off_for(m: &Manifest, seed: u64, active: Option<&Outfit>) -> Vec<String> {
     let mut pool: Vec<String> = m
         .clips
         .iter()
         .filter(|(n, c)| {
-            is_pose(n, m) && category_of(n) == 0 && c.mode == crate::atlas::LoopMode::Once
+            is_pose(n, m)
+                && !is_seasonal(n, m)
+                && category_of(n) == 0
+                && c.mode == crate::atlas::LoopMode::Once
         })
         .map(|(n, _)| n.clone())
         .collect();
+    let mut seasonal: Vec<String> = m
+        .clips
+        .keys()
+        .filter(|n| is_pose(n, m) && is_seasonal(n, m) && seasonal_visible(n, m, active))
+        .cloned()
+        .collect();
+    pool.extend(seasonal.iter().cloned());
     pool.sort();
+    seasonal.sort();
     let mut rng = lillith_core::rng::Rng::new(seed | 1);
     // Fisher-Yates.
     for i in (1..pool.len()).rev() {
@@ -176,6 +265,14 @@ pub fn show_off(m: &Manifest, seed: u64) -> Vec<String> {
     }
     let n = 4 + rng.index(3);
     pool.truncate(n);
+    if !seasonal.is_empty() && !pool.iter().any(|c| seasonal.contains(c)) {
+        let pick = seasonal[rng.index(seasonal.len())].clone();
+        let at = rng.index(pool.len().max(1));
+        match pool.get_mut(at) {
+            Some(slot) => *slot = pick,
+            None => pool.push(pick),
+        }
+    }
     pool
 }
 
@@ -226,5 +323,103 @@ mod tests {
         assert_eq!(category_of("talk_loop_flirty"), 5);
         assert_eq!(label("idle_flirt_hip_lean"), "Hip lean");
         assert_eq!(label("event_battery_low"), "Battery low");
+    }
+
+    fn seasonal_manifest() -> Manifest {
+        let mut text = String::new();
+        let mut clip = |name: &str, mode: &str, tags: &str| {
+            text += &format!(
+                "[clips.{name}]\npage = \"{name}.png\"\nmode = \"{mode}\"\ntags = [{tags}]\nframes = [{{ x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] }}]\n"
+            );
+        };
+        for n in [
+            "blow_kiss",
+            "hair_flip",
+            "hip_sway",
+            "heart_hands",
+            "lean_tease",
+            "wave",
+        ] {
+            clip(n, "once", "\"allure\"");
+        }
+        for n in ["halloween_hat_tip_wink", "halloween_cape_swirl_arch"] {
+            clip(
+                n,
+                "loop",
+                "\"allure\", \"seasonal\", \"season:halloween\", \"outfit:halloween\"",
+            );
+        }
+        clip(
+            "xmas_bow_wink",
+            "loop",
+            "\"seasonal\", \"season:xmas\", \"outfit:xmas\"",
+        );
+        Manifest::from_toml_str(&text).expect("test manifest")
+    }
+
+    #[test]
+    fn seasonal_clips_are_allure_and_follow_the_outfit() {
+        let m = seasonal_manifest();
+        let seasons = lillith_core::seasons::Seasons::bundled();
+        let witch = seasons.outfit("halloween");
+        assert!(witch.is_some());
+        // By name alone they would be Gestures; the tag makes them Flirty.
+        assert_eq!(category_of("halloween_hat_tip_wink"), 2);
+        assert_eq!(category_in("halloween_hat_tip_wink", &m), 0);
+        assert_eq!(category_in("wave", &m), 2);
+        assert!(is_seasonal("xmas_bow_wink", &m) && !is_seasonal("blow_kiss", &m));
+        // Base outfit: no seasonal clip in the pages; all base clips stay.
+        let base = grouped(&m);
+        let all: Vec<&String> = base.iter().flat_map(|(_, c)| c).collect();
+        assert!(all.iter().all(|c| !is_seasonal(c, &m)), "{all:?}");
+        assert_eq!(all.len(), 6);
+        // Witch worn: her clips in Flirty, never Christmas ones.
+        let worn = grouped_for(&m, witch);
+        assert_eq!(worn[0].0, CATEGORIES[0]);
+        assert!(worn[0].1.contains(&"halloween_hat_tip_wink".to_string()));
+        assert!(worn[0].1.contains(&"halloween_cape_swirl_arch".to_string()));
+        assert!(worn
+            .iter()
+            .all(|(_, c)| !c.contains(&"xmas_bow_wink".to_string())));
+        assert_eq!(worn.iter().map(|(_, c)| c.len()).sum::<usize>(), 8);
+        // Worn: by date / setting, and only with clips in the set.
+        let md = |m, d| lillith_core::seasons::MonthDay::new(m, d).unwrap();
+        let id = |o: Option<&Outfit>| o.map(|o| o.id.clone());
+        assert_eq!(
+            id(worn_outfit(&seasons, &m, md(10, 31), "auto")),
+            Some("halloween".into())
+        );
+        assert_eq!(
+            id(worn_outfit(&seasons, &m, md(7, 4), "halloween")),
+            Some("halloween".into())
+        );
+        assert_eq!(id(worn_outfit(&seasons, &m, md(10, 31), "off")), None);
+        // Christmas lists no clips in seasons.toml yet: base outfit.
+        assert_eq!(id(worn_outfit(&seasons, &m, md(12, 10), "auto")), None);
+        // Hidden sets.
+        assert_eq!(hidden_seasonal(&m, None).len(), 3);
+        assert_eq!(
+            hidden_seasonal(&m, witch).into_iter().collect::<Vec<_>>(),
+            ["xmas_bow_wink"]
+        );
+    }
+
+    #[test]
+    fn show_off_only_uses_the_worn_outfit() {
+        let m = seasonal_manifest();
+        let seasons = lillith_core::seasons::Seasons::bundled();
+        let witch = seasons.outfit("halloween");
+        for seed in 0..200 {
+            let base = show_off(&m, seed);
+            assert!(base.iter().all(|c| !is_seasonal(c, &m)), "{base:?}");
+            let s = show_off_for(&m, seed, witch);
+            assert!((4..=6).contains(&s.len()), "{s:?}");
+            assert!(s.iter().any(|c| c.starts_with("halloween_")), "{s:?}");
+            assert!(!s.contains(&"xmas_bow_wink".to_string()), "{s:?}");
+            let mut d = s.clone();
+            d.sort();
+            d.dedup();
+            assert_eq!(d.len(), s.len(), "distinct: {s:?}");
+        }
     }
 }
