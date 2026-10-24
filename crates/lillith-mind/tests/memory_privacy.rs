@@ -88,3 +88,21 @@ async fn safeword_is_checked_before_memory() {
     // "I love red" is a mention, not the safeword: still never stored.
     assert!(lillith_memory::mentions_safeword("I love red"));
 }
+
+/// A pending "forget everything" is cancelled by the safeword: a later "yes"
+/// wipes nothing.
+#[tokio::test]
+async fn safeword_cancels_a_pending_forget() {
+    let b = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
+    b.observe_interaction("I love dark synthwave", "", &Ctx::now());
+    let before = b.stats().nodes;
+    let mut s = ChatSession::new(&ChatConfig::default(), true).with_brain(b);
+    let out = s.send("forget everything", |_| {}).await;
+    assert!(out.text().contains("yes"), "asks first: {}", out.text());
+    assert!(s.pending_forget().is_some());
+    s.send("red", |_| {}).await;
+    assert!(s.pending_forget().is_none(), "the safeword cancels it");
+    let out = s.send("yes", |_| {}).await;
+    assert!(!out.text().contains("Wiped"), "{}", out.text());
+    assert_eq!(s.memory().unwrap().stats().nodes, before);
+}
