@@ -8,15 +8,17 @@ Everything is on-device: models live in <models>/stt, sherpa-onnx is a bundled w
   * echo safety:       by default the mic is NOT transcribed while she is playing (echo="mute")
   * safety:            voice transcripts never count as consent ("consent_ok": false), and the
                        safeword ("red" / "OOC: stop") stops speech immediately.
-Capture: LILLITH_MIC_CMD (any command writing s16le 16 kHz mono to stdout), else
+Capture: LILLITH_MIC_CMD (an allowlisted recorder, absolute path: arecord / parecord / parec / pw-record /
+ffmpeg, writing s16le 16 kHz mono to stdout; see launchguard.check_mic_command), else
 pw-record (PipeWire) -> parec (Pulse) -> arecord (ALSA) on Linux; sounddevice (WASAPI) on Windows.
+Mic gate: capture starts only after Ko's mouse-click Yes on a Soul Contract card (micgate.py, PROTOCOL.md),
+and every capture start writes one LAUNCH line to Lillith's audit log.
 """
 from . import netguard  # noqa: F401
 
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -27,6 +29,8 @@ import wave
 import numpy as np
 
 from .core import MODEL_DIR, CONFIG_HOME, NO_WINDOW
+from . import launchguard as G
+from .micgate import MicGate
 
 STT_DIR = os.environ.get("LILLITH_STT_DIR") or os.path.join(MODEL_DIR, "stt")
 STT_MODEL = os.environ.get("LILLITH_STT_MODEL", "tiny.en")
@@ -302,32 +306,55 @@ class Vad:
 
 
 # --------------------------------------------------------------------------- capture
+def _which_abs(name):
+    """`name` on PATH, only as an absolute path to an executable file (relative PATH entries are ignored)."""
+    w = shutil.which(name)
+    return G.checked_exe(w)[0] if w and os.path.isabs(w) else None
+
+
 def mic_command(device=None):
-    env = os.environ.get("LILLITH_MIC_CMD")
+    env = G.mic_env_command()   # None when unset or refused (logged): fall back to the default recorder
     if env:
-        return shlex.split(env)
+        return env
     device = device or mic_config().get("device") or os.environ.get("LILLITH_MIC_DEVICE")
-    if shutil.which("pw-record"):
-        c = ["pw-record", "--rate", str(RATE), "--channels", "1", "--format", "s16"]
+    if device is not None and not (isinstance(device, str) and G.mic_arg_ok(device)):
+        print(f"lillith-voice: mic device {device!r} refused (letters, digits, _.,:=+@%-); using the default device",
+              file=sys.stderr, flush=True)
+        device = None
+    pw = _which_abs("pw-record")
+    if pw:
+        c = [pw, "--rate", str(RATE), "--channels", "1", "--format", "s16"]
         return c + (["--target", device] if device else []) + ["-"]
-    if shutil.which("parec"):
-        c = ["parec", "--raw", f"--rate={RATE}", "--channels=1", "--format=s16le", "--latency-msec=30"]
+    pa = _which_abs("parec")
+    if pa:
+        c = [pa, "--raw", f"--rate={RATE}", "--channels=1", "--format=s16le", "--latency-msec=30"]
         return c + ([f"--device={device}"] if device else [])
-    if shutil.which("arecord"):
-        return ["arecord", "-q", "-t", "raw", "-f", "S16_LE", "-r", str(RATE), "-c", "1"] + (["-D", device] if device else [])
+    ar = _which_abs("arecord")
+    if ar:
+        return [ar, "-q", "-t", "raw", "-f", "S16_LE", "-r", str(RATE), "-c", "1"] + (["-D", device] if device else [])
     return None
+
+
+def mic_argv():
+    """What a capture start would run (shown on the mic card and in the audit log)."""
+    return mic_command() or ["(sounddevice)"]
 
 
 def list_devices():
     out = []
-    if shutil.which("pactl"):
-        r = subprocess.run(["pactl", "list", "short", "sources"], capture_output=True, text=True)
+    pactl, arecord = _which_abs("pactl"), _which_abs("arecord")
+    if pactl:
+        argv = [pactl, "list", "short", "sources"]
+        G.audit_once("mic_devices", argv)
+        r = subprocess.run(argv, capture_output=True, text=True, **NO_WINDOW)
         for ln in r.stdout.splitlines():
             p = ln.split("\t")
             if len(p) > 1 and ".monitor" not in p[1]:
                 out.append({"id": p[1], "desc": " ".join(p[2:])})
-    elif shutil.which("arecord"):
-        r = subprocess.run(["arecord", "-L"], capture_output=True, text=True)
+    elif arecord:
+        argv = [arecord, "-L"]
+        G.audit_once("mic_devices", argv)
+        r = subprocess.run(argv, capture_output=True, text=True, **NO_WINDOW)
         out = [{"id": ln.strip(), "desc": ""} for ln in r.stdout.splitlines() if ln and not ln.startswith(" ")]
     try:
         import sounddevice as sd  # Windows (WASAPI) / anywhere it is installed
@@ -349,11 +376,13 @@ class Mic:
         self.stream = None
         self.running = False
 
-    def start(self):
+    def start(self, card=None):
+        """Starts capture. Callers go through the mic gate first (Listener); `card` is the approving card id."""
         if self.running:
             return
         self.running = True
         cmd = mic_command(self.device)
+        G.audit(G.LAUNCH, "mic_capture", cmd or ["(sounddevice)"], card)
         if cmd is None:
             try:
                 import sounddevice as sd
@@ -410,8 +439,9 @@ def read_wav16k(path):
 class Listener:
     """Mic + VAD + STT glued to a Speaker (for barge-in / echo safety) and an event sink."""
 
-    def __init__(self, speaker=None, emit=None, echo=None, barge_in=None, threads=2):
+    def __init__(self, speaker=None, emit=None, echo=None, barge_in=None, threads=2, gate=None):
         cfg = mic_config()
+        self.gate = gate or MicGate(mic_argv=lambda: mic_command(self.device) or ["(sounddevice)"])
         self.speaker = speaker
         self.emit = emit or (lambda ev: None)
         self.echo = echo or cfg.get("echo") or os.environ.get("LILLITH_ECHO", "mute")   # mute | open
@@ -491,13 +521,17 @@ class Listener:
         self.emit(info)
 
     # ---------------------------------------------------------------- API
-    def ptt_start(self):
+    def ptt_start(self, token=None):
+        if not self.mic.running:
+            refused = self.gate.allow("listen", token)
+            if refused is not None:
+                return refused
         if self._playing() or (self.speaker and self.speaker.busy()):
             self._barge("ptt")          # pressing talk always interrupts her
         with self._lock:
             self._ptt = []
             self._mode = "ptt"
-        self.mic.start()
+        self.mic.start(card=self.gate.last_card)
         self.emit({"ev": "listening", "mode": "ptt"})
         return {"ok": True, "listening": True}
 
@@ -531,7 +565,11 @@ class Listener:
         self.emit({"ev": "transcript", **{k: v for k, v in info.items() if k != "ok"}})
         return info
 
-    def listen_once(self, timeout=15.0):
+    def listen_once(self, timeout=15.0, token=None):
+        if not self.mic.running:
+            refused = self.gate.allow("listen", token)
+            if refused is not None:
+                return refused
         if self._playing() or (self.speaker and self.speaker.busy()):
             self._barge("listen")
         done = threading.Event()
@@ -539,7 +577,7 @@ class Listener:
         with self._lock:
             self.vad.reset()
             self._mode = "once"
-        self.mic.start()
+        self.mic.start(card=self.gate.last_card)
         self.emit({"ev": "listening", "mode": "once"})
         t_end = time.time() + timeout
         while not done.wait(0.05):
@@ -558,7 +596,11 @@ class Listener:
             return {"ok": True, "text": "", "timeout": True, **classify("")}
         return {"ok": True, **{k: v for k, v in r.items() if k != "ev"}}
 
-    def set_always(self, on: bool):
+    def set_always(self, on: bool, token=None):
+        if on and not self.always:
+            refused = self.gate.allow("always", token)   # every switch-on needs its own card / token
+            if refused is not None:
+                return refused
         self.always = bool(on)
         with self._lock:
             if on:
@@ -567,7 +609,7 @@ class Listener:
             elif self._mode == "always":
                 self._mode = None
         if on:
-            self.mic.start()
+            self.mic.start(card=self.gate.last_card)
         else:
             self.mic.stop()
         self.emit({"ev": "listen_mode", "on": self.always})

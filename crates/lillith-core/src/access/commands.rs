@@ -635,8 +635,10 @@ fn kill_tree(child: &mut std::process::Child) {
         // the POSIX form; procps-ng 4.0.x mis-parses `kill -KILL -<pgid>`
         // (exit 1, and on the GitHub runner the group survived, so a
         // grandchild kept the output pipe open until it exited).
-        let _ = std::process::Command::new("kill")
-            .args(["-s", "KILL", "--", &format!("-{}", child.id())])
+        let mut c = std::process::Command::new("kill");
+        c.args(["-s", "KILL", "--", &format!("-{}", child.id())]);
+        crate::launch_audit::record_command("kill_tree", &c);
+        let _ = c
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -645,8 +647,10 @@ fn kill_tree(child: &mut std::process::Child) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        let _ = std::process::Command::new("taskkill")
-            .args(["/T", "/F", "/PID", &child.id().to_string()])
+        let mut c = std::process::Command::new("taskkill");
+        c.args(["/T", "/F", "/PID", &child.id().to_string()]);
+        crate::launch_audit::record_command("kill_tree", &c);
+        let _ = c
             .creation_flags(super::winshell::CREATE_NO_WINDOW)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())

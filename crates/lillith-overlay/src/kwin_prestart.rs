@@ -6,23 +6,33 @@
 //! her window (`[overlay] auto_fix_kwin`, default on). On KDE it:
 //!
 //! 1. asks KWin which effects are loaded (`org.kde.kwin.Effects`
-//!    `loadedEffects` over D-Bus); falls back to `[Plugins] …Enabled` in
-//!    kwinrc when D-Bus doesn't answer;
-//! 2. for every loaded force-blur effect (Better Blur DX `better_blur_dx`,
+//!    `loadedEffects` over D-Bus, a read-only query); falls back to
+//!    `[Plugins] …Enabled` in kwinrc when D-Bus doesn't answer;
+//! 2. plans the changes below **without running anything** ([`plan_check`])
+//!    and, if there is anything to change, shows Ko a mouse-only Soul
+//!    Contract card (`lillith contract-card`, Yes is `clicked_by(Primary)`
+//!    only and not focusable) with the exact kwinrc diff (keys before and
+//!    after) and every command, one argument per line. Audit lines
+//!    `PROPOSED` / `CONFIRM` / `DENY` / `TIMEOUT` / `CANCELLED` / `NO_UI`
+//!    carry `card=<id>`. Only Yes applies the plan ([`apply_plan`]); No, a
+//!    timeout, a closed card or no card UI skip the tweak (nothing written,
+//!    nothing reloaded) and the overlay still starts;
+//! 3. on Yes, for every loaded force-blur effect (Better Blur DX `better_blur_dx`,
 //!    Better Blur `forceblur`, `blurplus`) whose `WindowClasses` would blur
 //!    her, edits the list like `lillith fix-kwin` (blur-all-except: add
 //!    `lillith`; blur-only: drop the `lillith` line), records the change
 //!    in the same state file `kwin-blur-exclude.sh revert` /
 //!    `lillith fix-kwin --revert` undo, and reconfigures that effect
 //!    (`reconfigureEffect`, synchronous inside KWin) plus KWin;
-//! 3. when that's impossible (a `/regex/` in blur-only mode that covers her,
+//! 4. when that's impossible (a `/regex/` in blur-only mode that covers her,
 //!    an unknown effect whose config group has a blur-all `WindowClasses`
 //!    list, no `kwriteconfig6`), unloads the effect **for this session
 //!    only** (`unloadEffect`, kwinrc untouched) and leaves a one-time note
 //!    for the chat saying what was done and how to make it permanent.
 //!
 //! Never blocks startup for long: every D-Bus/helper call shares one
-//! deadline ([`BUDGET`], 1.4 s) and is killed when it runs out; without
+//! deadline ([`BUDGET`], 1.4 s, fresh again after a Yes) and is killed when
+//! it runs out (the card itself waits up to 60 s for Ko); without
 //! D-Bus she simply starts (her dock window type still keeps Better Blur
 //! off by default).
 
@@ -94,6 +104,9 @@ pub enum Action {
     Unloaded { effect: String, why: String },
     /// Needed a fix but couldn't (unload failed / timed out).
     Failed { effect: String, why: String },
+    /// Needed a fix, but Ko didn't approve the card (No, timeout, no UI):
+    /// nothing was changed.
+    Skipped { effect: String, why: String },
 }
 
 /// What the check found and did.
@@ -166,29 +179,208 @@ const STOCK: &[&str] = &[
     "blendchanges",
 ];
 
-/// Runs the check. `role` is her window type (docks are skipped by Better
-/// Blur unless "Blur docks" is on; exclusion is applied anyway, unloading
-/// only when the effect would really draw behind her).
-pub fn run_check(
-    bus: &mut dyn KwinBus,
-    rc: &mut dyn KwinRc,
-    data_dir: Option<&Path>,
-    role: WindowRole,
-    budget: Duration,
-) -> Report {
-    let t0 = Instant::now();
-    let deadline = t0 + budget;
-    let mut r = Report::default();
-    r.trace.push("check:start".into());
-    let text = rc.text();
-    let ini = Ini { text: &text };
+/// A kwinrc `WindowClasses` edit the check wants to make.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedWrite {
+    /// KWin plugin id (`better_blur_dx`, …).
+    pub id: String,
+    /// Display name (`Better Blur DX`).
+    pub effect: String,
+    pub group: String,
+    /// Current value (`\n`-separated list).
+    pub before: String,
+    /// Value after the edit.
+    pub after: String,
+    /// `added` (blur-all list) or `removed` (blur-only list).
+    pub how: &'static str,
+    /// The effect would really draw behind her (a failed write then falls
+    /// back to a session unload, as listed on the card).
+    pub hits_her: bool,
+}
+
+/// What the check would change, worked out without changing anything:
+/// the only command run to build it is the read-only `loadedEffects`
+/// query. Nothing here is applied until [`apply_plan`] (after a Yes).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Plan {
+    pub bus_ok: bool,
+    /// kwinrc edits (persistent, revertible).
+    pub writes: Vec<PlannedWrite>,
+    /// Session-only unloads `(id, why)` (only when the bus answered).
+    pub unload: Vec<(String, String)>,
+    /// Effects already fine, or unfixable without D-Bus (nothing to run).
+    pub actions: Vec<Action>,
+    pub trace: Vec<String>,
+}
+
+impl Plan {
+    /// Nothing to change: no card is needed.
+    pub fn is_empty(&self) -> bool {
+        self.writes.is_empty() && self.unload.is_empty()
+    }
+
+    /// The card's one-line summary.
+    pub fn summary(&self) -> String {
+        let mut names: Vec<String> = self.writes.iter().map(|w| w.effect.clone()).collect();
+        for (id, _) in &self.unload {
+            names.push(effect_name(id));
+        }
+        names.dedup();
+        format!(
+            "keep {} off her window: edit your KDE kwinrc and reload KWin's effects",
+            names.join(", ")
+        )
+    }
+
+    /// The card's detail: the exact kwinrc change (each key before and
+    /// after) and every command that would run, one argument per line.
+    pub fn card_detail(&self) -> String {
+        let mut out = String::new();
+        let show = |v: &str| -> String {
+            if v.is_empty() {
+                "    (empty)".to_string()
+            } else {
+                v.lines()
+                    .map(|l| format!("    {l}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        };
+        for w in &self.writes {
+            out.push_str(&format!(
+                "kwinrc [{}] WindowClasses ({})\n- before:\n{}\n+ after:\n{}\n\n",
+                w.group,
+                w.effect,
+                show(&w.before),
+                show(&w.after)
+            ));
+        }
+        let mut cmds: Vec<Vec<String>> = Vec::new();
+        for w in &self.writes {
+            cmds.push(kwrite_argv(&w.group, "WindowClasses", &w.after));
+        }
+        if self.bus_ok {
+            for w in &self.writes {
+                cmds.push(dbus_argv(
+                    "/Effects",
+                    "org.kde.kwin.Effects.reconfigureEffect",
+                    &[format!("string:{}", w.id)],
+                    None,
+                ));
+            }
+            if !self.writes.is_empty() {
+                cmds.push(dbus_argv("/KWin", "org.kde.KWin.reconfigure", &[], None));
+            }
+            for (id, _) in &self.unload {
+                cmds.push(unload_argv(id));
+            }
+        }
+        out.push_str("Commands (in order):\n");
+        for c in &cmds {
+            out.push_str(&argv_lines(c));
+            out.push('\n');
+        }
+        let fallback: Vec<&PlannedWrite> = self
+            .writes
+            .iter()
+            .filter(|w| w.hits_her && self.bus_ok)
+            .collect();
+        if !fallback.is_empty() {
+            out.push_str("\nIf writing kwinrc fails, instead (this session only):\n");
+            for w in fallback {
+                out.push_str(&argv_lines(&unload_argv(&w.id)));
+                out.push('\n');
+            }
+        }
+        for (id, why) in &self.unload {
+            out.push_str(&format!("\nUnload {id}: {why}"));
+        }
+        out.push_str(
+            "\n(qdbus6 is used with the same arguments if dbus-send is missing.)\n\
+             No: nothing is changed and she starts anyway. \
+             Set [overlay] auto_fix_kwin = false to stop this check.",
+        );
+        out
+    }
+}
+
+/// `$ <program>` then one argument per line (newlines in a value shown
+/// as `\n`), never shortened.
+pub fn argv_lines(argv: &[String]) -> String {
+    let mut it = argv.iter();
+    let mut s = format!("$ {}", it.next().map(String::as_str).unwrap_or(""));
+    for a in it {
+        s.push_str("\n    ");
+        s.push_str(&a.replace('\n', "\\n"));
+    }
+    s
+}
+
+fn effect_name(id: &str) -> String {
+    BLUR_EFFECTS
+        .iter()
+        .find(|e| e.plugin_id == id)
+        .map(|e| e.name.to_string())
+        .unwrap_or_else(|| id.to_string())
+}
+
+/// `kwriteconfig6 --file kwinrc --group G --key K -- V`.
+pub fn kwrite_argv(group: &str, key: &str, value: &str) -> Vec<String> {
+    [
+        "kwriteconfig6",
+        "--file",
+        "kwinrc",
+        "--group",
+        group,
+        "--key",
+        key,
+        "--",
+        value,
+    ]
+    .map(str::to_string)
+    .to_vec()
+}
+
+/// `dbus-send --session --print-reply --reply-timeout=MS --dest=org.kde.KWin PATH METHOD ARGS…`
+/// (`ms` `None`: shown as `<ms left>` on the card).
+pub fn dbus_argv(path: &str, method: &str, args: &[String], ms: Option<u128>) -> Vec<String> {
+    let mut v = vec![
+        "dbus-send".to_string(),
+        "--session".into(),
+        "--print-reply".into(),
+        match ms {
+            Some(ms) => format!("--reply-timeout={ms}"),
+            None => "--reply-timeout=<ms left of the 1.4 s budget>".into(),
+        },
+        "--dest=org.kde.KWin".into(),
+        path.into(),
+        method.into(),
+    ];
+    v.extend(args.iter().cloned());
+    v
+}
+
+fn unload_argv(id: &str) -> Vec<String> {
+    dbus_argv(
+        "/Effects",
+        "org.kde.kwin.Effects.unloadEffect",
+        &[format!("string:{id}")],
+        None,
+    )
+}
+
+/// Works out what the check would change (see [`Plan`]); writes nothing.
+pub fn plan_check(bus: &mut dyn KwinBus, text: &str, role: WindowRole, deadline: Instant) -> Plan {
+    let mut p = Plan::default();
+    p.trace.push("check:start".into());
+    let ini = Ini { text };
     let loaded = match bus.loaded_effects(deadline) {
         Ok(l) => {
-            r.bus_ok = true;
+            p.bus_ok = true;
             l
         }
         Err(e) => {
-            r.trace.push(format!("bus:{e:?}"));
+            p.trace.push(format!("bus:{e:?}"));
             // Fall back to what kwinrc says is enabled (known effects only).
             BLUR_EFFECTS
                 .iter()
@@ -197,10 +389,8 @@ pub fn run_check(
                 .collect()
         }
     };
-    r.trace.push(format!("loaded:{}", loaded.join(",")));
-    let mut reconfigure: Vec<String> = Vec::new();
+    p.trace.push(format!("loaded:{}", loaded.join(",")));
     let mut unload: Vec<(String, String)> = Vec::new();
-    let mut state_lines: Vec<String> = Vec::new();
     for id in &loaded {
         if let Some(e) = BLUR_EFFECTS.iter().find(|e| e.plugin_id == id) {
             let group = if e.plugin_id == "better_blur_dx"
@@ -214,7 +404,7 @@ pub fn run_check(
             let classes = ini.get(group, "WindowClasses").unwrap_or_default();
             let blacklist = ini.bool(group, "BlurMatching") == Some(false);
             if !class_list_targets_her(&classes, blacklist) {
-                r.actions.push(Action::Fine {
+                p.actions.push(Action::Fine {
                     effect: e.name.into(),
                 });
                 continue;
@@ -222,35 +412,22 @@ pub fn run_check(
             let docks = ini.bool(group, "BlurDocks") == Some(true);
             let hits_her = role != WindowRole::Dock || docks;
             match exclude_her(&classes, blacklist) {
-                Some(new) => match rc.write(group, "WindowClasses", &new, deadline) {
-                    Ok(()) => {
-                        let how = if blacklist { "added" } else { "removed" };
-                        r.trace.push(format!("write:{group}"));
-                        state_lines.push(format!("{group}\t{how}"));
-                        r.actions.push(Action::Excluded {
-                            effect: e.name.into(),
-                            group: group.into(),
-                            how,
-                        });
-                        reconfigure.push(id.clone());
-                    }
-                    Err(why) if hits_her => unload.push((id.clone(), why)),
-                    Err(why) => {
-                        // Her dock window type keeps this effect off her
-                        // anyway: log it, don't bother Ko.
-                        r.trace.push(format!("write-failed:{group}:{why}"));
-                        r.actions.push(Action::Fine {
-                            effect: e.name.into(),
-                        });
-                    }
-                },
+                Some(new) => p.writes.push(PlannedWrite {
+                    id: id.clone(),
+                    effect: e.name.into(),
+                    group: group.into(),
+                    before: classes.clone(),
+                    after: new,
+                    how: if blacklist { "added" } else { "removed" },
+                    hits_her,
+                }),
                 None if hits_her => unload.push((
                     id.clone(),
                     format!(
                         "a /regex/ in [{group}] WindowClasses (blur only listed) covers `{CLASS}`"
                     ),
                 )),
-                None => r.actions.push(Action::Fine {
+                None => p.actions.push(Action::Fine {
                     effect: e.name.into(),
                 }),
             }
@@ -271,9 +448,62 @@ pub fn run_check(
                     format!("unknown effect with a blur-all window list in [{g}]"),
                 ));
             } else {
-                r.actions.push(Action::Fine { effect: id.clone() });
+                p.actions.push(Action::Fine { effect: id.clone() });
             }
             break;
+        }
+    }
+    for (id, why) in unload {
+        if p.bus_ok {
+            p.unload.push((id, why));
+        } else {
+            // Nothing could run: logged / told once, no card needed.
+            p.actions.push(Action::Failed {
+                effect: effect_name(&id),
+                why: format!("{why}; KWin's D-Bus didn't answer, so it couldn't be unloaded"),
+            });
+        }
+    }
+    p
+}
+
+/// Applies a [`Plan`] Ko said Yes to: the kwinrc writes (recorded in the
+/// state file for `--revert`), the effect reloads and the session unloads.
+pub fn apply_plan(
+    plan: Plan,
+    bus: &mut dyn KwinBus,
+    rc: &mut dyn KwinRc,
+    data_dir: Option<&Path>,
+    deadline: Instant,
+) -> Report {
+    let mut r = Report {
+        bus_ok: plan.bus_ok,
+        actions: plan.actions,
+        trace: plan.trace,
+        ..Report::default()
+    };
+    let mut reconfigure: Vec<String> = Vec::new();
+    let mut unload = plan.unload;
+    let mut state_lines: Vec<String> = Vec::new();
+    for w in plan.writes {
+        match rc.write(&w.group, "WindowClasses", &w.after, deadline) {
+            Ok(()) => {
+                r.trace.push(format!("write:{}", w.group));
+                state_lines.push(format!("{}\t{}", w.group, w.how));
+                r.actions.push(Action::Excluded {
+                    effect: w.effect,
+                    group: w.group,
+                    how: w.how,
+                });
+                reconfigure.push(w.id);
+            }
+            Err(why) if w.hits_her => unload.push((w.id, why)),
+            Err(why) => {
+                // Her dock window type keeps this effect off her
+                // anyway: log it, don't bother Ko.
+                r.trace.push(format!("write-failed:{}:{why}", w.group));
+                r.actions.push(Action::Fine { effect: w.effect });
+            }
         }
     }
     if !state_lines.is_empty() {
@@ -301,11 +531,7 @@ pub fn run_check(
     }
     let mut unloaded = Vec::new();
     for (id, why) in unload {
-        let name = BLUR_EFFECTS
-            .iter()
-            .find(|e| e.plugin_id == id)
-            .map(|e| e.name.to_string())
-            .unwrap_or_else(|| id.clone());
+        let name = effect_name(&id);
         if !r.bus_ok {
             r.actions.push(Action::Failed {
                 effect: name,
@@ -326,9 +552,136 @@ pub fn run_check(
         }
     }
     r.notice = notice(&r.actions, &unloaded, data_dir);
-    r.elapsed = t0.elapsed();
     r.trace.push("check:done".into());
     r
+}
+
+/// Ko's answer to the KWin card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Consent {
+    /// A mouse click on the card's Yes.
+    Yes,
+    /// No / Esc.
+    No,
+    /// Not answered in time.
+    TimedOut,
+    /// The card window was closed.
+    Cancelled,
+    /// No card could be shown (no display, no card helper).
+    NoUi,
+}
+
+impl Consent {
+    /// The audit tag of the decision.
+    pub fn audit_tag(self) -> &'static str {
+        match self {
+            Consent::Yes => "CONFIRM",
+            Consent::No => "DENY",
+            Consent::TimedOut => "TIMEOUT",
+            Consent::Cancelled => "CANCELLED",
+            Consent::NoUi => "NO_UI",
+        }
+    }
+}
+
+/// The `kind` column of the KWin card's audit lines.
+pub const CARD_KIND: &str = "kwin_fix";
+
+/// The gated check: plans, and when anything would change, audits
+/// `PROPOSED` (card=`card`), asks `ask` (the mouse-only Soul Contract
+/// card), audits the decision and applies the plan only on [`Consent::Yes`].
+/// No, timeout, a closed card or no UI change nothing (she starts anyway).
+/// `audit_log` `None` skips the audit lines (tests without a log).
+#[allow(clippy::too_many_arguments)]
+pub fn run_check_gated(
+    bus: &mut dyn KwinBus,
+    rc: &mut dyn KwinRc,
+    data_dir: Option<&Path>,
+    role: WindowRole,
+    budget: Duration,
+    audit_log: Option<&Path>,
+    card: &str,
+    ask: &mut dyn FnMut(&Plan) -> Consent,
+) -> Report {
+    let t0 = Instant::now();
+    let text = rc.text();
+    let plan = plan_check(bus, &text, role, t0 + budget);
+    let audit = |tag: &str, plan: &Plan| {
+        if let Some(log) = audit_log {
+            let what: Vec<String> = std::iter::once("kwriteconfig6".to_string())
+                .chain(plan.writes.iter().map(|w| format!("[{}]", w.group)))
+                .chain(plan.unload.iter().map(|(id, _)| format!("unload:{id}")))
+                .collect();
+            lillith_core::launch_audit::record_to(log, tag, CARD_KIND, &what, Some(card));
+        }
+    };
+    if plan.is_empty() {
+        let mut r = apply_plan(plan, bus, rc, data_dir, t0 + budget);
+        r.elapsed = t0.elapsed();
+        return r;
+    }
+    audit("PROPOSED", &plan);
+    let consent = ask(&plan);
+    audit(consent.audit_tag(), &plan);
+    if consent != Consent::Yes {
+        let mut r = Report {
+            bus_ok: plan.bus_ok,
+            actions: plan.actions,
+            trace: plan.trace,
+            ..Report::default()
+        };
+        r.trace.push(format!("card:{}", consent.audit_tag()));
+        for w in plan.writes {
+            r.actions.push(Action::Skipped {
+                effect: w.effect,
+                why: format!("not approved ({})", consent.audit_tag()),
+            });
+        }
+        for (id, _) in plan.unload {
+            r.actions.push(Action::Skipped {
+                effect: effect_name(&id),
+                why: format!("not approved ({})", consent.audit_tag()),
+            });
+        }
+        r.trace.push("check:done".into());
+        r.elapsed = t0.elapsed();
+        return r;
+    }
+    // A fresh budget for the approved changes (the card took its time).
+    let mut r = CARD.with(|c| {
+        *c.borrow_mut() = Some(card.to_string());
+        let r = apply_plan(plan, bus, rc, data_dir, Instant::now() + budget);
+        *c.borrow_mut() = None;
+        r
+    });
+    r.trace.insert(r.trace.len() - 1, "card:CONFIRM".into());
+    r.elapsed = t0.elapsed();
+    r
+}
+
+/// The ungated check (tests only: the app always goes through
+/// [`run_check_gated`]).
+#[cfg(test)]
+pub fn run_check(
+    bus: &mut dyn KwinBus,
+    rc: &mut dyn KwinRc,
+    data_dir: Option<&Path>,
+    role: WindowRole,
+    budget: Duration,
+) -> Report {
+    let t0 = Instant::now();
+    let deadline = t0 + budget;
+    let text = rc.text();
+    let plan = plan_check(bus, &text, role, deadline);
+    let mut r = apply_plan(plan, bus, rc, data_dir, deadline);
+    r.elapsed = t0.elapsed();
+    r
+}
+
+thread_local! {
+    /// The approved card while its plan is applied: launches carry
+    /// `card=<id>` in the audit log.
+    static CARD: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
 }
 
 fn settle(deadline: Instant, want: Duration) {
@@ -409,10 +762,25 @@ fn notice(
 
 // ---------------------------------------------------------------- real I/O
 
-/// Runs `cmd` until it exits or `deadline` passes (then kills it).
+/// Runs `cmd` until it exits or `deadline` passes (then kills it). Each
+/// launch writes one audit line (`card=<id>` while an approved KWin card's
+/// plan is applied, else `no-card`: the read-only `loadedEffects` query
+/// and `fix-kwin --revert`).
 fn run_until(cmd: &mut Command, deadline: Instant) -> Result<String, BusError> {
     if Instant::now() >= deadline {
         return Err(BusError::Timeout);
+    }
+    let argv = lillith_core::launch_audit::argv_of_command(cmd);
+    if let Some(log) = lillith_core::config::audit_log_path() {
+        CARD.with(|c| {
+            lillith_core::launch_audit::record_to(
+                &log,
+                lillith_core::launch_audit::LAUNCH_TAG,
+                "kwin_prestart",
+                &argv,
+                c.borrow().as_deref(),
+            )
+        });
     }
     let mut child = cmd
         .stdin(Stdio::null())
@@ -481,14 +849,9 @@ impl SessionBus {
         args: &[String],
         deadline: Instant,
     ) -> Result<String, BusError> {
-        let mut c = Command::new("dbus-send");
-        c.arg("--session")
-            .arg("--print-reply")
-            .arg(format!("--reply-timeout={}", Self::ms_left(deadline)))
-            .arg("--dest=org.kde.KWin")
-            .arg(path)
-            .arg(method)
-            .args(args);
+        let argv = dbus_argv(path, method, args, Some(Self::ms_left(deadline)));
+        let mut c = Command::new(&argv[0]);
+        c.args(&argv[1..]);
         match run_until(&mut c, deadline) {
             Err(BusError::Unavailable(e))
                 if e.contains("No such file") || e.contains("not found") =>
@@ -582,9 +945,9 @@ impl KwinRc for DiskRc {
         value: &str,
         deadline: Instant,
     ) -> Result<(), String> {
-        let mut c = Command::new("kwriteconfig6");
-        c.args(["--file", "kwinrc", "--group", group, "--key", key, "--"])
-            .arg(value);
+        let argv = kwrite_argv(group, key, value);
+        let mut c = Command::new(&argv[0]);
+        c.args(&argv[1..]);
         run_until(&mut c, deadline)
             .map(drop)
             .map_err(|e| format!("kwriteconfig6: {e:?}"))
@@ -592,7 +955,10 @@ impl KwinRc for DiskRc {
 }
 
 /// The app's entry point: no-op (logged) off KDE or when switched off;
-/// otherwise [`run_check`] on the real bus/kwinrc, logging every action.
+/// otherwise [`run_check_gated`] on the real bus/kwinrc with the
+/// stand-alone mouse-only Soul Contract card (Ko's decision: the kwinrc
+/// edit and effect reloads need his Yes; No, a timeout or no UI skip the
+/// tweak and she starts anyway), logging every action.
 pub fn before_first_frame(enabled: bool, data_dir: Option<&Path>) -> Report {
     let role = WindowRole::from_env();
     if !enabled {
@@ -609,9 +975,44 @@ pub fn before_first_frame(enabled: bool, data_dir: Option<&Path>) -> Report {
             ..Report::default()
         };
     }
-    let r = run_check(&mut SessionBus, &mut DiskRc, data_dir, role, BUDGET);
+    let card = lillith_core::card_process::new_card_id("kwin");
+    let log = lillith_core::config::audit_log_path();
+    let r = run_check_gated(
+        &mut SessionBus,
+        &mut DiskRc,
+        data_dir,
+        role,
+        BUDGET,
+        log.as_deref(),
+        &card,
+        &mut |plan| ask_card(plan, &card),
+    );
     log_report(&r);
     r
+}
+
+/// How long the KWin card waits for Ko before it counts as a timeout.
+pub const CARD_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Shows the KWin card (`lillith contract-card`, this same binary).
+fn ask_card(plan: &Plan, card: &str) -> Consent {
+    use lillith_core::card_process::{ask, CardAnswer, CardText};
+    let Ok(exe) = std::env::current_exe() else {
+        return Consent::NoUi;
+    };
+    let text = CardText {
+        title: "Change KDE's KWin settings?".into(),
+        summary: plan.summary(),
+        target: format!("~/.config/kwinrc (card {card})"),
+        detail: plan.card_detail(),
+    };
+    match ask(&exe, &text, CARD_TIMEOUT) {
+        CardAnswer::Yes => Consent::Yes,
+        CardAnswer::No => Consent::No,
+        CardAnswer::TimedOut => Consent::TimedOut,
+        CardAnswer::Cancelled => Consent::Cancelled,
+        CardAnswer::NoUi => Consent::NoUi,
+    }
 }
 
 /// One log line per action (and the D-Bus status).
@@ -642,6 +1043,11 @@ pub fn log_report(r: &Report) {
                     "KWin pre-start: could not keep this effect off her"
                 )
             }
+            Action::Skipped { effect, why } => tracing::info!(
+                effect,
+                why,
+                "KWin pre-start: change not approved on the Soul Contract card; nothing changed"
+            ),
         }
     }
     tracing::info!(
@@ -916,6 +1322,135 @@ mod tests {
         assert_eq!(bus.calls, ["loadedEffects", "unloadEffect better_blur_dx"]);
         assert!(matches!(&r.actions[0], Action::Unloaded { .. }));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn kwin_card_no_timeout_or_no_ui_writes_nothing() {
+        for c in [
+            Consent::No,
+            Consent::TimedOut,
+            Consent::Cancelled,
+            Consent::NoUi,
+        ] {
+            let dir = tmp("card-no");
+            let log = dir.join("audit.log");
+            let mut bus = FakeBus::with(&["better_blur_dx"]);
+            let mut rc = FakeRc::new(DX_BLUR_ALL);
+            let mut asked = 0;
+            let r = run_check_gated(
+                &mut bus,
+                &mut rc,
+                Some(&dir),
+                WindowRole::Normal,
+                BUDGET,
+                Some(&log),
+                "kwin-t1",
+                &mut |p| {
+                    asked += 1;
+                    assert_eq!(p.writes.len(), 1);
+                    c
+                },
+            );
+            assert_eq!(asked, 1);
+            assert!(rc.writes.is_empty(), "{c:?}: no kwinrc write");
+            assert_eq!(bus.calls, ["loadedEffects"], "{c:?}: no reload");
+            assert!(!dir.join(STATE_FILE).exists());
+            assert!(
+                matches!(&r.actions[..], [Action::Skipped { .. }]),
+                "{:?}",
+                r.actions
+            );
+            assert!(r.notice.is_none());
+            let audit = std::fs::read_to_string(&log).unwrap();
+            let lines: Vec<&str> = audit.lines().collect();
+            assert_eq!(lines.len(), 2, "{audit}");
+            let cols: Vec<&str> = lines[0].split('\t').collect();
+            assert_eq!(
+                &cols[1..5],
+                ["PROPOSED", CARD_KIND, "kwriteconfig6", "card=kwin-t1"]
+            );
+            let cols: Vec<&str> = lines[1].split('\t').collect();
+            assert_eq!(cols[1], c.audit_tag());
+            assert_eq!(cols[4], "card=kwin-t1");
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
+    fn kwin_card_yes_applies_and_nothing_to_change_never_asks() {
+        let dir = tmp("card-yes");
+        let log = dir.join("audit.log");
+        let mut bus = FakeBus::with(&["better_blur_dx"]);
+        let mut rc = FakeRc::new(DX_BLUR_ALL);
+        let r = run_check_gated(
+            &mut bus,
+            &mut rc,
+            Some(&dir),
+            WindowRole::Normal,
+            BUDGET,
+            Some(&log),
+            "kwin-t2",
+            &mut |_| Consent::Yes,
+        );
+        assert_eq!(
+            rc.writes[&("Effect-better-blur-dx".into(), "WindowClasses".into())],
+            "plasmashell\nkrunner\nlillith"
+        );
+        assert_eq!(
+            bus.calls,
+            [
+                "loadedEffects",
+                "reconfigureEffect better_blur_dx",
+                "reconfigure"
+            ]
+        );
+        assert!(matches!(&r.actions[..], [Action::Excluded { .. }]));
+        let audit = std::fs::read_to_string(&log).unwrap();
+        assert!(audit.lines().nth(1).unwrap().contains("\tCONFIRM\t"));
+        // Already fine: no card, no audit line from the gate.
+        let log2 = dir.join("audit2.log");
+        let mut bus = FakeBus::with(&["better_blur_dx"]);
+        let r = run_check_gated(
+            &mut bus,
+            &mut rc,
+            Some(&dir),
+            WindowRole::Normal,
+            BUDGET,
+            Some(&log2),
+            "kwin-t3",
+            &mut |_| panic!("nothing to change: no card"),
+        );
+        assert!(matches!(&r.actions[..], [Action::Fine { .. }]));
+        assert!(!log2.exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn kwin_card_shows_the_exact_diff_and_one_arg_per_line() {
+        let mut bus = FakeBus::with(&["better_blur_dx"]);
+        let p = plan_check(
+            &mut bus,
+            DX_BLUR_ALL,
+            WindowRole::Normal,
+            Instant::now() + BUDGET,
+        );
+        let d = p.card_detail();
+        assert!(
+            d.contains("kwinrc [Effect-better-blur-dx] WindowClasses (Better Blur DX)\n- before:\n    plasmashell\n    krunner\n+ after:\n    plasmashell\n    krunner\n    lillith\n"),
+            "{d}"
+        );
+        assert!(
+            d.contains("$ kwriteconfig6\n    --file\n    kwinrc\n    --group\n    Effect-better-blur-dx\n    --key\n    WindowClasses\n    --\n    plasmashell\\nkrunner\\nlillith\n"),
+            "{d}"
+        );
+        assert!(d.contains("$ dbus-send\n    --session\n"), "{d}");
+        assert!(d.contains("    org.kde.kwin.Effects.reconfigureEffect\n    string:better_blur_dx"));
+        assert!(d.contains("    org.kde.KWin.reconfigure"));
+        assert!(
+            d.contains("unloadEffect"),
+            "write-failure fallback is listed"
+        );
+        assert!(p.summary().contains("Better Blur DX"));
     }
 
     #[test]

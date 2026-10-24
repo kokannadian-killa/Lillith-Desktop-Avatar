@@ -118,6 +118,53 @@ The reply includes `audio_s`, `rtf`, `out` and `rate`. `out` must be absolute. T
 `{"cmd":"listen_mode","on":true}` → `{"ok":true,"always":true}`. Transcripts then arrive as `stt` events.
 `"on":false` turns it off.
 
+### Mic gate (Soul Contract card, mouse click only)
+The microphone never starts without Ko's **mouse-click Yes** on a Soul Contract card. Voice, typed text, keys
+and Esc can never approve it. The daemon shows the card itself by running
+`lillith contract-card --timeout 60`, which is the same mouse-only card the app uses (stdin: title, summary,
+target, then detail lines; stdout: `yes` / `no` / `timeout` / `cancelled` / `no_ui`). The program is
+`$LILLITH_CARD_CMD` (it must be an absolute path to an executable file) or else `lillith` on `PATH`.
+
+- `{"cmd":"mic_card","kind":"listen"|"always"}` shows a card and waits for the answer.
+  - On Yes it replies `{"ok":true,"token":"...","card":"mic-...","expires_s":120}`.
+  - The token works **once**, for **that kind** only, and expires after 120 s.
+- To use it, add `"token"` to `{"cmd":"listen",...}` (kind `listen`) or to `{"cmd":"listen_mode","on":true}`
+  (kind `always`).
+- **No token**: the daemon shows the card inline, and the reply waits until Ko answers (at most about 70 s).
+  On Yes it mints a one-time token and uses it immediately, so existing clients keep working unchanged.
+- **Push-to-talk / listen once** (`kind:"listen"`): after one Yes, later push-to-talk and listen starts are
+  allowed for the rest of the daemon session. `{"cmd":"mic_revoke"}` → `{"ok":true,"revoked":true}` ends that
+  grant and drops any unused tokens.
+- **Always listening** (`kind:"always"`): every switch-on needs its own Yes (inline card or token). Turning it
+  off (`"on":false`) is never gated.
+- Refusals: No, timeout, a closed card, no card UI (no display, or no `lillith` binary), or a bad, used,
+  expired or wrong-kind token all reply
+  `{"ok":false,"error":"...","need_card":true}`, and the mic stays off. Only one card is open at a time; a
+  second request meanwhile gets the same refusal.
+- `{"cmd":"stt","wav":...}` (a file, no mic) is not gated.
+- Audit: every card writes `PROPOSED` and then `CONFIRM` / `DENY` / `TIMEOUT` / `CANCELLED` / `NO_UI` with
+  `card=<id>` to Lillith's audit log (`$XDG_DATA_HOME/lillith/audit.log`; on Windows
+  `%LOCALAPPDATA%\lillith\audit.log`). Every capture start writes a `LAUNCH` line (kind `mic_capture`) carrying
+  the approving card. The columns match the app's:
+  `<utc>\t<TAG>\t<kind>\t<program>\t<card=<id>|no-card>\t$ <masked argv>`.
+- Threat model: this protects the mic from other local socket clients. Whoever controls the daemon's own
+  environment (`$LILLITH_CARD_CMD`, `$PATH`) is trusted, as with any program.
+
+### Programs from the environment
+- `$LILLITH_MIC_CMD` must be an **allowlisted recorder** given as an absolute path to an executable file:
+  `arecord`, `parecord`, `parec`, `pw-record` or `ffmpeg`.
+  - At most 32 arguments, each from `A-Z a-z 0-9 _ . , : = + @ % / -`.
+  - No URLs and no `..`. Paths are allowed only under `/dev/`, and no file names (`.wav`, `.py`, …).
+  - The device name from `mic.json` / `$LILLITH_MIC_DEVICE` follows the same argument rule.
+  - Anything else is refused with a log line, and the default recorder is used.
+- `$LILLITH_FFMPEG` must be an absolute path to an existing executable file; otherwise it is logged and
+  `ffmpeg` on `PATH` (absolute) is used.
+- `$LILLITH_PLAYER` is split with `shlex` (never a shell), and its program must be an absolute executable;
+  otherwise it is logged and the default player is used. `none` still means no player.
+- `presets.json`: `echo` must be numbers only (`in:out:delays|..:decays|..`, gains 0–1, delays up to 2000 ms,
+  decays 0–1, 1–8 taps, the same number of delays and decays), or it is turned off. Numeric fields are clamped,
+  non-numbers are dropped, and `eq` / `treble` must be lists of numbers.
+
 ### shutdown
 `{"cmd":"shutdown"}` → `{"ok":true}`, and the daemon exits.
 

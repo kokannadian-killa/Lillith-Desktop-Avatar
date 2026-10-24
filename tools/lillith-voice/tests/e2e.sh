@@ -14,7 +14,13 @@ export PATH="$HOME/.local/bin:$PATH"
 # capture "playback" as files, taking real time like a speaker would (needed for barge-in / lip-sync timing)
 export LILLITH_PLAYER="$VPY $HERE/fake_player.py {} $OUT/played/"
 # simulated microphone: silence until a WAV is dropped at $OUT/mic_play.wav (real hardware can't be tested here)
-export LILLITH_MIC_CMD="$VPY $HERE/fake_mic.py $OUT"
+# LILLITH_MIC_CMD only accepts an allowlisted recorder (absolute path), so the fake mic runs behind an `arecord` shim
+mkdir -p "$OUT/bin"
+printf '#!/bin/sh\nexec "%s" "%s" "%s"\n' "$VPY" "$HERE/fake_mic.py" "$OUT" > "$OUT/bin/arecord"; chmod 755 "$OUT/bin/arecord"
+export LILLITH_MIC_CMD="$OUT/bin/arecord"
+# the mic gate shows a Soul Contract card; here a fake card helper answers "yes" (no screen, no mouse in a test)
+printf '#!/bin/sh\ncat >/dev/null\necho yes\n' > "$OUT/bin/fake-card"; chmod 755 "$OUT/bin/fake-card"
+export LILLITH_CARD_CMD="$OUT/bin/fake-card"
 export XDG_CONFIG_HOME="$OUT/config"
 export LILLITH_VOICE_SOCKET="$OUT/voiced.sock"
 PASS=0; FAIL=0
@@ -24,6 +30,10 @@ T="Oh my god, hiii! Like, there you are? I've been, like, sooo bored without you
 PRESETS="${PRESETS:-lillith lillith_fast p1 bella bella85_heart15 bella80_nicole20 bella75_sky25}"
 DPRESETS="${DPRESETS:-lillith p1 bella}"
 [ -n "${LV_IN_NETNS:-}" ] && { ip -o link | grep -qv ' lo:' && no "netns has non-loopback links" || ok "running with NO network (only loopback)"; }
+
+echo "== mic gate + launch guards (no models)"
+"$VPY" "$HERE/micgate_test.py" >"$OUT/micgate.log" 2>&1 && ok "mic gate: $(grep -c '^PASS' "$OUT/micgate.log") checks (card/token gate, MIC_CMD allowlist, echo, audit)" \
+  || no "mic gate: $(grep -E '^FAIL|Error' "$OUT/micgate.log" | head -3)"
 
 echo "== transport (fake core, no models)"
 "$VPY" "$HERE/transport_test.py" >"$OUT/transport.log" 2>&1 && ok "transport: $(grep -c '^PASS' "$OUT/transport.log") checks (framing, 24 clients, subscriber + say, stop on 2nd conn)" \

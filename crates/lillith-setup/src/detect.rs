@@ -134,8 +134,12 @@ pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
 }
 
 /// [`search_dirs`] with the bundled folders given explicitly (testable).
+///
+/// Only absolute folders are searched: a relative `extra_bin_dirs` entry
+/// or `$PATH` entry (which would resolve against the current folder) is
+/// refused with a log line.
 pub fn search_dirs_with(extra: &[PathBuf], bundled: &[PathBuf]) -> Vec<PathBuf> {
-    let mut roots: Vec<PathBuf> = extra.to_vec();
+    let mut roots: Vec<PathBuf> = absolute_only("extra_bin_dirs", extra.iter().cloned());
     if let Some(h) = paths::home_dir() {
         for d in [
             "llama.cpp",
@@ -165,7 +169,7 @@ pub fn search_dirs_with(extra: &[PathBuf], bundled: &[PathBuf]) -> Vec<PathBuf> 
     }
     let mut dirs: Vec<PathBuf> = bundled.to_vec();
     if let Some(p) = std::env::var_os("PATH") {
-        dirs.extend(std::env::split_paths(&p));
+        dirs.extend(absolute_only("PATH", std::env::split_paths(&p)));
     }
     if let Some(h) = paths::home_dir() {
         dirs.push(h.join(".local/bin"));
@@ -201,14 +205,32 @@ pub fn search_dirs_with(extra: &[PathBuf], bundled: &[PathBuf]) -> Vec<PathBuf> 
         }
     }
     let mut seen = std::collections::HashSet::new();
-    dirs.retain(|d| seen.insert(d.clone()));
+    dirs.retain(|d| d.is_absolute() && seen.insert(d.clone()));
     dirs
+}
+
+/// The absolute entries of `dirs`; each relative one is refused with a
+/// log line naming where it came from (empty `PATH` entries mean the
+/// current folder too).
+fn absolute_only(what: &str, dirs: impl Iterator<Item = PathBuf>) -> Vec<PathBuf> {
+    dirs.filter(|d| {
+        let ok = d.is_absolute();
+        if !ok {
+            eprintln!(
+                "lillith-setup: {what} entry {:?} refused: not an absolute folder (skipped)",
+                d.display().to_string()
+            );
+        }
+        ok
+    })
+    .collect()
 }
 
 /// First executable `name` in `dirs` (`name.exe` on Windows).
 pub fn find_binary(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
     let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
     dirs.iter()
+        .filter(|d| d.is_absolute())
         .map(|d| d.join(&file))
         .find(|p| is_executable(p))
 }
@@ -228,7 +250,17 @@ pub fn is_executable(p: &Path) -> bool {
 
 /// First non-empty line of `<bin> --version` (stdout or stderr), killed
 /// after `timeout`. Local process only.
+///
+/// `bin` must be an absolute path to an existing executable file (no
+/// `$PATH` / cwd lookup); anything else is refused with a log line.
 pub fn binary_version(bin: &Path, timeout: Duration) -> Option<String> {
+    if !bin.is_absolute() || !is_executable(bin) {
+        eprintln!(
+            "lillith-setup: --version probe of {:?} refused: needs an absolute path to an executable file",
+            bin.display().to_string()
+        );
+        return None;
+    }
     let mut child = Command::new(bin)
         .arg("--version")
         .stdin(Stdio::null())
@@ -445,6 +477,27 @@ pub fn spawn(opts: DetectOptions) -> DetectHandle {
 mod tests {
     use super::*;
     use crate::http::tests::fake_server;
+
+    #[test]
+    fn relative_bin_dirs_and_bare_binaries_are_refused() {
+        let abs = std::env::temp_dir().join("lillith-abs-bin");
+        let dirs = search_dirs_with(&[PathBuf::from("rel/llama"), abs.clone()], &[]);
+        assert!(dirs.iter().all(|d| d.is_absolute()), "{dirs:?}");
+        assert!(dirs.iter().any(|d| d.starts_with(&abs)));
+        assert!(!dirs.iter().any(|d| d.starts_with("rel")));
+        assert_eq!(find_binary("sh", &[PathBuf::from("bin")]), None);
+        assert_eq!(
+            binary_version(Path::new("sh"), Duration::from_secs(1)),
+            None
+        );
+        assert_eq!(
+            binary_version(
+                Path::new("/nonexistent/llama-server"),
+                Duration::from_secs(1)
+            ),
+            None
+        );
+    }
 
     const TAGS: &str = r#"{"models":[{"name":"lily:latest","model":"lily:latest","size":2019393189,"details":{"family":"llama","parameter_size":"3.2B","quantization_level":"Q4_K_M"}}]}"#;
 

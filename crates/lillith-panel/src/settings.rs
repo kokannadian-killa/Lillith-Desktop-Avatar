@@ -241,7 +241,10 @@ impl Settings {
                 ),
             ];
             for (bin, args) in tries {
-                if let Ok(out) = std::process::Command::new(bin).args(args).output() {
+                let mut c = std::process::Command::new(bin);
+                c.args(args);
+                lillith_core::launch_audit::record_command("avatar_picker", &c);
+                if let Ok(out) = c.output() {
                     let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
                     let _ = tx.send((!s.is_empty()).then_some(s));
                     return;
