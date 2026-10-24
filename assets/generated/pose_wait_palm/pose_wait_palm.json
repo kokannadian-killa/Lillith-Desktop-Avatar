@@ -257,12 +257,12 @@
     "height": 400,
     "frame_count": 24,
     "fps": 10.0,
-    "bytes": 314129,
+    "bytes": 315393,
     "quality": {
-      "edge_mae": 2.251,
+      "edge_mae": 2.244,
       "edge_p99": 17.0,
-      "halo_dark": 0.051,
-      "halo_light": -0.136,
+      "halo_dark": 0.049,
+      "halo_light": -0.139,
       "alpha_mae": 0.0624
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
@@ -270,7 +270,8 @@
   "matte_clean": {
     "version": 1,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "c2d180410e59cef0a36fb17dcf081f1fda9e27d95235481f49583fc9520557f0",
-    "hand_fix": "scratch nrcheck/handfix: white background pockets, light edge px, white pinholes (fix/no-white-fringe-nr)"
+    "sheet_sha256": "cda8064a6247a1e4795bac691e013065bc12ab84dcbaab72eda0c992519dd113",
+    "hand_fix": "scratch nrcheck/handfix: white background pockets, light edge px, white pinholes (fix/no-white-fringe-nr)",
+    "hand_fix_2": "interior-gap defringe (hair/neck, chin, strap gaps): un-mix semi-transparent white ring px against nearest solid colour, erode/recolour opaque backdrop-white edge px; pale fingers/nails kept, 1px dark outline restored as in source"
   }
 }
