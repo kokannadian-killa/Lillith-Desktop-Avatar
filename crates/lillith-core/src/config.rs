@@ -836,6 +836,174 @@ impl MemoryConfig {
     }
 }
 
+/// Self-learning (`[learn]`, docs/SELF_LEARNING.md). On by default (Ko,
+/// D1); never runs when `[memory] enabled = false`. The idle learner only
+/// reads installed docs and writes notes under the knowledge folder: it
+/// never goes online, installs anything or runs a program by itself. Keys
+/// for later milestones (online trips, practice, dreaming, workers) are
+/// parsed and kept but not used yet.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LearnConfig {
+    /// Master switch (the Knowledge panel's Off toggle).
+    pub enabled: bool,
+    /// Desktop idle this long (seconds) before a step may start.
+    pub idle_after_s: f32,
+    /// Busy share over a rolling 10-minute window (0.10 = 10 %).
+    pub max_duty: f32,
+    /// Pause while the 1-minute load average is above this.
+    pub max_load: f32,
+    pub pause_on_battery: bool,
+    pub pause_on_activity: bool,
+    pub pause_on_fullscreen: bool,
+    /// Minutes of rest after the safeword.
+    pub safeword_cooldown_min: f32,
+    pub max_tokens_per_day: u32,
+    pub max_steps_per_hour: u32,
+    pub note_half_life_days: f32,
+    /// Seed topic folders under `knowledge/`.
+    pub topics: Vec<String>,
+    /// She may create new topic folders (slug `[a-z0-9-]{1,32}`).
+    pub allow_create_topics: bool,
+    pub prefer_notes_need_review: bool,
+    /// Enabled sources (P1 reads `man`, `info`, `doc`, `rust-doc`, `python-doc`).
+    pub sources: Vec<String>,
+    /// Largest file read (bytes).
+    pub max_file_bytes: u64,
+    pub share_socket: bool,
+    pub block_hosts: Vec<String>,
+    pub online: bool,
+    pub online_max_pages: u32,
+    pub online_max_bytes: u64,
+    pub tor_socks: String,
+    pub practice: bool,
+    /// `[learn.dream]` (P7; parsed, unused).
+    pub dream: LearnDreamConfig,
+    /// `[learn.workers]` (P7; parsed, unused).
+    pub workers: LearnWorkersConfig,
+}
+
+impl Default for LearnConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            idle_after_s: 300.0,
+            max_duty: 0.10,
+            max_load: 1.5,
+            pause_on_battery: true,
+            pause_on_activity: true,
+            pause_on_fullscreen: true,
+            safeword_cooldown_min: 60.0,
+            max_tokens_per_day: 40_000,
+            max_steps_per_hour: 12,
+            note_half_life_days: 90.0,
+            topics: [
+                "coding",
+                "linux-garuda",
+                "rust",
+                "python",
+                "ko-preferences",
+                "self",
+                "fixes",
+                "tools",
+                "web",
+            ]
+            .map(String::from)
+            .to_vec(),
+            allow_create_topics: true,
+            prefer_notes_need_review: false,
+            sources: [
+                "man",
+                "info",
+                "doc",
+                "rust-doc",
+                "python-doc",
+                "chat",
+                "memory",
+                "habits",
+                "shared",
+            ]
+            .map(String::from)
+            .to_vec(),
+            max_file_bytes: 256 * 1024,
+            share_socket: false,
+            block_hosts: Vec::new(),
+            online: false,
+            online_max_pages: 5,
+            online_max_bytes: 2_097_152,
+            tor_socks: "127.0.0.1:9050".into(),
+            practice: true,
+            dream: LearnDreamConfig::default(),
+            workers: LearnWorkersConfig::default(),
+        }
+    }
+}
+
+impl LearnConfig {
+    /// Whether `source` (e.g. `man`) is turned on.
+    pub fn source_on(&self, source: &str) -> bool {
+        self.sources.iter().any(|s| s.trim() == source)
+    }
+}
+
+/// `[learn.dream]` (docs/SELF_LEARNING.md §11; not used before P7).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LearnDreamConfig {
+    pub min_minutes: u32,
+    pub max_minutes: u32,
+    pub max_workers: u32,
+    pub external_bots: bool,
+    pub fetch_interval_s: u32,
+    pub max_pages_per_hour: u32,
+    pub max_bytes_per_session: u64,
+    pub max_disk_mb: u32,
+    pub dream_strength: f32,
+    pub stop_battery_pct: u32,
+    pub stop_cpu_temp_c: u32,
+}
+
+impl Default for LearnDreamConfig {
+    fn default() -> Self {
+        Self {
+            min_minutes: 30,
+            max_minutes: 480,
+            max_workers: 2,
+            external_bots: false,
+            fetch_interval_s: 20,
+            max_pages_per_hour: 60,
+            max_bytes_per_session: 52_428_800,
+            max_disk_mb: 100,
+            dream_strength: 0.2,
+            stop_battery_pct: 20,
+            stop_cpu_temp_c: 85,
+        }
+    }
+}
+
+/// `[learn.workers]` (docs/SELF_LEARNING.md §12; not used before P7).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LearnWorkersConfig {
+    pub heartbeat_s: u32,
+    pub missed_heartbeats_kill: u32,
+    pub max_restarts: u32,
+    pub backoff_base_s: u32,
+    pub breaker_failures: u32,
+}
+
+impl Default for LearnWorkersConfig {
+    fn default() -> Self {
+        Self {
+            heartbeat_s: 10,
+            missed_heartbeats_kill: 3,
+            max_restarts: 3,
+            backoff_base_s: 5,
+            breaker_failures: 3,
+        }
+    }
+}
+
 /// The default overlay scale (and the one used when an older config has
 /// `scale = 1.0`, the previous default):
 /// ~220 px tall from the 400 px cells (Ko's choice).
@@ -897,6 +1065,8 @@ pub struct Config {
     pub build: BuildConfig,
     /// Local learning memory graph (`[memory]`).
     pub memory: MemoryConfig,
+    /// Self-learning while idle (`[learn]`).
+    pub learn: LearnConfig,
 }
 
 impl Default for Config {
@@ -934,6 +1104,7 @@ impl Default for Config {
             mind: MindConfig::default(),
             build: BuildConfig::default(),
             memory: MemoryConfig::default(),
+            learn: LearnConfig::default(),
         }
     }
 }
@@ -1528,5 +1699,31 @@ mod tests {
         save_scale(&p, 1.3).unwrap();
         assert!((Config::load(&p).unwrap().scale - 1.3).abs() < 1e-6);
         let _ = std::fs::remove_dir_all(d);
+    }
+    #[test]
+    fn learn_defaults_on_and_later_keys_parse() {
+        // D1 (Ko): self-learning is on by default, also for an old config
+        // without a [learn] table.
+        let d = Config::default().learn;
+        assert!(d.enabled && d.pause_on_activity && d.pause_on_battery);
+        assert_eq!((d.idle_after_s, d.max_duty), (300.0, 0.10));
+        assert_eq!((d.max_tokens_per_day, d.max_steps_per_hour), (40_000, 12));
+        assert_eq!(d.max_file_bytes, 256 * 1024);
+        assert!(d.topics.iter().any(|t| t == "linux-garuda"));
+        assert!(d.source_on("man") && !d.source_on("web"));
+        let old: Config = toml::from_str("scale = 0.5\n").unwrap();
+        assert!(old.learn.enabled);
+        // Keys for later milestones parse (and are kept) without breaking.
+        let c: Config = toml::from_str(
+            "[learn]\nenabled = false\nonline = true\ntor_socks = \"127.0.0.1:9050\"\n\
+             [learn.dream]\nmax_minutes = 480\nexternal_bots = false\n\
+             [learn.workers]\nheartbeat_s = 10\n\
+             [memory.compaction]\nenabled = true\nmax_db_mb = 512\n",
+        )
+        .unwrap();
+        assert!(!c.learn.enabled);
+        assert_eq!(c.learn.dream.max_minutes, 480);
+        assert!(!c.learn.dream.external_bots);
+        assert!(c.memory.enabled);
     }
 }

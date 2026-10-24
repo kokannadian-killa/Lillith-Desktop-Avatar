@@ -87,6 +87,31 @@ pub const MIGRATIONS: &[&str] = &[
     CREATE INDEX errors_updated ON errors(updated_at);
     CREATE INDEX edges_created ON edges(created_at);
     "#,
+    // v3: self-learning index (docs/SELF_LEARNING.md §2). Additive only:
+    // learned notes (files are the source of truth, `lillith learn
+    // --reindex` rebuilds this table), what was read, learn jobs and the
+    // (gated, later) online trips.
+    r#"
+    CREATE TABLE notes (
+        id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, topic TEXT NOT NULL,
+        kind TEXT NOT NULL, title TEXT NOT NULL, source_type TEXT NOT NULL,
+        source_ref TEXT NOT NULL, source_hash TEXT NOT NULL, content_hash TEXT NOT NULL,
+        confidence REAL NOT NULL, origin TEXT NOT NULL,
+        node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+        created_at REAL NOT NULL, updated_at REAL NOT NULL);
+    CREATE INDEX notes_topic ON notes(topic);
+    CREATE TABLE sources (
+        ref TEXT PRIMARY KEY, type TEXT NOT NULL, hash TEXT NOT NULL,
+        chunks_done INTEGER NOT NULL, read_at REAL NOT NULL);
+    CREATE TABLE learn_jobs (
+        id INTEGER PRIMARY KEY, kind TEXT NOT NULL, arg TEXT NOT NULL,
+        state TEXT NOT NULL, tries INTEGER NOT NULL DEFAULT 0, updated_at REAL NOT NULL);
+    CREATE TABLE trips (
+        id TEXT PRIMARY KEY, purpose TEXT NOT NULL, proposed_urls TEXT NOT NULL,
+        fetched_urls TEXT NOT NULL, saved_notes TEXT NOT NULL,
+        state TEXT NOT NULL, card TEXT NOT NULL,
+        started_at REAL, finished_at REAL);
+    "#,
 ];
 
 /// The schema version this build writes.
@@ -169,6 +194,46 @@ mod tests {
             )
             .unwrap();
         assert_eq!((n, e), (100.0, 20.0));
+    }
+
+    #[test]
+    fn v2_db_upgrades_to_v3_with_learning_tables_and_keeps_data() {
+        let mut c = Connection::open_in_memory().unwrap();
+        assert_eq!(migrate_with(&mut c, &MIGRATIONS[..2]).unwrap(), 2);
+        c.execute_batch(
+            "INSERT INTO nodes(kind,key,label,strength,created_at,last_seen,updated_at)
+                 VALUES ('fact','k','Ko likes tea',1.0,100.0,500.0,100.0);",
+        )
+        .unwrap();
+        assert_eq!(migrate(&mut c).unwrap(), 3);
+        assert_eq!(LATEST, 3);
+        let n: i64 = c
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE name IN
+                 ('notes','sources','learn_jobs','trips','notes_topic')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 5);
+        let label: String = c
+            .query_row("SELECT label FROM nodes WHERE key='k'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(label, "Ko likes tea");
+        // node_id is cleared (not cascaded) when the graph node goes.
+        c.execute_batch(
+            "PRAGMA foreign_keys = ON;
+             INSERT INTO notes(id,path,topic,kind,title,source_type,source_ref,source_hash,
+                 content_hash,confidence,origin,node_id,created_at,updated_at)
+                 VALUES ('n-1','inbox/a.md','inbox','fact','A','man','ls(1)','h','c',0.5,
+                 'learned',(SELECT id FROM nodes WHERE key='k'),1.0,1.0);
+             DELETE FROM nodes WHERE key='k';",
+        )
+        .unwrap();
+        let nid: Option<i64> = c
+            .query_row("SELECT node_id FROM notes WHERE id='n-1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(nid, None);
     }
 
     #[test]

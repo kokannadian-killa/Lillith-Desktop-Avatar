@@ -289,3 +289,55 @@
 # proactive_interval_min = 12.0    # how often she checks
 # proactive_cooldown_min = 180.0   # same suggestion at most this often
 # proactive_max_per_hour = 2
+
+# Idle self-learning (docs/SELF_LEARNING.md). While you're away she reads one
+# small chunk of an installed doc (man / info pages, /usr/share/doc, the local
+# Rust / Python html docs) and keeps short private notes under
+# ~/.local/share/lillith/knowledge/<topic>/. Fully local: the idle loop never
+# uses the network, installs or runs anything; the only connection is the
+# loopback model server, and chat always gets it first. Off whenever memory
+# is off (enabled = false under memory). The safeword stops it at once and rests it.
+# `lillith learn --once --dry-run` shows one step; `--reindex` rebuilds the index.
+# [learn]
+# enabled = true
+# idle_after_s = 300.0         # desktop idle this long before a step
+# max_duty = 0.1               # at most 10% of the time busy (rests 9x each step)
+# max_load = 1.5               # 1-minute load average above this: wait
+# pause_on_battery = true
+# pause_on_activity = true     # any input drops a running step
+# pause_on_fullscreen = true
+# safeword_cooldown_min = 60.0 # rest after the safeword
+# max_tokens_per_day = 40000
+# max_steps_per_hour = 12
+# note_half_life_days = 90.0   # (later milestone)
+# topics = ["coding", "linux-garuda", "rust", "python", "ko-preferences", "self", "fixes", "tools", "web"]
+# allow_create_topics = true   # new topic folders ([a-z0-9-]{1,32}); unsure notes go to inbox/
+# prefer_notes_need_review = false
+# sources = ["man", "info", "doc", "rust-doc", "python-doc", "chat", "memory", "habits", "shared"]
+# max_file_bytes = 262144      # bigger doc files are skipped
+# The keys below belong to later milestones; they are read but unused for now.
+# share_socket = false   # P2; off until online learning is reviewed/merged
+# block_hosts = []
+# online = false         # P2; off until online learning is reviewed/merged
+# online_max_pages = 5
+# online_max_bytes = 2097152
+# tor_socks = "127.0.0.1:9050"
+# practice = true
+# [learn.dream]
+# min_minutes = 30
+# max_minutes = 480
+# max_workers = 2
+# external_bots = false
+# fetch_interval_s = 20
+# max_pages_per_hour = 60
+# max_bytes_per_session = 52428800
+# max_disk_mb = 100
+# dream_strength = 0.2
+# stop_battery_pct = 20
+# stop_cpu_temp_c = 85
+# [learn.workers]
+# heartbeat_s = 10
+# missed_heartbeats_kill = 3
+# max_restarts = 3
+# backoff_base_s = 5
+# breaker_failures = 3
