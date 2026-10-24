@@ -2565,12 +2565,15 @@ dependencies = [
  "eframe",
  "egui",
  "image",
+ "libc",
  "lillith-anim",
  "lillith-core",
  "lillith-setup",
  "lillith-theme",
  "rfd",
+ "serde_json",
  "toml_edit 0.22.27",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

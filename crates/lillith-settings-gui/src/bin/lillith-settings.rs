@@ -10,7 +10,7 @@ USAGE: lillith-settings [CONFIG_PATH] [OPTIONS]
 
   CONFIG_PATH          config.toml to edit (default: ~/.config/lillith/config.toml)
   --tab ID             open a tab: companion motion brain avatar icon voice build about
-                       access sealed-2
+                       access import
   --step NAME          Chat/Brain wizard step: avatar runtime pick-model persona test-save;
                        Companion: poses/N opens Poses category N;
                        Avatar: import:PATH imports an image, anchors:ID edits one

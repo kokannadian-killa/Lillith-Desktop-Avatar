@@ -59,6 +59,33 @@ if ! command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
+# ffmpeg + ffprobe: her MP4 poses and Pose Builder's "Import Video" need
+# them. A bundled bin/ffmpeg is used first if the zip has one; otherwise
+# they come from your system. Never installed silently: the command is
+# shown and the default answer is No (also with --yes / no terminal).
+if [[ -x $ROOT/bin/ffmpeg && -x $ROOT/bin/ffprobe ]]; then
+  echo "Using the bundled ffmpeg/ffprobe in $ROOT/bin"
+elif ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+  if command -v pacman >/dev/null 2>&1; then
+    echo "==> ffmpeg/ffprobe are missing (needed to play poses and import your own videos)."
+    echo "    To install them:  sudo pacman -S --needed ffmpeg"
+    reply=""
+    if [[ -t 0 ]]; then
+      read -r -p "    Run that now? [y/N] " reply || reply=""
+    fi
+    if [[ ${reply,,} == y || ${reply,,} == yes ]]; then
+      sudo pacman -S --needed ffmpeg
+    else
+      echo "    Skipped. Install it later with: sudo pacman -S --needed ffmpeg"
+    fi
+  else
+    echo "==> ffmpeg/ffprobe are missing (needed to play poses and import your own videos)."
+    echo "    Install the 'ffmpeg' package with your distro's package manager"
+    echo "    (Debian/Ubuntu: sudo apt install ffmpeg   Fedora: sudo dnf install ffmpeg"
+    echo "     openSUSE: sudo zypper install ffmpeg), or put ffmpeg and ffprobe in $ROOT/bin/."
+  fi
+fi
+
 # Default model: the one Ko already uses, then any .gguf in ~/models.
 # (Otherwise linux/install.sh searches your home folder and lets you pick.)
 # Never downloaded: the zip has no model (bundle/models/README.txt).

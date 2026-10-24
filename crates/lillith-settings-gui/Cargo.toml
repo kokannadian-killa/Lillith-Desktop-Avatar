@@ -28,6 +28,15 @@ eframe.workspace = true
 egui = { version = "0.31", default-features = false }
 image.workspace = true
 toml_edit = "0.22"
+serde_json.workspace = true
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"], optional = true }
+
+[target.'cfg(unix)'.dependencies]
+# SIGTERM / killpg for cancelling a video import.
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# CTRL_BREAK for cancelling a video import.
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Console"] }
 
 [dev-dependencies]
