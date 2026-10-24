@@ -87,7 +87,6 @@ mod imp {
     use crate::access::admin_proto::{
         pipe_sddl, random_hex, read_frame, write_frame, HelperArgs, Reply, Request, PIPE_PREFIX,
     };
-    use std::io::{Read, Write};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
@@ -253,6 +252,9 @@ mod imp {
         // Put the session back only if the helper process is still tracked
         // (force_kill may have cleared PROC mid-read).
         let helper_alive = PROC.lock().unwrap_or_else(|e| e.into_inner()).is_some();
+        // A helper launched per-command is never reused, even if the
+        // setting changed since it was started.
+        let per_command = per_command || session.per_command;
         if helper_alive && !per_command {
             let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
             *g = Some(session);

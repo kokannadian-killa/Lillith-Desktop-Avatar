@@ -24,8 +24,6 @@ use lillith_core::access::admin_proto::{read_frame, write_frame, Reply, Request}
 #[cfg(windows)]
 use lillith_core::access::winshell;
 #[cfg(windows)]
-use std::io::{Read, Write};
-#[cfg(windows)]
 use std::path::Path;
 #[cfg(windows)]
 use std::time::{Duration, Instant};
@@ -261,7 +259,8 @@ mod win {
     }
 
     #[allow(dead_code)]
-    fn _link(_: WAIT_TIMEOUT, f: std::fs::File) {
+    fn _link(f: std::fs::File) -> u32 {
         let _ = f.into_raw_handle();
+        WAIT_TIMEOUT
     }
 }
