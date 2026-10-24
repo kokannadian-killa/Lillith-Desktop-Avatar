@@ -59,9 +59,15 @@ defaults already point to `http://127.0.0.1:8080`, so no config is needed.
 
 ## 3b. …or let Lillith start it
 
-Set both paths under `[chat.server]`. Lillith then starts `llama-server` with the app
-(unless something already answers at `endpoint`) and stops it when she quits,
-including on Ctrl-C or SIGTERM.
+Set both paths under `[chat.server]`. Starting a program goes through the
+Soul Contract, so she asks first: when you chat and nothing answers at
+`endpoint`, the bubble shows a "Restart local model server?" card. Only a
+click on its **Yes** starts `llama-server` (audited `CONFIRM`; No, Esc, no
+answer within 120 s, or no card surface leave her text-only for 10 minutes).
+The app then owns the server and stops it when she quits, including on
+Ctrl-C or SIGTERM. `lillith chat --spawn-server` starts it straight away
+because you asked on the command line (audited `CLI_FLAG`). See
+[MEMORY.md](MEMORY.md) ("Desktop wiring") for the full table.
 
 ```toml
 # ~/.config/lillith/config.toml  (or any file passed with --config)

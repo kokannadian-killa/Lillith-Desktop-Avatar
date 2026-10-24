@@ -210,6 +210,7 @@
 # overlay_speech = true        # her replies in a speech bubble over her head
 # talk_jiggle = true
 # [chat.server]                # optional self-spawned llama-server (needs binary AND model_path)
+#                              # started only after a click on Yes on the Soul Contract card
 # binary = ""
 # model_path = ""
 # ctx_size = 4096

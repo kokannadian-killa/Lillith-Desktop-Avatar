@@ -108,17 +108,52 @@ exist; a stored fix string that is not one of them is never applied:
 
 | Failure (signature text) | Fixes | Where |
 | --- | --- | --- |
-| `llm: server unreachable` (nothing streamed yet) | `retry_backoff` (0.4 s, 1.2 s), `restart_llama_server` (only with `[chat.server]` configured and nothing answering; the startup spawn path, waits ≤90 s for `/health`) | `ChatSession::send` |
+| `llm: server unreachable` (nothing streamed yet) | `retry_backoff` (0.4 s, 1.2 s; same loopback server, no card), then `restart_llama_server` **only through the Soul Contract card** (see below) | `ChatSession::send` |
 | `llm: server loading` (503) | `retry_backoff` | `ChatSession::send` |
 | `voice: engine error (<engine>)` | `retry_backoff` (spoken lines rest 30 s, then worked when a line is spoken without a new error), `text_only` (speakers off for this run, never saved) | overlay voice sink |
-| `llama-server: spawn failed`, `setup: ...` | none (recorded, recurrences counted) | `ServerGuard::start`, `lillith setup` |
+| `llama-server: spawn failed`, `setup: ...` | none (recorded, recurrences counted) | `ServerHandle::spawn_approved`, `lillith setup` |
 | sensor crashes (`app.crash`, `*.error`) | none (recorded through the bridge) | feed |
 
 When nothing worked the chat answers with the usual in-character line for
 the *first* error. Recovery never contacts anything new: retries and the
 restart use the same loopback endpoint. With memory off the same fixes run
-in their default order and nothing is stored. A llama-server restarted by
-the chat bubble lives as long as that bubble process.
+in their default order and nothing is stored.
+
+**Restarting llama-server is a program launch: Soul Contract card only.**
+Recovery never spawns anything. When `[chat.server]` is configured, nothing
+answers and the plain retries failed, the session files one
+`start_model_server` request (`PendingAction::StartModelServer`, the exact
+command line with `--api-key` masked) and returns the text-only fallback at
+once; the chat stays usable while the card waits.
+
+| What happens | Result | Audit log (`audit.log`, also `commands.log`) |
+| --- | --- | --- |
+| Card filed | "Restart local model server?" card in the chat bubble ("Start …" before any reply this session) | `PROPOSED` |
+| **Click on Yes** (the only approval) | server started, then her last message is sent again (plain retry) | `CONFIRM` |
+| Click on No, or Esc on the card | text-only, 10 min cooldown | `DENY` |
+| No answer for 120 s | text-only, cooldown | `TIMEOUT` |
+| No card surface (`lillith chat` CLI, headless) | text-only straight away, cooldown | `NO_UI` |
+| Safeword (`red`) while it waits | dropped, cooldown | `CANCELLED` |
+
+- Typed or spoken "yes" never approves: chat text (`yes`, `/contract yes`)
+  is just a message, the voice path is refused while a card is up, and the
+  start call (`start_approved_server` / `wait_for_approved_server`) does
+  nothing without the recorded click.
+- At most one card at a time; while it is pending or cooling down recovery
+  only retries. The restart is never retried in a loop: a failed approved
+  start also cools down. Its outcome is remembered as the
+  `restart_llama_server` fix.
+- Audited to `[mind]`'s `audit.log`, or the same default path in the data
+  dir when `[mind]` is off.
+- **Startup is gated the same way.** The overlay no longer starts
+  `[chat.server]` by itself: the config only says *which* server may be
+  asked for, it is not an approval. The first chat finds nothing answering
+  and raises the same card; a clicked Yes makes the bubble emit
+  `chat.server_approved`, and the overlay spawns the server (it owns it and
+  stops it on exit, Ctrl-C or SIGTERM). A standalone `lillith chat-bubble`
+  (no `--app-server`) starts it in its own session instead.
+- `lillith chat --spawn-server` is Ko's own per-run command-line request, so
+  it starts the server without a card and is audited `CLI_FLAG`.
 
 ## On by default; turning it off; forgetting
 
@@ -188,3 +223,8 @@ a failure to rewrite it is said in the reply.
   habits are learned on KDE only.
 - LLM-assisted extraction: `Extractor` trait hook exists; the default is the
   rule-based extractor.
+- Model-server card decisions for the lead: startup no longer auto-starts
+  `[chat.server]` (it now waits for the card on first chat), and
+  `lillith chat --spawn-server` counts as Ko's explicit request (audited
+  `CLI_FLAG`, no card). The bubble closing while a card is up leaves only
+  the `PROPOSED` line (the bubble process is killed, so no `CANCELLED`).

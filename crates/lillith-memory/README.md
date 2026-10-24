@@ -84,7 +84,8 @@ if let Some(cmd) = parse_forget("forget the last 30 minutes") {
 - `recovery`: record a failure with a stable text, order the built-in
   `SafeFix`es (`retry_backoff`, `restart_llama_server`, `text_only`) by
   what worked before, record each outcome. `ChatSession::send` uses it for
-  an unreachable / loading llama-server.
+  an unreachable / loading llama-server; the restart is never run by
+  recovery itself, only after a clicked Yes on the Soul Contract card.
 
 See `docs/MEMORY.md` ("Desktop wiring").
 
