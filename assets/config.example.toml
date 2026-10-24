@@ -160,7 +160,7 @@
 # enabled = true
 # engine = "auto"        # auto | piper | espeak-ng | spd-say | none   (auto: piper → espeak-ng → spd-say → silent)
 # model = "~/.local/share/lillith/piper/en_US-amy-medium.onnx"   # piper .onnx; unset = none
-# model = "~/.local/share/lillith-voice/lillith.onnx"   # Ko's cloned voice (lillith-voice kit, install.sh --piper-shim; engine = "piper")
+#   or Ko's cloned voice: model = "~/.local/share/lillith-voice/lillith.onnx"   (lillith-voice kit, install.sh --piper-shim; engine = "piper")
 # voice = "female1"      # optional (spd-say -t / espeak-ng -v); unset = engine default
 # rate = 1.0             # 0.5..2.0
 # volume = 0.8           # 0..1
@@ -175,18 +175,18 @@
 # Loopback only: a non-127.0.0.1/localhost server_url or ollama_host is an error.
 # [llm]
 # backend = "llama-server"     # llama-server | ollama
-# gguf_path = ""               # the .gguf model file (empty = not chosen yet)
+# gguf_path = ""               # the .gguf model file (empty = not chosen yet), e.g. "~/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf"
 # server_url = "http://127.0.0.1:8080"
 # ollama_host = "http://127.0.0.1:11434"
 # ollama_model = "lily"
 # temperature = 0.95
 # ctx_size = 4096
-# chat_template = "chatml"
+# chat_template = "chatml"     # Ollama Modelfile only; llama-server always launches with --jinja (the model's own template)
 # llama_server_bin = ""        # empty = find llama-server on PATH
 # modelfile_path = ""          # empty = default path
 # system_prompt = ""           # empty = Lily's built-in persona
 # scan_paths = []              # extra folders for the GGUF scanner
-# threads = 0                  # llama-server -t (0 = auto)
+# threads = 0                  # llama-server -t (0 = this machine's physical cores)
 
 # ── Click-to-chat bubble ─────────────────────────────────────────────────────
 # [chat]
@@ -207,9 +207,9 @@
 # binary = ""
 # model_path = ""
 # ctx_size = 4096
-# threads = 0
-# gpu_layers = 99              # -ngl; unset = llama-server's default
-# extra_args = []
+# threads = 0                  # 0 = llama-server's own default; lillith setup writes your physical cores
+# gpu_layers = 99  # sample; default unset = no -ngl
+# extra_args = []             # lillith setup writes ["--jinja"]; keep it
 # startup_timeout_s = 90.0
 
 # ── Knowledge, skills and file access (everything gated by the Soul Contract) ─

@@ -283,11 +283,19 @@ mkdir -p ~/.config/lillith
 test -f ~/.config/lillith/config.toml; or cp assets/config.example.toml ~/.config/lillith/config.toml
 ```
 
+On Windows (cmd), from the source folder:
+
+```bat
+if not exist "%APPDATA%\lillith" mkdir "%APPDATA%\lillith"
+if not exist "%APPDATA%\lillith\config.toml" copy assets\config.example.toml "%APPDATA%\lillith\config.toml"
+```
+
 The keys people change most are `mode`, `scale`, `[overlay] auto_fix_kwin`
 (the KDE blur fix at start-up), `[voice] enabled` (the **Speak out loud**
 toggle), `[behavior.tease]` (the "come closer" tease) and `[mind.access]`
 (what she may do on your machine, always behind the Soul Contract).
-`lillith setup` writes `[llm]` and `[chat]`.
+`lillith setup` (and the setup wizard) writes `[llm]`, `[chat]` and, for
+llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--jinja"]`).
 
 ---
 
