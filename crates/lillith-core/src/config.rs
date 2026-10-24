@@ -610,15 +610,15 @@ fn resolve_dir(override_path: &str, name: &str) -> Option<PathBuf> {
 }
 
 /// `$XDG_DATA_HOME/lillith`, else `~/.local/share/lillith`.
-/// Windows: `$XDG_DATA_HOME`, else `%LOCALAPPDATA%` (then `%APPDATA%`), else
-/// `~/.local/share` (`HOME` is usually unset there), matching the chat
-/// history and icon cache paths.
+/// Windows: `$XDG_DATA_HOME`, else `%LOCALAPPDATA%`, else `~/.local/share`
+/// (`HOME` is usually unset there), matching the chat history and icon cache
+/// paths. Roaming `%APPDATA%` is deliberately *not* a fallback: on domain
+/// roaming profiles it syncs to a server, which breaks the local-only rule.
 pub fn data_dir() -> Option<PathBuf> {
     let var = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty());
     data_dir_from(
         var("XDG_DATA_HOME"),
         var("LOCALAPPDATA"),
-        var("APPDATA"),
         var("HOME"),
         cfg!(windows),
     )
@@ -628,14 +628,12 @@ pub fn data_dir() -> Option<PathBuf> {
 pub fn data_dir_from(
     xdg_data_home: Option<std::ffi::OsString>,
     local_app_data: Option<std::ffi::OsString>,
-    app_data: Option<std::ffi::OsString>,
     home: Option<std::ffi::OsString>,
     windows: bool,
 ) -> Option<PathBuf> {
     let base = xdg_data_home.map(PathBuf::from);
     let base = if windows {
         base.or_else(|| local_app_data.map(PathBuf::from))
-            .or_else(|| app_data.map(PathBuf::from))
     } else {
         base
     };
@@ -745,7 +743,8 @@ impl Default for AvatarConfig {
 /// database is opened, nothing is read or written. Everything stays in one
 /// local SQLite file; there is no network code. Say "forget everything",
 /// "forget about <topic>" or "forget the last 30 minutes" in chat to delete
-/// memories (rows are deleted and the file is vacuumed). Messages that are
+/// memories (rows are deleted and the file is vacuumed; everything, a topic
+/// and windows over an hour ask for a "yes" first). Messages that are
 /// the safeword ("red", "OOC: stop") are never stored.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1101,26 +1100,32 @@ mod tests {
     fn data_dir_has_a_windows_fallback() {
         use std::ffi::OsString;
         let o = |s: &str| Some(OsString::from(s));
-        // Windows without HOME (the usual case): %LOCALAPPDATA%, then %APPDATA%.
+        // Windows without HOME (the usual case): %LOCALAPPDATA%.
         assert_eq!(
-            data_dir_from(None, o("C:/Users/ko/AppData/Local"), o("C:/R"), None, true),
+            data_dir_from(None, o("C:/Users/ko/AppData/Local"), None, true),
             Some(PathBuf::from("C:/Users/ko/AppData/Local").join("lillith"))
         );
+        // %LOCALAPPDATA% beats HOME on Windows.
         assert_eq!(
-            data_dir_from(None, None, o("C:/R"), None, true),
-            Some(PathBuf::from("C:/R").join("lillith"))
+            data_dir_from(None, o("C:/L"), o("C:/Users/ko"), true),
+            Some(PathBuf::from("C:/L").join("lillith"))
         );
+        // No roaming %APPDATA% fallback (local-only rule): HOME, else nothing.
+        assert_eq!(
+            data_dir_from(None, None, o("/home/ko"), true),
+            Some(PathBuf::from("/home/ko/.local/share/lillith"))
+        );
+        assert_eq!(data_dir_from(None, None, None, true), None);
         // XDG wins everywhere; unix ignores the Windows variables.
         assert_eq!(
-            data_dir_from(o("/x"), o("C:/L"), None, o("/home/ko"), true),
+            data_dir_from(o("/x"), o("C:/L"), o("/home/ko"), true),
             Some(PathBuf::from("/x/lillith"))
         );
         assert_eq!(
-            data_dir_from(None, o("C:/L"), None, o("/home/ko"), false),
+            data_dir_from(None, o("C:/L"), o("/home/ko"), false),
             Some(PathBuf::from("/home/ko/.local/share/lillith"))
         );
-        assert_eq!(data_dir_from(None, None, None, None, true), None);
-        assert_eq!(data_dir_from(None, o("C:/L"), None, None, false), None);
+        assert_eq!(data_dir_from(None, o("C:/L"), None, false), None);
     }
 
     #[test]

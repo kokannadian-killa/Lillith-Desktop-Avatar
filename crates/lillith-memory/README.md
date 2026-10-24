@@ -48,8 +48,9 @@ let rec = brain.record_error(&err_text, "chat.server", &ctx)?;      // count + k
 brain.record_fix(&err_text, "set threads = 2", FixOutcome::Worked, &ctx)?;
 let fix = brain.known_fix(&err_text);
 
-// Forget (deletes rows, then VACUUM + checked WAL truncate). Whole-word
-// topic matching; `forget_preview` counts without deleting.
+// Forget (deletes rows, then VACUUM + checked WAL truncate). A topic must
+// match as a whole within one row (`matches_topic`); `forget_preview` counts
+// without deleting and carries a few example labels.
 if let Some(cmd) = parse_forget("forget the last 30 minutes") {
     let report = brain.forget(&cmd, &ctx)?;   // counts + `scrubbed`
 }
@@ -68,7 +69,8 @@ if let Some(cmd) = parse_forget("forget the last 30 minutes") {
 - `lillith-mind::ChatSession::with_memory(&MemoryConfig)` attaches a brain:
   the system prompt gets the `[Memory]` block, replies feed
   `observe_interaction`, and "forget ..." messages are answered locally
-  ("forget everything" / "forget about X" need a "yes"; chat history is
+  ("forget everything" / "forget about X" / windows over an hour need a
+  "yes", see `ForgetCmd::needs_confirm`; chat history is
   pruned too, under a lock file). The bare safeword is still handled
   first by the kill switch in `ChatSession::send`.
 - `lillith chat` and `lillith chat-bubble` pass `Config::memory` through.
