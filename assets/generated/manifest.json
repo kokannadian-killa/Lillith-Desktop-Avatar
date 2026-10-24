@@ -4860,6 +4860,34 @@
    ],
    "allure": true,
    "video": "bend_forward_wink_long/bend_forward_wink_long.mp4"
+  },
+  {
+   "name": "perch_sit",
+   "frame_count": 96,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.5,
+   "body_anchor_x": 200,
+   "facing": "front (seated on an edge, legs dangling)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "perch_sit/",
+   "sheet": "perch_sit/perch_sit_sheet.png",
+   "manifest": "perch_sit/perch_sit.json",
+   "preview": "perch_sit/perch_sit_preview.gif",
+   "tags": [
+    "baked_motion",
+    "sit_base"
+   ],
+   "video": "perch_sit/perch_sit.mp4"
   }
  ]
 }
