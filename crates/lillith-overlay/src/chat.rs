@@ -26,6 +26,7 @@
 
 use crate::speech::SpeechView;
 use lillith_anim::animator::Animator;
+use lillith_anim::lipsync::TalkMouth;
 use lillith_anim::talk::{
     LipFlap, Mouth, MouthMap, DEFAULT_TALK_SPEED, TALK_CLIP, TALK_CLIP_FLIRTY,
 };
@@ -214,7 +215,12 @@ impl Speech {
 /// Speaking state.
 #[derive(Debug, Clone, Default)]
 pub struct Talk {
-    flap: LipFlap,
+    /// Lip-flap from the text, or audio lip-sync from the voice daemon.
+    mouth: TalkMouth,
+    /// Local monotonic clock (ms, summed `dt`) for audio lip-sync.
+    clock_ms: u64,
+    /// A lip-sync event (stop / reset) ended the audio mouth between ticks.
+    audio_ended: bool,
     /// Fallback lip-flap (no mouth patches): frames by baked mouth.
     frames: Option<MouthMap>,
     /// Mouth patches are pasted over the playing body (true lip-sync).
@@ -242,23 +248,40 @@ impl Talk {
     /// Talk state with lip-flap at `speed` (`[anim] talk_speed`).
     pub fn with_speed(speed: f32) -> Self {
         Self {
-            flap: LipFlap::with_speed(speed),
+            mouth: TalkMouth::new(LipFlap::with_speed(speed)),
             ..Self::default()
         }
     }
 
     /// `true` while she is speaking (stream + end smile).
     pub fn active(&self) -> bool {
-        self.flap.active()
+        self.mouth.active()
+    }
+
+    /// Feeds one voice-daemon lip-sync event line (drives her mouth from
+    /// the audio while it plays). Malformed lines are ignored.
+    pub fn feed_lipsync(&mut self, line: &str) {
+        let was = self.mouth.active();
+        if let Err(e) = self.mouth.audio.feed_line(line, self.clock_ms) {
+            tracing::debug!("lipsync line ignored: {e}");
+        }
+        self.audio_ended |= was && !self.mouth.active();
+    }
+
+    /// Drops audio lip-sync (daemon gone, barge-in, safeword).
+    pub fn reset_lipsync(&mut self) {
+        let was = self.mouth.active();
+        self.mouth.audio.reset();
+        self.audio_ended |= was && !self.mouth.active();
     }
 
     pub fn speed(&self) -> f32 {
-        self.flap.speed()
+        self.mouth.flap.speed()
     }
 
     /// Lip-flap pace (`[anim] talk_speed`, live from Settings).
     pub fn set_speed(&mut self, speed: f32) {
-        self.flap.set_speed(speed);
+        self.mouth.flap.set_speed(speed);
     }
 
     /// `true` if mouth patches drive her mouth (else baked-frame picking).
@@ -268,7 +291,7 @@ impl Talk {
 
     /// Characters per second the speech is revealed at.
     fn reveal_cps(&self) -> f32 {
-        REVEAL_CPS * self.flap.speed() / DEFAULT_TALK_SPEED
+        REVEAL_CPS * self.mouth.flap.speed() / DEFAULT_TALK_SPEED
     }
 
     /// Applies a `chat.*` event. Returns `false` for other names.
@@ -278,47 +301,14 @@ impl Talk {
         }
         match name {
             CHAT_START => {
-                self.flap.start();
+                self.mouth.flap.start();
                 self.streaming = true;
                 self.finish_pending = false;
                 self.since_event = 0.0;
                 self.speech = Some(Speech::default());
                 self.one_off = false;
                 self.replies = self.replies.wrapping_add(1);
-                let flirty_turn = self.replies % 2 == 0;
-                let pick = [
-                    if flirty_turn {
-                        TALK_CLIP_FLIRTY
-                    } else {
-                        TALK_CLIP
-                    },
-                    TALK_CLIP,
-                    TALK_CLIP_FLIRTY,
-                ]
-                .into_iter()
-                .find(|c| anim.has_clip(c));
-                anim.set_mouth(None);
-                // Whatever little reaction was playing (hover, idle fidget)
-                // stops: she turns to talk.
-                if pick.is_some() {
-                    anim.clear_overlays();
-                }
-                match pick {
-                    Some(c) => {
-                        tracing::debug!(clip = c, "talking");
-                        let _ = anim.set_base(c, false);
-                        self.took_base = true;
-                        self.setup_mouth(c, anim);
-                        self.clip = Some(c.to_string());
-                    }
-                    None => {
-                        self.took_base = false;
-                        self.frames = None;
-                        self.patches = false;
-                        self.flap.set_shape_ms(None);
-                        self.clip = None;
-                    }
-                }
+                self.take_talk_base(anim);
             }
             CHAT_TOKEN => {
                 if !self.streaming {
@@ -361,6 +351,45 @@ impl Talk {
         true
     }
 
+    /// Sets the talk clip of this reply as base (plain/flirty alternate)
+    /// and sets up its mouth; idle if she has no talk clip.
+    fn take_talk_base(&mut self, anim: &mut Animator) {
+        let flirty_turn = self.replies % 2 == 0;
+        let pick = [
+            if flirty_turn {
+                TALK_CLIP_FLIRTY
+            } else {
+                TALK_CLIP
+            },
+            TALK_CLIP,
+            TALK_CLIP_FLIRTY,
+        ]
+        .into_iter()
+        .find(|c| anim.has_clip(c));
+        anim.set_mouth(None);
+        // Whatever little reaction was playing (hover, idle fidget)
+        // stops: she turns to talk.
+        if pick.is_some() {
+            anim.clear_overlays();
+        }
+        match pick {
+            Some(c) => {
+                tracing::debug!(clip = c, "talking");
+                let _ = anim.set_base(c, false);
+                self.took_base = true;
+                self.setup_mouth(c, anim);
+                self.clip = Some(c.to_string());
+            }
+            None => {
+                self.took_base = false;
+                self.frames = None;
+                self.patches = false;
+                self.mouth.flap.set_shape_ms(None);
+                self.clip = None;
+            }
+        }
+    }
+
     /// Patch lip-sync if the drawn talk clip (or its clean sibling) has
     /// mouth patches, else frame picking on the drawn clip.
     fn setup_mouth(&mut self, base: &str, anim: &Animator) {
@@ -375,16 +404,16 @@ impl Talk {
                 .mouth_shape_ms
                 .or(clean.and_then(|c| c.mouth_shape_ms))
                 .unwrap_or(DEFAULT_MOUTH_SHAPE_MS);
-            self.flap.set_shape_ms(Some(ms));
+            self.mouth.flap.set_shape_ms(Some(ms));
             self.frames = None;
         } else {
-            self.flap.set_shape_ms(None);
+            self.mouth.flap.set_shape_ms(None);
             self.frames = MouthMap::for_clip(d).or_else(|| clean.and_then(MouthMap::for_clip));
         }
         tracing::debug!(
             clip = drawn,
             patches = self.patches,
-            shape_s = ?self.flap.shape_s(),
+            shape_s = ?self.mouth.flap.shape_s(),
             "lip-sync"
         );
     }
@@ -400,7 +429,7 @@ impl Talk {
             }
             s.done = true;
         } else {
-            self.flap.finish();
+            self.mouth.flap.finish();
             self.finish_pending = false;
         }
     }
@@ -418,21 +447,33 @@ impl Talk {
         let cps = self.reveal_cps();
         if let Some(s) = &mut self.speech {
             let piece = s.advance(dt, cps);
-            if !piece.is_empty() && self.flap.active() {
-                self.flap.on_token(&piece);
+            if !piece.is_empty() && self.mouth.flap.active() {
+                self.mouth.flap.on_token(&piece);
             }
             if self.finish_pending && s.fully_revealed() {
-                self.flap.finish();
+                self.mouth.flap.finish();
                 self.finish_pending = false;
             }
             if s.finished() {
                 self.speech = None;
             }
         }
-        let was = self.flap.active();
-        let mouth = self.flap.tick(dt);
+        self.clock_ms = self
+            .clock_ms
+            .saturating_add((dt.max(0.0) * 1000.0).round() as u64);
+        let was = self.mouth.active() || std::mem::take(&mut self.audio_ended);
+        let mouth = self.mouth.tick(dt, self.clock_ms);
+        // The voice usually starts after the text finished: take the talk
+        // clip again while the audio drives her mouth.
+        if self.mouth.audio_driven() && self.clip.is_none() {
+            self.take_talk_base(anim);
+        }
         self.mouth_now = mouth;
         let on_talk_base = self.clip.as_deref().is_some_and(|c| anim.base() == c);
+        // The audio mouth can end on a last closing shape: finish next tick.
+        if mouth.is_some() && was && !self.mouth.active() {
+            self.audio_ended = true;
+        }
         match mouth {
             Some(m) if on_talk_base => {
                 if self.patches {
@@ -444,7 +485,7 @@ impl Talk {
                 }
             }
             Some(_) => {}
-            None if was => {
+            None if was && !self.mouth.active() => {
                 if on_talk_base {
                     anim.pin_base_frame(None);
                     anim.set_mouth(None);
@@ -479,6 +520,64 @@ mod tests {
         g.click(4.0, 0.35);
         g.cancel();
         assert!(!g.poll(5.0, 0.35));
+    }
+
+    #[test]
+    fn daemon_lipsync_lines_drive_her_mouth_and_talk_clip() {
+        use lillith_anim::animator::AnimatorConfig;
+        let mut toml = String::new();
+        for name in ["idle", TALK_CLIP] {
+            toml += &format!(
+                "[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\nmode = \"loop\"\nframes = ["
+            );
+            for i in 0..4 {
+                toml += &format!(
+                    "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                    i * 400
+                );
+            }
+            toml += "]\n";
+        }
+        let manifest = lillith_anim::atlas::Manifest::from_toml_str(&toml).unwrap();
+        let cfg = AnimatorConfig {
+            idle_enabled: false,
+            ..AnimatorConfig::default()
+        };
+        let mut anim = Animator::new(manifest, cfg).unwrap();
+        let mut talk = Talk::with_speed(DEFAULT_TALK_SPEED);
+        talk.tick(0.016, &mut anim);
+        assert!(!talk.active());
+        // No chat stream at all: the voice alone moves her mouth.
+        let pts: Vec<String> = (0..=60).map(|i| format!("[{},0.6]", i * 33)).collect();
+        talk.feed_lipsync(&format!(
+            r#"{{"ev":"envelope","utt":7,"chunk":0,"fps":30,"pts":[{}]}}"#,
+            pts.join(",")
+        ));
+        talk.feed_lipsync(r#"{"ev":"chunk_start","utt":7,"chunk":0,"mono_ms":12345}"#);
+        talk.feed_lipsync("not json");
+        let mut opened = false;
+        for _ in 0..20 {
+            talk.tick(0.016, &mut anim);
+            opened |= talk.mouth_now == Some(Mouth::Open);
+        }
+        assert!(talk.active(), "audio drives the mouth");
+        assert!(opened, "loud envelope opens the mouth");
+        assert_eq!(anim.base(), TALK_CLIP, "talk clip taken for the voice");
+        // Barge-in / stop: mouth closes and she goes back to idle.
+        talk.feed_lipsync(r#"{"ev":"stop","utt":7}"#);
+        for _ in 0..5 {
+            talk.tick(0.016, &mut anim);
+        }
+        assert!(!talk.active());
+        assert_eq!(talk.mouth_now, None);
+        assert_ne!(anim.base(), TALK_CLIP);
+        // reset_lipsync (daemon gone) also ends it.
+        talk.feed_lipsync(r#"{"ev":"chunk_start","utt":8,"chunk":0,"mono_ms":1}"#);
+        talk.tick(0.016, &mut anim);
+        assert!(talk.active());
+        talk.reset_lipsync();
+        talk.tick(0.016, &mut anim);
+        assert!(!talk.active());
     }
 
     #[test]

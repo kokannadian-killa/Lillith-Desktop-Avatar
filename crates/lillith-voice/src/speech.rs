@@ -161,6 +161,7 @@ impl Shared {
 pub struct Voice {
     cfg: VoiceConfig,
     engine_name: &'static str,
+    voice_warning: Option<String>,
     shared: Arc<Shared>,
     worker: Option<JoinHandle<()>>,
     gate: Gate,
@@ -188,20 +189,21 @@ impl Voice {
     /// Detects the engine for `cfg` (logs the choice once) with the
     /// [`DefaultLines`] table.
     pub fn from_config(cfg: VoiceConfig) -> Self {
-        Self::from_config_with(cfg, &crate::engine::which)
+        Self::from_config_with(cfg, &crate::engine::which, &crate::engine::ping_daemon)
     }
 
     fn from_config_with(
         cfg: VoiceConfig,
         lookup: &dyn Fn(&str) -> Option<std::path::PathBuf>,
+        probe: &crate::engine::DaemonProbe,
     ) -> Self {
         // Probe even when the speakers are off so the live toggle can switch
         // them on later without a restart; `enabled` stays as configured.
-        let probe = VoiceConfig {
+        let probe_cfg = VoiceConfig {
             enabled: true,
             ..cfg.clone()
         };
-        let d = crate::engine::detect_with(&probe, lookup);
+        let d = crate::engine::detect_full(&probe_cfg, lookup, probe);
         if d.engine.is_real() && !cfg.enabled {
             tracing::info!("voice: {} (speakers off until toggled on)", d.reason);
         } else if d.engine.is_real() {
@@ -234,6 +236,7 @@ impl Voice {
             enabled: AtomicBool::new(cfg.enabled),
         });
         let engine_name = engine.name();
+        let voice_warning = engine.voice_warning();
         // Spawned even while disabled so the speakers switch works live.
         let worker = engine.is_real().then(|| {
             let sh = Arc::clone(&shared);
@@ -247,6 +250,7 @@ impl Voice {
             gate: Gate::new(cfg.cooldown_s, cfg.repeat_cooldown_s),
             cfg,
             engine_name,
+            voice_warning,
             shared,
             worker,
             lines,
@@ -256,6 +260,11 @@ impl Voice {
 
     pub fn engine_name(&self) -> &'static str {
         self.engine_name
+    }
+    /// Degraded-voice notice for the UI, e.g. "using fallback voice p1
+    /// (cloned 'lillith' voice unavailable)". `None` when all is well.
+    pub fn voice_warning(&self) -> Option<&str> {
+        self.voice_warning.as_deref()
     }
     /// `true` if lines can actually be heard (enabled + a real engine).
     pub fn is_active(&self) -> bool {
@@ -636,7 +645,7 @@ mod tests {
             ..cfg()
         };
         let lookup = |b: &str| (b == "espeak-ng").then(|| std::path::PathBuf::from("/x/espeak-ng"));
-        let mut v = Voice::from_config_with(c, &lookup);
+        let mut v = Voice::from_config_with(c, &lookup, &|_| None);
         assert!(v.has_engine() && !v.enabled() && !v.is_active());
         v.set_enabled(true);
         assert!(v.is_active());
