@@ -57,6 +57,29 @@ public final class VoiceTests {
         return "'" + s.replace("\n", "\\n").replace("\t", "\\t") + "'";
     }
 
+    static final String[][] TEXTNORM_PINNED = {
+        {"Meet me at 5:30 today", "Meet me at five thirty today"},
+        {"at 5:30 tonight, okay?", "at five thirty tonight, okay?"},
+        {"5:30 amazing", "five thirty amazing"},
+        {"at 5:30pm", "at five thirty P M"},
+        {"at 5:30 p.m. sharp", "at five thirty P M sharp"},
+        {"at 7:05 AM", "at seven oh five A M"},
+        {"at 9:00", "at nine o'clock"},
+        {"5, maybe 6", "five, maybe six"},
+        {"I want 3, no 4, kisses", "I want three, no four, kisses"},
+        {"1,000 kisses", "one thousand kisses"},
+        {"1,234,567 stars", "one million two hundred thirty-four thousand five hundred sixty-seven stars"},
+        {"$5, maybe $6", "five dollars, maybe six dollars"},
+        {"$1,250.50 total", "one thousand two hundred fifty dollars and fifty cents total"},
+        {"$1", "one dollar"},
+        {"in 1999", "in nineteen ninety-nine"},
+        {"3.14", "three point one four"},
+        {"50%", "fifty percent"},
+        {"the 21st", "the twenty-first"},
+        {"hiii~ hehe", "hiii Hehe."},
+        {"at 5pm", "at five P M"},
+    };
+
     public static void main(String[] a) throws Exception {
         File fx = new File(a[0]);
         SpTokenizer tok = SpTokenizer.load(new File(a[1]));
@@ -68,6 +91,15 @@ public final class VoiceTests {
             check("textnorm", want.equals(got), show(in) + " -> " + show(got) + " want " + show(want));
         }
         report("textnorm", before);
+
+        // pinned expectations, independent of the kit (mirror of tools/lillith-voice/tests/textnorm_test.py):
+        // "at 5:30 today" keeps its space, "5, maybe 6" keeps its comma
+        before = fail;
+        for (String[] r : TEXTNORM_PINNED) {
+            String got = TextNorm.normalize(r[0]);
+            check("textnorm pinned", r[1].equals(got), show(r[0]) + " -> " + show(got) + " want " + show(r[1]));
+        }
+        report("textnorm pinned", before);
 
         before = fail;
         for (String[] r : tsv(fx, "clean_split.tsv")) {

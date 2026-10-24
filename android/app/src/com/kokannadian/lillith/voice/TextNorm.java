@@ -164,13 +164,17 @@ public final class TextNorm {
     static {
         for (int i = 0; i < ABBR_SRC.length; i++) ABBR[i] = PyRe.compile(ABBR_SRC[i][0]);
     }
-    private static final Pattern MONEY = PyRe.compile("([$£€])\\s?(\\d[\\d,]*)(?:\\.(\\d{1,2}))?");
-    private static final Pattern TIME = PyRe.compile("\\b(\\d{1,2}):(\\d{2})\\s*([ap]\\.?m\\.?)?", PyRe.I);
+    // an integer, with "," only as a thousands separator (1,234,567), never a trailing comma (textnorm._INT)
+    private static final String INT = "(?:\\d{1,3}(?:,\\d{3})+(?!\\d)|\\d+)";
+    private static final Pattern MONEY = PyRe.compile("([$£€])\\s?(" + INT + ")(?:\\.(\\d{1,2}))?");
+    // am/pm only as its own word: "at 5:30 today" keeps the space before "today"
+    private static final Pattern TIME = PyRe.compile("\\b(\\d{1,2}):(\\d{2})(?:\\s*([ap]\\.?m\\b\\.?))?", PyRe.I);
     private static final Pattern PCT = PyRe.compile("\\b(\\d+)\\s*%");
     private static final Pattern ORD = PyRe.compile("\\b(\\d+)(st|nd|rd|th)\\b");
     private static final Pattern AMPM = PyRe.compile("\\b(\\d+)\\s*(am|pm)\\b", PyRe.I);
     private static final Pattern DECADE = PyRe.compile("\\b(\\d+)'s\\b");
-    private static final Pattern NUM = PyRe.compile("(?<![\\w.])\\d[\\d,]*(?:\\.\\d+)?(?![\\w])");
+    // a comma is a thousands separator only before exactly 3 digits: "5, maybe 6" keeps its comma
+    private static final Pattern NUM = PyRe.compile("(?<![\\w.])" + INT + "(?:\\.\\d+)?(?![\\w])");
     private static final Pattern WS = PyRe.compile("\\s+");
 
     public static String normalize(String text) {
