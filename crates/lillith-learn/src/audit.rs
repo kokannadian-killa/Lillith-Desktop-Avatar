@@ -81,6 +81,21 @@ pub fn record_online(
     write_line(log, &online_line(crate::now_s(), state, card, fields))
 }
 
+/// Appends a helper-worker line (`<ts>\tWORKER\t<op>\t<reason>\tjob=<id>`,
+/// docs §12) to `log`.
+pub fn record_worker(log: Option<&Path>, op: &str, reason: &str, job: &str) -> std::io::Result<()> {
+    let Some(log) = log else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no audit log path",
+        ));
+    };
+    write_line(
+        log,
+        &crate::workers::audit_line(crate::now_s(), op, reason, job),
+    )
+}
+
 /// Appends a `LEARN` line to `log` (file 0600 when created). Failures are
 /// logged, never fatal.
 pub fn record(log: Option<&Path>, op: &str, topic: &str, note_id: &str) {

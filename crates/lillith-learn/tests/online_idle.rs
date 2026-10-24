@@ -38,8 +38,14 @@ fn idle_path_starts_no_online_trip() {
         0,
         "the idle path must never start a trip"
     );
+    assert_eq!(
+        lillith_learn::workers::workers_spawned(),
+        0,
+        "the idle path must never spawn a helper worker"
+    );
     let log = std::fs::read_to_string(d.join("audit.log")).unwrap_or_default();
     assert!(!log.contains("online_research"), "{log}");
+    assert!(!log.contains("\tWORKER\t"), "{log}");
     let _ = std::fs::remove_dir_all(&d);
 
     // And no idle-path module even knows the trip engine exists.
@@ -55,6 +61,9 @@ fn idle_path_starts_no_online_trip() {
             "Fetcher",
             "TorFetcher",
             "TripRequest",
+            "workers::",
+            "Supervisor",
+            "WorkerProc",
         ] {
             assert!(!src.contains(bad), "{name} mentions {bad}");
         }
