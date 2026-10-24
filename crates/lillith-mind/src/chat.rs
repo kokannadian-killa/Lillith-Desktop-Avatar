@@ -1026,6 +1026,19 @@ impl ChatSession {
             tracing::debug!("chat: model-server card cooling down; text-only");
             return;
         }
+        // A refused extra arg is rejected before any card (one ARG_REFUSED
+        // line; the settings window names it), so Yes can never be clicked
+        // on a start that would then fail. Cooldown: no audit spam.
+        let bin = lillith_setup::launch::resolve_program(&cfg.server.binary);
+        if let Err(e) = crate::server::check_extra_args_audited(
+            &cfg.server.extra_args,
+            &bin.display().to_string(),
+            self.server_audit_log(),
+        ) {
+            tracing::warn!(error = %e, "chat: [chat.server] extra_args refused; no model-server card (text-only)");
+            self.server_card.cooldown_until = Some(Instant::now() + SERVER_CARD_COOLDOWN);
+            return;
+        }
         let Some(argv) = crate::server::display_argv(cfg) else {
             return;
         };
@@ -2321,6 +2334,30 @@ mod tests {
             k.failed_fixes.iter().any(|x| x == "restart_llama_server"),
             "{k:?}"
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_refused_extra_arg_files_no_card_and_is_audited() {
+        let mut f = FakeLlama::new("refused-arg");
+        f.cfg.server.extra_args = ["--jinja", "--lora", "/x.gguf"].map(String::from).to_vec();
+        for ui in [true, false] {
+            let _ = std::fs::remove_file(&f.audit);
+            let mut s = f.session(ui);
+            let out = s.send("hi", |_| {}).await;
+            assert!(persona::SERVER_DOWN_LINES.contains(&out.text()), "{out:?}");
+            assert!(s.take_server_request().is_none() && !s.server_card_pending());
+            assert!(!s.answer_server_card(CardChoice::Clicked(Answer::Yes)));
+            assert!(!s.start_approved_server().await);
+            assert_eq!(f.count("PROPOSED"), 0, "no card at all: {}", f.audit());
+            assert_eq!(f.count("ARG_REFUSED"), 1, "{}", f.audit());
+            assert!(f.audit().contains("--lora /x.gguf"), "{}", f.audit());
+            // Cooldown: asking again neither files a card nor re-logs.
+            s.send("hi again", |_| {}).await;
+            assert!(s.take_server_request().is_none());
+            assert_eq!(f.count("ARG_REFUSED"), 1, "{}", f.audit());
+            assert!(!f.ran.exists());
+        }
     }
 
     #[cfg(unix)]

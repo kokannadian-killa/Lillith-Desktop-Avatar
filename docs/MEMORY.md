@@ -191,12 +191,11 @@ handler of its own; the overlay check and the startup scan cover it.
   | Surface | When | Approves | Audit |
   | --- | --- | --- | --- |
   | The same card, in its own window (`lillith server-card`) | a desktop is available (`WAYLAND_DISPLAY` / `DISPLAY`; always on Windows) | click on Yes only | `CONFIRM`, `DENY` (No / Esc), `TIMEOUT` (120 s), `CANCELLED` (window closed) |
-  | `Start local model server? [y/N]` on the controlling terminal | no card could be shown | exactly `y` / `yes` (any case); anything else, an empty line or end of input is No | `CONFIRM_TTY` / `DENY_TTY` |
-  | none | no card and no terminal (`/dev/tty` / `CONIN$` can't be opened) | never | `NO_UI` |
+  | none | no desktop, or the card window can't open | never (a typed `y` never counts; nothing is read from the terminal or stdin) | `NO_UI`, and the command to start `llama-server` yourself is printed (API key masked) |
 
-  The terminal answer is read only from the controlling terminal
-  (`/dev/tty` on unix, `CONIN$` / `CONOUT$` on Windows), never from stdin,
-  so piped input can't answer it. Not approved: chat goes on text-only.
+  Not approved: chat goes on text-only. Start the printed command in another
+  terminal and run `lillith chat` again; a server that already answers needs
+  no card.
 
 ## On by default; turning it off; forgetting
 
@@ -307,7 +306,7 @@ says so).
 - LLM-assisted extraction: `Extractor` trait hook exists; the default is the
   rule-based extractor.
 - Model-server card (lead's decisions, done): startup waits for the card on
-  the first chat; `--spawn-server` asks (card, else tty, else `NO_UI`);
+  the first chat; `--spawn-server` asks (card only; no desktop is `NO_UI` plus the manual command);
   a card that loses its window is closed `CANCELLED` (bubble close handler,
   overlay check for a killed bubble, startup scan for orphans).
 - The orphan scan runs when the overlay starts, not for `lillith chat`

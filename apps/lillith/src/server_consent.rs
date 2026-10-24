@@ -5,48 +5,40 @@
 //!    bubble's, in its own window (`lillith server-card`). Only a click on
 //!    Yes approves (`CONFIRM`); No / Esc is `DENY`, an unanswered card
 //!    `TIMEOUT`, a closed window `CANCELLED`.
-//! 2. No card could be shown: `Start local model server? [y/N]` on the
-//!    controlling terminal (`/dev/tty`, `CONIN$` on Windows), never piped
-//!    stdin. Only `y` / `yes` approves (`CONFIRM_TTY`); anything else,
-//!    including an empty line or end of input, is `DENY_TTY`.
-//! 3. No terminal either: `NO_UI`, and chat stays text-only.
+//! 2. No card could be shown (no display, or the window couldn't open):
+//!    nothing starts (`NO_UI`) and the terminal gets the command to start
+//!    llama-server by hand. There is no `[y/N]`: a typed (or piped, or
+//!    spoken) yes never approves a launch; nothing is read from the
+//!    terminal or stdin.
 //!
 //! Every path first audits `PROPOSED`; all lines share the card's id.
 
 use lillith_core::soul_contract::{Answer, PendingAction, SoulContract};
 use lillith_mind::chat::{CardChoice, SERVER_CARD_TIMEOUT};
-use std::io::{BufRead, Write};
-
-/// The terminal question.
-pub const TTY_QUESTION: &str = "Start local model server? [y/N] ";
 
 /// How the start was decided.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Decision {
     /// Answered (or not) on the card.
     Card(CardChoice),
-    /// Answered on the terminal: `true` only for an explicit y / yes.
-    Tty(bool),
-    /// Neither a card nor a terminal: text-only.
-    NoUi,
+    /// No card could be shown: refused, text-only (`display`: whether a
+    /// desktop was there and only the window failed).
+    NoUi { display: bool },
 }
 
 impl Decision {
-    /// Only a clicked Yes or a typed y / yes on the tty starts the server.
+    /// Only a clicked Yes on the card starts the server.
     pub fn approved(self) -> bool {
-        matches!(
-            self,
-            Decision::Card(CardChoice::Clicked(Answer::Yes)) | Decision::Tty(true)
-        )
+        matches!(self, Decision::Card(CardChoice::Clicked(Answer::Yes)))
     }
 
     /// A line for the terminal.
     pub fn describe(self) -> &'static str {
         match self {
-            Decision::Card(CardChoice::Clicked(Answer::Yes)) | Decision::Tty(true) => {
+            Decision::Card(CardChoice::Clicked(Answer::Yes)) => {
                 "approved; starting the local model server"
             }
-            Decision::Card(CardChoice::Clicked(Answer::No)) | Decision::Tty(false) => {
+            Decision::Card(CardChoice::Clicked(Answer::No)) => {
                 "declined; not starting the local model server (text-only)"
             }
             Decision::Card(CardChoice::TimedOut) => {
@@ -55,65 +47,78 @@ impl Decision {
             Decision::Card(CardChoice::Cancelled) => {
                 "card closed; not starting the local model server (text-only)"
             }
-            Decision::NoUi => {
-                "no card or terminal to ask on; not starting the local model server (text-only)"
+            Decision::NoUi { display: false } => {
+                "no display for the Soul Contract card, and a typed yes never counts; \
+                 not starting the local model server (text-only)"
+            }
+            Decision::NoUi { display: true } => {
+                "the Soul Contract card window could not open, and a typed yes never counts; \
+                 not starting the local model server (text-only)"
             }
         }
     }
 }
 
-/// `true` only for an explicit `y` / `yes` (any case, surrounding space
-/// ignored). Everything else, including an empty line, is No.
-pub fn tty_says_yes(line: &str) -> bool {
-    matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+/// What to print after a refusal without a card: how to start llama-server
+/// by hand (the exact command the card would have shown, secrets masked).
+pub fn manual_start_hint(argv: &[String]) -> String {
+    let masked = lillith_core::soul_contract::mask_secret_args(argv);
+    let cmd = lillith_setup::launch::LaunchCommand {
+        program: masked.first().cloned().unwrap_or_default(),
+        args: masked.iter().skip(1).cloned().collect(),
+    };
+    format!(
+        "To start the local model server yourself, run this in another terminal:\n  {}\n\
+         (if [chat] api_key is set, export LLAMA_API_KEY=<your key> first),\n\
+         then run `lillith chat` again; a server that already answers needs no card.",
+        cmd.to_shell_string()
+    )
 }
 
-/// Asks for `action` and audits the decision in `sc`. `card` shows the
-/// card (`None`: no card could be shown); `tty` asks on the controlling
-/// terminal (`None`: no terminal). Both are injectable for tests.
+/// Asks for `action` on the card and audits the decision in `sc`. `card`
+/// shows the card (`None`: no card could be shown; `display` says whether
+/// a desktop was there). Injectable for tests. Nothing is ever read from a
+/// terminal or stdin.
 pub fn decide(
     sc: &mut SoulContract,
     action: PendingAction,
+    display: bool,
     card: impl FnOnce(&PendingAction) -> Option<CardChoice>,
-    tty: impl FnOnce(&PendingAction) -> Option<String>,
 ) -> Decision {
     sc.record("PROPOSED", &action);
-    if let Some(choice) = card(&action) {
-        match choice {
-            CardChoice::Clicked(Answer::Yes) => {
-                let kept = action.clone();
-                let id = sc.request(action);
-                if let Err(e) = sc.confirm(id) {
-                    tracing::warn!("model-server approval failed: {e}");
-                    // No CONFIRM was written: close the card in the log.
-                    sc.record_note(
-                        "CANCELLED",
-                        &kept,
-                        &format!("approval could not be recorded: {e}"),
-                    );
-                    return Decision::Card(CardChoice::Cancelled);
-                }
+    let shown = if display { card(&action) } else { None };
+    let Some(choice) = shown else {
+        let why = if display {
+            "card window could not open; a typed yes never approves; nothing started"
+        } else {
+            "no display for the card; a typed yes never approves; nothing started"
+        };
+        sc.record_note("NO_UI", &action, why);
+        return Decision::NoUi { display };
+    };
+    match choice {
+        CardChoice::Clicked(Answer::Yes) => {
+            let kept = action.clone();
+            let id = sc.request(action);
+            if let Err(e) = sc.confirm(id) {
+                tracing::warn!("model-server approval failed: {e}");
+                // No CONFIRM was written: close the card in the log.
+                sc.record_note(
+                    "CANCELLED",
+                    &kept,
+                    &format!("approval could not be recorded: {e}"),
+                );
+                return Decision::Card(CardChoice::Cancelled);
             }
-            CardChoice::Clicked(Answer::No) => {
-                let id = sc.request(action);
-                let _ = sc.deny(id);
-            }
-            CardChoice::TimedOut => sc.record("TIMEOUT", &action),
-            CardChoice::Cancelled => sc.record("CANCELLED", &action),
         }
-        return Decision::Card(choice);
+        CardChoice::Clicked(Answer::No) => {
+            let id = sc.request(action);
+            let _ = sc.deny(id);
+        }
+        CardChoice::TimedOut => sc.record("TIMEOUT", &action),
+        CardChoice::Cancelled => sc.record("CANCELLED", &action),
     }
-    match tty(&action) {
-        Some(line) => {
-            let yes = tty_says_yes(&line);
-            sc.record(if yes { "CONFIRM_TTY" } else { "DENY_TTY" }, &action);
-            Decision::Tty(yes)
-        }
-        None => {
-            sc.record("NO_UI", &action);
-            Decision::NoUi
-        }
-    }
+    Decision::Card(choice)
 }
 
 /// A desktop session a window can open on.
@@ -127,12 +132,9 @@ pub fn display_available() -> bool {
 }
 
 /// Shows the card in its own process (`lillith server-card`, so this
-/// process never owns a window event loop). `None` when there is no
-/// desktop or the window couldn't open: the caller falls back to the tty.
+/// process never owns a window event loop). `None` when the window
+/// couldn't open.
 pub fn show_card(action: &PendingAction) -> Option<CardChoice> {
-    if !display_available() {
-        return None;
-    }
     let PendingAction::StartModelServer { argv, restart, .. } = action else {
         return None;
     };
@@ -161,117 +163,9 @@ pub fn card_main(argv: Vec<String>, restart: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Asks [`TTY_QUESTION`] on the controlling terminal and reads one line
-/// from it (never from stdin, which may be a pipe). `None` when there is no
-/// terminal; a read error or end of input is an empty line (No).
-pub fn ask_tty(action: &PendingAction) -> Option<String> {
-    let (input, mut output) = open_tty()?;
-    if let PendingAction::StartModelServer { argv, .. } = action {
-        // The whole command, one arg per line (api key masked).
-        let lines = lillith_core::soul_contract::argv_lines(
-            &lillith_core::soul_contract::mask_secret_args(argv),
-        );
-        let _ = writeln!(output, "[soul contract]\n{lines}");
-    }
-    // Keystrokes typed before the question (a stray "y⏎") don't answer it.
-    flush_tty_input(&input);
-    let _ = write!(output, "{TTY_QUESTION}");
-    let _ = output.flush();
-    let mut line = String::new();
-    if std::io::BufReader::new(input).read_line(&mut line).is_err() {
-        line.clear();
-    }
-    Some(line)
-}
-
-#[cfg(unix)]
-fn open_tty() -> Option<(std::fs::File, std::fs::File)> {
-    let f = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open("/dev/tty")
-        .ok()?;
-    let w = f.try_clone().ok()?;
-    Some((f, w))
-}
-
-#[cfg(windows)]
-fn open_tty() -> Option<(std::fs::File, std::fs::File)> {
-    let input = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open("CONIN$")
-        .ok()?;
-    let output = std::fs::OpenOptions::new()
-        .write(true)
-        .open("CONOUT$")
-        .ok()?;
-    Some((input, output))
-}
-
-#[cfg(not(any(unix, windows)))]
-fn open_tty() -> Option<(std::fs::File, std::fs::File)> {
-    None
-}
-
-/// Drops pending, unread terminal input (`tcflush(TCIFLUSH)`).
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-fn flush_tty_input(f: &std::fs::File) {
-    use std::os::fd::AsRawFd;
-    extern "C" {
-        fn tcflush(fd: i32, queue_selector: i32) -> i32;
-    }
-    #[cfg(target_os = "linux")]
-    const TCIFLUSH: i32 = 0;
-    #[cfg(target_os = "macos")]
-    const TCIFLUSH: i32 = 1;
-    // SAFETY: a valid open fd for the call's duration; tcflush only
-    // discards queued input and touches no memory of ours.
-    unsafe {
-        tcflush(f.as_raw_fd(), TCIFLUSH);
-    }
-}
-
-/// Drops pending console input (`FlushConsoleInputBuffer`).
-#[cfg(windows)]
-fn flush_tty_input(f: &std::fs::File) {
-    use std::os::windows::io::AsRawHandle;
-    // SAFETY: CONIN$ handle owned by `f`, valid for the call.
-    unsafe {
-        windows_sys::Win32::System::Console::FlushConsoleInputBuffer(f.as_raw_handle());
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-fn flush_tty_input(_: &std::fs::File) {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn only_an_explicit_y_or_yes_is_yes() {
-        for yes in ["y", "Y", "yes", "YES", " Yes \n", "y\r\n"] {
-            assert!(tty_says_yes(yes), "{yes:?}");
-        }
-        for no in [
-            "",
-            "\n",
-            "n",
-            "no",
-            "N",
-            "ye",
-            "yess",
-            "yes please",
-            "sure",
-            "ok",
-            "1",
-            "y y",
-            "oui",
-        ] {
-            assert!(!tty_says_yes(no), "{no:?}");
-        }
-    }
 
     struct Log(std::path::PathBuf);
 
@@ -320,25 +214,16 @@ mod tests {
         )
     }
 
-    fn run(
-        tag: &str,
-        card: Option<CardChoice>,
-        tty: Option<&str>,
-    ) -> (Decision, Vec<String>, bool) {
+    fn run(tag: &str, display: bool, card: Option<CardChoice>) -> (Decision, Vec<String>, bool) {
         let log = Log::new(tag);
         let a = action();
         let id = a.card_id().unwrap().to_string();
-        let mut tty_asked = false;
-        let d = decide(
-            &mut log.contract(),
-            a,
-            |_| card,
-            |_| {
-                tty_asked = true;
-                tty.map(str::to_string)
-            },
-        );
-        (d, log.decisions(&id), tty_asked)
+        let mut card_asked = false;
+        let d = decide(&mut log.contract(), a, display, |_| {
+            card_asked = true;
+            card
+        });
+        (d, log.decisions(&id), card_asked)
     }
 
     #[test]
@@ -351,36 +236,43 @@ mod tests {
             (CardChoice::TimedOut, "TIMEOUT"),
             (CardChoice::Cancelled, "CANCELLED"),
         ] {
-            let (d, log, tty_asked) = run(tag, Some(choice), Some("yes"));
+            let (d, log, asked) = run(tag, true, Some(choice));
+            assert!(asked);
             assert_eq!(d, Decision::Card(choice));
             assert_eq!(d.approved(), choice == yes, "{choice:?}");
             assert_eq!(log, ["PROPOSED", tag]);
-            assert!(!tty_asked, "a shown card is never bypassed by the tty");
         }
     }
 
     #[test]
-    fn without_a_card_the_tty_decides_and_only_y_or_yes_approves() {
-        let (d, log, _) = run("tty-yes", None, Some("y\n"));
-        assert!(d.approved());
-        assert_eq!(log, ["PROPOSED", "CONFIRM_TTY"]);
-        for (i, answer) in ["", "\n", "n\n", "maybe\n", "yes please\n"]
-            .into_iter()
-            .enumerate()
-        {
-            let (d, log, _) = run(&format!("tty-no-{i}"), None, Some(answer));
-            assert_eq!(d, Decision::Tty(false), "{answer:?}");
-            assert!(!d.approved());
-            assert_eq!(log, ["PROPOSED", "DENY_TTY"], "{answer:?}");
-        }
-    }
-
-    #[test]
-    fn no_card_and_no_tty_is_no_ui_and_text_only() {
-        let (d, log, tty_asked) = run("noui", None, None);
-        assert_eq!(d, Decision::NoUi);
-        assert!(!d.approved() && tty_asked);
+    fn without_a_card_nothing_is_approved_and_nothing_is_asked() {
+        // No display: the card isn't even tried, and there is no terminal
+        // question to answer y to.
+        let (d, log, asked) = run("nodisplay", false, Some(CardChoice::Clicked(Answer::Yes)));
+        assert!(!asked, "no display: no card window");
+        assert_eq!(d, Decision::NoUi { display: false });
+        assert!(!d.approved());
         assert_eq!(log, ["PROPOSED", "NO_UI"]);
-        assert!(d.describe().contains("text-only"));
+        assert!(d.describe().contains("typed yes never counts"));
+        // A desktop, but the window failed: refused the same way.
+        let (d, log, asked) = run("nowindow", true, None);
+        assert!(asked);
+        assert_eq!(d, Decision::NoUi { display: true });
+        assert!(!d.approved());
+        assert_eq!(log, ["PROPOSED", "NO_UI"]);
+    }
+
+    #[test]
+    fn the_manual_hint_names_the_command_with_secrets_masked() {
+        let h = manual_start_hint(&[
+            "/opt/llama-server".into(),
+            "--port".into(),
+            "8080".into(),
+            "--api-key".into(),
+            "sekrit".into(),
+        ]);
+        assert!(h.contains("/opt/llama-server --port 8080 --api-key"), "{h}");
+        assert!(!h.contains("sekrit"), "{h}");
+        assert!(h.contains("LLAMA_API_KEY"), "{h}");
     }
 }

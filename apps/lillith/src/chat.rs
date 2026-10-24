@@ -310,9 +310,10 @@ impl ServerGuard {
     }
 
     /// `lillith chat --spawn-server`: the flag only asks; starting is a
-    /// program launch, so it waits for the Soul Contract (the card when a
-    /// desktop is available, else a `[y/N]` on the controlling terminal,
-    /// else `NO_UI`; see [`crate::server_consent`]). `true` when it was
+    /// program launch, so it waits for a click on Yes on the Soul Contract
+    /// card. Without a display (or when the card window can't open) it is
+    /// refused (`NO_UI`) and the terminal gets the manual start command; a
+    /// typed yes never counts (see [`crate::server_consent`]). `true` when it was
     /// started. A server already answering needs no card.
     pub async fn start_cli(cfg: &ChatConfig, mind: &MindConfig) -> (Self, bool) {
         let g = Self::default();
@@ -322,10 +323,25 @@ impl ServerGuard {
         if already_running(&cfg.endpoint).await {
             return (g, true);
         }
+        let log = mind.audit_log_path();
+        // A refused extra arg is rejected up front (one ARG_REFUSED line):
+        // no card is shown for a start that would fail after the Yes.
+        let bin = lillith_setup::launch::resolve_program(&cfg.server.binary);
+        if let Err(e) = lillith_mind::server::check_extra_args_audited(
+            &cfg.server.extra_args,
+            &bin.display().to_string(),
+            log.clone(),
+        ) {
+            println!(
+                "[chat.server] {e}\nNot starting the local model server and no Soul Contract card shown \
+                 (logged as ARG_REFUSED). Remove it from [chat.server] extra_args in config.toml \
+                 (see \"Migrating extra_args\" in docs/CHAT.md)."
+            );
+            return (g, false);
+        }
         let Some(argv) = lillith_mind::server::display_argv(cfg) else {
             return (g, false);
         };
-        let log = mind.audit_log_path();
         // Cards a dead process left open (its pid is gone) are closed
         // first; a live overlay's card is left alone.
         SoulContract::new(log.clone())
@@ -333,12 +349,13 @@ impl ServerGuard {
         let action = PendingAction::start_model_server(argv, false);
         let kept = action.clone();
         let log2 = log.clone();
+        let display = crate::server_consent::display_available();
         let decision = match tokio::task::spawn_blocking(move || {
             crate::server_consent::decide(
                 &mut SoulContract::new(log2),
                 action,
+                display,
                 crate::server_consent::show_card,
-                crate::server_consent::ask_tty,
             )
         })
         .await
@@ -352,10 +369,15 @@ impl ServerGuard {
                     &kept,
                     &format!("consent prompt panicked: {e}"),
                 );
-                crate::server_consent::Decision::NoUi
+                crate::server_consent::Decision::Card(lillith_mind::chat::CardChoice::Cancelled)
             }
         };
         println!("[soul contract] {}", decision.describe());
+        if let crate::server_consent::Decision::NoUi { .. } = decision {
+            if let PendingAction::StartModelServer { argv, .. } = &kept {
+                println!("{}", crate::server_consent::manual_start_hint(argv));
+            }
+        }
         if !decision.approved() {
             return (g, false);
         }
@@ -397,8 +419,8 @@ impl ServerGuard {
 pub struct ServerHandle(Arc<Mutex<Option<LlamaServer>>>);
 
 impl ServerHandle {
-    /// Spawns `[chat.server]` after an approval (a clicked Yes, or a typed
-    /// y / yes on the terminal for `--spawn-server`). No-op when the one it started is
+    /// Spawns `[chat.server]` after an approval (a clicked Yes on the card;
+    /// a typed yes never counts). No-op when the one it started is
     /// still running. Spawn failures are remembered in `memory`.
     pub fn spawn_approved(
         &self,

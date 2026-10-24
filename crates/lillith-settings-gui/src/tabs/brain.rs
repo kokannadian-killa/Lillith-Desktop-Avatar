@@ -84,6 +84,10 @@ pub struct BrainTab {
     cfg: LlmConfig,
     saved: LlmConfig,
     load_error: Option<String>,
+    /// Names the `[chat.server] extra_args` llama-server would refuse (the
+    /// start is refused and logged as `ARG_REFUSED`), so nothing is
+    /// dropped silently. Re-read on load, save and revert.
+    args_notice: Option<String>,
     step: Step,
     // scan
     scan: Option<ScanHandle>,
@@ -123,6 +127,13 @@ fn params_of(m: &Modelfile) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The notice for refused `[chat.server] extra_args` in the config file
+/// at `path` (`None` when every arg passes or the file can't be read).
+fn extra_args_notice(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    lillith_setup::extra_args::notice(&lillith_setup::extra_args::from_config_toml(&text))
+}
+
 fn gb(b: u64) -> String {
     format!("{:.1} GB", b as f64 / 1e9)
 }
@@ -154,6 +165,7 @@ impl BrainTab {
             saved: cfg.clone(),
             cfg,
             load_error,
+            args_notice: extra_args_notice(config_path),
             step: Step::Runtime,
             scan: None,
             scan_status: String::new(),
@@ -1470,6 +1482,9 @@ impl SettingsTab for BrainTab {
                 .color(c32(pal::WARN)),
             );
         }
+        if let Some(n) = &self.args_notice {
+            ui.label(RichText::new(format!("⚠ {n}")).color(c32(pal::WARN)));
+        }
         self.steps_row(ui, shared);
         let i = self.step.index();
         ui.label(
@@ -1525,10 +1540,12 @@ impl SettingsTab for BrainTab {
         if self.mf_dirty {
             self.write_modelfile()?;
         }
+        self.args_notice = extra_args_notice(&self.config_path);
         Ok(())
     }
     fn revert(&mut self, _shared: &mut Shared) {
         self.cfg = self.saved.clone();
+        self.args_notice = extra_args_notice(&self.config_path);
         let m = Modelfile::from_file(&self.mf_path)
             .ok()
             .and_then(|r| r.ok())
@@ -1571,6 +1588,80 @@ fn audit_ungated(log: Option<PathBuf>, tag: &str, kind: &str, c: &launch::Launch
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_wizard_writes_the_same_ollama_create_line_as_core() {
+        let dir = std::env::temp_dir().join(format!("lillith-wiz-fmt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (a, b) = (dir.join("core.log"), dir.join("setup.log"));
+        let argv: Vec<String> = [
+            "/usr/bin/ollama",
+            "create",
+            "lily",
+            "-f",
+            "/m/Model\tfile",
+            "--api-key",
+            "s3cret",
+        ]
+        .map(String::from)
+        .to_vec();
+        lillith_core::soul_contract::SoulContract::new(Some(a.clone())).record_ungated_launch_as(
+            OLLAMA_CREATE_UNGATED_TAG,
+            OLLAMA_CREATE_KIND,
+            &argv,
+        );
+        lillith_setup::audit::record_ungated_launch(
+            &b,
+            lillith_setup::audit::OLLAMA_CREATE_UNGATED_TAG,
+            lillith_setup::audit::OLLAMA_CREATE_KIND,
+            &argv,
+        )
+        .unwrap();
+        let cols = |p: &Path| -> Vec<String> {
+            let t = std::fs::read_to_string(p).unwrap();
+            assert_eq!(t.lines().count(), 1, "{t}");
+            assert!(t.ends_with('\n'));
+            let c: Vec<String> = t.trim_end().split('\t').map(String::from).collect();
+            assert_eq!(c[0].len(), "2026-10-24T10:00:00Z".len(), "{t}");
+            c[1..].to_vec()
+        };
+        assert_eq!(cols(&a), cols(&b));
+        assert!(!std::fs::read_to_string(&b).unwrap().contains("s3cret"));
+        assert_eq!(
+            lillith_setup::audit::OLLAMA_CREATE_UNGATED_TAG,
+            OLLAMA_CREATE_UNGATED_TAG
+        );
+        assert_eq!(lillith_setup::audit::OLLAMA_CREATE_KIND, OLLAMA_CREATE_KIND);
+        assert_eq!(
+            lillith_setup::audit::NO_CARD,
+            lillith_core::soul_contract::NO_CARD
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_refused_extra_arg_shows_a_notice_naming_it() {
+        let dir = std::env::temp_dir().join(format!("lillith-args-notice-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("config.toml");
+        std::fs::write(
+            &p,
+            "[chat.server]\nextra_args = [\"--jinja\", \"--chat-template\", \"./t.jinja\", \"-np\", \"2\"]\n",
+        )
+        .unwrap();
+        let n = extra_args_notice(&p).expect("a notice");
+        assert!(n.contains("`--chat-template ./t.jinja`"), "{n}");
+        assert!(n.contains("ARG_REFUSED"), "{n}");
+        std::fs::write(
+            &p,
+            "[chat.server]\nextra_args = [\"--chat-template\", \"llama3\", \"-cb\"]\n",
+        )
+        .unwrap();
+        assert!(extra_args_notice(&p).is_none());
+        assert!(extra_args_notice(&dir.join("missing.toml")).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn ollama_create_leaves_one_plain_masked_audit_line() {
