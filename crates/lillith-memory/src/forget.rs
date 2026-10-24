@@ -32,7 +32,7 @@ const LEADS: &[&str] = &[
 pub fn parse_forget(text: &str) -> Option<ForgetCmd> {
     let mut t = text
         .trim()
-        .trim_end_matches(|c: char| matches!(c, '.' | '!' | '?' | ' '))
+        .trim_end_matches(['.', '!', '?', ' '])
         .to_lowercase();
     loop {
         let before = t.len();

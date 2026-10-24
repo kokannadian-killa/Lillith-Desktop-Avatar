@@ -22,6 +22,9 @@ const W_STRENGTH: f64 = 0.25;
 const W_RECENCY: f64 = 0.15;
 const APP_BOOST: f64 = 0.10;
 const NEIGHBOR_DISCOUNT: f64 = 0.5;
+/// id, kind, label, detail, strength, last_seen, edge strength, edge last_seen.
+type NeighborRow = (i64, String, String, String, f64, f64, f64, f64);
+
 const KIND_BOOST: f64 = 0.08;
 const BARE_ENTITY: f64 = 0.6;
 /// Reinforcement rates.
@@ -560,7 +563,7 @@ impl Brain {
                  WHERE (e.src = ?1 OR e.dst = ?1) AND n.key != 'ko' LIMIT 16",
             )?;
             for (seed, seed_score) in seeds {
-                let rows: Vec<(i64, String, String, String, f64, f64, f64, f64)> = st
+                let rows: Vec<NeighborRow> = st
                     .query_map([seed], |r| {
                         Ok((
                             r.get(0)?,
