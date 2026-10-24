@@ -32,7 +32,7 @@ One JSON object per line, one JSON reply per line. "cmd" and "op" are synonyms.
   press / listen and every always-listening switch-on (no session grant). Either pass "token" from
   {"cmd":"mic_card","kind":"listen"|"always"} (one-time, 120 s) or let the daemon show the card
   inline. No / timeout / no card UI -> {"ok":false,"need_card":true,...}, mic stays off.
-  {"cmd":"mic_revoke"}      drop unused mic tokens
+  {"cmd":"mic_revoke"}      drop unused mic tokens (also done by every stop and the safeword)
   {"cmd":"stt","wav":"/abs/file.wav"}        transcribe a file
   {"op":"subscribe","topics":["lipsync","stt"]}   this connection then only receives events
   {"cmd":"shutdown"}
@@ -73,11 +73,15 @@ class Core:
         if cmd == "stop":
             sp.stop(reason=r.get("reason", "stop"))
             if r.get("reason") == "safeword":
-                # A mic card still waiting for its Yes is closed (CANCELLED); the mic never opens for it.
+                # A mic card still waiting for its Yes is closed (CANCELLED) and every unused mic token is
+                # dropped (REVOKED): the mic never opens on a permission given before the safeword.
                 if self._listener is not None:
                     self._listener.cancel_pending("safeword")
                 else:
                     self.gate.cancel()
+                    self.gate.revoke("safeword")
+            else:
+                self.gate.revoke("stop")   # any stop also drops unused mic tokens
             return {"ok": True}
         if cmd == "shutdown":
             sp.stop()
@@ -88,7 +92,7 @@ class Core:
         if cmd == "mic_card":
             return self.gate.card(r.get("kind", "listen"))
         if cmd == "mic_revoke":
-            return self.gate.revoke()
+            return self.gate.revoke("client")
         if cmd not in ("say", "file"):
             return {"ok": False, "error": f"unknown cmd {cmd!r}"}
         text = r.get("text", "")

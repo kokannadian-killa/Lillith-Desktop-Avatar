@@ -172,6 +172,8 @@ class MicGate:
             with self._lock:
                 self._card_open = False
                 self._cancel = self._owner = None
+        if word in ("timeout", "cancelled"):
+            self.revoke(word)          # a timed-out or cancelled card also kills any token minted before it
         if word != "yes":
             why = {"no": "Ko said no", "timeout": "the card timed out",
                    "cancelled": "the card was closed (press released or safeword)",
@@ -214,7 +216,13 @@ class MicGate:
         self.last_card = card
         return None
 
-    def revoke(self):
+    def revoke(self, why="client"):
+        """Drops every unused mic token (there is no session grant to drop). Called on the safeword, on any
+        `stop`, on a cancelled or timed-out card and on `mic_revoke`. Audited `REVOKED` (kind
+        `mic_revoke_<why>`, no speech text) when something was dropped, and always for the safeword."""
         with self._lock:
+            n = len(self._tokens)
             self._tokens.clear()
-        return {"ok": True, "revoked": True}
+        if n or why == "safeword":
+            G.audit("REVOKED", f"mic_revoke_{why}", self.mic_argv(), None, self.log)
+        return {"ok": True, "revoked": True, "dropped": n}

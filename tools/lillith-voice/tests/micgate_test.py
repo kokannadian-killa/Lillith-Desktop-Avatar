@@ -334,7 +334,8 @@ check("card decisions are audited", all(t in tags for t in ("PROPOSED", "CONFIRM
                                                             "NO_UI")), str(set(tags)))
 check("audit lines carry card=<id> and 6 columns", all(len(ln.split("\t")) == 6 and
                                                        ln.split("\t")[4].startswith("card=mic-") for ln in lines
-                                                       if "\tmic_card_ui\t" not in ln))  # helper LAUNCH: no card
+                                                       if "\tmic_card_ui\t" not in ln         # helper LAUNCH: no card
+                                                       and "\tREVOKED\t" not in ln))          # revokes: no card
 
 # no card helper at all -> no_ui
 check("no card program -> no_ui", M.run_card(None, "t", "s", "x", "d") == "no_ui")
@@ -382,6 +383,16 @@ try:
     core.gate._cancel = threading.Event()
     core.dispatch({"cmd": "stop"})
     check("a plain stop (not the safeword) leaves a mic card alone", not core.gate._cancel.is_set())
+    # a token minted before a stop / safeword is dead afterwards (daemon level, no listener loaded)
+    for req in ({"cmd": "stop", "reason": "safeword"}, {"cmd": "stop"}):
+        core.gate = M.MicGate(mic_argv=lambda: ["x"], ask=lambda *a: "yes")
+        tok = core.dispatch({"cmd": "mic_card", "kind": "listen"}).get("token")
+        core.dispatch(req)
+        r = core.gate.allow("listen", tok)
+        check(f"daemon {req}: an earlier mic token is revoked (no listener branch)", bool(tok) and r is not None
+              and r.get("need_card"), str(r))
+    check("REVOKED audit lines carry no speech text", all(ln.split("\t")[2].startswith("mic_revoke_")
+                                                          for ln in audit_lines() if "\tREVOKED\t" in ln))
     check("PROTOCOL documents the gate", "mic_card" in D.PROTOCOL and "token" in D.PROTOCOL)
 except ImportError as e:   # the daemon needs the TTS stack only for Speaker; tolerate a missing optional dep
     print(f"SKIP daemon dispatch ({e})")

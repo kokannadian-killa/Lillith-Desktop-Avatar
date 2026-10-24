@@ -165,5 +165,80 @@ L.ptt_stop()
 time.sleep(0.3)
 check("...and its release stops the mic too", mic_procs() == [], str(mic_procs()))
 
+# 5. a one-time token minted before a safeword / stop / cancelled or timed-out card is dead afterwards
+try:
+    from lillith_voice import daemon as D
+except ImportError as e:
+    D = None
+    print(f"SKIP daemon-level token checks ({e})")
+
+
+class _Sp:
+    voice = None
+
+    def stop(self, reason="stop"):
+        pass
+
+
+def core_for(L):
+    c = object.__new__(D.Core)
+    c.speaker, c._listener, c._llock, c.gate = _Sp(), L, threading.Lock(), L.gate
+    return c
+
+
+def kill_cancel(L):
+    card("hang")
+    th = threading.Thread(target=lambda: L.gate.card("listen"))
+    th.start()
+    for _ in range(100):
+        if procs("pttrace-card-marker"):
+            break
+        time.sleep(0.05)
+    L.gate.cancel()
+    th.join(5)
+
+
+def kill_timeout(L):
+    card("timeout")
+    L.gate.card("listen")
+
+
+def kill_release(L):
+    card("hang")
+    th = threading.Thread(target=L.ptt_start)
+    th.start()
+    for _ in range(100):
+        if procs("pttrace-card-marker"):
+            break
+        time.sleep(0.05)
+    L.ptt_stop()
+    th.join(5)
+
+
+cases = [("safeword (spoken red / OOC -> cancel_pending)", lambda L: L.cancel_pending("safeword")),
+         ("a cancelled card", kill_cancel), ("a timed-out card", kill_timeout),
+         ("a press released before Yes", kill_release)]
+if D is not None:
+    cases += [("{cmd:stop, reason:safeword}", lambda L: core_for(L).dispatch({"cmd": "stop", "reason": "safeword"})),
+              ("{cmd:stop, reason:safeword} (no listener loaded)",
+               lambda L: (lambda c: (setattr(c, "_listener", None), c.dispatch({"cmd": "stop", "reason": "safeword"})))(
+                   core_for(L))),
+              ("a plain {cmd:stop}", lambda L: core_for(L).dispatch({"cmd": "stop"}))]
+for name, kill in cases:
+    L = listener()
+    card("yes")
+    tok = L.gate.card("listen").get("token")
+    kill(L)
+    card("yes")       # even if a card were shown now it would say yes: the token itself must be refused
+    r = L.ptt_start(token=tok)
+    time.sleep(0.3)
+    check(f"token then {name}: listen start with the old token is refused, no mic process",
+          bool(tok) and r.get("ok") is False and r.get("need_card") and mic_procs() == [], f"{r} {mic_procs()}")
+    L.ptt_stop()
+with open(AUDIT, encoding="utf-8") as f:
+    rv = [ln for ln in f.read().splitlines() if "\tREVOKED\t" in ln]
+check("revokes are audited REVOKED (kind mic_revoke_<why>, no speech text)", rv and all(
+    ln.split("\t")[2].startswith("mic_revoke_") and ln.split("\t")[4] == "no-card" for ln in rv), str(rv[:2]))
+
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED")
 sys.exit(1 if FAILS else 0)
