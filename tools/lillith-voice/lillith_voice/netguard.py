@@ -5,7 +5,8 @@
 2. Monkey-patches the socket layer: AF_UNIX is allowed (PipeWire, our daemon
    socket); AF_INET/AF_INET6 may only reach loopback (llama-server on
    127.0.0.1:8080). Anything else raises NetworkBlocked. DNS for non-local names
-   is refused too.
+   is refused too, and AF_INET/AF_INET6 sockets may only bind() to loopback
+   (never 0.0.0.0 / ::), so no library can open a listener on the LAN.
 
 Child processes (ffmpeg, pw-play) inherit the env; ffmpeg is additionally run
 with `-protocol_whitelist pipe,file` and only ever gets pipes.
@@ -53,6 +54,7 @@ _orig_connect = socket.socket.connect
 _orig_connect_ex = socket.socket.connect_ex
 _orig_sendto = socket.socket.sendto
 _orig_getaddrinfo = socket.getaddrinfo
+_orig_bind = socket.socket.bind
 
 
 def _check(sock, address):
@@ -80,6 +82,14 @@ def _sendto(self, data, *args):
     return _orig_sendto(self, data, *args)
 
 
+def _bind(self, address):
+    fam = getattr(self, "family", None)
+    if fam in (socket.AF_INET, getattr(socket, "AF_INET6", None)):
+        if not (isinstance(address, tuple) and address and _is_loopback(address[0]) and address[0] != ""):
+            raise NetworkBlocked(f"lillith-voice is local-only; refused bind to {address!r} (loopback only)")
+    return _orig_bind(self, address)
+
+
 def _getaddrinfo(host, *args, **kw):
     if not _is_loopback(host):
         raise NetworkBlocked(f"lillith-voice is offline-only; refused DNS lookup of {host!r}")
@@ -89,5 +99,6 @@ def _getaddrinfo(host, *args, **kw):
 socket.socket.connect = _connect
 socket.socket.connect_ex = _connect_ex
 socket.socket.sendto = _sendto
+socket.socket.bind = _bind
 socket.getaddrinfo = _getaddrinfo
 ACTIVE = True
