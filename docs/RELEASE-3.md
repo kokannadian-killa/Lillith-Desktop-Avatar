@@ -24,8 +24,15 @@ sizes and checksums are filled in when the build is published. **INSTALL.md** co
   - `[chat.server] extra_args` can no longer change the host, port, model or
     API key, download a model (`-hf…`, `--model-url`, `--docker-repo`, any
     `…-url` flag), reach other machines (`--rpc`) or serve files (`--path`).
-    Such an arg stops the start with an error. `--jinja` and the normal
-    tuning flags still work.
+    Only an allowlist passes: the normal tuning flags, `--jinja`,
+    `--chat-template <built-in name>`, `-np`/`--parallel`,
+    `-cb`/`--cont-batching` and `-mg`/`--main-gpu`. Anything else (including
+    file flags such as `--lora`, `--mmproj`, a template file) stops the start,
+    is logged as `ARG_REFUSED` and is named in a notice in the settings
+    window. See "Migrating `extra_args`" in CHAT.md.
+  - `lillith chat --spawn-server` no longer takes a typed `y`: only a click
+    on the card's Yes starts the server. With no desktop it refuses and
+    prints the command to start llama-server yourself.
   - The API key is handed over in the `LLAMA_API_KEY` environment variable,
     not on the command line, and the startup log masks it. Stray `LLAMA_ARG_*`
     variables are cleared so nothing outside the config can steer the server.

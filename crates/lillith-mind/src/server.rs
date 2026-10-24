@@ -27,7 +27,7 @@ pub enum ServerError {
     Exited(String),
     #[error("llama-server not ready after {0:?}")]
     NotReady(Duration),
-    #[error("refusing llama-server extra arg {0:?}: only context, threads, GPU layers, --jinja, sampling, batch, --mlock, --no-mmap and --flash-attn flags are allowed")]
+    #[error("refusing llama-server extra arg {0:?}: only context, threads, GPU layers / main GPU, --jinja, a built-in --chat-template name, sampling, batch, parallel / cont-batching, --mlock, --no-mmap and --flash-attn flags are allowed")]
     ForbiddenArg(String),
     #[error(
         "refusing to bind llama-server to {0:?}: only 127.0.0.1 / localhost / ::1 are allowed"
@@ -35,123 +35,40 @@ pub enum ServerError {
     BindHost(String),
 }
 
-/// The only llama-server flags `extra_args` may carry: context size,
-/// threads, GPU layers, the chat template switch, sampling, batch sizes and
-/// memory mapping. Everything else (host, port, model, downloads, API key,
-/// file serving, and any flag llama.cpp adds later) is refused.
-/// `(flag, takes_value)`.
-pub const ALLOWED_EXTRA_ARGS: &[(&str, bool)] = &[
-    ("-c", true),
-    ("--ctx-size", true),
-    ("-t", true),
-    ("--threads", true),
-    ("-ngl", true),
-    ("--n-gpu-layers", true),
-    ("--gpu-layers", true),
-    ("--jinja", false),
-    ("-b", true),
-    ("--batch-size", true),
-    ("-ub", true),
-    ("--ubatch-size", true),
-    ("--mlock", false),
-    ("--no-mmap", false),
-    ("-fa", false),
-    ("--flash-attn", false),
-    // Sampling.
-    ("--temp", true),
-    ("--top-k", true),
-    ("--top-p", true),
-    ("--min-p", true),
-    ("--typical", true),
-    ("--top-nsigma", true),
-    ("--repeat-penalty", true),
-    ("--repeat-last-n", true),
-    ("--presence-penalty", true),
-    ("--frequency-penalty", true),
-    ("--mirostat", true),
-    ("--mirostat-lr", true),
-    ("--mirostat-ent", true),
-    ("--dynatemp-range", true),
-    ("--dynatemp-exp", true),
-    ("--xtc-probability", true),
-    ("--xtc-threshold", true),
-    ("--dry-multiplier", true),
-    ("--dry-base", true),
-    ("--dry-allowed-length", true),
-    ("--dry-penalty-last-n", true),
-    ("-s", true),
-    ("--seed", true),
-];
-
-/// `--flash-attn` / `-fa` may carry `on`, `off` or `auto` (newer
-/// llama.cpp) or stand alone (older builds).
-const FLASH_ATTN_VALUES: &[&str] = &["on", "off", "auto"];
-
-/// A flag value: a short plain token (a number, `auto`, `all`, …), never a
-/// path, URL, or anything with spaces.
-fn plain_value(v: &str) -> bool {
-    // A leading `-` only for a negative number (`--seed -1`), so the next
-    // flag can't be swallowed as a value.
-    let negative_ok = !v.starts_with('-') || v.parse::<f64>().is_ok();
-    negative_ok
-        && !v.is_empty()
-        && v.len() <= 32
-        && v.chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+' | '_'))
-}
-
-/// Errors on the first extra arg that is not on [`ALLOWED_EXTRA_ARGS`]
-/// (bare or `flag=value`), a value flag without a plain value, or a stray
+/// Errors on the first extra arg that is not on the allowlist
+/// ([`lillith_setup::extra_args::ALLOWED`]: context, threads, GPU layers /
+/// main GPU, `--jinja`, a *named* `--chat-template`, sampling, batch sizes,
+/// parallel slots / continuous batching, `--mlock`, `--no-mmap`,
+/// `--flash-attn`), a value flag without an allowed value, or a stray
 /// positional arg.
 pub fn check_extra_args(extra: &[String]) -> Result<(), ServerError> {
-    let mut it = extra.iter().peekable();
-    while let Some(a) = it.next() {
-        let refuse = || Err(ServerError::ForbiddenArg(a.clone()));
-        let (flag, inline) = match a.split_once('=') {
-            Some((f, v)) => (f, Some(v)),
-            None => (a.as_str(), None),
-        };
-        let Some(&(_, takes_value)) = ALLOWED_EXTRA_ARGS.iter().find(|(f, _)| *f == flag) else {
-            return refuse();
-        };
-        let flash = flag == "-fa" || flag == "--flash-attn";
-        match inline {
-            Some(v) if takes_value && plain_value(v) => {}
-            Some(v) if flash && FLASH_ATTN_VALUES.contains(&v) => {}
-            Some(_) => return refuse(),
-            None if takes_value => match it.next() {
-                Some(v) if plain_value(v) => {}
-                _ => return refuse(),
-            },
-            None if flash => {
-                if it
-                    .peek()
-                    .is_some_and(|v| FLASH_ATTN_VALUES.contains(&v.as_str()))
-                {
-                    it.next();
-                }
-            }
-            None => {}
-        }
+    match lillith_setup::extra_args::first_refused(extra) {
+        Some(a) => Err(ServerError::ForbiddenArg(
+            lillith_setup::extra_args::masked(&a),
+        )),
+        None => Ok(()),
     }
-    Ok(())
 }
 
-/// [`check_extra_args`], and on a refusal an `ARG_REFUSED` line in the
-/// audit log `audit` (binary `binary`; the refused arg with any secret
-/// masked).
+/// [`check_extra_args`], and on a refusal one `ARG_REFUSED` line in the
+/// audit log `audit` naming every refused arg (binary `binary`; secrets
+/// masked). The settings window shows the same list as a notice.
 pub fn check_extra_args_audited(
     extra: &[String],
     binary: &str,
     audit: Option<PathBuf>,
 ) -> Result<(), ServerError> {
     let r = check_extra_args(extra);
-    if let Err(ServerError::ForbiddenArg(arg)) = &r {
-        let shown = masked_args(std::slice::from_ref(arg)).join(" ");
+    if r.is_err() {
+        let bad = lillith_setup::extra_args::refused(extra);
+        let shown: Vec<String> = bad
+            .iter()
+            .map(|b| lillith_setup::extra_args::masked(b))
+            .collect();
         lillith_core::soul_contract::SoulContract::new(audit).record_arg_refused(
             binary,
-            &shown,
-            "refused llama-server extra arg (not on the allowlist); nothing started",
+            &shown.join(", "),
+            "refused llama-server extra arg(s) (not on the allowlist); nothing started",
         );
     }
     r
@@ -529,10 +446,8 @@ mod tests {
             "-mmu",
             "--model-url=http://x",
             // Not on the allowlist: refused now too.
-            "--chat-template",
-            "-np",
-            "--cont-batching",
-            "-mg",
+            "--chat-template-file",
+            "--no-cont-batching",
             "--lora",
             "--mmproj",
             "--log-file",
@@ -558,6 +473,11 @@ mod tests {
             &["-ngl", "99 --host"],
             &["--ctx-size=../m.gguf"],
             &["-b", "512", "0.0.0.0"],
+            // A template name only, never a file.
+            &["--chat-template", "/t/llama3.jinja"],
+            &["--chat-template=t.jinja"],
+            &["--chat-template"],
+            &["-np", "x/y"],
         ] {
             assert!(refused(bad), "{bad:?}");
         }
@@ -596,6 +516,17 @@ mod tests {
             "--seed",
             "-1",
             "--mlock",
+            "--chat-template",
+            "llama3",
+            "-np",
+            "2",
+            "--parallel=1",
+            "-cb",
+            "--cont-batching",
+            "-mg",
+            "0",
+            "--main-gpu",
+            "1",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -635,6 +566,14 @@ mod tests {
         let _ = std::fs::remove_file(&log);
         assert!(check_extra_args_audited(&ok, "x", Some(log.clone())).is_ok());
         assert!(!log.exists());
+        // A spaced secret is named with its value masked, never logged.
+        let spaced: Vec<String> = ["--api-key", "s3cret", "--lora", "/l.gguf"]
+            .map(String::from)
+            .to_vec();
+        assert!(check_extra_args_audited(&spaced, "x", Some(log.clone())).is_err());
+        let text = std::fs::read_to_string(&log).expect("audit line written");
+        assert!(!text.contains("s3cret"), "{text}");
+        assert!(text.contains("--api-key ***, --lora /l.gguf"), "{text}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

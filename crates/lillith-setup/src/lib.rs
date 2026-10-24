@@ -37,9 +37,11 @@
 //! std::fs::write(paths::default_modelfile_path().unwrap(), mf.render()).unwrap();
 //! ```
 
+pub mod audit;
 pub mod check;
 pub mod config;
 pub mod detect;
+pub mod extra_args;
 pub mod gguf;
 pub mod host;
 pub mod http;

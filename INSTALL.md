@@ -452,7 +452,7 @@ toggle), `[behavior.tease]` (the "come closer" tease) and `[mind.access]`
 For the voice kit, `[voice] daemon_socket`, `preset` and `[voice.stt]` (the
 push-to-talk mic) are optional; the defaults find the local daemon.
 `lillith setup` (and the setup wizard) writes `[llm]`, `[chat]` and, for
-llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--jinja"]`).
+llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--jinja"]`; only allowlisted flags pass, see docs/CHAT.md).
 
 ---
 

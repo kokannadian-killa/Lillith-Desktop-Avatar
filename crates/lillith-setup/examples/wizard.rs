@@ -414,6 +414,28 @@ fn run(a: Args) -> Result<(), String> {
                 })
                 .or_else(paths::default_modelfile_path)
                 .ok_or("no Modelfile")?;
+            // No card for `ollama create` (Ko's choice: exempt, audit-log
+            // only): one OLLAMA_CREATE_UNGATED line, the same columns the
+            // settings window writes, before it runs.
+            let cmd = launch::ollama_create_command(&bin, &c.ollama_model, Path::new(&mf), &c)
+                .map_err(|e| e.to_string())?;
+            let argv: Vec<String> = std::iter::once(cmd.program.clone())
+                .chain(cmd.args.iter().cloned())
+                .collect();
+            // No audit line, no launch.
+            let log = audit::audit_log_path().ok_or("no data folder for the audit log")?;
+            audit::record_ungated_launch(
+                &log,
+                audit::OLLAMA_CREATE_UNGATED_TAG,
+                audit::OLLAMA_CREATE_KIND,
+                &argv,
+            )
+            .map_err(|e| {
+                format!(
+                    "audit log {}: {e}; not running ollama create",
+                    log.display()
+                )
+            })?;
             println!(
                 "{}",
                 launch::ollama_create(&bin, &c.ollama_model, Path::new(&mf), &c)

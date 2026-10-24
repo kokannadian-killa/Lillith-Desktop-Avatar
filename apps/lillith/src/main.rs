@@ -133,8 +133,10 @@ enum Cmd {
         /// Message to send (omit for an interactive loop; `/quit` ends it).
         message: Option<String>,
         /// Offer to start llama-server from `[chat.server]` first (and stop
-        /// it after). Starting it is a program launch: it waits for a Yes
-        /// on the Soul Contract card, or a typed y on the terminal.
+        /// it after). Starting it is a program launch: it waits for a
+        /// clicked Yes on the Soul Contract card. Without a display it is
+        /// refused and prints how to start llama-server by hand; a typed y
+        /// never counts.
         #[arg(long)]
         spawn_server: bool,
         /// Don't load or save the chat history file.
