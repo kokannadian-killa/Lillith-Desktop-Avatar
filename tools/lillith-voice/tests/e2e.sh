@@ -83,6 +83,8 @@ echo "== lip-sync events (scripted subscriber) + stop from a second connection"
 "$VPY" "$HERE/lipsync_sub.py" > "$OUT/lipsync.txt" 2>&1 && ok "$(grep -E '^chunks=' "$OUT/lipsync.txt")" || { no "lipsync"; cat "$OUT/lipsync.txt"; }
 echo "== safeword / consent classifier (lone fuzzy 'red' stops her; sentences never do; voice is never consent)"
 "$VPY" "$HERE/safeword_test.py" "$LV_HOME/lib" > "$OUT/safeword.txt" 2>&1 && ok "safeword table ($(grep -c ^PASS "$OUT/safeword.txt") cases)" || { no "safeword table"; grep ^FAIL "$OUT/safeword.txt"; }
+echo "== text normalisation (times keep the next word's space, commas kept unless thousands separators)"
+"$VPY" "$HERE/textnorm_test.py" "$LV_HOME/lib" > "$OUT/textnorm.txt" 2>&1 && ok "textnorm ($(grep -c ^PASS "$OUT/textnorm.txt") cases)" || { no "textnorm"; grep ^FAIL "$OUT/textnorm.txt"; }
 echo "== speech-to-text: round trip, VAD, push-to-talk, barge-in, echo safety, safeword"
 lillith-say --daemon -o "$OUT/q.wav" "Hey Lillith, what should we do tonight?" \
   && lillith-say --daemon -o "$OUT/red.wav" "Red." && lillith-say --daemon -o "$OUT/yes.wav" "Yes, I agree." \
