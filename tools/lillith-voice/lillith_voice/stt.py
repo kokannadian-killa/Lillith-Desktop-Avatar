@@ -590,7 +590,9 @@ class Listener:
         with self._press_lock:
             if self._press is not None and self._mode != "ptt":
                 self._press = None
-        return self.gate.cancel()
+        closed = self.gate.cancel()
+        self.gate.revoke(why)          # and every unused mic token: none survives the safeword
+        return closed
 
     def transcribe(self, audio):
         """VAD-trim then transcribe (used for PTT buffers and WAV files)."""

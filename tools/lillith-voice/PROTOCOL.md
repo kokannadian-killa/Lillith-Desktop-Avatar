@@ -145,7 +145,10 @@ target, then detail lines; stdout: `yes` / `no` / `timeout` / `cancelled` / `no_
     `{"ok":false,"released":true,"need_card":true,...}` (released or safeword) or the usual timeout refusal, and
     the audit log gets `CANCELLED` (`TIMEOUT` for a timeout) for that card; no speech text is logged.
     A release after the Yes always stops the mic.
-  `{"cmd":"mic_revoke"}` → `{"ok":true,"revoked":true}` drops any unused tokens.
+  `{"cmd":"mic_revoke"}` → `{"ok":true,"revoked":true}` drops any unused tokens. Unused tokens are also
+  dropped by **every** `stop` (plain or `reason:"safeword"`), the spoken safeword, and any mic card that is
+  cancelled or times out; a later `listen` with such a token is refused (`need_card`). Audited `REVOKED`
+  (kind `mic_revoke_<why>`, no speech text).
   - Hold-to-talk clients: the card's reply waits for Ko's click, and clicking Yes means letting go of the
     talk button, so start-on-press / stop-on-release would capture almost nothing. Such a client should
     treat the Yes as the start of the capture and stop on the next press (or use `listen` once, which ends
@@ -188,7 +191,8 @@ target, then detail lines; stdout: `yes` / `no` / `timeout` / `cancelled` / `no_
   - The daemon **stops speech immediately** and emits `{"ev":"safeword","text":...}`.
   - Clients must end the scene and must not send the transcript to the model as chat.
 - **Safeword and mic cards.** `{"cmd":"stop","reason":"safeword"}` (the app's typed or spoken "red") also
-  closes any mic card still waiting for its Yes (audited `CANCELLED`), so the mic never opens afterwards.
+  closes any mic card still waiting for its Yes (audited `CANCELLED`) and drops every unused mic token
+  (audited `REVOKED`), so the mic never opens afterwards on a permission given before it.
   `stop` is never gated and does not wait for the card.
 - **No voice consent.** Every voice transcript carries `"voice":true,"consent_ok":false`, and `"affirmation":true` when it starts with yes / yeah / sure / okay / I agree / I accept / deal / confirm...
   - **A voice transcript must never count as "Yes" to a Soul Contract or a plan.** The UI must require a mouse click on the card.

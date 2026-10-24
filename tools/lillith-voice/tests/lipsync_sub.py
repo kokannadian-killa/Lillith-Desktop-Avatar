@@ -78,6 +78,10 @@ for _ in range(600):
     time.sleep(0.05)
 st = call(conn()[1], cmd="stop")
 th.join(10)
+for _ in range(100):   # the stop event can land a few ms after the say reply
+    if any(e["ev"] == "stop" for _, e in evs):
+        break
+    time.sleep(0.01)
 stops = [e for _, e in evs if e["ev"] == "stop"]
 print("stop reply:", st, "waiting say reply:", {k: rep2.get(k) for k in ("ok", "utt", "stopped")}, "stop events:", stops)
 if not (st["ok"] and rep2.get("stopped") and stops and stops[0]["utt"] == rep2.get("utt")):
