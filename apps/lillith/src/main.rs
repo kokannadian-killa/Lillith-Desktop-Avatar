@@ -30,6 +30,7 @@ use lillith_overlay::{Backend, OverlayOptions};
 use std::path::PathBuf;
 
 mod chat;
+mod learn_wiring;
 mod memory_wiring;
 mod preview;
 mod server_consent;
@@ -158,6 +159,21 @@ enum Cmd {
         /// Import this image into the avatar anchor editor right away.
         #[arg(long)]
         import: Option<PathBuf>,
+    },
+    /// Idle self-learning from installed docs (P1, fully local). `--once`
+    /// runs one step now (`--dry-run`: print what she'd note, write
+    /// nothing); `--reindex` rebuilds the note index from the knowledge
+    /// folder. Does nothing when `[memory] enabled = false`.
+    Learn {
+        /// Run one learning step now.
+        #[arg(long)]
+        once: bool,
+        /// With `--once`: show the notes, write nothing.
+        #[arg(long, requires = "once")]
+        dry_run: bool,
+        /// Rebuild the notes index from disk.
+        #[arg(long, conflicts_with = "once")]
+        reindex: bool,
     },
     /// First-run setup (the Windows installer runs this): point Lily's
     /// brain at a GGUF model and llama-server on this computer. Writes
@@ -579,6 +595,14 @@ async fn main() -> Result<()> {
             }
         }
         Some(Cmd::ContractCard { timeout }) => contract_card_cmd(timeout),
+        Some(Cmd::Learn {
+            once,
+            dry_run,
+            reindex,
+        }) => {
+            let (cfg, _) = load_config(&cli);
+            learn_wiring::cli(&cfg, once, dry_run, reindex)?;
+        }
         None => run_overlay(&cli, rules.rules.len()).await?,
     }
     Ok(())
@@ -1182,6 +1206,10 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     // tee) and speaks proactive lines back into it (`memory.suggest`).
     let memory = memory_wiring::start(&cfg.memory, feed.clone());
     let tx = memory_wiring::tee(feed, &memory);
+    // The idle learner (own thread + memory connection) sees the same
+    // events: activity pauses it, `chat.safeword` stops it at once.
+    let learner = learn_wiring::start(&cfg, !cli.no_llm);
+    let tx = learn_wiring::tee(tx, learner.as_ref());
     let monitor = start_monitor(cli, &cfg, tx.clone());
     let chat_on = cfg.chat.enabled;
     // Optional self-spawned llama-server (`[chat.server]`), stopped on exit.

@@ -2384,6 +2384,7 @@ dependencies = [
  "directories",
  "lillith-anim",
  "lillith-core",
+ "lillith-learn",
  "lillith-memory",
  "lillith-mind",
  "lillith-overlay",
@@ -2443,9 +2444,26 @@ name = "lillith-core"
 version = "0.0.1"
 dependencies = [
  "glam",
+ "libc",
  "serde",
  "thiserror 2.0.21",
  "toml",
+ "tracing",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "lillith-learn"
+version = "0.0.1"
+dependencies = [
+ "flate2",
+ "libc",
+ "lillith-core",
+ "lillith-memory",
+ "lillith-mind",
+ "rusqlite",
+ "serde_json",
+ "tokio",
  "tracing",
  "windows-sys 0.59.0",
 ]

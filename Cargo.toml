@@ -18,6 +18,7 @@ members = [
     "crates/lillith-admin",
     "android/rust",
     "crates/lillith-memory",
+    "crates/lillith-learn",
 ]
 default-members = [
     "crates/lillith-core",
@@ -37,6 +38,7 @@ default-members = [
     "crates/lillith-admin",
     "android/rust",
     "crates/lillith-memory",
+    "crates/lillith-learn",
 ]
 
 [workspace.package]
@@ -63,6 +65,7 @@ lillith-settings-gui = { path = "crates/lillith-settings-gui" }
 lillith-setup = { path = "crates/lillith-setup" }
 lillith-admin = { path = "crates/lillith-admin" }
 lillith-memory = { path = "crates/lillith-memory" }
+lillith-learn = { path = "crates/lillith-learn" }
 lillith-android = { path = "android/rust" }
 
 # Common

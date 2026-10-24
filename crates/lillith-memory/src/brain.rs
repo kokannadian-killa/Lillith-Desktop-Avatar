@@ -159,7 +159,7 @@ impl ForgetReport {
 
 /// Lillith's memory. `Send` (move it to the chat worker), not `Sync`.
 pub struct Brain {
-    conn: Option<Connection>,
+    pub(crate) conn: Option<Connection>,
     cfg: MemoryConfig,
     path: Option<PathBuf>,
     extractor: Box<dyn Extractor>,
@@ -1304,7 +1304,7 @@ impl Brain {
     /// taken up front, waiting `busy_timeout` for another process instead of
     /// failing half-way). Already inside a transaction: just runs `f`.
     /// An error rolls everything back.
-    fn write_tx<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    pub(crate) fn write_tx<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
         let Some(c) = &self.conn else { return f() };
         if !c.is_autocommit() {
             return f();
@@ -1679,7 +1679,7 @@ pub(crate) fn format_block(
     };
     for m in mems {
         let mut l = format!("- {}", m.label);
-        if !m.detail.is_empty() && matches!(m.kind, Kind::Error) {
+        if !m.detail.is_empty() && matches!(m.kind, Kind::Error | Kind::Note) {
             l.push_str(&format!(" ({})", m.detail));
         }
         if add(l, &mut out) {
