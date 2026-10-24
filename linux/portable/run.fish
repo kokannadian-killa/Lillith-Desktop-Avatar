@@ -23,12 +23,19 @@ if contains -- --fix-kwin $argv
     set argv $keep
 end
 
+# Launching her = no arguments, or options only (`--backend x11`);
+# `status`, `rules`, `preview --list`, `setup` … are subcommands.
+set -l launch 0
+if test (count $argv) -eq 0; or string match -q -- '-*' $argv[1]
+    set launch 1
+end
+
 # KDE force blur (Better Blur DX / Better Blur) paints a dark rounded panel
 # behind her. With consent, exclude only her window class; otherwise check
-# once and print the fix.
+# once (only when launching her) and print the fix.
 if test $fix_kwin = 1
     $pkg/bin/lillith fix-kwin
-else if command -q kreadconfig6
+else if test $launch = 1; and command -q kreadconfig6
     set -q XDG_STATE_HOME; and set -l statedir $XDG_STATE_HOME; or set -l statedir $HOME/.local/state
     set -l marker $statedir/lillith/kwin-blur-checked
     if not test -f $marker
@@ -45,13 +52,13 @@ end
 
 set -l extra
 set -q XDG_CONFIG_HOME; and set -l cfgdir $XDG_CONFIG_HOME; or set -l cfgdir $HOME/.config
-# Prefer a personal config if one exists, else the bundled one.
-if not test -f $cfgdir/lillith/config.toml; and not contains -- --config $argv
+# Prefer a personal config if one exists, else the bundled one. `setup`
+# always writes the personal config (seeded from the bundled one).
+if not test -f $cfgdir/lillith/config.toml; and not contains -- --config $argv; and not contains -- setup $argv
     set extra $extra --config $pkg/config.toml
 end
 # Default to Wayland unless a backend was given or a subcommand is run.
-set -l first $argv[1]
-if test (count $argv) -eq 0; or string match -q -- '-*' $first
+if test $launch = 1
     if not contains -- --backend $argv; and set -q WAYLAND_DISPLAY
         set extra $extra --backend wayland   # use: ./run.fish --backend x11  for the X11 fallback
     end

@@ -36,9 +36,9 @@ from pacman or an AUR helper you run yourself).
 ### 2. Unzip and start her
 
 ```fish
-unzip Lillith-<version>.zip
-cd Lillith-<version>
-chmod +x bin/lillith bin/lillith-settings run.sh run.fish kwin-blur-exclude.sh   # if unzip dropped the executable bits
+unzip Lillith-Desktop-Avatar-<sha>.zip      # <sha> = the build's commit, e.g. 46ed853
+cd Lillith-Desktop-Avatar-<sha>
+chmod +x bin/lillith bin/lillith-settings bin/lillith-setup-wizard run.sh run.fish kwin-blur-exclude.sh   # if unzip dropped the executable bits
 ./run.fish
 ```
 
@@ -75,8 +75,15 @@ GGUF model and `llama-server`, both on your machine.
    `~/.config/lillith/config.toml` (loopback only, `--jinja` included):
 
    ```fish
-   ./bin/lillith setup --gguf ~/models/<model>.gguf --llama-server (command -s llama-server)
+   if command -q llama-server
+       ./bin/lillith setup --gguf ~/models/<model>.gguf --llama-server (command -s llama-server)
+   else
+       echo "llama-server not found: install llama.cpp first (step 1)"
+   end
    ```
+
+   If `llama-server` isn't on your `PATH`, give its full path instead,
+   e.g. `--llama-server ~/llama.cpp/build/bin/llama-server`.
 
    If you'd rather use the GUI, run `./bin/lillith-settings` and open the
    **Brain** tab. That's the setup wizard, and it can also scan your disks
@@ -127,8 +134,11 @@ Settings. Either one writes `~/.config/autostart/lillith.desktop`.
 
 ### Full install (menu entry, `~/.local/bin`)
 
-From a source checkout, run `./linux/install.sh --assets Lillith-<version>.zip`.
-It asks a few questions. Undo it with `./linux/install.sh --uninstall`.
+From the unzipped release folder, run
+`./source/linux/install.sh --assets assets/generated` (it builds from
+`source/`, so it needs Rust). It asks a few questions. Undo it with
+`./source/linux/install.sh --uninstall`. In a git checkout of the repo the
+script is `./linux/install.sh` (the zip keeps the repo's files under `source/`).
 
 ---
 
@@ -137,7 +147,9 @@ It asks a few questions. Undo it with `./linux/install.sh --uninstall`.
 The release zip has no Windows build, so you build it.
 
 **Option A: cross-build from Linux or WSL** (makes the installer and a
-portable zip):
+portable zip). Run it in a git checkout of the repo with the art pulled
+(`git lfs pull`): the zip's `source/` folder has the script at
+`source/windows/build.sh`, but not the `assets/` it packs.
 
 ```sh
 rustup toolchain install 1.85
@@ -196,8 +208,8 @@ tokens, 160 reply tokens) are sent with every chat request, so they aren't on
 the command line. If you use Ollama instead (`backend = "ollama"`), it must be
 on `http://127.0.0.1:11434`. The **kill switch** on Windows is the same safeword
 (see below), and it also shuts down the elevated `lillith-admin` helper.
-More detail: [`windows/INSTALL-windows.md`](windows/INSTALL-windows.md)
-(`source/windows/INSTALL-windows.md` in the zip).
+More detail: `source/windows/INSTALL-windows.md` in the release zip
+([`windows/INSTALL-windows.md`](windows/INSTALL-windows.md) in the repo).
 
 ---
 

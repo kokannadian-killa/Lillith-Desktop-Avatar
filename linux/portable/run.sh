@@ -20,12 +20,17 @@ for a in "$@"; do
 done
 set -- ${rest[@]+"${rest[@]}"}
 
+# Launching her = no arguments, or options only (`--backend x11`);
+# `status`, `rules`, `preview --list`, `setup` … are subcommands.
+launch=0
+if [[ $# -eq 0 || "$1" == -* ]]; then launch=1; fi
+
 # KDE force blur (Better Blur DX / Better Blur) paints a dark rounded panel
 # behind her. With consent, exclude only her window class; otherwise check
-# once and print the fix.
+# once (only when launching her) and print the fix.
 if [[ "$fix_kwin" == 1 ]]; then
   "$PKG/bin/lillith" fix-kwin || true
-elif command -v kreadconfig6 >/dev/null 2>&1; then
+elif [[ "$launch" == 1 ]] && command -v kreadconfig6 >/dev/null 2>&1; then
   marker="${XDG_STATE_HOME:-$HOME/.local/state}/lillith/kwin-blur-checked"
   if [[ ! -f "$marker" ]]; then
     report="$("$PKG/bin/lillith" fix-kwin --check 2>/dev/null || true)"
@@ -40,13 +45,14 @@ elif command -v kreadconfig6 >/dev/null 2>&1; then
 fi
 
 args=()
-# Prefer a personal config if one exists, else the bundled one.
+# Prefer a personal config if one exists, else the bundled one. `setup`
+# always writes the personal config (seeded from the bundled one).
 user_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/lillith/config.toml"
-if [[ ! -f "$user_cfg" && " $* " != *" --config "* ]]; then
+if [[ ! -f "$user_cfg" && " $* " != *" --config "* && " $* " != *" setup "* ]]; then
   args+=(--config "$PKG/config.toml")
 fi
 # Default to Wayland unless the caller picked a backend or runs a subcommand.
-if [[ $# -eq 0 || "$1" == -* ]] && [[ " $* " != *" --backend "* ]] && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+if [[ "$launch" == 1 ]] && [[ " $* " != *" --backend "* ]] && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
   args+=(--backend wayland)   # use: ./run.sh --backend x11  for the X11 fallback
 fi
 exec "$PKG/bin/lillith" ${args[@]+"${args[@]}"} "$@"
