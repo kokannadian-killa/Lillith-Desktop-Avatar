@@ -48,13 +48,48 @@ pub fn line(t: f64, op: &str, topic: &str, note_id: &str) -> String {
 /// one column (tabs and newlines flattened), cut to 2048 chars so a long URL
 /// list can't swamp the log.
 pub fn online_line(t: f64, state: &str, card: &str, fields: &[String]) -> String {
-    let mut l = format!(
-        "{}\t{}\t{}\tcard={}",
-        utc(t),
-        col(state),
+    card_line(
+        t,
+        state,
         lillith_core::soul_contract::ONLINE_RESEARCH_KIND,
-        col(card)
-    );
+        card,
+        fields,
+    )
+}
+
+/// A practice-sandbox card line (§6):
+/// `<ts>\t<STATE>\tsandbox_run\tcard=<id>\t<field>\t…` (same columns and
+/// caps as [`online_line`]; the fields carry `job=`, `step=`, `hash=` and
+/// `argv=`).
+pub fn sandbox_line(t: f64, state: &str, card: &str, fields: &[String]) -> String {
+    card_line(
+        t,
+        state,
+        lillith_core::soul_contract::SANDBOX_RUN_KIND,
+        card,
+        fields,
+    )
+}
+
+/// Appends a practice-sandbox card line to `log` (0600 when created).
+/// Fail-closed like [`record_online`]: no `PROPOSED` line, no card.
+pub fn record_sandbox(
+    log: Option<&Path>,
+    state: &str,
+    card: &str,
+    fields: &[String],
+) -> std::io::Result<()> {
+    let Some(log) = log else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no audit log path",
+        ));
+    };
+    write_line(log, &sandbox_line(crate::now_s(), state, card, fields))
+}
+
+fn card_line(t: f64, state: &str, kind: &str, card: &str, fields: &[String]) -> String {
+    let mut l = format!("{}\t{}\t{}\tcard={}", utc(t), col(state), kind, col(card));
     for f in fields {
         l.push('\t');
         l.extend(lillith_core::launch_audit::one_column(f).chars().take(2048));
@@ -79,6 +114,98 @@ pub fn record_online(
         ));
     };
     write_line(log, &online_line(crate::now_s(), state, card, fields))
+}
+
+/// Appends a helper-worker line
+/// (`<ts>\tWORKER\t<op>\t<reason>\tjob=<id>[\tcard=<id>]`, docs §12) to
+/// `log`. Callers fail closed on an error.
+pub fn record_worker(
+    log: Option<&Path>,
+    op: &str,
+    reason: &str,
+    job: &str,
+    card: Option<&str>,
+) -> std::io::Result<()> {
+    let Some(log) = log else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no audit log path",
+        ));
+    };
+    write_line(
+        log,
+        &crate::workers::audit_line(crate::now_s(), op, reason, job, card),
+    )
+}
+
+/// Appends a card line of any Soul Contract `kind`
+/// (`<ts>\t<STATE>\t<kind>\tcard=<id>\t<field>\t…`, e.g. the practice
+/// skill's `write_skill` card); fail-closed like [`record_online`].
+pub fn record_card(
+    log: Option<&Path>,
+    state: &str,
+    kind: &str,
+    card: &str,
+    fields: &[String],
+) -> std::io::Result<()> {
+    let Some(log) = log else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no audit log path",
+        ));
+    };
+    write_line(log, &card_line(crate::now_s(), state, kind, card, fields))
+}
+
+/// A dream-session card line (§11.1):
+/// `<ts>\t<STATE>\tdream_session\tcard=<id>\t<field>\t…`.
+pub fn dream_card_line(t: f64, state: &str, card: &str, fields: &[String]) -> String {
+    card_line(
+        t,
+        state,
+        lillith_core::soul_contract::DREAM_SESSION_KIND,
+        card,
+        fields,
+    )
+}
+
+/// Appends a dream-session card line; fail-closed like [`record_online`].
+pub fn record_dream_card(
+    log: Option<&Path>,
+    state: &str,
+    card: &str,
+    fields: &[String],
+) -> std::io::Result<()> {
+    let Some(log) = log else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no audit log path",
+        ));
+    };
+    write_line(log, &dream_card_line(crate::now_s(), state, card, fields))
+}
+
+/// A dream-session event line (§11.1):
+/// `<ts>\tDREAM\t<op>\t<reason>\tcard=<id>` (`start`, `end`).
+pub fn dream_line(t: f64, op: &str, reason: &str, card: &str) -> String {
+    format!(
+        "{}\tDREAM\t{}\t{}\tcard={}\n",
+        utc(t),
+        col(op),
+        col(reason),
+        col(card)
+    )
+}
+
+/// Appends a dream-session event line; callers fail closed on an error.
+pub fn record_dream(log: Option<&Path>, op: &str, reason: &str, card: &str) -> std::io::Result<()> {
+    let Some(log) = log else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no audit log path",
+        ));
+    };
+    write_line(log, &dream_line(crate::now_s(), op, reason, card))
 }
 
 /// Appends a `LEARN` line to `log` (file 0600 when created). Failures are

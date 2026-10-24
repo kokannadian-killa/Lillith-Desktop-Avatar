@@ -18,6 +18,8 @@
 //! - [`runner`]: the background thread the overlay starts.
 //! - [`online`]: user-gated, Tor-only online research trips (P5, off by
 //!   default; only ever started by Ko, never by the idle loop).
+//! - [`workers`]: the helper-worker supervisor (§12, P7 first slice; off
+//!   with online research, never started by the idle loop).
 
 pub mod audit;
 pub mod classify;
@@ -30,8 +32,10 @@ pub mod paths;
 pub mod readers;
 pub mod runner;
 pub mod scheduler;
+pub mod sha256;
 pub mod store;
 pub mod summarize;
+pub mod workers;
 
 pub use learner::{Learner, StepReport};
 pub use lillith_core::config::LearnConfig;

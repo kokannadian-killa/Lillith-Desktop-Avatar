@@ -877,6 +877,9 @@ pub struct LearnConfig {
     /// Online trips may fetch plain `http://` (off: a Tor exit node can
     /// read and change plaintext, so only `https://` is fetched).
     pub allow_http: bool,
+    /// The practice sandbox (P4, docs §6). Off by default: Ko opts in
+    /// separately from online research; each compile / run still needs its
+    /// own card click.
     pub practice: bool,
     /// `[learn.dream]` (P7; parsed, unused).
     pub dream: LearnDreamConfig,
@@ -933,7 +936,7 @@ impl Default for LearnConfig {
             online_max_bytes: 2_097_152,
             tor_socks: "127.0.0.1:9050".into(),
             allow_http: false,
-            practice: true,
+            practice: false,
             dream: LearnDreamConfig::default(),
             workers: LearnWorkersConfig::default(),
         }
