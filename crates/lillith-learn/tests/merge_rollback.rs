@@ -101,6 +101,11 @@ fn failed_merge_restores_the_old_note_file() {
     assert_eq!(notes.len(), 1);
     assert_eq!(notes[0].content_hash, row.content_hash);
     assert_eq!(audit_ops(&d), ["write", "fail"]);
+    // The audit lines carry ids only, never note text (old or merged).
+    let log = std::fs::read_to_string(d.join("audit.log")).unwrap();
+    for t in ["pacman -Qtd first", "pacman -Rns", "orphan", "Garuda"] {
+        assert!(!log.contains(t), "note text in the audit log: {log}");
+    }
     let _ = std::fs::remove_dir_all(d);
 }
 

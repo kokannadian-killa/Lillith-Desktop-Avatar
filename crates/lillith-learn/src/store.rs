@@ -600,4 +600,30 @@ pub(crate) mod tests {
             .any(|(r, n)| r == "inbox/n-small.md" && n.topic == INBOX));
         let _ = std::fs::remove_dir_all(d);
     }
+
+    #[test]
+    fn restore_refuses_paths_outside_the_knowledge_folder() {
+        let d = tmp("restore");
+        let s = NoteStore::open(&d.join("knowledge"), &["rust".into()], true).unwrap();
+        let lock = s.lock().unwrap().unwrap();
+        let p = s.write(&lock, &note("n-r1", "rust", "t")).unwrap();
+        s.restore(&lock, &p, b"old bytes").unwrap();
+        assert_eq!(std::fs::read(&p).unwrap(), b"old bytes");
+        let outside = d.join("outside.md");
+        assert!(s.restore(&lock, &outside, b"x").is_err());
+        assert!(s
+            .restore(&lock, &s.root().join("rust/../../escape.md"), b"x")
+            .is_err());
+        assert!(!outside.exists() && !d.join("escape.md").exists());
+        #[cfg(unix)]
+        {
+            std::fs::create_dir_all(d.join("elsewhere")).unwrap();
+            std::os::unix::fs::symlink(d.join("elsewhere"), s.root().join("evil")).unwrap();
+            assert!(s
+                .restore(&lock, &s.root().join("evil/n-r2.md"), b"x")
+                .is_err());
+            assert_eq!(std::fs::read_dir(d.join("elsewhere")).unwrap().count(), 0);
+        }
+        let _ = std::fs::remove_dir_all(d);
+    }
 }
