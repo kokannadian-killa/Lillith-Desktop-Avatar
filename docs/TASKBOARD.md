@@ -18,7 +18,7 @@ Times are America/Edmonton (MDT/MST).
 | Sexy voice bot | `voice-clone-kit` (local `feat/voice-clone-kit`) | a674da4 | standalone voice-clone kit | In progress | Hand SHA to lead | 2026-10-23 17:00 MDT |
 | Unknown | `art/dom-persona-clips` | a674da4 | dominant-persona clips | Unknown | Owner to claim this row | 2026-10-23 17:00 MDT |
 | Lead | `fix/qa-a674da4` | a674da4 | QA fixes from test-build-a674da4 | QA in progress | Finish QA pass; small fixes here, others go back to their owner | 2026-10-23 17:00 MDT |
-| Grok Bot (x11 black box) | `fix/x11-blackbox-flicker` | a674da4 | `crates/lillith-overlay/src/x11.rs`, `crates/lillith-overlay/Cargo.toml` (x11rb `xfixes`), 1 line of `INSTALL.md` | Gate running | XFixes compositor switch + atomic resize; runtime 0 black / 0 empty frames. Hand SHA to lead after the 1.85 gate | 2026-10-23 17:55 MDT |
+| Grok Bot (x11 black box) | `fix/x11-blackbox-flicker` | 371ed83 | `crates/lillith-overlay/src/x11.rs`, `crates/lillith-overlay/Cargo.toml` (x11rb `xfixes`), 1 line of `INSTALL.md` | Gate running | XFixes compositor switch + atomic resize; runtime 0 black / 0 empty frames. Hand SHA to lead after the 1.85 gate | 2026-10-23 18:20 MDT |
 | TBD | persona v2 | — | persona prompt | Owner TBD | Claim after everything above | 2026-10-23 17:00 MDT |
 
 ## Merge order
