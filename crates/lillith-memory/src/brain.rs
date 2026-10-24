@@ -3,7 +3,9 @@
 use crate::decay::{decayed, recency, reinforce};
 use crate::errors::{signature, ErrorRecord, FixOutcome, KnownFix};
 use crate::extract::{intent_key, keywords, Extractor, Fact, Polarity, RuleExtractor};
-use crate::forget::{content_words, mentions_any, parse_forget, ForgetCmd};
+use crate::forget::{
+    contains_phrase, content_words, matches_topic, parse_forget, same_word, ForgetCmd,
+};
 use crate::habits::{self, EventRow, Prediction};
 use crate::safeword::{is_safeword, mentions_safeword};
 use crate::{schema, Error, Kind};
@@ -138,7 +140,15 @@ pub struct ForgetReport {
     pub scrubbed: bool,
     /// Why scrubbing did not finish (no memory content in it).
     pub note: Option<String>,
+    /// Up to [`FORGET_EXAMPLES`] short labels of what matched, for the
+    /// confirmation question (shown to Ko only; never logged).
+    pub examples: Vec<String>,
 }
+
+/// How many example rows a forget preview carries.
+pub const FORGET_EXAMPLES: usize = 3;
+/// Example labels are cut to this many characters.
+const EXAMPLE_CHARS: usize = 60;
 
 impl ForgetReport {
     /// Rows removed (nodes + events + errors; edges ride along).
@@ -156,6 +166,10 @@ pub struct Brain {
     last_retrieved: RefCell<Vec<i64>>,
     local_offset: Cell<Option<i32>>,
     last_maintain: Cell<f64>,
+    /// The shared `<data>/lillith/audit.log` (also with a custom
+    /// `db_path`): one line per forget, kind + counts only. Set by
+    /// [`Brain::open`]; `None` for `open_path` / in-memory brains.
+    audit_log: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for Brain {
@@ -175,10 +189,13 @@ impl Brain {
             return Ok(Self::disabled(cfg));
         }
         let path = cfg.resolved_db_path().ok_or(Error::NoDataDir)?;
-        Self::open_path(&path, cfg)
+        Ok(Self::open_path(&path, cfg)?.with_audit_log(lillith_core::config::audit_log_path()))
     }
 
-    /// Opens (creating) the DB at `path`. Still honours `cfg.enabled`.
+    /// Opens (creating) the DB at `path`. Still honours `cfg.enabled`. No
+    /// audit file (tests / embedders opt in with
+    /// [`with_audit_log`](Self::with_audit_log)); [`open`](Self::open) uses
+    /// the shared `<data>/lillith/audit.log`.
     pub fn open_path(path: &Path, cfg: &MemoryConfig) -> Result<Self> {
         if !cfg.enabled {
             return Ok(Self::disabled(cfg));
@@ -211,6 +228,7 @@ impl Brain {
             last_retrieved: RefCell::new(Vec::new()),
             local_offset: Cell::new(None),
             last_maintain: Cell::new(0.0),
+            audit_log: None,
         }
     }
 
@@ -244,7 +262,20 @@ impl Brain {
             last_retrieved: RefCell::new(Vec::new()),
             local_offset: Cell::new(None),
             last_maintain: Cell::new(last),
+            audit_log: None,
         })
+    }
+
+    /// Where forget audit lines go (kind + counts only, file 0600 on unix);
+    /// `None` turns the file audit off (the tracing line stays).
+    pub fn with_audit_log(mut self, path: Option<PathBuf>) -> Self {
+        self.audit_log = path;
+        self
+    }
+
+    /// The forget audit file, if any.
+    pub fn audit_log(&self) -> Option<&Path> {
+        self.audit_log.as_deref()
     }
 
     /// Swaps the fact extractor (e.g. an LLM-assisted one).
@@ -1318,6 +1349,21 @@ impl Brain {
             scrubbed = r.scrubbed,
             "forget"
         );
+        if let Some(log) = &self.audit_log {
+            let line = format!(
+                "{}\tFORGET\tmemory:{}\tnodes={} edges={} events={} errors={} scrubbed={}\n",
+                format_utc(ctx.now),
+                forget_kind(cmd),
+                r.nodes,
+                r.edges,
+                r.events,
+                r.errors,
+                r.scrubbed
+            );
+            if let Err(e) = append_private(log, &line) {
+                tracing::warn!("memory: could not write {}: {e}", log.display());
+            }
+        }
         Ok(r)
     }
 
@@ -1349,8 +1395,9 @@ impl Brain {
                 r.errors = s.errors as usize;
                 (Vec::new(), Vec::new(), Vec::new())
             }
-            ForgetCmd::LastSecs(secs) => {
-                let cut = ctx.now - *secs as f64;
+            ForgetCmd::LastSecs(_) | ForgetCmd::LastTurn => {
+                let secs = cmd.window_secs().unwrap_or(0);
+                let cut = ctx.now - secs as f64;
                 let ids = c
                     .prepare(
                         "SELECT id FROM nodes WHERE key != 'ko' AND (created_at >= ?1 OR updated_at >= ?1)",
@@ -1375,11 +1422,16 @@ impl Brain {
                 if words.is_empty() {
                     return Ok(r);
                 }
-                // Whole-word matches on key, label and detail (no FTS prefix
-                // or LIKE substring: "ex" never hits "next" or "text").
+                // A row matches when key, label and detail together hold the
+                // whole topic: every content word for 1-2 words, else two
+                // thirds of them (`matches_topic`). Whole words only (plus
+                // the exact singular/plural), never FTS prefixes or LIKE:
+                // "new job" never hits "new wave music", "news" never "new".
                 let mut ids: Vec<i64> = Vec::new();
                 // Values of matched attributes ("my ex" → "sarah"): the raw
-                // event log and a bare entity of that name go too.
+                // event log and a bare entity of that name go too, matched
+                // by the whole value as one phrase ("google engineer" never
+                // hits "google chrome").
                 let mut values: Vec<String> = Vec::new();
                 {
                     let mut st =
@@ -1394,10 +1446,14 @@ impl Brain {
                     })?;
                     for row in rows {
                         let (id, key, label, detail) = row?;
-                        if mentions_any(&key, &words)
-                            || mentions_any(&label, &words)
-                            || mentions_any(&detail, &words)
-                        {
+                        // An attribute whose name IS one of the topic's
+                        // words ("my new job" → `attr:job`) matches too:
+                        // the whole key, never a part of it.
+                        let attr_hit = key.strip_prefix("attr:").is_some_and(|a| {
+                            let a = a.trim().to_lowercase();
+                            words.iter().any(|w| same_word(&a, w))
+                        });
+                        if attr_hit || matches_topic(&[&key, &label, &detail], &words) {
                             ids.push(id);
                             if key.starts_with("attr:") && !detail.trim().is_empty() {
                                 values.push(detail.trim().to_lowercase());
@@ -1426,10 +1482,6 @@ impl Brain {
                         .collect::<rusqlite::Result<Vec<_>>>()?;
                     ids.extend(found);
                 }
-                let mut event_words = words.clone();
-                for v in &values {
-                    event_words.extend(content_words(v));
-                }
                 let sigs = {
                     let mut st = c.prepare(
                         "SELECT signature, sample, context, coalesce(fix, ''), failed_fixes FROM errors",
@@ -1446,7 +1498,7 @@ impl Brain {
                     let mut sigs = Vec::new();
                     for row in rows {
                         let (sig, a, b, f, ff) = row?;
-                        if [a, b, f, ff].iter().any(|t| mentions_any(t, &words)) {
+                        if matches_topic(&[&a, &b, &f, &ff], &words) {
                             sigs.push(sig);
                         }
                     }
@@ -1459,7 +1511,9 @@ impl Brain {
                     let mut ev = Vec::new();
                     for row in rows {
                         let (id, subject) = row?;
-                        if mentions_any(&subject, &event_words) {
+                        if matches_topic(&[&subject], &words)
+                            || values.iter().any(|v| contains_phrase(&subject, v))
+                        {
                             ev.push(id);
                         }
                     }
@@ -1469,6 +1523,7 @@ impl Brain {
             }
         };
         if !matches!(cmd, ForgetCmd::All) {
+            r.examples = self.forget_examples(&nodes, &sigs, &events)?;
             // An error goes with its graph node and vice versa.
             let mut sigs = sigs;
             for id in &nodes {
@@ -1500,6 +1555,67 @@ impl Brain {
         c.execute_batch("INSERT INTO nodes_fts(nodes_fts) VALUES ('rebuild');")?;
         r.edges = edges_before.saturating_sub(self.stats().edges as usize);
         Ok(r)
+    }
+
+    /// Short labels of up to [`FORGET_EXAMPLES`] rows about to be deleted
+    /// (nodes first, then errors, then events), deduplicated.
+    fn forget_examples(
+        &self,
+        nodes: &[i64],
+        sigs: &[String],
+        events: &[i64],
+    ) -> Result<Vec<String>> {
+        let c = self.conn.as_ref().expect("enabled");
+        let mut out: Vec<String> = Vec::new();
+        let mut push = |s: String| {
+            let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+            let s = if s.chars().count() > EXAMPLE_CHARS {
+                let cut: String = s.chars().take(EXAMPLE_CHARS - 1).collect();
+                format!("{}…", cut.trim_end())
+            } else {
+                s
+            };
+            if !s.is_empty() && !out.contains(&s) && out.len() < FORGET_EXAMPLES {
+                out.push(s);
+            }
+        };
+        for id in nodes {
+            let label: Option<String> = c
+                .query_row(
+                    "SELECT label FROM nodes WHERE id = ?1 AND key != 'ko'",
+                    [id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if let Some(l) = label {
+                push(l);
+            }
+        }
+        for sig in sigs {
+            let sample: Option<String> = c
+                .query_row(
+                    "SELECT sample FROM errors WHERE signature = ?1",
+                    [sig],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if let Some(sm) = sample {
+                push(format!("error: {sm}"));
+            }
+        }
+        for id in events {
+            let ev: Option<(String, String)> = c
+                .query_row(
+                    "SELECT kind, subject FROM events WHERE id = ?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            if let Some((k, subj)) = ev {
+                push(format!("{k}: {subj}"));
+            }
+        }
+        Ok(out)
     }
 
     /// Compacts the file and checkpoints + truncates the WAL so deleted
@@ -1614,7 +1730,45 @@ fn forget_kind(cmd: &ForgetCmd) -> &'static str {
         ForgetCmd::All => "all",
         ForgetCmd::Topic(_) => "topic",
         ForgetCmd::LastSecs(_) => "last_secs",
+        ForgetCmd::LastTurn => "last_turn",
     }
+}
+
+/// Appends `line` to `path`, creating the file 0600 on unix.
+fn append_private(path: &Path, line: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    o.open(path)?.write_all(line.as_bytes())
+}
+
+/// Unix seconds → `YYYY-MM-DDTHH:MM:SSZ` (proleptic Gregorian).
+fn format_utc(t: f64) -> String {
+    let secs = t.max(0.0) as i64;
+    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
 }
 
 /// Creates the DB's folder (0700 on unix) and the file itself (0600 on
@@ -1652,6 +1806,13 @@ fn prepare_private_file(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod internal_tests {
     use super::*;
+
+    #[test]
+    fn audit_timestamps_are_utc_rfc3339() {
+        assert_eq!(format_utc(0.0), "1970-01-01T00:00:00Z");
+        assert_eq!(format_utc(951_782_400.0), "2000-02-29T00:00:00Z");
+        assert_eq!(format_utc(1_792_368_000.5), "2026-10-19T00:00:00Z");
+    }
 
     #[test]
     fn maintenance_recovers_from_a_future_last_maintain() {

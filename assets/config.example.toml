@@ -122,8 +122,8 @@
 # pause_s = 2.0
 # shrink_s = 3.0
 # peak_scale = 1.6             # lowered automatically if she wouldn't fit on screen
-# approach_clips = ["idle_flirt_hands_behind_sway", "hip_sway", "hip_sway_slow"]
-# beat_clips = ["tease_closeup", "bend_forward_wink", "predator_lean_in", "kneel_sit_back_beckon", "dom_throne_lean", "lean_tease", "idle_flirt_lip_bite", "hip_pop_wink"]
+# approach_clips = ["idle_flirt_hands_behind_sway", "hip_sway", "hip_sway_slow", "hair_twirl_lip_bite"]
+# beat_clips = ["tease_closeup", "bend_forward_wink", "predator_lean_in", "kneel_sit_back_beckon", "dom_throne_lean", "tail_heart_wink", "trace_heart_on_glass", "dom_chin_tilt_summon", "lean_tease", "idle_flirt_lip_bite", "hip_pop_wink"]
 # pause_clips = ["blink_wink"]
 
 # ── System monitor (lillith --no-monitor turns it off) ───────────────────────
@@ -254,13 +254,18 @@
 # "[Memory]" note (~300 tokens max) into each chat prompt.
 # Turn it OFF with `enabled = false` (then nothing is read or written).
 # Forget from chat: "forget everything", "forget about <topic>",
-# "forget the last 30 minutes" (rows are deleted, the file is vacuumed and
-# the WAL truncated). "forget everything" / "forget about X" ask first:
-# reply "yes" to confirm; anything else cancels.
+# "forget the last 30 minutes", "forget the last thing I said" (rows are
+# deleted, the file is vacuumed and the WAL truncated). A topic must match
+# as a whole (all its words, or 2/3 of longer topics, in one memory), so
+# "forget my new job" never deletes "new wave music". "forget everything",
+# "forget about X" and windows longer than an hour ("the last 2 hours",
+# "the last 1000 months") ask first, showing how many memories match plus a
+# few examples: reply "yes" to confirm; anything else cancels. Each forget
+# appends kind + counts (never content) to <data dir>/lillith/audit.log.
 # The safeword ("red" / "OOC: stop") is never stored.
 # [memory]
 # enabled = true
-# db_path = ""            # empty = ~/.local/share/lillith/memory.db ($XDG_DATA_HOME aware; Windows: %LOCALAPPDATA%\lillith)
+# db_path = ""            # empty = ~/.local/share/lillith/memory.db ($XDG_DATA_HOME aware; Windows: %LOCALAPPDATA%\lillith, never roaming %APPDATA%)
 # half_life_days = 14.0   # unused memories fade by half every N days
 # top_k = 6               # memories injected per chat turn
 # max_context_tokens = 300

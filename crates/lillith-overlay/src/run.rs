@@ -173,15 +173,27 @@ pub struct LandingBlend {
     pub to_seat_cell: i32,
 }
 
+/// Tag the build tool (`tools/video-pipeline/blend_start_match.py`) sets on
+/// a landing blend whose first frame matches its `from` clip's `from_frame`
+/// where the engine draws it at touchdown (its seat line on the window top,
+/// where the drag pose had its feet). Without it the blend would pop in, so
+/// [`landing_blend`] skips it.
+pub const START_MATCHES_TAG: &str = "start_matches";
+
 /// The manifest's landing blend for a drop in pose `from` (the drag pose,
 /// `drag_held`): the first clip (sorted) whose `[blend]` goes from `from` to
-/// one of the [`sit_clips`] with seat data. `None` without one (she then
+/// one of the [`sit_clips`] with seat data and whose first frame is marked
+/// as matching `from` ([`START_MATCHES_TAG`]). `None` without one (she then
 /// lands standing, as before).
 pub fn landing_blend(m: &Manifest, from: &str) -> Option<LandingBlend> {
     let sits = sit_clips(m);
     m.clips.iter().find_map(|(n, c)| {
         let b = c.blend.as_ref()?;
         if b.from != from || !sits.contains(&b.to) {
+            return None;
+        }
+        if !c.has_tag(START_MATCHES_TAG) {
+            tracing::debug!(blend = %n, "landing blend skipped: its first frame does not match {from}");
             return None;
         }
         let to_seat_cell = seat_cell(&m.clips[&b.to])?;
@@ -3020,7 +3032,7 @@ frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
         let land = |name: &str, extra: &str, to: &str| {
             format!(
                 "{}{}",
-                clip_n(name, 2, extra),
+                clip_n(name, 2, &format!("{extra}tags = [\"start_matches\"]\n")),
                 blend_of(name, "drag_held", to)
             )
         };
@@ -3066,6 +3078,24 @@ frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
             landing_blend(&m(&format!("{seatless}{with_seat}")), "drag_held"),
             None
         );
+        // A blend whose first frame does not match the drag pose (no
+        // `start_matches` tag from the build tool): skipped, she lands
+        // standing rather than popping into it.
+        let unmatched = format!(
+            "{}{}",
+            clip_n("land_e", 2, "seat_y = 16\n"),
+            blend_of("land_e", "drag_held", "perch_sit")
+        );
+        assert_eq!(
+            landing_blend(&m(&format!("{perch}{unmatched}")), "drag_held"),
+            None
+        );
+        // ...and a matching one next to it is still found.
+        assert_eq!(
+            landing_blend(&m(&format!("{perch}{unmatched}{with_seat}")), "drag_held")
+                .map(|l| l.blend),
+            Some("land_a".into())
+        );
         // sit_swing counts as a sit base too.
         let swing = clip_n("sit_swing", 1, "seat_y = 20\n");
         let to_swing = land("land_d", "", "sit_swing");
@@ -3086,7 +3116,11 @@ frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
             "mode = \"loop\"\nseat_y = 20\nseat_x_range = [14, 26]\ntags = [\"sit_base\"]\n",
         );
         let blend = "blend_drag_held_to_perch_sit";
-        toml.push_str(&clip_n(blend, 6, "mode = \"once\"\nseat_y = 16\n"));
+        toml.push_str(&clip_n(
+            blend,
+            6,
+            "mode = \"once\"\nseat_y = 16\ntags = [\"start_matches\"]\n",
+        ));
         toml.push_str(&blend_of(blend, "drag_held", "perch_sit"));
         let (dir, mut c) = m3_controller_with("grav_land_blend", MoveMode::Stay, &toml);
         c.gravity.cfg.sit_for_s = (2.0, 2.0);
@@ -3162,7 +3196,10 @@ frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
     #[test]
     fn lands_standing_without_a_landing_blend() {
         use lillith_core::desktop::Rect;
-        // Only blends that do not lead from the drag pose into a sit base.
+        // Only blends that do not lead from the drag pose into a sit base,
+        // and a drag -> perch_sit landing blend whose first frame does not
+        // match the drag pose (no `start_matches` tag): she lands standing
+        // instead of popping into it.
         let mut toml = clip_n(
             "perch_sit",
             4,
@@ -3171,6 +3208,7 @@ frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
         for (n, from, to) in [
             ("blend_idle_to_perch_sit", "idle", "perch_sit"),
             ("blend_drag_held_to_wave", "drag_held", "wave"),
+            ("blend_drag_held_to_perch_sit", "drag_held", "perch_sit"),
         ] {
             toml.push_str(&clip_n(n, 6, "mode = \"once\"\n"));
             toml.push_str(&blend_of(n, from, to));

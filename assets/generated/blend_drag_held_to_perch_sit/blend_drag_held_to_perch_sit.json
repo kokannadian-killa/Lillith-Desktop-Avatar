@@ -1,793 +1,825 @@
 {
-  "name": "blend_drag_held_to_perch_sit",
-  "placeholder": false,
+ "name": "blend_drag_held_to_perch_sit",
+ "placeholder": false,
+ "frame_count": 70,
+ "frame_width": 400,
+ "frame_height": 400,
+ "canvas_w": 400,
+ "canvas_h": 400,
+ "layout": "horizontal_strip",
+ "sheet": "blend_drag_held_to_perch_sit_sheet.png",
+ "frames_dir": "frames/",
+ "fps": 12.0,
+ "loop": false,
+ "baseline_y": 392,
+ "anchor": [
+  200,
+  392
+ ],
+ "style": "canonical_ko (thigh-highs + shorts)",
+ "source": "grok-imagine-video",
+ "scale": 0.559,
+ "body_anchor_x": 200,
+ "facing": "front (drops in from above, lands seated on the edge)",
+ "source_files": [
+  "../../source/video/climb_on_land/climb_on_land_v1_b.mp4"
+ ],
+ "source_frame_range": {
+  "first": 5,
+  "last": 143,
+  "step": 2,
+  "video_fps": 24,
+  "note": "1-based ffmpeg frame numbers"
+ },
+ "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+ "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+ "centering": "fixed",
+ "baseline_snap": "global (video ground line)",
+ "body_point_src_x": [
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2,
+  634.2
+ ],
+ "horn_fix": {
+  "ref_horn_px": 562,
+  "ref_hue_median": 274.8,
+  "mean_hue_shift_deg_per_frame": [
+   0.0,
+   -53.9,
+   -52.8,
+   -53.3,
+   -48.7,
+   -43.8,
+   -46.8,
+   -40.1,
+   -26.9,
+   -37.5,
+   2.6,
+   -1.8,
+   5.6,
+   6.7,
+   6.9,
+   5.8,
+   4.4,
+   3.5,
+   2.9,
+   3.5,
+   4.8,
+   4.9,
+   5.1,
+   5.3,
+   5.3,
+   5.7,
+   5.3,
+   6.1,
+   5.7,
+   5.1,
+   4.4,
+   3.2,
+   2.1,
+   1.3,
+   0.2,
+   -0.3,
+   -1.0,
+   -2.0,
+   -1.2,
+   -3.0,
+   -2.6,
+   -2.7,
+   -2.4,
+   -2.3,
+   -1.5,
+   -2.2,
+   -1.6,
+   -2.4,
+   -2.3,
+   -1.4,
+   -1.6,
+   -1.7,
+   -1.2,
+   -1.5,
+   -1.7,
+   -1.1,
+   -0.6,
+   -0.1,
+   0.3,
+   -0.3,
+   -0.2,
+   -0.5,
+   -0.1,
+   -0.4,
+   -0.4,
+   -0.3,
+   -0.3,
+   -0.2,
+   -0.2,
+   0.0
+  ]
+ },
+ "baked_secondary_motion": [
+  "full_body_bounce",
+  "hip_sway",
+  "pigtails",
+  "tail",
+  "chest_follow"
+ ],
+ "engine_note": "One-shot landing transition (climb_on_land take v1_b) into perch_sit. NOT yet played by the engine: run.rs land() goes straight to Mode::Perched and the brain resets to its base on DragEnd; wiring needs a landing path that starts the perch_sit seat directly and plays this blend first. v2 bakes secondary motion; mute engine springs while it plays.",
+ "notes": "Landing transition drag_held -> perch_sit (take climb_on_land_v1_b): she drops in from above the window and lands seated in the perch_sit ledge pose. Video frames 5-143 step 2 at 12 fps (frames 1-3 of the take are blank and were trimmed); top of the body is cut off during the first ~1 s drop-in (frames 0-10 touch y~10), as in the take. Built at scale 0.559 with --cx-src 634.2 and shifted -15 px so the final frames sit on y240 like perch_sit; ends in the same ledge pose and seat line as the perch_sit variants (cleavage_beckon/chest_press_tease geometry). deshadow.py rows 150-300; no ledge shadow left. Seat fields measured as for perch_sit (seat_y on final frames 64-69).",
+ "deshadow": {
+  "rows": [
+   150,
+   300
+  ],
+  "chroma_lt": 16,
+  "min_light": 120,
+  "min_area": 25,
+  "px_removed_per_frame": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   86,
+   157,
+   104,
+   214,
+   123,
+   109,
+   113,
+   110,
+   120,
+   119,
+   130,
+   367,
+   217,
+   397,
+   399,
+   227,
+   221,
+   57,
+   0,
+   0,
+   0,
+   0,
+   0,
+   49,
+   50,
+   49,
+   50,
+   59,
+   0,
+   82,
+   165,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   36,
+   38,
+   51,
+   0,
+   53,
+   54,
+   54,
+   0,
+   46,
+   57,
+   46,
+   47,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   47,
+   60,
+   60
+  ],
+  "tool": "tools/video-pipeline/deshadow.py"
+ },
+ "seat_align": {
+  "dy_px": -4,
+  "note": "whole clip shifted -15 then +11 px (net -4 vs build): the second shift registers the body to perch_sit frame 0 (alpha-IoU fit on frame 0, scale 1.0), so the body sits exactly where perch_sit's does; seat_y stays 240 like perch_sit"
+ },
+ "seat_y": 240,
+ "seat_x_range": [
+  159,
+  242
+ ],
+ "feet_lowest_y": 387,
+ "from_clip": "drag_held",
+ "to_clip": "perch_sit",
+ "source_frames": {
+  "drag_held": 0,
+  "perch_sit": 0
+ },
+ "tags": [
+  "baked_motion"
+ ],
+ "perch_sit_handoff": {
+  "start_frame_weights_of_perch_sit_f0": [],
+  "end_frame_weights_of_perch_sit_f0_last_first": [
+   0.84375,
+   0.5,
+   0.15625
+  ],
+  "tail_zone_never_mixed": {
+   "box_xyxy": [
+    205,
+    244,
+    399,
+    399
+   ],
+   "except": "opaque pink stocking in both sources (blended)"
+  },
+  "method": "premultiplied-alpha smoothstep crossfade with perch_sit frame 0 at the clip ends; inside the tail zone (x >= 205, y >= 244, except stocking pixels that are pink in both sources) pixels are taken whole from whichever source weighs >= 0.5, so only one tail ever shows",
+  "tool": "perch_work/handoff.py"
+ },
+ "top_fade": {
+  "frames": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "rows": 30,
+  "note": "drop-in frames sliced flat by the top of the source video: alpha faded in over the 30 rows below the cut"
+ },
+ "canvas_compliant": true,
+ "bbox_per_frame": [
+  [
+   177,
+   196,
+   30,
+   50
+  ],
+  [
+   177,
+   230,
+   38,
+   83
+  ],
+  [
+   175,
+   231,
+   56,
+   125
+  ],
+  [
+   170,
+   233,
+   21,
+   160
+  ],
+  [
+   157,
+   241,
+   21,
+   192
+  ],
+  [
+   92,
+   316,
+   21,
+   225
+  ],
+  [
+   93,
+   314,
+   21,
+   255
+  ],
+  [
+   96,
+   311,
+   21,
+   284
+  ],
+  [
+   101,
+   317,
+   21,
+   311
+  ],
+  [
+   108,
+   321,
+   21,
+   334
+  ],
+  [
+   115,
+   322,
+   21,
+   353
+  ],
+  [
+   120,
+   322,
+   43,
+   366
+  ],
+  [
+   118,
+   321,
+   65,
+   370
+  ],
+  [
+   120,
+   314,
+   73,
+   367
+  ],
+  [
+   118,
+   304,
+   72,
+   363
+  ],
+  [
+   118,
+   292,
+   67,
+   362
+  ],
+  [
+   120,
+   284,
+   62,
+   363
+  ],
+  [
+   121,
+   283,
+   59,
+   364
+  ],
+  [
+   122,
+   280,
+   56,
+   364
+  ],
+  [
+   124,
+   277,
+   54,
+   365
+  ],
+  [
+   127,
+   276,
+   52,
+   365
+  ],
+  [
+   128,
+   275,
+   50,
+   364
+  ],
+  [
+   128,
+   278,
+   49,
+   363
+  ],
+  [
+   129,
+   281,
+   48,
+   363
+  ],
+  [
+   129,
+   284,
+   47,
+   363
+  ],
+  [
+   129,
+   285,
+   46,
+   363
+  ],
+  [
+   129,
+   286,
+   46,
+   364
+  ],
+  [
+   129,
+   286,
+   45,
+   365
+  ],
+  [
+   129,
+   286,
+   45,
+   367
+  ],
+  [
+   129,
+   287,
+   44,
+   369
+  ],
+  [
+   129,
+   288,
+   44,
+   370
+  ],
+  [
+   129,
+   289,
+   45,
+   372
+  ],
+  [
+   129,
+   289,
+   43,
+   374
+  ],
+  [
+   129,
+   289,
+   43,
+   377
+  ],
+  [
+   129,
+   289,
+   43,
+   379
+  ],
+  [
+   129,
+   290,
+   44,
+   381
+  ],
+  [
+   129,
+   290,
+   44,
+   383
+  ],
+  [
+   128,
+   291,
+   42,
+   385
+  ],
+  [
+   128,
+   292,
+   42,
+   386
+  ],
+  [
+   127,
+   293,
+   42,
+   387
+  ],
+  [
+   127,
+   295,
+   44,
+   388
+  ],
+  [
+   127,
+   296,
+   43,
+   388
+  ],
+  [
+   127,
+   297,
+   45,
+   388
+  ],
+  [
+   127,
+   300,
+   45,
+   388
+  ],
+  [
+   127,
+   302,
+   45,
+   388
+  ],
+  [
+   127,
+   303,
+   46,
+   388
+  ],
+  [
+   127,
+   303,
+   47,
+   388
+  ],
+  [
+   127,
+   301,
+   47,
+   387
+  ],
+  [
+   127,
+   297,
+   48,
+   387
+  ],
+  [
+   127,
+   292,
+   48,
+   387
+  ],
+  [
+   127,
+   286,
+   48,
+   387
+  ],
+  [
+   127,
+   279,
+   49,
+   387
+  ],
+  [
+   127,
+   274,
+   49,
+   387
+  ],
+  [
+   127,
+   273,
+   48,
+   387
+  ],
+  [
+   127,
+   273,
+   48,
+   387
+  ],
+  [
+   127,
+   273,
+   48,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
+   387
+  ],
+  [
+   127,
+   272,
+   47,
+   387
+  ],
+  [
+   127,
+   272,
+   47,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
+   387
+  ],
+  [
+   127,
+   273,
+   47,
+   387
+  ],
+  [
+   126,
+   274,
+   47,
+   387
+  ],
+  [
+   125,
+   275,
+   48,
+   387
+  ],
+  [
+   125,
+   274,
+   47,
+   387
+  ]
+ ],
+ "seat_note": "Remeasured after the perch_sit hand-off fix (release-2 QA): the body is registered to perch_sit frame 0 (alpha IoU ~0.95 at scale 1.0, so no rescale), so her hips/thighs rest on the same line as perch_sit and seat_y = 240 (perch_sit's value). The hands-span method gives 240 on the eased end frames and ~250 mid-clip only because her fingers curl further over the edge than perch_sit's flat hands. seat_x_range = p5/p95 of the opaque run containing x=200 on rows 232/236/240 over all frames; feet_lowest_y = max lowest opaque row (alpha > 128) over all frames.",
+ "video": {
+  "file": "blend_drag_held_to_perch_sit.mp4",
+  "layout": "alpha_side_by_side",
+  "codec": "h264 high yuv420p full-range bt709",
+  "crf": 16,
+  "edge_bleed_px": 0,
+  "width": 800,
+  "height": 400,
   "frame_count": 70,
-  "frame_width": 400,
-  "frame_height": 400,
-  "canvas_w": 400,
-  "canvas_h": 400,
-  "layout": "horizontal_strip",
-  "sheet": "blend_drag_held_to_perch_sit_sheet.png",
-  "frames_dir": "frames/",
   "fps": 12.0,
-  "loop": false,
-  "baseline_y": 392,
-  "anchor": [
-    200,
-    392
+  "bytes": 710322,
+  "quality": {
+   "edge_mae": 2.417,
+   "edge_p99": 22.98,
+   "halo_dark": 0.041,
+   "halo_light": -0.136,
+   "alpha_mae": 0.0551
+  },
+  "tool": "tools/video-pipeline/pack_mp4.py"
+ },
+ "matte_clean": {
+  "version": 6,
+  "tool": "tools/matte-clean/matte_clean.py",
+  "sheet_sha256": "d7bd866fbac9bd22d0aa6921bf99230e8c4250a984633191b9847b5ce87e3e31",
+  "source_sha256": "8b2302dd41be4c3601740592ff0ab6ddd659f00cb5e6245e5715e1c0bf36f2f0",
+  "main_d93ae0c_post_fix": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
+ },
+ "start_match": {
+  "from": "drag_held",
+  "from_frame": 0,
+  "shift_px": [
+   0,
+   152
   ],
-  "style": "canonical_ko (thigh-highs + shorts)",
-  "source": "grok-imagine-video",
-  "scale": 0.559,
-  "body_anchor_x": 200,
-  "facing": "front (drops in from above, lands seated on the edge)",
-  "source_files": [
-    "../../source/video/climb_on_land/climb_on_land_v1_b.mp4"
+  "iou": 0.0094,
+  "rgb_mae": 105.32,
+  "threshold": 0.98,
+  "matches": false
+ },
+ "tail_fix": {
+  "frames": [
+   57,
+   58,
+   59,
+   60,
+   61,
+   62,
+   63,
+   64,
+   65,
+   66,
+   67
   ],
-  "source_frame_range": {
-    "first": 5,
-    "last": 143,
-    "step": 2,
-    "video_fps": 24,
-    "note": "1-based ffmpeg frame numbers"
-  },
-  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
-  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
-  "centering": "fixed",
-  "baseline_snap": "global (video ground line)",
-  "body_point_src_x": [
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2,
-    634.2
+  "px_changed_per_frame": [
+   54,
+   66,
+   78,
+   77,
+   82,
+   80,
+   76,
+   77,
+   78,
+   78,
+   79
   ],
-  "horn_fix": {
-    "ref_horn_px": 562,
-    "ref_hue_median": 274.8,
-    "mean_hue_shift_deg_per_frame": [
-      0.0,
-      -53.9,
-      -52.8,
-      -53.3,
-      -48.7,
-      -43.8,
-      -46.8,
-      -40.1,
-      -26.9,
-      -37.5,
-      2.6,
-      -1.8,
-      5.6,
-      6.7,
-      6.9,
-      5.8,
-      4.4,
-      3.5,
-      2.9,
-      3.5,
-      4.8,
-      4.9,
-      5.1,
-      5.3,
-      5.3,
-      5.7,
-      5.3,
-      6.1,
-      5.7,
-      5.1,
-      4.4,
-      3.2,
-      2.1,
-      1.3,
-      0.2,
-      -0.3,
-      -1.0,
-      -2.0,
-      -1.2,
-      -3.0,
-      -2.6,
-      -2.7,
-      -2.4,
-      -2.3,
-      -1.5,
-      -2.2,
-      -1.6,
-      -2.4,
-      -2.3,
-      -1.4,
-      -1.6,
-      -1.7,
-      -1.2,
-      -1.5,
-      -1.7,
-      -1.1,
-      -0.6,
-      -0.1,
-      0.3,
-      -0.3,
-      -0.2,
-      -0.5,
-      -0.1,
-      -0.4,
-      -0.4,
-      -0.3,
-      -0.3,
-      -0.2,
-      -0.2,
-      0.0
-    ]
-  },
-  "baked_secondary_motion": [
-    "full_body_bounce",
-    "hip_sway",
-    "pigtails",
-    "tail",
-    "chest_follow"
-  ],
-  "engine_note": "One-shot landing transition (climb_on_land take v1_b) into perch_sit. NOT yet played by the engine: run.rs land() goes straight to Mode::Perched and the brain resets to its base on DragEnd; wiring needs a landing path that starts the perch_sit seat directly and plays this blend first. v2 bakes secondary motion; mute engine springs while it plays.",
-  "notes": "Landing transition drag_held -> perch_sit (take climb_on_land_v1_b): she drops in from above the window and lands seated in the perch_sit ledge pose. Video frames 5-143 step 2 at 12 fps (frames 1-3 of the take are blank and were trimmed); top of the body is cut off during the first ~1 s drop-in (frames 0-10 touch y~10), as in the take. Built at scale 0.559 with --cx-src 634.2 and shifted -15 px so the final frames sit on y240 like perch_sit; ends in the same ledge pose and seat line as the perch_sit variants (cleavage_beckon/chest_press_tease geometry). deshadow.py rows 150-300; no ledge shadow left. Seat fields measured as for perch_sit (seat_y on final frames 64-69).",
-  "deshadow": {
-    "rows": [
-      150,
-      300
-    ],
-    "chroma_lt": 16,
-    "min_light": 120,
-    "min_area": 25,
-    "px_removed_per_frame": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      86,
-      157,
-      104,
-      214,
-      123,
-      109,
-      113,
-      110,
-      120,
-      119,
-      130,
-      367,
-      217,
-      397,
-      399,
-      227,
-      221,
-      57,
-      0,
-      0,
-      0,
-      0,
-      0,
-      49,
-      50,
-      49,
-      50,
-      59,
-      0,
-      82,
-      165,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      36,
-      38,
-      51,
-      0,
-      53,
-      54,
-      54,
-      0,
-      46,
-      57,
-      46,
-      47,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      47,
-      60,
-      60
-    ],
-    "tool": "tools/video-pipeline/deshadow.py"
-  },
-  "seat_align": {
-    "dy_px": -4,
-    "note": "whole clip shifted -15 then +11 px (net -4 vs build): the second shift registers the body to perch_sit frame 0 (alpha-IoU fit on frame 0, scale 1.0), so the body sits exactly where perch_sit's does; seat_y stays 240 like perch_sit"
-  },
-  "seat_y": 240,
-  "seat_x_range": [
-    159,
-    242
-  ],
-  "feet_lowest_y": 387,
-  "from_clip": "drag_held",
-  "to_clip": "perch_sit",
-  "source_frames": {
-    "drag_held": 0,
-    "perch_sit": 0
-  },
-  "tags": [
-    "baked_motion"
-  ],
-  "perch_sit_handoff": {
-    "start_frame_weights_of_perch_sit_f0": [],
-    "end_frame_weights_of_perch_sit_f0_last_first": [
-      0.84375,
-      0.5,
-      0.15625
-    ],
-    "tail_zone_never_mixed": {
-      "box_xyxy": [
-        205,
-        244,
-        399,
-        399
-      ],
-      "except": "opaque pink stocking in both sources (blended)"
-    },
-    "method": "premultiplied-alpha smoothstep crossfade with perch_sit frame 0 at the clip ends; inside the tail zone (x >= 205, y >= 244, except stocking pixels that are pink in both sources) pixels are taken whole from whichever source weighs >= 0.5, so only one tail ever shows",
-    "tool": "perch_work/handoff.py"
-  },
-  "top_fade": {
-    "frames": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10
-    ],
-    "rows": 30,
-    "note": "drop-in frames sliced flat by the top of the source video: alpha faded in over the 30 rows below the cut"
-  },
-  "canvas_compliant": true,
-  "bbox_per_frame": [
-    [
-      177,
-      196,
-      30,
-      50
-    ],
-    [
-      177,
-      230,
-      38,
-      83
-    ],
-    [
-      175,
-      231,
-      56,
-      125
-    ],
-    [
-      170,
-      233,
-      21,
-      160
-    ],
-    [
-      157,
-      241,
-      21,
-      192
-    ],
-    [
-      92,
-      316,
-      21,
-      225
-    ],
-    [
-      93,
-      314,
-      21,
-      255
-    ],
-    [
-      96,
-      311,
-      21,
-      284
-    ],
-    [
-      101,
-      317,
-      21,
-      311
-    ],
-    [
-      108,
-      321,
-      21,
-      334
-    ],
-    [
-      115,
-      322,
-      21,
-      353
-    ],
-    [
-      120,
-      322,
-      43,
-      366
-    ],
-    [
-      118,
-      321,
-      65,
-      370
-    ],
-    [
-      120,
-      314,
-      73,
-      367
-    ],
-    [
-      118,
-      304,
-      72,
-      363
-    ],
-    [
-      118,
-      292,
-      67,
-      362
-    ],
-    [
-      120,
-      284,
-      62,
-      363
-    ],
-    [
-      121,
-      283,
-      59,
-      364
-    ],
-    [
-      122,
-      280,
-      56,
-      364
-    ],
-    [
-      124,
-      277,
-      54,
-      365
-    ],
-    [
-      127,
-      276,
-      52,
-      365
-    ],
-    [
-      128,
-      275,
-      50,
-      364
-    ],
-    [
-      128,
-      278,
-      49,
-      363
-    ],
-    [
-      129,
-      281,
-      48,
-      363
-    ],
-    [
-      129,
-      284,
-      47,
-      363
-    ],
-    [
-      129,
-      285,
-      46,
-      363
-    ],
-    [
-      129,
-      286,
-      46,
-      364
-    ],
-    [
-      129,
-      286,
-      45,
-      365
-    ],
-    [
-      129,
-      286,
-      45,
-      367
-    ],
-    [
-      129,
-      287,
-      44,
-      369
-    ],
-    [
-      129,
-      288,
-      44,
-      370
-    ],
-    [
-      129,
-      289,
-      45,
-      372
-    ],
-    [
-      129,
-      289,
-      43,
-      374
-    ],
-    [
-      129,
-      289,
-      43,
-      377
-    ],
-    [
-      129,
-      289,
-      43,
-      379
-    ],
-    [
-      129,
-      290,
-      44,
-      381
-    ],
-    [
-      129,
-      290,
-      44,
-      383
-    ],
-    [
-      128,
-      291,
-      42,
-      385
-    ],
-    [
-      128,
-      292,
-      42,
-      386
-    ],
-    [
-      127,
-      293,
-      42,
-      387
-    ],
-    [
-      127,
-      295,
-      44,
-      388
-    ],
-    [
-      127,
-      296,
-      43,
-      388
-    ],
-    [
-      127,
-      297,
-      45,
-      388
-    ],
-    [
-      127,
-      300,
-      45,
-      388
-    ],
-    [
-      127,
-      302,
-      45,
-      388
-    ],
-    [
-      127,
-      303,
-      46,
-      388
-    ],
-    [
-      127,
-      303,
-      47,
-      388
-    ],
-    [
-      127,
-      301,
-      47,
-      387
-    ],
-    [
-      127,
-      297,
-      48,
-      387
-    ],
-    [
-      127,
-      292,
-      48,
-      387
-    ],
-    [
-      127,
-      286,
-      48,
-      387
-    ],
-    [
-      127,
-      279,
-      49,
-      387
-    ],
-    [
-      127,
-      274,
-      49,
-      387
-    ],
-    [
-      127,
-      273,
-      48,
-      387
-    ],
-    [
-      127,
-      273,
-      48,
-      387
-    ],
-    [
-      127,
-      273,
-      48,
-      387
-    ],
-    [
-      127,
-      273,
-      47,
-      387
-    ],
-    [
-      127,
-      273,
-      47,
-      387
-    ],
-    [
-      127,
-      272,
-      47,
-      387
-    ],
-    [
-      127,
-      272,
-      47,
-      387
-    ],
-    [
-      127,
-      273,
-      47,
-      387
-    ],
-    [
-      127,
-      273,
-      47,
-      387
-    ],
-    [
-      127,
-      273,
-      47,
-      387
-    ],
-    [
-      127,
-      273,
-      47,
-      387
-    ],
-    [
-      127,
-      273,
-      47,
-      387
-    ],
-    [
-      127,
-      273,
-      47,
-      387
-    ],
-    [
-      127,
-      273,
-      47,
-      387
-    ],
-    [
-      126,
-      274,
-      47,
-      387
-    ],
-    [
-      125,
-      275,
-      48,
-      387
-    ],
-    [
-      125,
-      274,
-      47,
-      387
-    ]
-  ],
-  "seat_note": "Remeasured after the perch_sit hand-off fix (release-2 QA): the body is registered to perch_sit frame 0 (alpha IoU ~0.95 at scale 1.0, so no rescale), so her hips/thighs rest on the same line as perch_sit and seat_y = 240 (perch_sit's value). The hands-span method gives 240 on the eased end frames and ~250 mid-clip only because her fingers curl further over the edge than perch_sit's flat hands. seat_x_range = p5/p95 of the opaque run containing x=200 on rows 232/236/240 over all frames; feet_lowest_y = max lowest opaque row (alpha > 128) over all frames.",
-  "video": {
-    "file": "blend_drag_held_to_perch_sit.mp4",
-    "layout": "alpha_side_by_side",
-    "codec": "h264 high yuv420p full-range bt709",
-    "crf": 16,
-    "edge_bleed_px": 0,
-    "width": 800,
-    "height": 400,
-    "frame_count": 70,
-    "fps": 12.0,
-    "bytes": 710506,
-    "quality": {
-      "edge_mae": 2.412,
-      "edge_p99": 22.98,
-      "halo_dark": 0.045,
-      "halo_light": -0.129,
-      "alpha_mae": 0.055
-    },
-    "tool": "tools/video-pipeline/pack_mp4.py"
-  },
-  "matte_protect": {
-    "tool": "tools/matte-clean/regress.py",
-    "base": "b0b7424",
-    "px_restored": 0
-  },
-  "matte_clean_prev": {
-    "version": 1,
-    "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "5350f0a573a7184742d7f8ec605d4ec2fcb76211913e57f351fad8c13f45c2f8",
-    "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
-  },
-  "matte_clean": {
-    "version": 6,
-    "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "d6e4b0b7ef1418681f4b25c4b056a9d8f1965ae4d8dd4a49ba5715c2cbe86269",
-    "source_sha256": "5350f0a573a7184742d7f8ec605d4ec2fcb76211913e57f351fad8c13f45c2f8"
-  }
+  "what": "tail spade floated detached on f57-67: in the source take (climb_on_land_v1_b, video 119-139) the tail line itself stops ~15 px above the spade from about f59 on, and keying/matte trim thinned the line to broken dashes. Per frame: the registered raw frame restores the dark, low-saturation tail-line pixels in x228-285 y262-342 (alpha only raised, colour from the nearest opaque tail pixel), then a 2 px antialiased quadratic stroke in the tail colour continues the line from its end (256,303) along its direction to the nearest spade pixel. Detached islands on f57-67: 11 -> 0; one tail; frames 68-69 (perch_sit hand-off) unchanged.",
+  "tool": "perch_motion_work/tail_fix.py + blend_tail.py (fix/perch-motion-2)"
+ }
 }
