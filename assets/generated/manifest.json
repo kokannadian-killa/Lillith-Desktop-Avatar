@@ -6660,6 +6660,76 @@
    ],
    "allure": true,
    "video": "squeeze_hands_press_tease/squeeze_hands_press_tease.mp4"
+  },
+  {
+   "name": "summer_shades_peek_wink",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "summer_shades_peek_wink/",
+   "sheet": "summer_shades_peek_wink/summer_shades_peek_wink_sheet.png",
+   "manifest": "summer_shades_peek_wink/summer_shades_peek_wink.json",
+   "preview": "summer_shades_peek_wink/summer_shades_peek_wink_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:summer",
+    "outfit:summer"
+   ],
+   "allure": true,
+   "video": "summer_shades_peek_wink/summer_shades_peek_wink.mp4",
+   "season": "summer",
+   "outfit": "summer"
+  },
+  {
+   "name": "summer_string_oops",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "summer_string_oops/",
+   "sheet": "summer_string_oops/summer_string_oops_sheet.png",
+   "manifest": "summer_string_oops/summer_string_oops.json",
+   "preview": "summer_string_oops/summer_string_oops_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:summer",
+    "outfit:summer"
+   ],
+   "allure": true,
+   "video": "summer_string_oops/summer_string_oops.mp4",
+   "season": "summer",
+   "outfit": "summer"
   }
  ]
 }
