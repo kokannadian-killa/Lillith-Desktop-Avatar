@@ -7,7 +7,7 @@ use crate::fall::{Fall, Step};
 use crate::pages::{Pages, DEFAULT_BUDGET};
 use lillith_anim::animator::{Animator, AnimatorConfig, Dir};
 use lillith_anim::atlas::{AtlasError, Manifest};
-use lillith_anim::render::{draw_cell, draw_cell_mix, draw_mouth};
+use lillith_anim::render::{draw_cell, draw_cell_crossfade, draw_mouth};
 use lillith_anim::Canvas;
 use lillith_core::config::Config;
 use lillith_core::interaction::Button;
@@ -378,30 +378,16 @@ impl Engine {
             let cell = self.pages.cell(f.clip, f.frame)?;
             if let Some((next, w)) = blend {
                 let nc = self.pages.cell(f.clip, next)?;
-                let src = tiny_skia::BlendMode::SourceOver;
-                draw_cell_mix(
-                    &mut self.canvas,
-                    &cell,
-                    f.rect.anchor,
-                    self.origin,
-                    f.flip,
-                    &t,
-                    self.scale,
-                    1.0 - w,
-                    src,
-                );
-                let plus = tiny_skia::BlendMode::Plus;
                 let na = f.clip.frames[next.min(f.clip.frames.len() - 1)].anchor;
-                draw_cell_mix(
+                draw_cell_crossfade(
                     &mut self.canvas,
-                    &nc,
-                    na,
+                    (&cell, f.rect.anchor),
+                    (&nc, na),
                     self.origin,
                     f.flip,
                     &t,
                     self.scale,
                     w,
-                    plus,
                 );
             } else {
                 draw_cell(

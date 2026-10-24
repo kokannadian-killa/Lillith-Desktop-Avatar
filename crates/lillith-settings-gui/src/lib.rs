@@ -97,6 +97,17 @@ pub fn window_icon(id: &str) -> Option<std::sync::Arc<egui::IconData>> {
     }))
 }
 
+/// Wayland app id / X11 `WM_CLASS` of the Settings window.
+pub const APP_ID: &str = "lillith-settings";
+
+/// `true` when winit will open a Wayland window (its own rule: a non-empty
+/// `WAYLAND_DISPLAY` or `WAYLAND_SOCKET`), else X11.
+fn wayland_session(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> bool {
+    ["WAYLAND_DISPLAY", "WAYLAND_SOCKET"]
+        .iter()
+        .any(|k| var(k).is_some_and(|v| !v.is_empty()))
+}
+
 /// eframe options for the window (Wayland app id `lillith-settings`; the
 /// window icon is the configured app icon).
 pub fn native_options(opts: &Options) -> eframe::NativeOptions {
@@ -107,13 +118,19 @@ pub fn native_options(opts: &Options) -> eframe::NativeOptions {
         .unwrap_or_else(|_| lillith_core::icons::DEFAULT_ICON.to_string());
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Lillith · Settings")
-        .with_app_id("lillith-settings")
         .with_inner_size(size)
         .with_min_inner_size(MIN_SIZE)
         .with_resizable(true)
         .with_decorations(opts.decorated);
     if let Some(icon) = window_icon(&icon_id) {
         viewport = viewport.with_icon(icon);
+    }
+    // egui turns the app id into X11 `WM_CLASS` ("", "lillith-settings"),
+    // i.e. an empty instance. Without it winit's X11 default is the
+    // executable name for both ("lillith-settings", "lillith-settings"), so
+    // the app id is only set for Wayland (release QA 46ed853 #10).
+    if wayland_session(|k| std::env::var_os(k)) {
+        viewport = viewport.with_app_id(APP_ID);
     }
     eframe::NativeOptions {
         viewport,
@@ -157,4 +174,29 @@ pub fn run_with_tabs(
             )))
         }),
     )
+}
+
+#[cfg(test)]
+mod wm_class_tests {
+    use super::*;
+
+    #[test]
+    fn app_id_only_for_wayland() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |k: &str| {
+                pairs
+                    .iter()
+                    .find(|(n, _)| *n == k)
+                    .map(|(_, v)| std::ffi::OsString::from(v))
+            }
+        };
+        assert!(wayland_session(env(&[("WAYLAND_DISPLAY", "wayland-0")])));
+        assert!(wayland_session(env(&[("WAYLAND_SOCKET", "3")])));
+        assert!(!wayland_session(env(&[("DISPLAY", ":0")])));
+        assert!(!wayland_session(env(&[
+            ("WAYLAND_DISPLAY", ""),
+            ("DISPLAY", ":0")
+        ])));
+        assert_eq!(APP_ID, "lillith-settings");
+    }
 }

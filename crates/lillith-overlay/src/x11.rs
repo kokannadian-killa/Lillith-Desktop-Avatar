@@ -20,13 +20,20 @@
 //!   - **composited** (32-bit ARGB visual *and* a compositing manager owns
 //!     `_NET_WM_CM_S<n>`, e.g. KWin or picom): softbuffer presents
 //!     premultiplied `0xAARRGGBB`, transparent pixels are `0x00000000` and
-//!     the compositor blends the soft edges;
+//!     the compositor blends the soft edges (no bounding shape: reshaping
+//!     every frame makes compositors such as picom drop the window for a
+//!     frame, so she would blink);
 //!   - **shaped** (no compositor running / compositing suspended, or no ARGB
 //!     visual): the X server ignores the alpha byte and would paint every
 //!     transparent pixel black, i.e. the "black box" around her. The X Shape
 //!     **bounding** shape is then set to her silhouette (alpha ≥
 //!     [`SHAPE_ALPHA`]) so nothing outside her is drawn at all, and the
 //!     pixels are presented opaque and un-premultiplied (hard edge, no box).
+//!   - When a compositor appears, the first transparent ARGB frame is
+//!     presented while the old silhouette shape is still in place; the shape
+//!     is only removed with the next frame, after softbuffer has waited for
+//!     that frame's `PutImage` to finish. Removing it first would show the
+//!     window's stale backing pixels (a black box) for a frame.
 //! - Resizes (tease, peek, speech area) move + resize the window in one
 //!   `ConfigureWindow`, set the new bounding shape and round-trip our
 //!   connection before softbuffer presents the new-size frame in the same
@@ -74,6 +81,27 @@ pub use winit;
 /// compositing at runtime, e.g. Alt+Shift+F12). Short, because until the
 /// switch to [`AlphaMode::Shaped`] lands every transparent pixel is black.
 pub const CM_RECHECK: Duration = Duration::from_millis(250);
+
+/// Removing the silhouette shape when a compositor appears.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Unshape {
+    /// Nothing pending.
+    Idle,
+    /// Present one transparent ARGB frame under the old shape first.
+    AfterPresent,
+    /// That frame is out: remove the shape before the next present.
+    Now,
+}
+
+impl Unshape {
+    /// State after a frame was presented.
+    fn presented(self) -> Self {
+        match self {
+            Unshape::AfterPresent => Unshape::Now,
+            other => other,
+        }
+    }
+}
 
 /// Safety-net re-check while the XFixes watcher reports owner changes.
 pub const CM_RECHECK_NOTIFY: Duration = Duration::from_secs(2);
@@ -472,6 +500,9 @@ struct App {
     /// Round-trip our X connection before the next present (a configure
     /// / shape for a resize is in flight).
     sync_present: bool,
+    /// The compositor just appeared: present one ARGB frame under the old
+    /// silhouette shape before removing the shape.
+    unshape: Unshape,
     /// The XFixes watcher thread reports compositor changes.
     cm_watch: bool,
     cursor: (f64, f64),
@@ -501,6 +532,7 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
         pixels_dirty: true,
         mask_dirty: true,
         sync_present: false,
+        unshape: Unshape::Idle,
         cm_watch,
         cursor: (0.0, 0.0),
         error: None,
@@ -628,9 +660,13 @@ impl App {
         let alpha = AlphaMode::pick(live.depth, compositor);
         if alpha != live.alpha {
             live.alpha = alpha;
-            if alpha == AlphaMode::Composited {
-                live.xc.set_bounding(None);
-            }
+            // To composited: keep the silhouette shape until a transparent
+            // ARGB frame has landed (see `draw`); clearing it now would
+            // expose the window's stale, opaque backing pixels.
+            self.unshape = match alpha {
+                AlphaMode::Composited => Unshape::AfterPresent,
+                AlphaMode::Shaped => Unshape::Idle,
+            };
             tracing::info!(
                 compositor,
                 ?alpha,
@@ -650,25 +686,36 @@ impl App {
         };
         if self.pixels_dirty {
             let canvas = self.ctl.stage.canvas();
-            if live.alpha == AlphaMode::Shaped {
-                // Clip the window to her silhouette before the pixels land,
-                // so no transparent (= black without a compositor) pixel shows.
-                let rects = mask_rects(
-                    canvas.data(),
-                    canvas.width(),
-                    canvas.height(),
-                    SHAPE_ALPHA,
-                    1,
-                );
-                live.xc.set_bounding(Some(&rects));
-            }
-            if self.sync_present {
-                // Configure (+ shape) processed before these pixels land.
-                live.xc.sync();
-                self.sync_present = false;
-            }
+            // `buffer_mut` first: softbuffer waits there for the previous
+            // frame's `PutImage` to finish, so a shape change below never
+            // lands before the frame that was presented under the old shape.
             match live.surface.buffer_mut() {
                 Ok(mut buf) => {
+                    match live.alpha {
+                        AlphaMode::Shaped => {
+                            // Shape before the pixels land: no transparent
+                            // (= black) pixel is ever on screen outside her.
+                            let rects = mask_rects(
+                                canvas.data(),
+                                canvas.width(),
+                                canvas.height(),
+                                SHAPE_ALPHA,
+                                1,
+                            );
+                            live.xc.set_bounding(Some(&rects));
+                        }
+                        AlphaMode::Composited if self.unshape == Unshape::Now => {
+                            // The first transparent frame has landed.
+                            live.xc.set_bounding(None);
+                            self.unshape = Unshape::Idle;
+                        }
+                        AlphaMode::Composited => {}
+                    }
+                    if self.sync_present {
+                        // Configure (+ shape) processed before these pixels land.
+                        live.xc.sync();
+                        self.sync_present = false;
+                    }
                     match live.alpha {
                         AlphaMode::Composited => {
                             rgba_to_argb_u32(canvas.data(), &mut buf, self.ctl.opacity)
@@ -681,6 +728,11 @@ impl App {
                         tracing::warn!("present: {e}");
                     }
                     self.pixels_dirty = false;
+                    self.unshape = self.unshape.presented();
+                    if self.unshape == Unshape::Now {
+                        // Remove the shape with the next frame.
+                        self.pixels_dirty = true;
+                    }
                 }
                 Err(e) => tracing::warn!("buffer: {e}"),
             }
@@ -1193,6 +1245,13 @@ mod tests {
     fn dock_type_by_default() {
         assert_eq!(x11_window_type(WindowRole::default()), WindowType::Dock);
         assert_eq!(x11_window_type(WindowRole::Utility), WindowType::Utility);
+    }
+
+    #[test]
+    fn shape_is_removed_only_after_a_transparent_frame_was_presented() {
+        assert_eq!(Unshape::AfterPresent.presented(), Unshape::Now);
+        assert_eq!(Unshape::Now.presented(), Unshape::Now);
+        assert_eq!(Unshape::Idle.presented(), Unshape::Idle);
     }
 
     #[test]

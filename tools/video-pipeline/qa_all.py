@@ -18,7 +18,7 @@ from scipy import ndimage
 import os as _o, sys as _s; _s.path.insert(0, _o.path.dirname(_o.path.abspath(__file__))); import paths
 V2 = paths.V2
 NO_SNAP = {'drag_held', 'run_right', 'run_left', 'sit_swing', 'sleep', 'wake', 'tiptoe_bounce', 'blend_idle_to_sit_swing',
-           'blend_sit_swing_to_idle', 'blend_sleep_to_wake', 'blend_wake_to_sleep', 'salute', 'tada_celebrate', 'dance', 'spell_orb_cast', 'pose_vsign', 'pose_wait_palm', 'twirl', 'victory_jump', 'cheeky_tongue_wink', 'sit_bored_chin', 'sit_cross_legged_bob', 'sit_heel_kick', 'sit_stretch_yawn', 'walk_skip_right', 'walk_skip_left', 'perch_sit'}
+           'blend_sit_swing_to_idle', 'blend_sleep_to_wake', 'blend_wake_to_sleep', 'salute', 'tada_celebrate', 'dance', 'spell_orb_cast', 'pose_vsign', 'pose_wait_palm', 'twirl', 'victory_jump', 'cheeky_tongue_wink', 'sit_bored_chin', 'sit_cross_legged_bob', 'sit_heel_kick', 'sit_stretch_yawn', 'walk_skip_right', 'walk_skip_left', 'perch_sit', 'cleavage_beckon', 'chest_press_tease', 'arch_trace', 'perch_lounge', 'blend_drag_held_to_perch_sit'}
 def is_overlay(n): return n.startswith('event_') or n in ('beam_cast', 'blow_kiss', 'heart_hands', 'peace_sign_pose', 'hip_pop_wink')
 def horn_hue(a):
     al = a[..., 3] > 200; ys = np.where(al.any(1))[0]
