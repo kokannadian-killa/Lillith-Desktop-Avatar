@@ -453,6 +453,22 @@ impl Learner {
                 },
             ),
         };
+        // A merge overwrites an existing note file: keep its old bytes so a
+        // failed DB step can put the file back as it was.
+        // `None` = remove the file on failure, `Some(None)` = leave it alone
+        // (its old bytes couldn't be read), `Some(Some(b))` = write `b` back.
+        let before: Option<Option<Vec<u8>>> = if op == "merge" {
+            match store.path_for(&store.resolve_topic(Some(&note.topic)), &note.id) {
+                Ok(p) => match std::fs::read(&p) {
+                    Ok(b) => Some(Some(b)),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(_) => Some(None),
+                },
+                Err(_) => Some(None),
+            }
+        } else {
+            None
+        };
         let path = store.write(lock, &note)?;
         let rel = store.rel(&path);
         let topic = rel.split('/').next().unwrap_or("inbox").to_string();
@@ -463,10 +479,18 @@ impl Learner {
             Ok(node) => node,
             Err(e) => {
                 // The DB step failed. Don't leave a note that isn't indexed or
-                // audited: roll back a brand-new file (a merge updated an
-                // existing note, so keep it), and always record a failure line.
-                if op == "write" {
-                    let _ = std::fs::remove_file(&path);
+                // audited: roll back a brand-new file, put a merged note's old
+                // contents back, and always record a failure line.
+                match &before {
+                    None => {
+                        let _ = std::fs::remove_file(&path);
+                    }
+                    Some(Some(old)) => {
+                        if let Err(re) = store.restore(lock, &path, old) {
+                            tracing::warn!("learn: merged note not restored: {re}");
+                        }
+                    }
+                    Some(None) => {}
                 }
                 audit::record(self.audit_log.as_deref(), "fail", &topic, &note.id);
                 return Err(std::io::Error::other(e.to_string()));
