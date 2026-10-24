@@ -492,12 +492,11 @@ pub fn run_captured(
 }
 
 /// The last line of a command's output when a stop ([`super::kill_switch::stop_all`]:
-/// Ctrl-C / SIGTERM / app shutdown) killed it. The text still says "safeword"
-/// because `soul_contract.rs` audits on it; the safeword itself no longer
-/// kills commands.
-pub const STOPPED_LINE: &str = "[stopped by the safeword]";
+/// Ctrl-C / SIGTERM / app shutdown) killed it. `soul_contract.rs` audits on
+/// it; the safeword itself never kills commands.
+pub const STOPPED_LINE: &str = "[stopped by Ctrl-C/shutdown]";
 
-/// Whether a command result says the safeword stopped it (audited as
+/// Whether a command result says a stop (Ctrl-C / shutdown) killed it (audited as
 /// `RESULT-STOPPED`, not `RESULT-OK`).
 pub fn was_stopped(output: &str) -> bool {
     output.trim_end().ends_with(STOPPED_LINE)
@@ -507,7 +506,7 @@ pub fn was_stopped(output: &str) -> bool {
 /// `timeout` and output capped at `cap` bytes. The whole child tree is
 /// killed on timeout or on a stop ([`super::kill_switch::stop_all`]:
 /// Ctrl-C / SIGTERM / app shutdown; not the safeword). Returns the combined output plus an
-/// `[exit N]` / `[timed out after Ns]` / `[stopped by the safeword]` line.
+/// `[exit N]` / `[timed out after Ns]` / `[stopped by Ctrl-C/shutdown]` line.
 pub fn run_child(
     c: std::process::Command,
     timeout: Duration,
@@ -805,17 +804,17 @@ mod tests {
         let started = Instant::now();
         super::super::kill_switch::stop_all();
         let out = t.join().unwrap().unwrap();
-        assert!(out.contains("stopped by the safeword"), "{out}");
+        assert!(out.contains("stopped by Ctrl-C/shutdown"), "{out}");
         assert!(was_stopped(&out), "{out}");
         assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     #[test]
     fn was_stopped_only_matches_the_final_marker() {
-        assert!(was_stopped("partial\n[stopped by the safeword]"));
-        assert!(was_stopped("[stopped by the safeword]\n"));
+        assert!(was_stopped("partial\n[stopped by Ctrl-C/shutdown]"));
+        assert!(was_stopped("[stopped by Ctrl-C/shutdown]\n"));
         assert!(!was_stopped("hi\n[exit 0]"));
-        assert!(!was_stopped("echo [stopped by the safeword]\n[exit 0]"));
+        assert!(!was_stopped("echo [stopped by Ctrl-C/shutdown]\n[exit 0]"));
         assert!(!was_stopped(""));
     }
 }
