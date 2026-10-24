@@ -149,6 +149,16 @@ mod persona_prompt_tests {
     }
 
     #[test]
+    fn max_tokens_defaults_match_lily() {
+        let n = lillith_setup::modelfile::LILY_NUM_PREDICT;
+        assert_eq!(n, 160);
+        // `[chat] max_tokens` overrides ChatOptions in ChatSession::new, so
+        // its default must be Lily's cap too, not just ChatOptions'.
+        assert_eq!(lillith_core::config::ChatConfig::default().max_tokens, n);
+        assert_eq!(crate::llm::ChatOptions::default().max_tokens, n);
+    }
+
+    #[test]
     fn precedence_chat_then_llm_then_default() {
         assert_eq!(
             resolve_system_prompt("Chat says hi.", Some("LLM says hi.")),

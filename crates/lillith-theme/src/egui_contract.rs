@@ -77,13 +77,14 @@ pub fn summary_line(view: &ContractView<'_>) -> String {
 /// inner well (logical px).
 pub const SKULL_TOP_GAP: f32 = 5.0;
 
-/// The photoreal horned skull on the emblem: an RGBA PNG cut out of the
-/// approved art (black keyed to a feathered alpha edge, sockets kept
-/// opaque), aged to desaturated bone and trimmed to its bounds so its top
-/// row is the horn crowns.
+/// The photoreal horned skull on the emblem: a jawless cranium (upper teeth
+/// only, no mandible) turned slightly to the viewer's left, as an RGBA PNG
+/// cut out of the approved art (black keyed to a feathered alpha edge,
+/// sockets kept opaque), aged to desaturated bone and trimmed to its bounds
+/// so its top row is the horn crowns.
 const SKULL_PNG: &[u8] = include_bytes!("../assets/soul_skull.png");
 /// Pixel size of [`SKULL_PNG`] (`[w, h]`); a test keeps this in sync.
-const SKULL_PX: [u32; 2] = [396, 320];
+const SKULL_PX: [u32; 2] = [507, 320];
 /// Thickness of the emblem's iron frame around its dark well.
 const EMBLEM_INSET: f32 = 5.0;
 /// Padding inside the gold-ruled header plate.
@@ -107,16 +108,16 @@ fn emblem_size(narrow: bool) -> Vec2 {
 }
 
 /// Where the skull art is drawn inside an emblem: centred in the well, at
-/// the art's own aspect, as large as fits under [`SKULL_TOP_GAP`].
+/// the art's own aspect, as large as fits with [`SKULL_TOP_GAP`] clear above.
 fn skull_rect(emblem: Rect) -> Rect {
     let well = emblem.shrink(EMBLEM_INSET);
     let aspect = SKULL_PX[0] as f32 / SKULL_PX[1] as f32;
     let h = (well.height() - SKULL_TOP_GAP - 2.0).min((well.width() - 4.0) / aspect);
     let size = Vec2::new(h * aspect, h);
-    Rect::from_min_size(
-        Pos2::new(well.center().x - size.x / 2.0, well.top() + SKULL_TOP_GAP),
-        size,
-    )
+    // The jawless cranium is wider than tall, so it is width-bound: centre
+    // it in the spare height, never closer than SKULL_TOP_GAP to the top.
+    let top = well.top() + SKULL_TOP_GAP.max((well.height() - size.y) / 2.0);
+    Rect::from_min_size(Pos2::new(well.center().x - size.x / 2.0, top), size)
 }
 
 /// Width left for the header text column on a plate whose inner width is

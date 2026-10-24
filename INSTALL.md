@@ -11,6 +11,7 @@ yourself.
 - [Linux (Garuda / Arch, KDE Plasma 6 Wayland)](#linux-garuda--arch-kde-plasma-6-wayland)
 - [Windows (build from source)](#windows-build-from-source)
 - [Android (Termux chat, experimental APK)](#android-termux-chat-experimental-apk)
+- [Configuration](#configuration)
 - [The safeword (kill switch)](#the-safeword-kill-switch)
 - [Troubleshooting](#troubleshooting)
 
@@ -267,6 +268,34 @@ install steps, see `source/android/INSTALL-android.md`.
    `llama-cli --help` lists its system-prompt option.
 
 Keep `--host 127.0.0.1` so nothing else on the network can reach the server.
+
+---
+
+## Configuration
+
+Her settings live in `~/.config/lillith/config.toml` (Windows:
+`%APPDATA%\lillith\config.toml`). Every key is optional. **`assets/config.example.toml`**
+lists every table and key with its real default, and a test keeps it in sync
+with the code. Copy it, then uncomment what you want to change:
+
+```fish
+mkdir -p ~/.config/lillith
+test -f ~/.config/lillith/config.toml; or cp assets/config.example.toml ~/.config/lillith/config.toml
+```
+
+On Windows (cmd), from the source folder:
+
+```bat
+if not exist "%APPDATA%\lillith" mkdir "%APPDATA%\lillith"
+if not exist "%APPDATA%\lillith\config.toml" copy assets\config.example.toml "%APPDATA%\lillith\config.toml"
+```
+
+The keys people change most are `mode`, `scale`, `[overlay] auto_fix_kwin`
+(the KDE blur fix at start-up), `[voice] enabled` (the **Speak out loud**
+toggle), `[behavior.tease]` (the "come closer" tease) and `[mind.access]`
+(what she may do on your machine, always behind the Soul Contract).
+`lillith setup` (and the setup wizard) writes `[llm]`, `[chat]` and, for
+llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--jinja"]`).
 
 ---
 

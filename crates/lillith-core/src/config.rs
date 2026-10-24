@@ -271,7 +271,9 @@ pub struct ChatConfig {
     /// System prompt; empty = Lillith's built-in persona.
     pub system_prompt: String,
     pub temperature: f32,
-    /// Reply length cap (`max_tokens`).
+    /// Reply length cap (`max_tokens`). Default 160, the same as the
+    /// wizard's `LILY_NUM_PREDICT` (pinned by a test in lillith-mind), so
+    /// replies stay short enough for the bubble and for reading aloud.
     pub max_tokens: u32,
     /// How many past user/assistant turns are sent with each message.
     pub history_turns: usize,
@@ -304,7 +306,7 @@ impl Default for ChatConfig {
             // Matches lillith_setup::modelfile::LILY_TEMPERATURE (pinned by a
             // test in lillith-mind, which depends on both crates).
             temperature: 0.95,
-            max_tokens: 320,
+            max_tokens: 160,
             history_turns: 12,
             timeout_s: 120.0,
             save_history: true,
@@ -1080,6 +1082,15 @@ mod tests {
             PathBuf::from("/tmp/x/mem.db")
         );
         assert!(!MemoryConfig::disabled().enabled);
+    }
+
+    #[test]
+    fn chat_max_tokens_default_is_160() {
+        // Matches lillith_setup::modelfile::LILY_NUM_PREDICT (pinned against
+        // it in lillith-mind; lillith-core doesn't depend on lillith-setup).
+        assert_eq!(ChatConfig::default().max_tokens, 160);
+        let c = Config::from_toml_str("[chat]\nenabled = true\n").unwrap();
+        assert_eq!(c.chat.max_tokens, 160);
     }
 
     #[test]
