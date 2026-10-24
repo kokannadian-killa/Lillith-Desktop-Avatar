@@ -339,14 +339,14 @@ mod imp {
             let mut psd: *mut std::ffi::c_void = std::ptr::null_mut();
             if ConvertStringSecurityDescriptorToSecurityDescriptorW(
                 sddl.as_ptr(),
-                SDDL_REVISION_1 as u32,
+                SDDL_REVISION_1,
                 &mut psd,
                 std::ptr::null_mut(),
             ) == 0
             {
                 return Err(std::io::Error::last_os_error());
             }
-            let mut sa = SECURITY_ATTRIBUTES {
+            let sa = SECURITY_ATTRIBUTES {
                 nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
                 lpSecurityDescriptor: psd,
                 bInheritHandle: 0,
@@ -359,7 +359,7 @@ mod imp {
                 super::super::admin_proto::MAX_FRAME as u32,
                 super::super::admin_proto::MAX_FRAME as u32,
                 0,
-                &mut sa,
+                &sa,
             );
             windows_sys::Win32::Foundation::LocalFree(psd);
             if h == INVALID_HANDLE_VALUE {
@@ -372,17 +372,18 @@ mod imp {
     fn connect_server(server: PipeServer) -> std::io::Result<std::fs::File> {
         use std::os::windows::io::FromRawHandle;
         unsafe {
-            let ok = ConnectNamedPipe(server.0, std::ptr::null_mut());
+            // `PipeServer` is a bare handle (no Drop): take it out and hand
+            // ownership to the File (closed on error).
+            let PipeServer(h) = server;
+            let ok = ConnectNamedPipe(h, std::ptr::null_mut());
             if ok == 0 {
                 let err = std::io::Error::last_os_error();
                 if err.raw_os_error() != Some(535) {
-                    CloseHandle(server.0);
+                    CloseHandle(h);
                     return Err(err);
                 }
             }
-            let f = std::fs::File::from_raw_handle(server.0 as *mut _);
-            std::mem::forget(server);
-            Ok(f)
+            Ok(std::fs::File::from_raw_handle(h as *mut _))
         }
     }
 
@@ -398,7 +399,7 @@ mod imp {
             info.lpVerb = verb.as_ptr();
             info.lpFile = file.as_ptr();
             info.lpParameters = params.as_ptr();
-            info.nShow = SW_HIDE as i32;
+            info.nShow = SW_HIDE;
             if ShellExecuteExW(&mut info) == 0 {
                 return Err(std::io::Error::last_os_error());
             }

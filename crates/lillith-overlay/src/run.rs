@@ -74,6 +74,8 @@ pub trait ActionSink {
 pub const CHAT_BARGE_IN: &str = "chat.barge_in";
 /// The bubble heard the safeword (voice or typed): everything stops.
 pub const CHAT_SAFEWORD: &str = "chat.safeword";
+/// Talk clip held after speech once the voice daemon is in use (s).
+pub const DAEMON_TALK_HOLD_S: f32 = 1.0;
 
 /// Shared [`ActionSink`] handle (cloneable so the Wayland → X11 fallback
 /// keeps the same voice).
@@ -1030,6 +1032,8 @@ impl Controller {
         let actions = self.brain.tick(dt, busy);
         self.apply(actions);
         self.pump_lipsync();
+        self.talk.body_free =
+            !self.drag.active() && !self.tease.active() && !self.gravity.sitting();
         self.talk.tick(dt, self.stage.animator_mut());
         self.pump_showoff();
         let view = self.talk.speech.as_ref().map(|s| s.view());
@@ -1500,6 +1504,11 @@ impl Controller {
             .unwrap_or(false);
         if gone {
             self.talk.reset_lipsync();
+        }
+        if !lines.is_empty() {
+            // The voice daemon is speaking: hold the talk clip between the
+            // text and the voice.
+            self.talk.set_hold(DAEMON_TALK_HOLD_S);
         }
         for l in &lines {
             self.talk.feed_lipsync(l);
