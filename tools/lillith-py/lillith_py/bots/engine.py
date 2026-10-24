@@ -8,13 +8,11 @@ from __future__ import annotations
 
 import base64
 import json
-import shutil
-import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
 
-from .. import llm
+from .. import launch, llm
 from ..lillith_config import load_toml, llm_settings, sidecar_settings, LLMSettings
 from ..attachments.chat import render_attachments, UNTRUSTED_NOTE, estimate_tokens
 from ..attachments.config import Config as AttachConfig
@@ -310,14 +308,15 @@ class Lillith:
 
 
 def send_notification(title: str, body: str, icon: str = "") -> bool:
-    exe = shutil.which("notify-send")
+    exe = launch.which("notify-send")
     if not exe:
         return False
     cmd = [exe, "--app-name=Lillith", title, body[:500]]
     if icon and Path(icon).is_file():
         cmd.insert(1, f"--icon={icon}")
     try:
-        return subprocess.run(cmd, timeout=10, capture_output=True).returncode == 0
+        return launch.run(cmd, purpose="routine notification",
+                          timeout=10, capture_output=True).returncode == 0
     except Exception:
         return False
 

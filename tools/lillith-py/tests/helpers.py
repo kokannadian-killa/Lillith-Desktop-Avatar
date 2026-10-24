@@ -35,3 +35,9 @@ def make_png(w, h, rgb=(200, 30, 60)):
         return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
     return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+def audit_lines(tmp_path) -> list[str]:
+    """Lines of the shared audit.log (the Rust path, under the isolated XDG_DATA_HOME)."""
+    p = tmp_path / "xdg-data" / "lillith" / "audit.log"
+    return p.read_text(encoding="utf-8").splitlines() if p.is_file() else []
