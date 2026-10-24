@@ -962,8 +962,8 @@ pub(crate) mod tests {
             "fade-in under an opaque frame 0: {steps:?}"
         );
         assert!(
-            steps.iter().any(|s| s.0 == 255 && s.1 == 255),
-            "both covered mid-fade: {steps:?}"
+            steps.iter().any(|s| s.1 == 255 && s.0 > 0 && s.0 < 255),
+            "fade-out over an opaque frame 1: {steps:?}"
         );
         assert!(
             steps
