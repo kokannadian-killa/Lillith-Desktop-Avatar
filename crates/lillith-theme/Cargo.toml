@@ -13,7 +13,9 @@ publish.workspace = true
 default = []
 # egui Visuals/Style + Painter helpers. tiny-skia users (the overlay popup)
 # leave this off and use `palette` + `geom` + `fonts` only.
-egui = ["dep:egui"]
+egui = ["dep:egui", "dep:png"]
 
 [dependencies]
 egui = { version = "0.31", default-features = false, features = ["default_fonts"], optional = true }
+# Decodes the bundled Soul Contract skull art (already in the tree via tiny-skia).
+png = { version = "0.17", optional = true }
