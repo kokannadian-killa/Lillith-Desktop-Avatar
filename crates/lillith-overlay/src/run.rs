@@ -4663,8 +4663,10 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         c.settings_pick(MenuPick::SeasonalOutfit("halloween".into()));
         assert_eq!(c.outfit_active().map(|o| o.id.as_str()), Some("halloween"));
         // A config reload applies the key live.
-        let mut cf = Config::default();
-        cf.seasonal_outfit = "off".into();
+        let cf = Config {
+            seasonal_outfit: "off".into(),
+            ..Config::default()
+        };
         c.apply_config(&cf);
         assert_eq!(c.outfit_active(), None);
         // No clip was removed from the set.

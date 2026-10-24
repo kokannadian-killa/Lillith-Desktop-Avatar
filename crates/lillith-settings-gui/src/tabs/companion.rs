@@ -13,7 +13,7 @@ use egui::{pos2, vec2, Align2, RichText, Sense};
 use lillith_anim::atlas::Manifest;
 use lillith_anim::avatar::AvatarStore;
 use lillith_core::menu::{
-    build_menu, Check, Menu, MenuAction, MenuItem, MenuState, PoseGroup, OUTFIT_AUTO, OUTFIT_OFF,
+    build_menu, Check, Menu, MenuAction, MenuItem, MenuState, OUTFIT_AUTO, OUTFIT_OFF,
 };
 use lillith_core::seasons::{Outfit, Seasons};
 use lillith_theme::egui_theme::{self as th, c32};
@@ -811,6 +811,7 @@ fn outfit_card(ui: &mut egui::Ui, c: Card, on: bool, time: f64) -> egui::Respons
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lillith_core::menu::PoseGroup;
 
     #[test]
     fn renders_main_menu_and_a_poses_page() {
