@@ -10217,11 +10217,11 @@
     "height": 400,
     "frame_count": 180,
     "fps": 12.0,
-    "bytes": 1393088,
+    "bytes": 1393187,
     "quality": {
-      "edge_mae": 2.119,
+      "edge_mae": 2.121,
       "edge_p99": 18.0,
-      "halo_dark": 0.038,
+      "halo_dark": 0.034,
       "halo_light": -0.089,
       "alpha_mae": 0.0381
     },
@@ -10230,8 +10230,13 @@
   "matte_clean": {
     "version": 1,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "4d8e0818f0bfed964852ab3e69e05d88290481093f60c2cc7f59134a919fdf85",
+    "sheet_sha256": "84336aa4f159994eb885e1a861df7f0adcc5e14e41b11a17b3e61ede34b3d95c",
     "hand_pass": "white background pockets cleared (newbot handfix.py)",
     "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
+  },
+  "matte_protect": {
+    "tool": "tools/matte-clean/regress.py",
+    "base": "379900d",
+    "px_restored": 51
   }
 }

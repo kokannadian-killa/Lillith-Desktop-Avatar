@@ -920,12 +920,12 @@
     "height": 400,
     "frame_count": 60,
     "fps": 12.0,
-    "bytes": 649586,
+    "bytes": 649516,
     "quality": {
-      "edge_mae": 2.095,
-      "edge_p99": 17.84,
-      "halo_dark": 0.037,
-      "halo_light": -0.094,
+      "edge_mae": 2.097,
+      "edge_p99": 18.0,
+      "halo_dark": 0.036,
+      "halo_light": -0.09,
       "alpha_mae": 0.0639
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
@@ -933,8 +933,13 @@
   "matte_clean": {
     "version": 2,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "289923ae06a05d74668b9d743d4b640d4195674efed9983f1ae75a1087151da5",
+    "sheet_sha256": "8b37f7bed602b7b2322de64e20f17ef051d1d5499073953ba10044b2857b692b",
     "source_sha256": "17f4ed30d0907d9109e2c1ed78ee2b3600fb5884483bc42772e1b5c766f41458",
     "hand_pass": "sz_polish (white-fringe s-z hand pass, see commit message)"
+  },
+  "matte_protect": {
+    "tool": "tools/matte-clean/regress.py",
+    "base": "379900d",
+    "px_restored": 3
   }
 }
