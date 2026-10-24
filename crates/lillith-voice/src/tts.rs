@@ -1,6 +1,7 @@
-//! Text-to-speech fallback chain. TODO(M8): piper model path, playback via rodio.
-
-use tokio::process::Command;
+//! Text-to-speech engine names. Speaking itself goes through
+//! [`crate::engine`] (argv-safe, `--`-terminated). The old `speak()` here,
+//! which ran `espeak-ng … <text>` / `spd-say -w <text>` with the raw text
+//! as argv and had no callers, was removed (legacy-launches #31–32).
 
 /// TTS engines in preference order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,33 +23,4 @@ impl Engine {
             Engine::SpdSay => "spd-say",
         }
     }
-}
-
-/// Speaks `text` with the first engine that works. Returns the engine used,
-/// or `None` (silent) if none is installed.
-pub async fn speak(text: &str) -> Option<Engine> {
-    // Never read emoji / emoticons aloud; nothing speakable → silent.
-    let spoken = crate::speech_text::speech_text(text);
-    if spoken.is_empty() {
-        return None;
-    }
-    let text = spoken.as_str();
-    for &engine in CHAIN {
-        let status = match engine {
-            // TODO(M8): piper needs a voice model and pipes raw audio to a player.
-            Engine::Piper => continue,
-            Engine::EspeakNg => {
-                Command::new("espeak-ng")
-                    .args(["-v", "en+f3", "-s", "145", "-p", "50", text])
-                    .status()
-                    .await
-            }
-            Engine::SpdSay => Command::new("spd-say").args(["-w", text]).status().await,
-        };
-        if matches!(status, Ok(s) if s.success()) {
-            return Some(engine);
-        }
-        tracing::debug!(engine = engine.binary(), "tts engine unavailable");
-    }
-    None
 }
