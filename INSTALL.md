@@ -270,6 +270,13 @@ that you approve with Yes or No. Nothing runs before you approve it, and every
 action goes into the audit log (`~/.local/share/lillith/audit.log`). To undo
 her last file-organize batch, run `lillith undo-organize`.
 
+## Art kit (optional)
+
+The zip's `art-kit/` folder holds the tools that made her clips (`gen-kit`,
+`video-pipeline`, `slice-sheets`, `import-manifest`) and the source I2V takes.
+Lillith doesn't need it to run. See `art-kit/README.md`. No model weights are
+included; get any you need yourself.
+
 ---
 
 ## Troubleshooting
