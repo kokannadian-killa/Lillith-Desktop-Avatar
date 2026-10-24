@@ -974,9 +974,10 @@ mod tests {
 
     #[test]
     fn a_scrolling_detail_is_never_cut() {
-        let long: String = (0..40)
-            .map(|i| format!("    --arg-{i} {}\n", "x".repeat(200)))
-            .collect();
+        let long = (0..40)
+            .map(|i| format!("    --arg-{i} {}", "x".repeat(200)))
+            .collect::<Vec<_>>()
+            .join("\n");
         let v = ContractView {
             detail: Some(&long),
             scroll_detail: true,
