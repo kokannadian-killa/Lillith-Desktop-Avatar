@@ -926,9 +926,9 @@ impl Default for LearnConfig {
             .map(String::from)
             .to_vec(),
             max_file_bytes: 256 * 1024,
-            share_socket: true,
+            share_socket: false,
             block_hosts: Vec::new(),
-            online: true,
+            online: false,
             online_max_pages: 5,
             online_max_bytes: 2_097_152,
             tor_socks: "127.0.0.1:9050".into(),
