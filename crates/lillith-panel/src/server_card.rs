@@ -71,6 +71,8 @@ impl eframe::App for Card {
             busy: false,
             // `--spawn-server` is Ko's own request.
             initiator: Initiator::You,
+            // The whole argv, one arg per line, scrolling, never cut.
+            scroll_detail: p.scrolls(),
         };
         if let Some(choice) = soul_contract_popup(ctx, egui::Id::new("lillith-server-card"), &view)
         {

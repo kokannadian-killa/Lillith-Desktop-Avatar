@@ -175,6 +175,7 @@ impl BuildTab {
             busy: self.busy(),
             // Every Build tab action comes from Ko's own button press.
             initiator: Initiator::You,
+            scroll_detail: prompt.scrolls(),
         };
         Some(f(&view))
     }

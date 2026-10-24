@@ -81,9 +81,16 @@ pub fn decide(
     if let Some(choice) = card(&action) {
         match choice {
             CardChoice::Clicked(Answer::Yes) => {
+                let kept = action.clone();
                 let id = sc.request(action);
                 if let Err(e) = sc.confirm(id) {
                     tracing::warn!("model-server approval failed: {e}");
+                    // No CONFIRM was written: close the card in the log.
+                    sc.record_note(
+                        "CANCELLED",
+                        &kept,
+                        &format!("approval could not be recorded: {e}"),
+                    );
                     return Decision::Card(CardChoice::Cancelled);
                 }
             }
@@ -160,8 +167,14 @@ pub fn card_main(argv: Vec<String>, restart: bool) -> anyhow::Result<()> {
 pub fn ask_tty(action: &PendingAction) -> Option<String> {
     let (input, mut output) = open_tty()?;
     if let PendingAction::StartModelServer { argv, .. } = action {
-        let _ = writeln!(output, "[soul contract] $ {}", argv.join(" "));
+        // The whole command, one arg per line (api key masked).
+        let lines = lillith_core::soul_contract::argv_lines(
+            &lillith_core::soul_contract::mask_secret_args(argv),
+        );
+        let _ = writeln!(output, "[soul contract]\n{lines}");
     }
+    // Keystrokes typed before the question (a stray "y⏎") don't answer it.
+    flush_tty_input(&input);
     let _ = write!(output, "{TTY_QUESTION}");
     let _ = output.flush();
     let mut line = String::new();
@@ -200,6 +213,37 @@ fn open_tty() -> Option<(std::fs::File, std::fs::File)> {
 fn open_tty() -> Option<(std::fs::File, std::fs::File)> {
     None
 }
+
+/// Drops pending, unread terminal input (`tcflush(TCIFLUSH)`).
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn flush_tty_input(f: &std::fs::File) {
+    use std::os::fd::AsRawFd;
+    extern "C" {
+        fn tcflush(fd: i32, queue_selector: i32) -> i32;
+    }
+    #[cfg(target_os = "linux")]
+    const TCIFLUSH: i32 = 0;
+    #[cfg(target_os = "macos")]
+    const TCIFLUSH: i32 = 1;
+    // SAFETY: a valid open fd for the call's duration; tcflush only
+    // discards queued input and touches no memory of ours.
+    unsafe {
+        tcflush(f.as_raw_fd(), TCIFLUSH);
+    }
+}
+
+/// Drops pending console input (`FlushConsoleInputBuffer`).
+#[cfg(windows)]
+fn flush_tty_input(f: &std::fs::File) {
+    use std::os::windows::io::AsRawHandle;
+    // SAFETY: CONIN$ handle owned by `f`, valid for the call.
+    unsafe {
+        windows_sys::Win32::System::Console::FlushConsoleInputBuffer(f.as_raw_handle());
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn flush_tty_input(_: &std::fs::File) {}
 
 #[cfg(test)]
 mod tests {

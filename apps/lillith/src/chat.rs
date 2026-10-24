@@ -213,10 +213,10 @@ fn pump(
         let Ok(line) = line else { break };
         let Some(ev) = decode(&line) else { continue };
         if ev.name == SERVER_APPROVED_EVENT {
-            // Sent only after a clicked Yes on the card (audited CONFIRM
-            // in the bubble).
+            // Sent after a clicked Yes on the card (audited CONFIRM in the
+            // bubble); re-checked here against the audit log and config.
             if let Some(s) = server {
-                s.handle.spawn_approved(&s.cfg, Some(&s.memory));
+                start_approved(s, ev.detail.as_deref(), audit_log.clone());
             }
             continue;
         }
@@ -237,6 +237,48 @@ fn pump(
     // Crashed or killed without saying goodbye: stop talking.
     if !closed {
         let _ = feed.send(Event::new("chat.closed"));
+    }
+}
+
+/// Checks a `chat.server_approved` detail before anything starts: it must
+/// name a card and the argv it showed; that argv must equal what
+/// `[chat.server]` would run now (`display_argv`); and the audit log must
+/// hold the card's `CONFIRM` and no earlier use. Then `USED` is appended
+/// (one card, one launch) and `(card, binary)` returned. Every refusal is
+/// audited `SPAWN_REFUSED` when the card is known.
+fn approve_spawn(
+    detail: Option<&str>,
+    cfg: &ChatConfig,
+    audit_log: Option<PathBuf>,
+) -> Result<(String, String), String> {
+    let (card, argv) = detail
+        .and_then(lillith_panel::chat_bubble::parse_approval_detail)
+        .ok_or("the approval names no card and command")?;
+    let sc = SoulContract::new(audit_log);
+    let bin = argv.first().cloned().unwrap_or_default();
+    if lillith_mind::server::display_argv(cfg).as_ref() != Some(&argv) {
+        let why = "the approved command is not what [chat.server] would run";
+        sc.refuse_model_server_card(&card, &bin, why);
+        return Err(why.into());
+    }
+    sc.claim_model_server_approval(&card, &bin)?;
+    Ok((card, bin))
+}
+
+/// Starts `[chat.server]` for an approval that passes [`approve_spawn`];
+/// a failed spawn is audited `SPAWN_FAILED` so the bubble stops waiting.
+fn start_approved(s: &ApprovedServer, detail: Option<&str>, audit_log: Option<PathBuf>) {
+    match approve_spawn(detail, &s.cfg, audit_log.clone()) {
+        Ok((card, bin)) => {
+            if !s.handle.spawn_approved(&s.cfg, Some(&s.memory)) {
+                SoulContract::new(audit_log).record_model_server_failure(
+                    &card,
+                    &bin,
+                    "llama-server could not be started",
+                );
+            }
+        }
+        Err(e) => tracing::warn!("not starting llama-server: {e}"),
     }
 }
 
@@ -284,16 +326,35 @@ impl ServerGuard {
             return (g, false);
         };
         let log = mind.audit_log_path();
-        let decision = tokio::task::spawn_blocking(move || {
+        // Cards a dead process left open (its pid is gone) are closed
+        // first; a live overlay's card is left alone.
+        SoulContract::new(log.clone())
+            .close_orphaned_model_server_cards("orphaned PROPOSED closed at startup");
+        let action = PendingAction::start_model_server(argv, false);
+        let kept = action.clone();
+        let log2 = log.clone();
+        let decision = match tokio::task::spawn_blocking(move || {
             crate::server_consent::decide(
-                &mut SoulContract::new(log),
-                PendingAction::start_model_server(argv, false),
+                &mut SoulContract::new(log2),
+                action,
                 crate::server_consent::show_card,
                 crate::server_consent::ask_tty,
             )
         })
         .await
-        .unwrap_or(crate::server_consent::Decision::NoUi);
+        {
+            Ok(d) => d,
+            Err(e) => {
+                // The prompt panicked: close the card (PROPOSED stays
+                // open otherwise) and start nothing.
+                SoulContract::new(log).record_note(
+                    "CANCELLED",
+                    &kept,
+                    &format!("consent prompt panicked: {e}"),
+                );
+                crate::server_consent::Decision::NoUi
+            }
+        };
         println!("[soul contract] {}", decision.describe());
         if !decision.approved() {
             return (g, false);
@@ -1033,6 +1094,66 @@ mod tests {
             assert_eq!(std::fs::read_to_string(&log).unwrap(), before, "{d}");
         }
         assert!(sc.open_model_server_cards().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_overlay_starts_only_an_unused_confirmed_card_with_the_same_command() {
+        use lillith_panel::chat_bubble::approval_detail;
+        let dir = std::env::temp_dir().join(format!("lillith-claim-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let mut cfg = ChatConfig {
+            endpoint: "http://127.0.0.1:8080".into(),
+            ..ChatConfig::default()
+        };
+        cfg.server.binary = "/opt/llama/llama-server".into();
+        cfg.server.model_path = "/opt/llama/m.gguf".into();
+        let argv = lillith_mind::server::display_argv(&cfg).unwrap();
+        let file = |confirm: bool| {
+            let mut sc = SoulContract::new(Some(log.clone()));
+            let a = PendingAction::start_model_server(argv.clone(), true);
+            sc.record("PROPOSED", &a);
+            let card = a.card_id().unwrap().to_string();
+            if confirm {
+                let id = sc.request(a);
+                sc.confirm(id).unwrap();
+            }
+            card
+        };
+        let ask = |card: &str, argv: &[String]| {
+            approve_spawn(Some(&approval_detail(card, argv)), &cfg, Some(log.clone()))
+        };
+        let count = |d: &str| {
+            std::fs::read_to_string(&log)
+                .unwrap()
+                .matches(&format!("\t{d}\tstart_model_server\t"))
+                .count()
+        };
+
+        // An approval that names no card starts nothing.
+        assert!(approve_spawn(None, &cfg, Some(log.clone())).is_err());
+        assert!(approve_spawn(Some("{}"), &cfg, Some(log.clone())).is_err());
+        // Missing confirm: the card was only proposed.
+        let proposed = file(false);
+        let e = ask(&proposed, &argv).unwrap_err();
+        assert!(e.contains("no clicked Yes"), "{e}");
+        // Mismatch: a confirmed card, but not the command [chat.server] runs.
+        let confirmed = file(true);
+        let mut other = argv.clone();
+        other.extend(["--host".into(), "0.0.0.0".into()]);
+        let e = ask(&confirmed, &other).unwrap_err();
+        assert!(e.contains("not what [chat.server] would run"), "{e}");
+        // ...which used it up.
+        assert!(ask(&confirmed, &argv).unwrap_err().contains("already used"));
+        // The real thing: once.
+        let good = file(true);
+        assert_eq!(ask(&good, &argv), Ok((good.clone(), argv[0].clone())));
+        // Reuse: the same card can't launch twice.
+        let e = ask(&good, &argv).unwrap_err();
+        assert!(e.contains("already used"), "{e}");
+        assert_eq!((count("USED"), count("SPAWN_REFUSED")), (1, 4));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
