@@ -610,11 +610,36 @@ fn resolve_dir(override_path: &str, name: &str) -> Option<PathBuf> {
 }
 
 /// `$XDG_DATA_HOME/lillith`, else `~/.local/share/lillith`.
+/// Windows: `$XDG_DATA_HOME`, else `%LOCALAPPDATA%` (then `%APPDATA%`), else
+/// `~/.local/share` (`HOME` is usually unset there), matching the chat
+/// history and icon cache paths.
 pub fn data_dir() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_DATA_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
+    let var = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty());
+    data_dir_from(
+        var("XDG_DATA_HOME"),
+        var("LOCALAPPDATA"),
+        var("APPDATA"),
+        var("HOME"),
+        cfg!(windows),
+    )
+}
+
+/// [`data_dir`] from explicit values (testable on every OS).
+pub fn data_dir_from(
+    xdg_data_home: Option<std::ffi::OsString>,
+    local_app_data: Option<std::ffi::OsString>,
+    app_data: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+    windows: bool,
+) -> Option<PathBuf> {
+    let base = xdg_data_home.map(PathBuf::from);
+    let base = if windows {
+        base.or_else(|| local_app_data.map(PathBuf::from))
+            .or_else(|| app_data.map(PathBuf::from))
+    } else {
+        base
+    };
+    let base = base.or_else(|| home.map(|h| PathBuf::from(h).join(".local/share")))?;
     Some(base.join("lillith"))
 }
 
@@ -728,7 +753,8 @@ pub struct MemoryConfig {
     /// Master switch. `false` = no reads, no writes, no file.
     pub enabled: bool,
     /// Database file. Empty = `<data>/lillith/memory.db`
-    /// (`$XDG_DATA_HOME/lillith/memory.db`, else `~/.local/share/...`).
+    /// (`$XDG_DATA_HOME/lillith/memory.db`, else `~/.local/share/...`;
+    /// Windows: `%LOCALAPPDATA%\lillith\memory.db`).
     /// `~` is expanded.
     pub db_path: String,
     /// Half-life of a memory's strength, in days (unused memories fade).
@@ -743,6 +769,8 @@ pub struct MemoryConfig {
     pub max_nodes: usize,
     /// Hard cap on the raw event log used for habit mining (oldest pruned).
     pub max_events: usize,
+    /// Hard cap on remembered errors/fixes (least recently seen pruned).
+    pub max_errors: usize,
 }
 
 impl Default for MemoryConfig {
@@ -757,6 +785,7 @@ impl Default for MemoryConfig {
             prune_below: 0.05,
             max_nodes: 5000,
             max_events: 5000,
+            max_errors: 1000,
         }
     }
 }
@@ -1069,6 +1098,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn data_dir_has_a_windows_fallback() {
+        use std::ffi::OsString;
+        let o = |s: &str| Some(OsString::from(s));
+        // Windows without HOME (the usual case): %LOCALAPPDATA%, then %APPDATA%.
+        assert_eq!(
+            data_dir_from(None, o("C:/Users/ko/AppData/Local"), o("C:/R"), None, true),
+            Some(PathBuf::from("C:/Users/ko/AppData/Local").join("lillith"))
+        );
+        assert_eq!(
+            data_dir_from(None, None, o("C:/R"), None, true),
+            Some(PathBuf::from("C:/R").join("lillith"))
+        );
+        // XDG wins everywhere; unix ignores the Windows variables.
+        assert_eq!(
+            data_dir_from(o("/x"), o("C:/L"), None, o("/home/ko"), true),
+            Some(PathBuf::from("/x/lillith"))
+        );
+        assert_eq!(
+            data_dir_from(None, o("C:/L"), None, o("/home/ko"), false),
+            Some(PathBuf::from("/home/ko/.local/share/lillith"))
+        );
+        assert_eq!(data_dir_from(None, None, None, None, true), None);
+        assert_eq!(data_dir_from(None, o("C:/L"), None, None, false), None);
+    }
+
+    #[test]
     fn memory_is_on_by_default_and_can_be_turned_off() {
         let d = Config::default();
         assert!(d.memory.enabled, "memory defaults to on (Ko's decision)");
@@ -1082,6 +1137,7 @@ mod tests {
             PathBuf::from("/tmp/x/mem.db")
         );
         assert!(!MemoryConfig::disabled().enabled);
+        assert_eq!(d.memory.max_errors, 1000);
     }
 
     #[test]
