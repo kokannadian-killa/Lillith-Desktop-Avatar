@@ -104,7 +104,9 @@ Python/Tk prototypes). Everything runs locally.
 - 🗓️ **Tray, settings panel, autostart, PKGBUILD (M6)** — an egui panel
   already exists for previewing poses (`lillith panel`).
 - 🗓️ **Local LLM chat + persistent memory (M7)** — Ollama or `llama-server`.
-- 🗓️ **Voice (M8)** — Piper / espeak-ng TTS, push-to-talk via whisper.cpp.
+- 🗓️ **Voice (M8)** — her own voice: Ko's cloned voice via the offline `lillith-voice` kit (Pocket TTS + local
+  whisper/VAD for the mic; see [INSTALL.md](INSTALL.md#her-voice-kos-cloned-voice-lillith-voice-kit-optional-fully-offline)),
+  else Piper / espeak-ng.
 
 ## Status / Roadmap
 

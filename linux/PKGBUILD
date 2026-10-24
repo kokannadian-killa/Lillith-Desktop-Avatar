@@ -19,6 +19,9 @@ optdepends=(
   'llama.cpp: local chat model server (llama-server; the GGUF stays on your disk)'
   'kwin: window perching via the bundled KWin script'
   'espeak-ng: spoken replies when Piper is not installed'
+  'python: lillith-voice kit (her own offline voice, Ko'"'"'s clone; install.sh --piper-shim)'
+  'ffmpeg: lillith-voice kit audio chain (p1 preset, resampling, polish)'
+  'pipewire-audio: lillith-voice kit playback and microphone capture (pw-play / pw-record)'
 )
 options=('!lto' '!debug')
 install=lillith.install
