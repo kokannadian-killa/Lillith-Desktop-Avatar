@@ -42,8 +42,8 @@ in place. `./linux/install.sh --yes` takes every default without asking.
 7. **Brain**: finds a `.gguf` under `~` (Dolphin 3.0 Llama 3.2 3B Q4_K_M first)
    and `llama-server`, then runs `lillith setup`. The endpoint is fixed to
    `http://127.0.0.1:8080`. Nothing is downloaded, and no model is ever fetched.
-   If `llama-server` is missing, install `llama.cpp` (pacman, or an AUR helper
-   yourself) and run `lillith setup --gguf … --llama-server …` later.
+   If `llama-server` is missing, install it (`sudo pacman -S llama-cpp`, or
+   the AUR's `llama.cpp` with a helper you run yourself) and run `lillith setup --gguf … --llama-server …` later.
 8. Checks `lillith --help` and the clip list, then asks **Start Lillith now?**
 
 ## Options

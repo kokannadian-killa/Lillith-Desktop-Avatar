@@ -29,7 +29,21 @@ yourself.
 Download **`Lillith-main-linux.zip`** from the latest GitHub release. It has
 the ready-made programs (`bin/`), all her art and pose videos, the art kit and
 the offline voice kit (models and Python wheels), so nothing is downloaded or
-built:
+built.
+
+**Not in the zip, install these first (Garuda / Arch):**
+
+- **llama-server** (her brain's server). Release #3 does *not* bundle one.
+  `sudo pacman -S --needed llama-cpp` (Arch `extra`), or `paru -S llama.cpp`
+  from the AUR. Check with `command -s llama-server`.
+- **ffmpeg** (plays her MP4 poses, and her voice uses it):
+  `sudo pacman -S --needed ffmpeg`. The installer offers it too.
+- **Python 3.13 or 3.14** for her voice (`python` on Garuda is 3.14).
+- **Your `.gguf` model**, e.g. `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf`.
+
+If the release has the zip in two parts (`.part1`, `.part2`), put all of the
+release files in one folder and run `bash join-and-verify.sh` first. It joins
+them and checks the sha256.
 
 ```fish
 cd ~/Downloads
@@ -83,7 +97,8 @@ Run it with `bash` (it isn't a fish script), from any folder. Steps:
    on 127.0.0.1:8080 she uses that one.
 
 Other model: `bash install.sh --gguf /path/to/model.gguf`. All options:
-`bash install.sh --help`. Remove her: `bash install.sh --uninstall`.
+`bash install.sh --help`. Remove her: `bash install.sh --uninstall` (it also offers to remove her voice;
+`--purge` also deletes settings, chat history and her memory).
 
 **Windows:** double-click `install.bat` in the unzipped folder. It downloads
 the art the same way (GitHub CLI login), offers to install Rust and the C++
@@ -113,8 +128,8 @@ sudo pacman -S --needed unzip ffmpeg libxkbcommon wayland dbus libpulse systemd-
 `ffmpeg` decodes her MP4 poses. Without it she falls back to the PNG sheets.
 A normal Plasma desktop already has most of the rest.
 
-For chat you also need llama.cpp's `llama-server` (the `llama.cpp` package,
-from pacman or an AUR helper you run yourself).
+For chat you also need llama.cpp's `llama-server`: `sudo pacman -S llama-cpp`
+(Arch `extra`), or the AUR's `llama.cpp` with a helper you run yourself.
 
 ### 2. Unzip and start her
 

@@ -249,16 +249,44 @@ if [[ $UNINSTALL == 1 ]]; then
   fi
   refresh_menus
 
+  # Her voice (installed by step 7b from the bundled kit): the daemon, the
+  # lillith-say/-listen/... commands and ~1 GB of models + venv.
+  LV_HOME="${LILLITH_VOICE_HOME:-$DATA_HOME/lillith-voice}"
+  VOICE_UNIT="$CONFIG_HOME/systemd/user/lillith-voice.service"
+  if [[ -d $LV_HOME || -f $VOICE_UNIT || -e $BIN_DIR/lillith-say ]]; then
+    if ask "Remove her voice too ($LV_HOME, about 1 GB, and the lillith-voice service)?" y; then
+      if have systemctl; then
+        systemctl --user disable --now lillith-voice.service >/dev/null 2>&1 || true
+      fi
+      rm -f -- "$VOICE_UNIT" "$CONFIG_HOME/fish/conf.d/lillith-voice.fish"
+      for b in lillith-say lillith-voiced lillith-chat lillith-piper lillith-listen; do
+        rm -f -- "$BIN_DIR/$b"
+      done
+      if [[ -f $BIN_DIR/piper ]] && grep -qs lillith "$BIN_DIR/piper"; then rm -f -- "$BIN_DIR/piper"; fi
+      [[ -d $LV_HOME ]] && rm -rf -- "$LV_HOME"
+      if have systemctl; then systemctl --user daemon-reload >/dev/null 2>&1 || true; fi
+      ok "removed her voice"
+    else
+      ok "kept her voice (remove later: bash tools/lillith-voice/uninstall.sh)"
+    fi
+  fi
+
   # Settings + personal data: named files only (never a blind rm -rf, so a
-  # model someone parked in these folders survives).
+  # model someone parked in these folders survives). Her knowledge/ and
+  # skills/ folders are hers (she makes them) and go with the same answer.
   USER_FILES=("$CONFIG_FILE" "$CONFIG_DIR/Modelfile.lily" "$DATA_DIR/chat_history.json"
+              "$DATA_DIR/memory.db" "$DATA_DIR/memory.db-wal" "$DATA_DIR/memory.db-shm"
               "$DATA_DIR/lillith_memory.db" "$DATA_DIR/lillith_memory.db-wal" "$DATA_DIR/lillith_memory.db-shm")
-  present=()
+  USER_DIRS=("$DATA_DIR/knowledge" "$DATA_DIR/skills")
+  present=() present_dirs=()
   for f in "${USER_FILES[@]}" "$CONFIG_DIR"/config.toml.*; do [[ -e $f ]] && present+=("$f"); done
-  if ((${#present[@]})); then
-    printf '  Your settings and chat history:\n'; printf '    %s\n' "${present[@]}"
+  for d in "${USER_DIRS[@]}"; do [[ -d $d ]] && present_dirs+=("$d"); done
+  if ((${#present[@]} + ${#present_dirs[@]})); then
+    printf '  Your settings, chat history and her memory:\n'
+    printf '    %s\n' "${present[@]}" "${present_dirs[@]/%//}"
     if [[ $PURGE == 1 ]] || ask "Delete these too?" n; then
-      rm -f -- "${present[@]}"
+      ((${#present[@]})) && rm -f -- "${present[@]}"
+      ((${#present_dirs[@]})) && rm -rf -- "${present_dirs[@]}"
       rmdir -- "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || true
       ok "deleted settings and chat history"
     else
@@ -414,8 +442,9 @@ if [[ $HAS_SETTINGS == 1 && -x $REL/lillith-settings ]]; then
   install -Dm755 "$REL/lillith-settings" "$BIN_DIR/lillith-settings"
   ok "$BIN_DIR/lillith-settings"
 fi
+mkdir -p "$DATA_DIR"
+chmod 700 "$DATA_DIR"   # her memory.db and knowledge live here: yours only
 if [[ $ASSET_STATE == ok ]]; then
-  mkdir -p "$DATA_DIR"
   python3 "$HERE/stage-assets.py" "$ASSET_SRC" "$ASSET_DIR" | sed 's/^/  /'
 fi
 # No env var or config key needed: Lillith looks in
@@ -608,11 +637,17 @@ else
       LLAMA="$(choose "Which llama-server?" "${servers[@]}")"
     else
       warn "llama-server isn't installed. It comes from llama.cpp:"
-      warn "  sudo pacman -S llama.cpp    (if your repos carry it, e.g. Garuda's chaotic-aur)"
+      warn "  sudo pacman -S llama-cpp    (Arch 'extra' repo; Garuda has it too)"
       warn "  or the AUR: paru -S llama.cpp   (this installer never installs from the AUR)"
-      if have pacman && [[ $SKIP_DEPS == 0 ]] && pacman -Si llama.cpp >/dev/null 2>&1; then
-        if ask "llama.cpp is in your pacman repos. Install it now?" n; then
-          sudo pacman -S --needed llama.cpp
+      LLAMA_PKG=""
+      if have pacman && [[ $SKIP_DEPS == 0 ]]; then
+        for p in llama-cpp llama.cpp; do
+          if pacman -Si "$p" >/dev/null 2>&1; then LLAMA_PKG="$p"; break; fi
+        done
+      fi
+      if [[ -n $LLAMA_PKG ]]; then
+        if ask "$LLAMA_PKG is in your pacman repos. Install it now?" n; then
+          sudo pacman -S --needed "$LLAMA_PKG"
           mapfile -t servers < <(find_llama)
           ((${#servers[@]})) && LLAMA="${servers[0]}"
         fi
