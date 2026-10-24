@@ -238,7 +238,7 @@ struct Bubble {
 
 // lillith-theme's hellforge bubble look (DemonOS palette).
 use lillith_theme::bubble::{self as look, BG, CRIMSON, EMBER, HER_TEXT, ME_TEXT, NEON};
-use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView};
+use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView, Initiator};
 use lillith_theme::egui_deletion::{
     deletion_contract_popup, DeletionChoice, DeletionState, DeletionView,
 };
@@ -855,6 +855,8 @@ impl Bubble {
             target: p.target.as_deref(),
             detail: p.detail.as_deref(),
             busy: false,
+            // Chat contracts are Lillith's own proposals.
+            initiator: Initiator::Her,
         };
         if let Some(choice) =
             soul_contract_popup(ctx, egui::Id::new("lillith-soul-contract"), &view)
