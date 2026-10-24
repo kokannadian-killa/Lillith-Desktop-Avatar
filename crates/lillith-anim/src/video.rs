@@ -92,8 +92,10 @@ impl VideoConfig {
                 "0" | "off" | "false" | "no" | "png"
             );
         }
-        if let Some(p) = std::env::var_os("LILLITH_FFMPEG").filter(|p| !p.is_empty()) {
-            c.ffmpeg = PathBuf::from(p);
+        // Only an absolute path to an existing executable file; anything
+        // else is refused (logged) and `ffmpeg` on PATH is used.
+        if let Some(p) = lillith_core::launch_audit::env_exe("LILLITH_FFMPEG") {
+            c.ffmpeg = p;
         }
         if let Some(mb) = std::env::var("LILLITH_VIDEO_CACHE_MB")
             .ok()
@@ -178,8 +180,10 @@ pub fn unpack_frame(rgb: &[u8], w: u32, h: u32) -> Option<Canvas> {
 /// frames. Used by `import-manifest --check` and tests; the overlay uses
 /// the streaming [`VideoCache`].
 pub fn decode_all(ffmpeg: &Path, path: &Path, w: u32, h: u32) -> Result<Vec<Canvas>, VideoError> {
-    let out = Command::new(ffmpeg)
-        .args(ffmpeg_args(&format!("file:{}", path.display())))
+    let mut c = Command::new(ffmpeg);
+    c.args(ffmpeg_args(&format!("file:{}", path.display())));
+    lillith_core::launch_audit::record_command_once("video_decode", &c);
+    let out = c
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -325,9 +329,11 @@ impl VideoCache {
     }
 
     fn spawn(&self) -> Result<Child, VideoError> {
-        Command::new(&self.cfg.ffmpeg)
-            .args(ffmpeg_args("pipe:0"))
-            .stdin(Stdio::piped())
+        let mut c = Command::new(&self.cfg.ffmpeg);
+        c.args(ffmpeg_args("pipe:0"));
+        // One line per process: the standby decoder runs per clip change.
+        lillith_core::launch_audit::record_command_once("video_decode", &c);
+        c.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -566,9 +572,10 @@ fn read_full(r: &mut impl Read, buf: &mut [u8]) -> std::io::Result<bool> {
 /// if it does not run.
 pub fn find_ffmpeg() -> Option<PathBuf> {
     let p = VideoConfig::from_env().ffmpeg;
-    Command::new(&p)
-        .arg("-version")
-        .stdout(Stdio::null())
+    let mut c = Command::new(&p);
+    c.arg("-version");
+    lillith_core::launch_audit::record_command_once("video_probe", &c);
+    c.stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .ok()

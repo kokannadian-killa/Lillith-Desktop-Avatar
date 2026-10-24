@@ -58,7 +58,10 @@ impl Default for SettingsWindow {
 }
 
 /// `lillith-settings` next to the running executable (release tarball,
-/// `target/{debug,release}`), else whatever `$PATH` has.
+/// `target/{debug,release}`), else the first absolute `$PATH` entry that
+/// has it as an executable file. Neither: the bare name, which
+/// [`SettingsWindow::open_tab`] refuses with a log line (never a relative
+/// or cwd lookup).
 pub fn default_program() -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -68,7 +71,8 @@ pub fn default_program() -> PathBuf {
                     .join(format!("{SETTINGS_BIN}{}", std::env::consts::EXE_SUFFIX)),
             )
         })
-        .filter(|p| p.is_file())
+        .and_then(|p| lillith_core::launch_audit::checked_exe(&p).ok())
+        .or_else(|| lillith_core::launch_audit::which_abs(SETTINGS_BIN))
         .unwrap_or_else(|| PathBuf::from(SETTINGS_BIN))
 }
 
@@ -115,6 +119,18 @@ impl SettingsWindow {
         if self.running() {
             return Launch::AlreadyRunning;
         }
+        // Only an absolute path to an existing executable file.
+        if let Err(e) = lillith_core::launch_audit::checked_exe(&self.program) {
+            tracing::warn!(
+                program = %self.program.display(),
+                "settings window not started: {e} (needs an absolute path to an executable lillith-settings)"
+            );
+            let kind = match e {
+                lillith_core::launch_audit::ExeError::Missing => std::io::ErrorKind::NotFound,
+                _ => std::io::ErrorKind::PermissionDenied,
+            };
+            return Launch::Failed(std::io::Error::new(kind, e.to_string()));
+        }
         let mut cmd = Command::new(&self.program);
         if let Some(t) = tab {
             cmd.arg("--tab").arg(t);
@@ -134,6 +150,7 @@ impl SettingsWindow {
             use std::os::unix::process::CommandExt;
             cmd.process_group(0);
         }
+        lillith_core::launch_audit::record_command("settings_window", &cmd);
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => return Launch::Failed(e),
@@ -293,5 +310,11 @@ pub(crate) mod tests {
         }
         assert!(!w.running());
         assert!(w.drain().is_empty());
+        // A bare name is never looked up relative to cwd / PATH at spawn.
+        let mut w = SettingsWindow::with_program("lillith-settings");
+        match w.open(Path::new("/tmp/x.toml"), None) {
+            Launch::Failed(e) => assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied),
+            other => panic!("{other:?}"),
+        }
     }
 }
