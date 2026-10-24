@@ -25,11 +25,50 @@ impl LaunchCommand {
         std::iter::once(&self.program).chain(&self.args).map(|a| shell_quote(a)).collect::<Vec<_>>().join(" ")
     }
 
+    /// The process to spawn, with an environment scrubbed of anything that
+    /// could make the child reach the network on its own: llama.cpp's
+    /// `LLAMA_ARG_*` overrides (e.g. `LLAMA_ARG_HF_REPO` / `LLAMA_ARG_MODEL_URL`
+    /// would make llama-server download a model, `LLAMA_ARG_HOST` could
+    /// re-bind it), `HF_*` hub settings, proxy variables and any inherited
+    /// `OLLAMA_HOST` (callers pin it to loopback explicitly).
     pub fn to_command(&self) -> Command {
         let mut c = Command::new(&self.program);
         c.args(&self.args);
+        for (k, _) in std::env::vars_os() {
+            if let Some(name) = k.to_str() {
+                if is_scrubbed_env(name) {
+                    c.env_remove(&k);
+                }
+            }
+        }
+        for k in SCRUBBED_ENV {
+            c.env_remove(k);
+        }
         c
     }
+}
+
+/// Environment variables always removed from launched children.
+const SCRUBBED_ENV: &[&str] = &[
+    "OLLAMA_HOST",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "LLAMA_ARG_HF_REPO",
+    "LLAMA_ARG_HF_FILE",
+    "LLAMA_ARG_MODEL_URL",
+    "LLAMA_ARG_HOST",
+    "LLAMA_ARG_PORT",
+    "HF_TOKEN",
+    "HF_ENDPOINT",
+];
+
+fn is_scrubbed_env(name: &str) -> bool {
+    let up = name.to_ascii_uppercase();
+    up.starts_with("LLAMA_ARG_") || up.starts_with("HF_") || up.ends_with("_PROXY") || SCRUBBED_ENV.contains(&name)
 }
 
 fn shell_quote(s: &str) -> String {
@@ -64,6 +103,13 @@ pub fn llama_server_command(cfg: &LlmConfig, bin: Option<&Path>) -> Result<Launc
     if cfg.gguf_path.trim().is_empty() {
         return Err(LaunchError::NoModel);
     }
+    // `-m` must be a local file path, never a URL / hub reference.
+    if cfg.gguf_path.contains("://") || cfg.gguf_path.trim_start().starts_with('-') {
+        return Err(LaunchError::NotLocalModel(format!(
+            "gguf_path `{}` is not a local file path (Lillith is local-only)",
+            cfg.gguf_path
+        )));
+    }
     let url: LocalUrl = cfg.server()?;
     let program = bin
         .map(|b| b.display().to_string())
@@ -90,25 +136,37 @@ pub fn llama_server_command(cfg: &LlmConfig, bin: Option<&Path>) -> Result<Launc
 }
 
 /// Checks that a Modelfile only references local files (so `ollama create`
-/// cannot download anything). Relative paths resolve against `base_dir`.
+/// cannot download anything). Every `FROM` and `ADAPTER` line is checked
+/// (Ollama uses the *last* `FROM`, so checking only the first would let a
+/// second `FROM llama3` slip through): it must look like a path
+/// ([`crate::modelfile::check_local_model_ref`]) **and** be an existing
+/// regular file. Relative paths resolve against `base_dir` (the
+/// Modelfile's folder, as Ollama does).
 pub fn ensure_local_modelfile(m: &Modelfile, base_dir: &Path) -> Result<(), LaunchError> {
-    let from = m.from().ok_or_else(|| LaunchError::NotLocalModel("Modelfile has no FROM".into()))?;
+    if m.from().is_none() {
+        return Err(LaunchError::NotLocalModel("Modelfile has no FROM".into()));
+    }
     let check = |what: &str, p: &str| -> Result<(), LaunchError> {
-        let path = crate::paths::expand_tilde(p);
+        let refuse = |why: String| {
+            LaunchError::NotLocalModel(format!(
+                "{what} `{p}`: {why}; refusing to run `ollama create` \
+                 because Ollama would try to download it (Lillith is local-only)"
+            ))
+        };
+        crate::modelfile::check_local_model_ref(p).map_err(refuse)?;
+        let path = crate::paths::expand_tilde(p.trim());
         let path = if path.is_absolute() { path } else { base_dir.join(path) };
         if path.is_file() {
             Ok(())
         } else {
-            Err(LaunchError::NotLocalModel(format!(
-                "{what} `{p}` is not an existing local file; refusing to run `ollama create` \
-                 because Ollama would try to download it (Lillith is local-only)"
-            )))
+            Err(refuse("not an existing local file".into()))
         }
     };
-    check("FROM", from)?;
     for i in &m.instructions {
-        if let Instruction::Adapter(a) = i {
-            check("ADAPTER", a)?;
+        match i {
+            Instruction::From(f) => check("FROM", f)?,
+            Instruction::Adapter(a) => check("ADAPTER", a)?,
+            _ => {}
         }
     }
     Ok(())
@@ -123,7 +181,11 @@ pub fn ollama_create_command(
 ) -> Result<LaunchCommand, LaunchError> {
     let src = std::fs::read_to_string(modelfile_path).map_err(|e| LaunchError::Io(modelfile_path.into(), e))?;
     let m = Modelfile::parse(&src)?;
+    m.validate()?;
     ensure_local_modelfile(&m, modelfile_path.parent().unwrap_or(Path::new(".")))?;
+    if model_name.trim().is_empty() || model_name.starts_with('-') || model_name.chars().any(char::is_whitespace) {
+        return Err(LaunchError::NotLocalModel(format!("bad Ollama model name `{model_name}`")));
+    }
     cfg.ollama()?; // host must be loopback
     Ok(LaunchCommand {
         program: ollama_bin.display().to_string(),
@@ -143,7 +205,7 @@ pub fn ollama_create(
     let host = cfg.ollama()?;
     let out = cmd
         .to_command()
-        .env("OLLAMA_HOST", format!("{}:{}", host.ip, host.port))
+        .env("OLLAMA_HOST", host.host_port())
         .stdin(Stdio::null())
         .output()
         .map_err(|e| LaunchError::Io(ollama_bin.into(), e))?;
@@ -198,5 +260,97 @@ mod tests {
         let remote = LlmConfig { ollama_host: "http://192.168.0.9:11434".into(), ..Default::default() };
         assert!(ollama_create_command(Path::new("/usr/bin/ollama"), "lily", &mf, &remote).is_err());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn tmpdir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("lillith-setup-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn every_from_and_adapter_must_be_a_local_file() {
+        let dir = tmpdir("mf2");
+        std::fs::write(dir.join("m.gguf"), b"GGUF").unwrap();
+        std::fs::create_dir_all(dir.join("adir")).unwrap();
+        let ok = |src: &str| ensure_local_modelfile(&Modelfile::parse(src).unwrap(), &dir);
+        assert!(ok("FROM ./m.gguf\n").is_ok());
+        assert!(ok("FROM m.gguf\n").is_ok());
+        assert!(ok(&format!("FROM {}\n", dir.join("m.gguf").display())).is_ok());
+        assert!(ok("FROM ./m.gguf\nADAPTER ./m.gguf\n").is_ok());
+        for src in [
+            "FROM ./m.gguf\nFROM llama3\n",          // second FROM wins in Ollama
+            "FROM llama3.2:3b\n",
+            "FROM dolphin3\n",
+            "FROM hf.co/bartowski/Dolphin3.0-Llama3.2-3B-GGUF:Q4_K_M\n",
+            "FROM registry.ollama.ai/library/llama3:latest\n",
+            "FROM https://example.com/m.gguf\n",
+            "FROM ./missing.gguf\n",                  // missing path = registry lookup in Ollama
+            "FROM missing.gguf\n",
+            "FROM ./*.gguf\n",
+            "FROM ./adir\n",
+            "FROM ./m.gguf\nADAPTER lora-from-hub\n",
+            "FROM ./m.gguf\nADAPTER ./missing-lora.gguf\n",
+            "# no from\nSYSTEM hi\n",
+        ] {
+            let e = ok(src).expect_err(src);
+            assert!(e.to_string().contains("local-only") || e.to_string().contains("no FROM"), "{src}: {e}");
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn ollama_create_validates_params_and_name() {
+        let dir = tmpdir("mf3");
+        std::fs::write(dir.join("m.gguf"), b"GGUF").unwrap();
+        let mf = dir.join("Modelfile");
+        let cfg = LlmConfig::default();
+        let bin = Path::new("/usr/bin/ollama");
+        std::fs::write(&mf, "FROM ./m.gguf\nPARAMETER temprature 0.7\n").unwrap();
+        assert!(matches!(ollama_create_command(bin, "lily", &mf, &cfg), Err(LaunchError::Modelfile(_))));
+        std::fs::write(&mf, "FROM ./m.gguf\nPARAMETER num_ctx lots\n").unwrap();
+        assert!(matches!(ollama_create_command(bin, "lily", &mf, &cfg), Err(LaunchError::Modelfile(_))));
+        std::fs::write(&mf, "FROM ./m.gguf\nPARAMETER num_ctx 4096\n").unwrap();
+        assert!(ollama_create_command(bin, "lily", &mf, &cfg).is_ok());
+        for name in ["", "--help", "two words"] {
+            assert!(ollama_create_command(bin, name, &mf, &cfg).is_err(), "{name:?}");
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn ollama_host_is_bracketed_for_ipv6() {
+        let cfg = LlmConfig { ollama_host: "http://[::1]:11500".into(), ..Default::default() };
+        assert_eq!(cfg.ollama().unwrap().host_port(), "[::1]:11500");
+    }
+
+    #[test]
+    fn children_get_a_scrubbed_environment() {
+        std::env::set_var("LLAMA_ARG_HF_REPO", "bartowski/whatever-GGUF");
+        std::env::set_var("LLAMA_ARG_MODEL_URL", "https://example.com/m.gguf");
+        std::env::set_var("HF_ENDPOINT_TEST_X", "https://example.com");
+        let cfg = LlmConfig { gguf_path: "/m.gguf".into(), ..Default::default() };
+        let cmd = llama_server_command(&cfg, None).unwrap().to_command();
+        std::env::remove_var("LLAMA_ARG_HF_REPO");
+        std::env::remove_var("LLAMA_ARG_MODEL_URL");
+        std::env::remove_var("HF_ENDPOINT_TEST_X");
+        let removed: Vec<String> = cmd
+            .get_envs()
+            .filter(|(_, v)| v.is_none())
+            .map(|(k, _)| k.to_string_lossy().into_owned())
+            .collect();
+        for k in ["LLAMA_ARG_HF_REPO", "LLAMA_ARG_MODEL_URL", "HF_ENDPOINT_TEST_X", "OLLAMA_HOST", "HTTPS_PROXY", "http_proxy"] {
+            assert!(removed.iter().any(|r| r == k), "{k} not scrubbed: {removed:?}");
+        }
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(!args.iter().any(|a| a.starts_with("-hf") || a.contains("url") || a.contains("http")), "{args:?}");
+    }
+
+    #[test]
+    fn llama_server_refuses_url_models() {
+        for p in ["https://huggingface.co/x/y.gguf", "--hf-repo"] {
+            let cfg = LlmConfig { gguf_path: p.into(), ..Default::default() };
+            assert!(matches!(llama_server_command(&cfg, None), Err(LaunchError::NotLocalModel(_))), "{p}");
+        }
     }
 }

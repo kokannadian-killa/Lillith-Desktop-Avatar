@@ -6,8 +6,17 @@
 //! quoted"""` (multi-line) arguments. Unknown instructions are kept verbatim
 //! so a round trip never loses anything.
 //!
-//! Note: `FROM` here should be a local `.gguf` path (or an already-installed
-//! local Ollama model). Nothing in this crate pulls models from a registry.
+//! Quoting follows Ollama's own parser (`parser/parser.go`) exactly: there
+//! are **no backslash escapes**; a value ends at the first line end where the
+//! trimmed text so far is either unquoted, `"…"` or `"""…"""`. [`Modelfile::render`]
+//! picks a form that Ollama (and [`Modelfile::parse`]) read back byte-for-byte,
+//! and [`Modelfile::try_render`] / [`Modelfile::validate`] report the rare value
+//! that no form can carry (a non-final line ending in `"""`).
+//!
+//! Local-only: `FROM` / `ADAPTER` must be local files ([`check_local_model_ref`]);
+//! a registry name (`llama3`, `hf.co/…:Q4_K_M`) or URL would make
+//! `ollama create` download it, so the launcher refuses those. Nothing in this
+//! crate pulls models from a registry.
 
 use crate::template::ChatTemplate;
 use std::fmt::Write as _;
@@ -35,6 +44,8 @@ pub enum ModelfileError {
     Unterminated { line: usize },
     #[error("line {line}: {msg}")]
     Syntax { line: usize, msg: String },
+    #[error("{what}: {msg}")]
+    Invalid { what: String, msg: String },
 }
 
 /// A parsed Modelfile: an ordered list of instructions.
@@ -95,25 +106,91 @@ impl Modelfile {
         Ok(Self::parse(&std::fs::read_to_string(path)?))
     }
 
-    /// Renders back to Modelfile text.
+    /// Renders back to Modelfile text. Best effort for values no quoting form
+    /// can carry (see [`Self::try_render`], which reports them instead).
     pub fn render(&self) -> String {
+        self.render_impl(false).unwrap_or_default()
+    }
+
+    /// Renders back to Modelfile text, or an error if a value can't be
+    /// written so that Ollama reads it back unchanged, or an instruction
+    /// would spill onto extra lines (newline in a key / role / name).
+    pub fn try_render(&self) -> Result<String, ModelfileError> {
+        self.render_impl(true)
+    }
+
+    fn render_impl(&self, strict: bool) -> Result<String, ModelfileError> {
         let mut s = String::new();
+        let q1 = |what: &str, v: &str| quote(v, false).or_else(|| (!strict).then(|| format!("\"\"\"{v}\"\"\""))).ok_or_else(|| unrepresentable(what));
+        let qb = |what: &str, v: &str| quote(v, true).or_else(|| (!strict).then(|| format!("\"\"\"{v}\"\"\""))).ok_or_else(|| unrepresentable(what));
+        let word = |what: &str, w: &str| {
+            if strict && (w.is_empty() || w.chars().any(char::is_whitespace)) {
+                Err(ModelfileError::Invalid { what: what.into(), msg: format!("`{w}` must be one word") })
+            } else {
+                Ok(())
+            }
+        };
         for ins in &self.instructions {
             match ins {
-                Instruction::From(v) => writeln!(s, "FROM {}", quote(v)),
-                Instruction::Parameter { key, value } => writeln!(s, "PARAMETER {key} {}", quote(value)),
-                Instruction::Template(v) => writeln!(s, "TEMPLATE {}", quote_block(v)),
-                Instruction::System(v) => writeln!(s, "SYSTEM {}", quote_block(v)),
-                Instruction::Adapter(v) => writeln!(s, "ADAPTER {}", quote(v)),
-                Instruction::License(v) => writeln!(s, "LICENSE {}", quote_block(v)),
-                Instruction::Message { role, content } => writeln!(s, "MESSAGE {role} {}", quote_block(content)),
-                Instruction::Requires(v) => writeln!(s, "REQUIRES {}", quote(v)),
-                Instruction::Comment(c) => writeln!(s, "#{c}"),
-                Instruction::Other { name, args } => writeln!(s, "{name} {args}"),
+                Instruction::From(v) => writeln!(s, "FROM {}", q1("FROM", v)?),
+                Instruction::Parameter { key, value } => {
+                    word("PARAMETER", key)?;
+                    writeln!(s, "PARAMETER {key} {}", q1(key, value)?)
+                }
+                Instruction::Template(v) => writeln!(s, "TEMPLATE {}", qb("TEMPLATE", v)?),
+                Instruction::System(v) => writeln!(s, "SYSTEM {}", qb("SYSTEM", v)?),
+                Instruction::Adapter(v) => writeln!(s, "ADAPTER {}", q1("ADAPTER", v)?),
+                Instruction::License(v) => writeln!(s, "LICENSE {}", qb("LICENSE", v)?),
+                Instruction::Message { role, content } => {
+                    word("MESSAGE", role)?;
+                    writeln!(s, "MESSAGE {role} {}", qb("MESSAGE", content)?)
+                }
+                Instruction::Requires(v) => writeln!(s, "REQUIRES {}", q1("REQUIRES", v)?),
+                // A newline in a comment must not start a new instruction.
+                Instruction::Comment(c) => c.split('\n').try_for_each(|l| writeln!(s, "#{l}")),
+                Instruction::Other { name, args } => {
+                    word("instruction", name)?;
+                    if strict && args.contains('\n') {
+                        return Err(ModelfileError::Invalid { what: name.clone(), msg: "multi-line arguments".into() });
+                    }
+                    writeln!(s, "{name} {args}")
+                }
             }
             .ok();
         }
-        s
+        Ok(s)
+    }
+
+    /// Checks everything `ollama create` would reject (and a few things it
+    /// would silently mangle): at least one `FROM`; known `PARAMETER` names
+    /// with well-typed values; `MESSAGE` roles; every value representable.
+    /// Does **not** touch the filesystem; see [`check_local_model_ref`] and
+    /// `launch::ensure_local_modelfile` for the local-file rule.
+    pub fn validate(&self) -> Result<(), ModelfileError> {
+        if self.from().is_none() {
+            return Err(ModelfileError::Invalid { what: "FROM".into(), msg: "missing FROM line".into() });
+        }
+        for i in &self.instructions {
+            match i {
+                Instruction::Parameter { key, value } => validate_param(key, value)?,
+                Instruction::Message { role, .. } if !matches!(role.as_str(), "system" | "user" | "assistant") => {
+                    return Err(ModelfileError::Invalid {
+                        what: "MESSAGE".into(),
+                        msg: format!("role `{role}` must be system, user or assistant"),
+                    })
+                }
+                _ => {}
+            }
+        }
+        self.try_render().map(|_| ())
+    }
+
+    /// Every `FROM` value (Ollama uses the last one; all must be local).
+    pub fn froms(&self) -> impl Iterator<Item = &str> {
+        self.instructions.iter().filter_map(|i| match i {
+            Instruction::From(v) => Some(v.as_str()),
+            _ => None,
+        })
     }
 
     // ---- accessors / editors (what the customizer UI binds to) ----
@@ -124,10 +201,12 @@ impl Modelfile {
             _ => None,
         })
     }
+    /// Sets `FROM` (a second `FROM` line, which Ollama would use instead,
+    /// is removed).
     pub fn set_from(&mut self, v: impl Into<String>) {
         let v = v.into();
-        match self.instructions.iter_mut().find(|i| matches!(i, Instruction::From(_))) {
-            Some(i) => *i = Instruction::From(v),
+        match self.instructions.iter().position(|i| matches!(i, Instruction::From(_))) {
+            Some(_) => self.set_single(Instruction::From(v), |i| matches!(i, Instruction::From(_))),
             None => self.instructions.insert(0, Instruction::From(v)),
         }
     }
@@ -208,76 +287,141 @@ impl Modelfile {
     }
 }
 
-/// Reads an argument starting at `rest`; consumes following lines for an
-/// open `"""`.
+/// Reads an argument starting at `rest`, the way Ollama does: keep adding
+/// lines until the trimmed text is complete (unquoted, `"…"` or `"""…"""`).
 fn read_value(rest: &str, lines: &[&str], i: &mut usize, lineno: usize) -> Result<String, ModelfileError> {
-    if let Some(after) = rest.strip_prefix("\"\"\"") {
-        if let Some(end) = after.find("\"\"\"") {
-            return Ok(after[..end].to_string());
+    let mut buf = rest.to_string();
+    loop {
+        if let Some(v) = unquote(buf.trim()) {
+            return Ok(v.to_string());
         }
-        let mut buf = after.to_string();
-        while *i < lines.len() {
-            let l = lines[*i];
-            *i += 1;
-            buf.push('\n');
-            if let Some(end) = l.find("\"\"\"") {
-                buf.push_str(&l[..end]);
-                return Ok(buf.strip_prefix('\n').map(str::to_string).unwrap_or(buf));
+        if *i >= lines.len() {
+            return Err(ModelfileError::Unterminated { line: lineno });
+        }
+        buf.push('\n');
+        buf.push_str(lines[*i]);
+        *i += 1;
+    }
+}
+
+/// Ollama's `unquote`: `None` = not finished yet (keep reading lines).
+fn unquote(s: &str) -> Option<&str> {
+    if let Some(r) = s.strip_prefix("\"\"\"") {
+        return (r.len() >= 3).then(|| r.strip_suffix("\"\"\"")).flatten();
+    }
+    if let Some(r) = s.strip_prefix('"') {
+        return r.strip_suffix('"');
+    }
+    Some(s)
+}
+
+/// True if `text` (a rendered value) reads back as exactly `v`.
+fn reads_back(text: &str, v: &str) -> bool {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut i = 1;
+    matches!(read_value(lines[0], &lines, &mut i, 1), Ok(ref got) if got == v && i == lines.len())
+}
+
+/// A rendering of `v` that reads back unchanged, preferring `"""…"""` for
+/// free text (`block`) and bare / `"…"` for one-word values. `None` if no
+/// form works (a non-final line of `v` ends in `"""`).
+fn quote(v: &str, block: bool) -> Option<String> {
+    let plain = !v.is_empty() && v == v.trim() && !v.contains(['\n', '\r']) && !v.starts_with('"');
+    let simple = plain && !v.contains(char::is_whitespace) && !v.contains(['<', '#', '"']);
+    if simple {
+        return Some(v.to_string());
+    }
+    let triple = format!("\"\"\"{v}\"\"\"");
+    let single = format!("\"{v}\"");
+    let order = if block { [triple, single] } else { [single, triple] };
+    order.into_iter().find(|c| reads_back(c, v))
+}
+
+fn unrepresentable(what: &str) -> ModelfileError {
+    ModelfileError::Invalid {
+        what: what.into(),
+        msg: "a line (other than the last) ends with \"\"\", which Ollama would read as the end of the text".into(),
+    }
+}
+
+/// Ollama `PARAMETER` names and their value types (Ollama rejects unknown
+/// names; deprecated ones still parse, with a warning).
+fn param_kind(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "num_ctx" | "num_batch" | "num_keep" | "num_thread" | "num_gpu" | "main_gpu" | "top_k" | "repeat_last_n"
+        | "num_predict" | "seed" | "mirostat" => "int",
+        "temperature" | "top_p" | "min_p" | "typical_p" | "tfs_z" | "repeat_penalty" | "presence_penalty"
+        | "frequency_penalty" | "mirostat_eta" | "mirostat_tau" => "float",
+        "use_mmap" | "use_mlock" | "numa" | "low_vram" | "f16_kv" | "vocab_only" | "penalize_newline"
+        | "logits_all" => "bool",
+        "stop" => "string",
+        _ => return None,
+    })
+}
+
+/// Validates one `PARAMETER key value`.
+pub fn validate_param(key: &str, value: &str) -> Result<(), ModelfileError> {
+    let bad = |msg: String| Err(ModelfileError::Invalid { what: format!("PARAMETER {key}"), msg });
+    if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+        return bad("parameter names are letters, digits and _".into());
+    }
+    let v = value.trim();
+    match param_kind(key) {
+        None => bad("unknown parameter (Ollama would refuse it)".into()),
+        Some("int") => match v.parse::<i64>() {
+            Ok(n) if matches!(key, "num_ctx" | "num_batch") && n <= 0 => bad(format!("{n} must be > 0")),
+            Ok(n) if matches!(key, "num_thread" | "num_keep" | "top_k" | "num_gpu") && n < 0 => bad(format!("{n} must be >= 0")),
+            Ok(n) if key == "mirostat" && !(0..=2).contains(&n) => bad(format!("{n} must be 0, 1 or 2")),
+            Ok(n) if key == "num_predict" && n < -2 => bad(format!("{n} must be >= -2")),
+            Ok(_) => Ok(()),
+            Err(_) => bad(format!("`{value}` is not a whole number")),
+        },
+        Some("float") => match v.parse::<f64>() {
+            Ok(f) if !f.is_finite() => bad(format!("`{value}` is not a finite number")),
+            Ok(f) if f < 0.0 && !matches!(key, "presence_penalty" | "frequency_penalty") => bad(format!("{f} must be >= 0")),
+            Ok(_) => Ok(()),
+            Err(_) => bad(format!("`{value}` is not a number")),
+        },
+        Some("bool") => match v {
+            "true" | "false" => Ok(()),
+            _ => bad(format!("`{value}` must be true or false")),
+        },
+        _ => {
+            if value.is_empty() {
+                bad("empty stop sequence".into())
+            } else {
+                Ok(())
             }
-            buf.push_str(l);
-        }
-        return Err(ModelfileError::Unterminated { line: lineno });
-    }
-    let r = rest.trim_end();
-    if r.len() >= 2 && r.starts_with('"') && r.ends_with('"') {
-        return Ok(unescape(&r[1..r.len() - 1]));
-    }
-    Ok(r.to_string())
-}
-
-fn unescape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut it = s.chars();
-    while let Some(c) = it.next() {
-        if c == '\\' {
-            match it.next() {
-                Some('n') => out.push('\n'),
-                Some('t') => out.push('\t'),
-                Some(o) => out.push(o),
-                None => out.push('\\'),
-            }
-        } else {
-            out.push(c);
         }
     }
-    out
 }
 
-/// Quotes a one-line value when needed (spaces at the ends, quotes,
-/// `#`, or empty).
-fn quote(v: &str) -> String {
-    if v.contains('\n') {
-        return quote_block(v);
+/// The local-only rule for a `FROM` / `ADAPTER` value, by syntax alone:
+/// a path (`/abs`, `./rel`, `../rel`, `~/x`) or a bare relative `*.gguf`
+/// file name. URLs, registry names / tags (`llama3`, `library/x:latest`,
+/// `hf.co/user/repo:Q4_K_M`) and glob patterns are refused. The caller must
+/// also check that the file exists, because Ollama treats a missing path
+/// as a registry name and pulls it.
+pub fn check_local_model_ref(v: &str) -> Result<(), String> {
+    let t = v.trim();
+    if t.is_empty() {
+        return Err("empty".into());
     }
-    let needs = v.is_empty() || v != v.trim() || v.starts_with('"') || v.starts_with('#');
-    if needs || (v.contains(char::is_whitespace) && v.contains('"')) {
-        format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\""))
-    } else if v.contains(char::is_whitespace) || v.contains('<') {
-        format!("\"{}\"", v.replace('\\', "\\\\"))
+    if t.contains("://") {
+        return Err(format!("`{t}` is a URL"));
+    }
+    if t.contains(['*', '?', '[', ']']) {
+        return Err(format!("`{t}` is a glob pattern"));
+    }
+    if t.contains(['\n', '\r']) {
+        return Err(format!("`{t}` spans lines"));
+    }
+    let pathlike = t.starts_with('/') || t.starts_with("./") || t.starts_with("../") || t.starts_with("~/");
+    let bare_gguf = !t.contains(':') && !t.starts_with('~') && t.to_ascii_lowercase().ends_with(".gguf");
+    if pathlike || bare_gguf {
+        Ok(())
     } else {
-        v.to_string()
-    }
-}
-
-/// Multi-line / free text: `"""…"""` (only if the text has no `"""`).
-fn quote_block(v: &str) -> String {
-    if v.contains("\"\"\"") {
-        return format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n"));
-    }
-    if v.contains('\n') || v.contains('"') || v != v.trim() || v.contains('#') || v.is_empty() || v.contains(' ') {
-        format!("\"\"\"{v}\"\"\"")
-    } else {
-        v.to_string()
+        Err(format!("`{t}` looks like a registry model name, not a local file"))
     }
 }
 
@@ -451,5 +595,171 @@ FOO bar baz
         assert!(text.contains("TEMPLATE \"\"\"{{- if .System }}<|im_start|>system"));
         assert!(text.contains("SYSTEM \"\"\"You are Lily"));
         assert_eq!(Modelfile::parse(&text).unwrap(), m);
+    }
+
+    /// Values that stress quoting; each must render to text that reads back
+    /// unchanged (Ollama semantics: no escapes).
+    const TRICKY: &[&str] = &[
+        "plain",
+        "two words",
+        "  leading and trailing  ",
+        "say \"hi\"",
+        "\"starts with a quote",
+        "ends with a quote\"",
+        "\"fully quoted\"",
+        "back\\slash \\n not an escape",
+        "C:\\models\\new\\x.gguf",
+        "line one\nline two",
+        "\nstarts with newline",
+        "ends with newline\n",
+        "has \"\"\" inside but not at a line end",
+        "\"\"\"",
+        "x\"\"\"",
+        "multi\nline with \"\"\" mid-line\nand \"quotes\"",
+        "<|im_start|>",
+        "# not a comment",
+        "tab\there",
+        "",
+        "💜 unicode ~ <3",
+    ];
+
+    #[test]
+    fn tricky_values_round_trip_in_every_slot() {
+        for v in TRICKY {
+            let m = Modelfile {
+                instructions: vec![
+                    Instruction::From("/m.gguf".into()),
+                    Instruction::Parameter { key: "stop".into(), value: (*v).into() },
+                    Instruction::Template((*v).into()),
+                    Instruction::System((*v).into()),
+                    Instruction::License((*v).into()),
+                    Instruction::Message { role: "user".into(), content: (*v).into() },
+                ],
+            };
+            let text = m.try_render().unwrap_or_else(|e| panic!("{v:?}: {e}"));
+            let back = Modelfile::parse(&text).unwrap_or_else(|e| panic!("{v:?}: {e}\n{text}"));
+            assert_eq!(back, m, "{v:?} ->\n{text}");
+            // Idempotent: rendering the parsed result gives the same text.
+            assert_eq!(back.try_render().unwrap(), text, "{v:?}");
+        }
+    }
+
+    #[test]
+    fn no_backslash_escapes_like_ollama() {
+        // Ollama keeps backslashes literally inside quotes.
+        let m = Modelfile::parse("SYSTEM \"a\\nb \\\"c\"\n").unwrap();
+        assert_eq!(m.system(), Some("a\\nb \\\"c"));
+        // Ollama ends a """ value at the *last* """ of a line.
+        let m = Modelfile::parse("SYSTEM \"\"\"He said \"\"\"hi\"\"\" ok\"\"\"\n").unwrap();
+        assert_eq!(m.system(), Some("He said \"\"\"hi\"\"\" ok"));
+        // Multi-line value keeps a leading newline, like Ollama.
+        let m = Modelfile::parse("SYSTEM \"\"\"\nhello\n\"\"\"\n").unwrap();
+        assert_eq!(m.system(), Some("\nhello\n"));
+    }
+
+    #[test]
+    fn unrepresentable_values_are_reported_not_corrupted() {
+        // A non-final line ending in """ would end the value early in Ollama.
+        let v = "first line ends \"\"\"\nsecond";
+        let mut m = Modelfile::parse("FROM /m.gguf\n").unwrap();
+        m.set_system(v);
+        assert!(matches!(m.try_render(), Err(ModelfileError::Invalid { .. })));
+        assert!(m.validate().is_err());
+    }
+
+    #[test]
+    fn newlines_cannot_inject_instructions() {
+        let m = Modelfile {
+            instructions: vec![
+                Instruction::Comment(" hi\nFROM llama3".into()),
+                Instruction::From("/m.gguf".into()),
+                Instruction::From("/m.gguf\nFROM llama3".into()),
+            ],
+        };
+        let text = m.render();
+        let back = Modelfile::parse(&text).unwrap();
+        assert!(back.froms().all(|f| f.starts_with("/m.gguf")), "{text}");
+        assert!(!text.lines().any(|l| l == "FROM llama3"), "{text}");
+        // Keys / roles / names with spaces or newlines are refused by try_render.
+        for bad in [
+            Instruction::Parameter { key: "stop\nFROM".into(), value: "x".into() },
+            Instruction::Message { role: "user x".into(), content: "x".into() },
+            Instruction::Other { name: "FOO".into(), args: "a\nFROM llama3".into() },
+        ] {
+            let m = Modelfile { instructions: vec![Instruction::From("/m.gguf".into()), bad.clone()] };
+            assert!(m.try_render().is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn parameter_validation() {
+        for (k, v) in [
+            ("temperature", "0.8"),
+            ("top_p", "0.9"),
+            ("num_ctx", "4096"),
+            ("num_predict", "-1"),
+            ("seed", "-42"),
+            ("stop", "<|im_end|>"),
+            ("mirostat", "2"),
+            ("use_mmap", "false"),
+            ("presence_penalty", "-0.5"),
+        ] {
+            assert!(validate_param(k, v).is_ok(), "{k}={v}");
+        }
+        for (k, v) in [
+            ("temprature", "0.8"),
+            ("temperature", "warm"),
+            ("temperature", "NaN"),
+            ("temperature", "inf"),
+            ("temperature", "-1"),
+            ("num_ctx", "0"),
+            ("num_ctx", "4k"),
+            ("num_thread", "-2"),
+            ("mirostat", "3"),
+            ("use_mmap", "yes"),
+            ("stop", ""),
+            ("bad key", "1"),
+            ("", "1"),
+        ] {
+            assert!(validate_param(k, v).is_err(), "{k}={v}");
+        }
+        let m = lily_modelfile("/m.gguf", &LilyParams { num_thread: 4, ..Default::default() });
+        assert_eq!(m.validate(), Ok(()));
+        assert!(Modelfile::parse("SYSTEM hi\n").unwrap().validate().is_err(), "missing FROM");
+        assert!(Modelfile::parse("FROM /m\nMESSAGE robot hi\n").unwrap().validate().is_err());
+    }
+
+    #[test]
+    fn local_model_refs() {
+        for ok in ["/abs/m.gguf", "./m.gguf", "../m/m.gguf", "~/AI/models/m.gguf", "m.gguf", "sub/m.GGUF", "/home/ko/My Models/m.gguf"] {
+            assert!(check_local_model_ref(ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "llama3",
+            "llama3.2:3b",
+            "dolphin3",
+            "library/llama3",
+            "hf.co/bartowski/Dolphin3.0-Llama3.2-3B-GGUF:Q4_K_M",
+            "huggingface.co/x/y",
+            "registry.ollama.ai/library/llama3:latest",
+            "https://example.com/m.gguf",
+            "http://127.0.0.1/m.gguf",
+            "file:///m.gguf",
+            "./*.gguf",
+            "/m/[ab].gguf",
+            "",
+            "   ",
+            "~bob/m.gguf",
+        ] {
+            assert!(check_local_model_ref(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn set_from_replaces_every_from() {
+        let mut m = Modelfile::parse("FROM ./a.gguf\nSYSTEM hi\nFROM llama3\n").unwrap();
+        m.set_from("/b.gguf");
+        assert_eq!(m.froms().collect::<Vec<_>>(), vec!["/b.gguf"]);
+        assert_eq!(m.render(), "FROM /b.gguf\nSYSTEM hi\n");
     }
 }

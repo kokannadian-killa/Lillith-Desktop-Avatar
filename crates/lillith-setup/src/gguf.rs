@@ -3,6 +3,16 @@
 //! Reads the magic, version and metadata key/values only; tensor data is
 //! never touched. Large arrays (the tokenizer vocab) are skipped by seeking,
 //! so a header read costs a few MB of sequential I/O at most.
+//!
+//! Hostile / corrupt files are handled without panics or big allocations:
+//! every read is bounds-checked against the file length *before* any buffer
+//! is allocated, the whole header must fit in [`MAX_HEADER_BYTES`], counts
+//! are capped ([`MAX_KV`], [`MAX_TENSORS`]), array nesting is capped
+//! ([`MAX_ARRAY_DEPTH`]), unknown value types are an error, and only regular
+//! files are opened (a directory, FIFO or device named `*.gguf` is refused
+//! without blocking). Invalid UTF-8 in keys / strings is replaced (lossy),
+//! not an error. Big-endian GGUF (rare, s390x builds) is reported as
+//! unsupported.
 
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -15,8 +25,15 @@ pub const GGUF_MAGIC: [u8; 4] = *b"GGUF";
 const MAX_STRING: u64 = 256 * 1024;
 /// Arrays longer than this are skipped instead of collected.
 const MAX_ARRAY_KEEP: u64 = 64;
-/// Sanity cap on the number of metadata entries.
-const MAX_KV: u64 = 1_000_000;
+/// Sanity cap on the number of metadata entries (real models: ~20–60).
+pub const MAX_KV: u64 = 65_536;
+/// Sanity cap on the tensor count (real models: hundreds to a few thousand).
+pub const MAX_TENSORS: u64 = 1 << 24;
+/// The metadata section must end within this many bytes of the start (a
+/// 256k-token vocab plus merges is ~10 MB).
+pub const MAX_HEADER_BYTES: u64 = 64 * 1024 * 1024;
+/// Arrays of arrays deeper than this are refused (real files use none).
+pub const MAX_ARRAY_DEPTH: u32 = 4;
 
 #[derive(Debug, thiserror::Error)]
 pub enum GgufError {
@@ -96,33 +113,52 @@ impl GgufHeader {
     }
 }
 
-/// True if `path` starts with the GGUF magic (cheap sniff, 4 bytes).
-pub fn is_gguf(path: &Path) -> bool {
-    let mut m = [0u8; 4];
-    File::open(path).and_then(|mut f| f.read_exact(&mut m)).is_ok() && m == GGUF_MAGIC
-}
-
-/// Reads the header of the GGUF file at `path`.
-pub fn read_header(path: &Path) -> Result<GgufHeader, GgufError> {
+/// Opens `path` only if it is a regular file (following symlinks), so a
+/// FIFO or device never blocks the scanner and a directory is a clean error.
+fn open_regular(path: &Path) -> std::io::Result<(File, u64)> {
+    let meta = std::fs::metadata(path)?;
+    if !meta.is_file() {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "not a regular file"));
+    }
     let f = File::open(path)?;
     let len = f.metadata()?.len();
+    Ok((f, len))
+}
+
+/// True if `path` is a regular file starting with the GGUF magic (cheap
+/// sniff, 4 bytes).
+pub fn is_gguf(path: &Path) -> bool {
+    let mut m = [0u8; 4];
+    open_regular(path).and_then(|(mut f, _)| f.read_exact(&mut m)).is_ok() && m == GGUF_MAGIC
+}
+
+/// Reads the header of the GGUF file at `path` (bounded: at most
+/// [`MAX_HEADER_BYTES`] are ever read).
+pub fn read_header(path: &Path) -> Result<GgufHeader, GgufError> {
+    let (f, len) = open_regular(path)?;
     read_header_from(BufReader::with_capacity(256 * 1024, f), len)
 }
 
-/// Reads a header from any seekable reader of total length `len`.
+/// Reads a header from any seekable reader of total length `len`,
+/// positioned at the start of the file.
 pub fn read_header_from<R: Read + Seek>(r: R, len: u64) -> Result<GgufHeader, GgufError> {
-    let mut p = Parser { r, len, v1: false };
-    let mut magic = [0u8; 4];
-    p.r.read_exact(&mut magic)?;
+    let mut p = Parser { r, len, pos: 0, v1: false };
+    let magic: [u8; 4] = p.bytes()?;
     if magic != GGUF_MAGIC {
         return Err(GgufError::BadMagic(magic));
     }
     let version = p.u32()?;
     if !(1..=3).contains(&version) {
+        if (1..=3).contains(&version.swap_bytes()) {
+            return Err(GgufError::Corrupt("big-endian GGUF is not supported".into()));
+        }
         return Err(GgufError::Version(version));
     }
     p.v1 = version == 1;
     let tensor_count = p.count()?;
+    if tensor_count > MAX_TENSORS {
+        return Err(GgufError::Corrupt(format!("{tensor_count} tensors")));
+    }
     let kv_count = p.count()?;
     if kv_count > MAX_KV {
         return Err(GgufError::Corrupt(format!("{kv_count} metadata entries")));
@@ -134,7 +170,7 @@ pub fn read_header_from<R: Read + Seek>(r: R, len: u64) -> Result<GgufHeader, Gg
             _ => return Err(GgufError::Corrupt("oversized key".into())),
         };
         let ty = p.u32()?;
-        let v = p.value(ty, true)?;
+        let v = p.value(ty, true, 0)?;
         metadata.insert(key, v);
     }
     Ok(GgufHeader { version, tensor_count, metadata })
@@ -143,13 +179,29 @@ pub fn read_header_from<R: Read + Seek>(r: R, len: u64) -> Result<GgufHeader, Gg
 struct Parser<R> {
     r: R,
     len: u64,
+    /// Bytes consumed so far (tracked, so no seek syscalls are needed).
+    pos: u64,
     v1: bool,
 }
 
 impl<R: Read + Seek> Parser<R> {
+    /// Fails (before anything is allocated or read) if `n` more bytes would
+    /// run past the end of the file or past [`MAX_HEADER_BYTES`].
+    fn ensure(&self, n: u64) -> Result<(), GgufError> {
+        let end = self.pos.checked_add(n).ok_or_else(|| GgufError::Corrupt("length overflow".into()))?;
+        if end > self.len {
+            return Err(GgufError::Corrupt(format!("truncated: need {n} bytes at offset {}", self.pos)));
+        }
+        if end > MAX_HEADER_BYTES {
+            return Err(GgufError::Corrupt(format!("metadata larger than {MAX_HEADER_BYTES} bytes")));
+        }
+        Ok(())
+    }
     fn bytes<const N: usize>(&mut self) -> Result<[u8; N], GgufError> {
+        self.ensure(N as u64)?;
         let mut b = [0u8; N];
         self.r.read_exact(&mut b)?;
+        self.pos += N as u64;
         Ok(b)
     }
     fn u32(&mut self) -> Result<u32, GgufError> {
@@ -163,10 +215,7 @@ impl<R: Read + Seek> Parser<R> {
         if self.v1 { Ok(self.u32()? as u64) } else { self.u64() }
     }
     fn skip(&mut self, n: u64) -> Result<(), GgufError> {
-        let pos = self.r.stream_position()?;
-        if pos.saturating_add(n) > self.len {
-            return Err(GgufError::Corrupt(format!("skip {n} past end at {pos}")));
-        }
+        self.ensure(n)?;
         if n <= 64 * 1024 {
             // Small skips (vocab strings) read through the buffer: seeking a
             // BufReader drops its buffer and costs a syscall per token.
@@ -175,8 +224,10 @@ impl<R: Read + Seek> Parser<R> {
                 return Err(GgufError::Corrupt("unexpected end of file".into()));
             }
         } else {
+            // n <= MAX_HEADER_BYTES here, so the cast can't overflow.
             self.r.seek(SeekFrom::Current(n as i64))?;
         }
+        self.pos += n;
         Ok(())
     }
     fn string(&mut self) -> Result<Value, GgufError> {
@@ -185,11 +236,13 @@ impl<R: Read + Seek> Parser<R> {
             self.skip(n)?;
             return Ok(Value::Skipped { len: n });
         }
+        self.ensure(n)?; // before allocating
         let mut b = vec![0u8; n as usize];
         self.r.read_exact(&mut b)?;
+        self.pos += n;
         Ok(Value::Str(String::from_utf8_lossy(&b).into_owned()))
     }
-    fn value(&mut self, ty: u32, keep: bool) -> Result<Value, GgufError> {
+    fn value(&mut self, ty: u32, keep: bool, depth: u32) -> Result<Value, GgufError> {
         Ok(match ty {
             0 => Value::U64(self.bytes::<1>()?[0] as u64),
             1 => Value::I64(self.bytes::<1>()?[0] as i8 as i64),
@@ -209,22 +262,31 @@ impl<R: Read + Seek> Parser<R> {
                 }
             }
             9 => {
+                if depth >= MAX_ARRAY_DEPTH {
+                    return Err(GgufError::Corrupt(format!("arrays nested deeper than {MAX_ARRAY_DEPTH}")));
+                }
                 let ety = self.u32()?;
+                if ety > 12 {
+                    return Err(GgufError::Corrupt(format!("unknown array element type {ety}")));
+                }
                 let n = self.count()?;
                 let keep_items = keep && n <= MAX_ARRAY_KEEP;
                 if !keep_items {
                     if let Some(sz) = fixed_size(ety) {
-                        self.skip(n.saturating_mul(sz))?;
+                        let total = n.checked_mul(sz).ok_or_else(|| GgufError::Corrupt(format!("array of {n} items")))?;
+                        self.skip(total)?;
                     } else {
+                        // Each variable-size item consumes >= 8 bytes, so
+                        // `ensure` stops a bogus count at the header cap.
                         for _ in 0..n {
-                            self.value(ety, false)?;
+                            self.value(ety, false, depth + 1)?;
                         }
                     }
                     return Ok(Value::Skipped { len: n });
                 }
                 let mut items = Vec::with_capacity(n as usize);
                 for _ in 0..n {
-                    items.push(self.value(ety, true)?);
+                    items.push(self.value(ety, true, depth + 1)?);
                 }
                 Value::Array(items)
             }
@@ -432,5 +494,276 @@ pub(crate) mod tests {
         assert_eq!(quant_from_filename("phi-3-mini-4k-instruct-IQ4_XS.gguf").as_deref(), Some("IQ4_XS"));
         assert_eq!(quant_from_filename("model-f16.gguf").as_deref(), Some("F16"));
         assert_eq!(quant_from_filename("model.gguf"), None);
+    }
+
+    // ---- hostile / edge-case headers, built from bytes ----
+
+    struct B(Vec<u8>);
+    impl B {
+        fn new(version: u32, tensors: u64, kvs: u64) -> Self {
+            let mut b = B(b"GGUF".to_vec());
+            b.u32(version).u64(tensors).u64(kvs);
+            b
+        }
+        fn u32(&mut self, v: u32) -> &mut Self {
+            self.0.extend_from_slice(&v.to_le_bytes());
+            self
+        }
+        fn u64(&mut self, v: u64) -> &mut Self {
+            self.0.extend_from_slice(&v.to_le_bytes());
+            self
+        }
+        fn raw(&mut self, v: &[u8]) -> &mut Self {
+            self.0.extend_from_slice(v);
+            self
+        }
+        fn s(&mut self, v: &str) -> &mut Self {
+            self.u64(v.len() as u64).raw(v.as_bytes())
+        }
+        fn parse(&self) -> Result<GgufHeader, GgufError> {
+            read_header_from(Cursor::new(self.0.clone()), self.0.len() as u64)
+        }
+    }
+
+    fn corrupt(r: Result<GgufHeader, GgufError>, needle: &str) {
+        match r {
+            Err(GgufError::Corrupt(m)) => assert!(m.contains(needle), "{m} !~ {needle}"),
+            other => panic!("expected Corrupt({needle}), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn magic_and_version() {
+        assert!(matches!(B(b"GGML\x03\0\0\0".to_vec()).parse(), Err(GgufError::BadMagic(_))));
+        assert!(matches!(B(b"gguf".to_vec()).parse(), Err(GgufError::BadMagic(_))));
+        assert!(matches!(B::new(0, 0, 0).parse(), Err(GgufError::Version(0))));
+        assert!(matches!(B::new(4, 0, 0).parse(), Err(GgufError::Version(4))));
+        assert!(matches!(B::new(u32::MAX, 0, 0).parse(), Err(GgufError::Version(_))));
+        // Big-endian v3: version bytes 00 00 00 03.
+        corrupt(B::new(3u32.swap_bytes(), 0, 0).parse(), "big-endian");
+        // Zero-byte and tiny inputs.
+        assert!(B(vec![]).parse().is_err());
+        assert!(B(b"GG".to_vec()).parse().is_err());
+        assert!(B(b"GGUF\x03\0".to_vec()).parse().is_err());
+        // Minimal valid v3 and v2 headers with no metadata.
+        assert_eq!(B::new(3, 0, 0).parse().unwrap().metadata.len(), 0);
+        assert_eq!(B::new(2, 5, 0).parse().unwrap().tensor_count, 5);
+    }
+
+    #[test]
+    fn v1_uses_u32_counts() {
+        let mut b = B(b"GGUF".to_vec());
+        b.u32(1).u32(2).u32(1); // v1, 2 tensors, 1 kv
+        b.u32(4).raw(b"name").u32(8).u32(3).raw(b"abc");
+        let h = b.parse().unwrap();
+        assert_eq!((h.version, h.tensor_count, h.get_str("name")), (1, 2, Some("abc")));
+    }
+
+    #[test]
+    fn absurd_counts_are_capped_without_allocating() {
+        corrupt(B::new(3, u64::MAX, 0).parse(), "tensors");
+        corrupt(B::new(3, 0, u64::MAX).parse(), "metadata entries");
+        corrupt(B::new(3, 0, MAX_KV + 1).parse(), "metadata entries");
+        // kv_count within the cap but the file ends: truncated, not a hang.
+        corrupt(B::new(3, 0, MAX_KV).parse(), "truncated");
+    }
+
+    #[test]
+    fn bad_string_lengths() {
+        // Key length far beyond the file.
+        let mut b = B::new(3, 0, 1);
+        b.u64(u64::MAX);
+        assert!(matches!(b.parse(), Err(GgufError::Corrupt(_))));
+        let mut b = B::new(3, 0, 1);
+        b.u64(1000).raw(b"short");
+        corrupt(b.parse(), "truncated");
+        // Value string length beyond the file (kept-size path: no 200 KB alloc).
+        let mut b = B::new(3, 0, 1);
+        b.s("k").u32(8).u64(200 * 1024).raw(b"x");
+        corrupt(b.parse(), "truncated");
+        // Oversized (skipped) string past the end.
+        let mut b = B::new(3, 0, 1);
+        b.s("k").u32(8).u64(10 * 1024 * 1024);
+        corrupt(b.parse(), "truncated");
+        // Oversized key is refused.
+        let big = "k".repeat(MAX_STRING as usize + 1);
+        let mut b = B::new(3, 0, 1);
+        b.s(&big).u32(4).u32(1);
+        corrupt(b.parse(), "oversized key");
+    }
+
+    #[test]
+    fn invalid_utf8_is_lossy_not_an_error() {
+        let mut b = B::new(3, 0, 2);
+        b.u64(3).raw(b"k\xff1").u32(8).u64(2).raw(b"\xc3\x28");
+        b.s("general.name").u32(8).u64(4).raw(b"ok\xe2\x82");
+        let h = b.parse().unwrap();
+        assert_eq!(h.metadata.len(), 2);
+        assert!(h.name().unwrap().starts_with("ok"));
+    }
+
+    #[test]
+    fn unknown_value_types() {
+        for t in [13u32, 99, u32::MAX] {
+            let mut b = B::new(3, 0, 1);
+            b.s("k").u32(t).u64(0);
+            corrupt(b.parse(), "unknown value type");
+        }
+        let mut b = B::new(3, 0, 1);
+        b.s("k").u32(9).u32(77).u64(1);
+        corrupt(b.parse(), "unknown array element type");
+    }
+
+    #[test]
+    fn arrays_nested_and_bounded() {
+        // [[1,2],[3]] of u8: kept.
+        let mut b = B::new(3, 0, 1);
+        b.s("nested").u32(9).u32(9).u64(2);
+        b.u32(0).u64(2).raw(&[1, 2]);
+        b.u32(0).u64(1).raw(&[3]);
+        let h = b.parse().unwrap();
+        assert_eq!(
+            h.metadata["nested"],
+            Value::Array(vec![Value::Array(vec![Value::U64(1), Value::U64(2)]), Value::Array(vec![Value::U64(3)])])
+        );
+        // Deep nesting (stack-overflow bait) is refused.
+        let mut b = B::new(3, 0, 1);
+        b.s("deep").u32(9);
+        for _ in 0..10_000 {
+            b.u32(9).u64(1);
+        }
+        corrupt(b.parse(), "nested deeper");
+        // Huge fixed-size array: count * size overflows / runs past the end.
+        let mut b = B::new(3, 0, 1);
+        b.s("a").u32(9).u32(12).u64(u64::MAX / 4);
+        assert!(matches!(b.parse(), Err(GgufError::Corrupt(_))));
+        let mut b = B::new(3, 0, 1);
+        b.s("a").u32(9).u32(6).u64(1_000_000);
+        corrupt(b.parse(), "truncated");
+        // Huge string-array count with too few bytes: stops at EOF.
+        let mut b = B::new(3, 0, 1);
+        b.s("a").u32(9).u32(8).u64(u64::MAX);
+        for _ in 0..100 {
+            b.s("t");
+        }
+        corrupt(b.parse(), "truncated");
+        // Array of unknown nested element type inside a skipped array.
+        let mut b = B::new(3, 0, 1);
+        b.s("a").u32(9).u32(9).u64(100);
+        b.u32(200).u64(0);
+        assert!(b.parse().is_err());
+    }
+
+    #[test]
+    fn header_size_is_capped() {
+        // A "valid" header whose metadata would extend past MAX_HEADER_BYTES
+        // is refused before reading it (len claims a huge file).
+        struct Zeros(u64);
+        impl Read for Zeros {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                buf.fill(0);
+                self.0 += buf.len() as u64;
+                Ok(buf.len())
+            }
+        }
+        impl Seek for Zeros {
+            fn seek(&mut self, p: SeekFrom) -> std::io::Result<u64> {
+                if let SeekFrom::Current(d) = p {
+                    self.0 = (self.0 as i64 + d) as u64;
+                }
+                Ok(self.0)
+            }
+        }
+        let mut head = B::new(3, 0, 1);
+        head.s("big").u32(9).u32(0).u64(MAX_HEADER_BYTES); // u8 array of 64 MiB
+        let r = std::io::Cursor::new(head.0.clone()).chain(Zeros(0));
+        struct Both<A, Bb>(A, Bb);
+        impl<A: Read, Bb> Read for Both<A, Bb> {
+            fn read(&mut self, b: &mut [u8]) -> std::io::Result<usize> {
+                self.0.read(b)
+            }
+        }
+        impl<A, Bb: Seek> Seek for Both<A, Bb> {
+            fn seek(&mut self, p: SeekFrom) -> std::io::Result<u64> {
+                self.1.seek(p)
+            }
+        }
+        let e = read_header_from(Both(r, Zeros(0)), 8 * 1024 * 1024 * 1024).unwrap_err();
+        assert!(e.to_string().contains("larger than"), "{e}");
+    }
+
+    #[test]
+    fn files_dirs_symlinks_and_specials() {
+        let dir = std::env::temp_dir().join(format!("lillith-gguf-fs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let good = dir.join("m.gguf");
+        std::fs::write(&good, sample()).unwrap();
+        assert!(read_header(&good).is_ok());
+        assert!(is_gguf(&good));
+        // Zero-byte file.
+        let empty = dir.join("empty.gguf");
+        std::fs::write(&empty, b"").unwrap();
+        assert!(read_header(&empty).is_err());
+        assert!(!is_gguf(&empty));
+        // Directory named *.gguf.
+        let d = dir.join("dir.gguf");
+        std::fs::create_dir_all(&d).unwrap();
+        assert!(read_header(&d).is_err());
+        assert!(!is_gguf(&d));
+        // Symlink to a good file works; dangling symlink is an error.
+        let link = dir.join("link.gguf");
+        std::os::unix::fs::symlink(&good, &link).unwrap();
+        assert!(read_header(&link).is_ok());
+        let dangling = dir.join("dangling.gguf");
+        std::os::unix::fs::symlink(dir.join("nope"), &dangling).unwrap();
+        assert!(read_header(&dangling).is_err());
+        // A FIFO must be refused without blocking on open().
+        let fifo = dir.join("fifo.gguf");
+        if std::process::Command::new("mkfifo").arg(&fifo).status().is_ok_and(|s| s.success()) {
+            assert!(read_header(&fifo).is_err());
+            assert!(!is_gguf(&fifo));
+        }
+        // /dev/zero: a character device, never read.
+        assert!(read_header(Path::new("/dev/zero")).is_err());
+        // Unreadable file (skipped when running as root, which ignores modes).
+        use std::os::unix::fs::PermissionsExt;
+        let locked = dir.join("locked.gguf");
+        std::fs::write(&locked, sample()).unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::File::open(&locked).is_err() {
+            assert!(matches!(read_header(&locked), Err(GgufError::Io(_))));
+        }
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o600)).ok();
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn truncation_at_every_offset_never_panics() {
+        let full = sample();
+        for cut in 0..full.len() {
+            let r = read_header_from(Cursor::new(full[..cut].to_vec()), cut as u64);
+            assert!(r.is_err(), "cut at {cut} parsed");
+        }
+        // And a length that lies (claims more than the reader has).
+        assert!(read_header_from(Cursor::new(full[..40].to_vec()), full.len() as u64).is_err());
+    }
+
+    #[test]
+    fn random_garbage_never_panics() {
+        // Deterministic xorshift fuzz over mutated headers.
+        let base = sample();
+        let mut x: u64 = 0x9e37_79b9_7f4a_7c15;
+        for _ in 0..3000 {
+            let mut b = base.clone();
+            for _ in 0..4 {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                let i = (x as usize) % b.len().min(200);
+                b[i] = (x >> 32) as u8;
+            }
+            let len = b.len() as u64;
+            let _ = read_header_from(Cursor::new(b), len);
+        }
     }
 }

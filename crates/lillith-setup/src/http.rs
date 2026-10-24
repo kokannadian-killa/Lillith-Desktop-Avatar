@@ -2,7 +2,9 @@
 //!
 //! It takes a [`LocalUrl`] (already proven loopback) and connects to its IP
 //! directly, so there is no DNS and no way to reach another host. No TLS, no
-//! redirects, no proxies, short timeouts, capped response size.
+//! redirects (a `3xx` is returned to the caller as-is, its `Location` is never
+//! followed), no proxies (`HTTP_PROXY` / `ALL_PROXY` / ... are never read),
+//! short timeouts, capped request and response size.
 
 use crate::local::{LocalUrl, LocalUrlError};
 use std::io::{Read, Write};
@@ -63,12 +65,23 @@ fn request(
     connect_timeout: Duration,
     read_timeout: Duration,
 ) -> Result<Response, HttpError> {
+    // Defence in depth: the address must still be loopback (LocalUrl's
+    // fields are public), and the path must not smuggle extra request lines.
+    if !base.ip.is_loopback() {
+        return Err(HttpError::NotLocal(crate::local::LocalUrlError::NotLoopback {
+            url: base.base(),
+            host: base.ip.to_string(),
+        }));
+    }
+    let full_path = format!("{}{}", base.base_path, path);
+    if !full_path.starts_with('/') || full_path.chars().any(|c| !c.is_ascii_graphic()) || base.host.chars().any(|c| !c.is_ascii_graphic()) {
+        return Err(HttpError::Bad(format!("refusing request path {full_path:?}")));
+    }
     let addr = base.socket_addr();
     let mut s = TcpStream::connect_timeout(&addr, connect_timeout)
         .map_err(|e| HttpError::Connect(addr.to_string(), e))?;
     s.set_read_timeout(Some(read_timeout))?;
     s.set_write_timeout(Some(connect_timeout))?;
-    let full_path = format!("{}{}", base.base_path, path);
     let mut req = format!(
         "{method} {full_path} HTTP/1.0\r\nHost: {}:{}\r\nUser-Agent: lillith-setup\r\nAccept: application/json\r\nConnection: close\r\n",
         base.host, base.port
@@ -203,6 +216,40 @@ pub(crate) mod tests {
         assert_eq!(r.status, 200);
         assert_eq!(r.body, "{\"status\":\"ok\"}");
         assert_eq!(get(&u, "/nope", Duration::from_secs(2)).unwrap().status, 404);
+    }
+
+    #[test]
+    fn redirects_are_not_followed() {
+        // A loopback server answering 302 -> remote host: the caller gets the
+        // 302 back, nothing else is contacted.
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let h2 = hits.clone();
+        std::thread::spawn(move || {
+            for stream in l.incoming() {
+                let Ok(mut s) = stream else { continue };
+                h2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let _ = read_request(&mut s);
+                let _ = s.write_all(b"HTTP/1.1 302 Found\r\nLocation: http://example.com/steal\r\nContent-Length: 0\r\n\r\n");
+            }
+        });
+        let u = LocalUrl::parse(&format!("127.0.0.1:{port}"), 1).unwrap();
+        let r = get(&u, "/health", Duration::from_secs(2)).unwrap();
+        assert_eq!(r.status, 302);
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn non_loopback_or_smuggled_requests_refused_without_connecting() {
+        // LocalUrl fields are public: a hand-built non-loopback value is still refused.
+        let mut u = LocalUrl::parse("127.0.0.1:9", 1).unwrap();
+        u.ip = "192.0.2.1".parse().unwrap();
+        assert!(matches!(get(&u, "/", Duration::from_millis(50)), Err(HttpError::NotLocal(_))));
+        let u = LocalUrl::parse("127.0.0.1:9", 1).unwrap();
+        for p in ["/x HTTP/1.0\r\nHost: evil", "/a b", "relative", "/\u{7f}"] {
+            assert!(matches!(get(&u, p, Duration::from_millis(50)), Err(HttpError::Bad(_))), "{p:?}");
+        }
     }
 
     #[test]

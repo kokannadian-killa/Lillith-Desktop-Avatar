@@ -386,6 +386,53 @@ mod tests {
     }
 
     #[test]
+    fn redirect_to_remote_is_an_error_not_followed() {
+        let port = fake_server(vec![
+            ("/health", 302, r#"{"see":"http://evil.example/health"}"#),
+            ("POST /v1/chat/completions", 307, "{}"),
+            ("/api/version", 301, "{}"),
+            ("/api/tags", 301, "{}"),
+        ]);
+        assert!(matches!(ping_server(&llama(port)), Err(CheckError::Status { status: 302, .. })));
+        assert!(matches!(test_chat(&llama(port), "hi"), Err(CheckError::Status { status: 307, .. })));
+        assert!(matches!(ping_server(&ollama(port)), Err(CheckError::Status { status: 301, .. })));
+    }
+
+    #[test]
+    fn proxy_environment_is_ignored() {
+        // A "proxy" that counts connections. If the client honoured
+        // HTTP_PROXY / ALL_PROXY it would be hit; it must never be.
+        let proxy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let pport = proxy.local_addr().unwrap().port();
+        proxy.set_nonblocking(true).unwrap();
+        for k in ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "HTTPS_PROXY"] {
+            std::env::set_var(k, format!("http://127.0.0.1:{pport}"));
+        }
+        let port = fake_server(vec![
+            ("/health", 200, r#"{"status":"ok"}"#),
+            ("POST /v1/chat/completions", 200, r#"{"choices":[{"message":{"content":"hi"}}]}"#),
+        ]);
+        let h = ping_server(&llama(port));
+        let c = test_chat(&llama(port), "hello");
+        for k in ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "HTTPS_PROXY"] {
+            std::env::remove_var(k);
+        }
+        assert!(h.unwrap().ready);
+        assert_eq!(c.unwrap(), "hi");
+        assert!(proxy.accept().is_err(), "proxy was contacted");
+    }
+
+    #[test]
+    fn hostile_configs_never_connect() {
+        // Every ambiguous / remote form is refused before any socket is opened.
+        for u in ["http://127.1:8080", "http://[::ffff:127.0.0.1]:8080", "http://localhost.:8080", "http://2130706433", "http://u@127.0.0.1"] {
+            let cfg = LlmConfig { server_url: u.into(), ..Default::default() };
+            assert!(matches!(ping_server(&cfg), Err(CheckError::Config(_))), "{u}");
+            assert!(matches!(test_chat(&cfg, "x"), Err(CheckError::Config(_))), "{u}");
+        }
+    }
+
+    #[test]
     fn test_alias_resolves() {
         let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
         assert!(crate::test::ping_server(&llama(port)).is_err());
