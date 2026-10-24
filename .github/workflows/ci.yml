@@ -2,46 +2,72 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, scaffold/rust-workspace, "ci/**"]
   pull_request:
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
 
+# Toolchain is pinned to 1.85 (same as the local gate); newer clippy adds a
+# float lint the codebase doesn't follow yet. System libraries and the
+# toolchain come from .github/actions/setup-lillith so every compiling job
+# gets the same setup.
+#
+# Git LFS art (~460 MB): the Android engine tests render the real generated
+# set, so the test job needs it. It's fetched once and kept in the Actions
+# cache (keyed on the LFS object list), so later runs only download objects
+# that changed and don't burn the repo's LFS bandwidth on every push. The
+# all-features clippy job doesn't need art and skips LFS entirely.
+
 jobs:
   check:
-    name: fmt + clippy + test (default features)
-    runs-on: ubuntu-latest
+    name: fmt + clippy + build + test (default features)
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@v7
         with:
-          toolchain: "1.85"
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+          lfs: false
+      - name: List Git LFS objects
+        run: git lfs ls-files --long | cut -d' ' -f1 | sort > .lfs-assets-id
+      - name: Restore Git LFS cache
+        id: lfs-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+          restore-keys: lfs-
+      - name: Fetch Git LFS art
+        run: git lfs pull
+      # Save right away (not in a post step) so a later test failure doesn't
+      # throw away the ~460 MB download.
+      - name: Save Git LFS cache
+        if: steps.lfs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+      - uses: ./.github/actions/setup-lillith
+        with:
+          cache-key: default
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: cargo build
+        run: cargo build --workspace --locked
       - name: cargo test
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
 
   full-features:
     name: clippy (all features, system libs)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - name: Install system libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            pkg-config libxkbcommon-dev libwayland-dev libdbus-1-dev \
-            libpulse-dev libsystemd-dev libasound2-dev
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@v7
         with:
-          toolchain: "1.85"
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
+          lfs: false
+      - uses: ./.github/actions/setup-lillith
+        with:
+          cache-key: all-features
       - name: cargo clippy --all-features
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
