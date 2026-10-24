@@ -914,48 +914,21 @@ pub(crate) mod tests {
 
     #[test]
     fn smooth_mode_cross_fades_between_frames() {
-        let dir = std::env::temp_dir().join(format!("lillith-stage-smooth-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        // Frame 0: block at x 5..15; frame 1: block at x 25..35.
-        let mut img = image_png(80, 40);
-        for y in 5..38u32 {
-            for (x0, off) in [(5u32, 0u32), (25, 40)] {
-                for x in x0..x0 + 10 {
-                    let i = ((y * 80 + x + off) * 4) as usize;
-                    img[i..i + 4].copy_from_slice(&[220, 60, 140, 255]);
-                }
-            }
-        }
-        write_png(&dir.join("idle.png"), 80, 40, &img);
-        let m = Manifest::from_toml_str(
-            r#"
-            [clips.idle]
-            page = "idle.png"
-            fps = 2.0
-            frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
-        "#,
-        )
-        .unwrap();
-        let cfg = AnimatorConfig {
-            idle_enabled: false,
-            smooth_frames: true,
-            crossfade: 0.5,
-            playback_speed: 1.0,
-            ..AnimatorConfig::default()
-        };
-        let mut st = Stage::new(m, PageCache::new(&dir), 1.0, cfg).unwrap();
+        // Both frames share a body (x 12..28); a limb moves from x 5..8
+        // (frame 0) to x 32..35 (frame 1): IoU 16/22, a shortened fade.
+        let (mut st, dir) = smooth_stage("smooth", &[(12, 16), (5, 3)], &[(12, 16), (32, 3)]);
         let alpha_at = |st: &Stage, x: u32| st.canvas().pixel(x, 20).unwrap().alpha();
         st.tick(0.05).unwrap();
         // Early in frame 0: hard frame 0, nothing of frame 1 yet.
-        assert_eq!(alpha_at(&st, 10), 255);
-        assert_eq!(alpha_at(&st, 30), 0);
-        // Fade over the last half of frame 0 (0.5 s frames): frame 1 fades
-        // in while frame 0 stays opaque, then frame 0 fades out. Never both
+        assert_eq!(alpha_at(&st, 6), 255);
+        assert_eq!(alpha_at(&st, 33), 0);
+        // Fade at the end of frame 0 (0.5 s frames): frame 1 fades in while
+        // frame 0 stays opaque, then frame 0 fades out. Never both
         // half-transparent (that is the see-through "white halo" in motion).
         let mut steps = Vec::new();
-        for _ in 0..9 {
-            st.tick(0.05).unwrap();
-            steps.push((alpha_at(&st, 10), alpha_at(&st, 30)));
+        for _ in 0..44 {
+            st.tick(0.01).unwrap();
+            steps.push((alpha_at(&st, 6), alpha_at(&st, 33)));
         }
         assert!(
             steps.iter().any(|s| s.0 == 255 && s.1 > 0 && s.1 < 255),
@@ -978,9 +951,68 @@ pub(crate) mod tests {
         // Smooth mode off: hard steps again.
         st.animator_mut().set_smooth_frames(false, 0.5);
         st.tick(0.0).unwrap();
-        let a = (alpha_at(&st, 10), alpha_at(&st, 30));
+        let a = (alpha_at(&st, 6), alpha_at(&st, 33));
         assert!(a == (255, 0) || a == (0, 255), "{a:?}");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn smooth_mode_hard_switches_frames_that_do_not_overlap() {
+        // An art hard cut: frame 0 block at x 5..15, frame 1 at x 25..35
+        // (IoU 0). A cross-fade would draw both bodies at once.
+        let (mut st, dir) = smooth_stage("smoothcut", &[(5, 10)], &[(25, 10)]);
+        let alpha_at = |st: &Stage, x: u32| st.canvas().pixel(x, 20).unwrap().alpha();
+        let mut steps = Vec::new();
+        for _ in 0..60 {
+            st.tick(0.01).unwrap();
+            steps.push((alpha_at(&st, 10), alpha_at(&st, 30)));
+        }
+        assert!(
+            steps.iter().all(|&s| s == (255, 0) || s == (0, 255)),
+            "hard switch, no double body: {steps:?}"
+        );
+        assert!(steps.contains(&(0, 255)), "did switch: {steps:?}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A smooth-mode stage on a 2-frame `idle` (2 fps, 40×40 cells) whose
+    /// frames are opaque columns `(x, width)` (rows 5..38), and its temp dir.
+    fn smooth_stage(
+        tag: &str,
+        f0: &[(u32, u32)],
+        f1: &[(u32, u32)],
+    ) -> (Stage, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("lillith-stage-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut img = image_png(80, 40);
+        for (cols, off) in [(f0, 0u32), (f1, 40)] {
+            for &(x0, w) in cols {
+                for y in 5..38u32 {
+                    for x in x0..x0 + w {
+                        let i = ((y * 80 + x + off) * 4) as usize;
+                        img[i..i + 4].copy_from_slice(&[220, 60, 140, 255]);
+                    }
+                }
+            }
+        }
+        write_png(&dir.join("idle.png"), 80, 40, &img);
+        let m = Manifest::from_toml_str(
+            r#"
+            [clips.idle]
+            page = "idle.png"
+            fps = 2.0
+            frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+        "#,
+        )
+        .unwrap();
+        let cfg = AnimatorConfig {
+            idle_enabled: false,
+            smooth_frames: true,
+            crossfade: 0.5,
+            playback_speed: 1.0,
+            ..AnimatorConfig::default()
+        };
+        (Stage::new(m, PageCache::new(&dir), 1.0, cfg).unwrap(), dir)
     }
 
     #[test]
