@@ -1,0 +1,7 @@
+#!/bin/sh
+# lillith-listen - Lillith offline speech-to-text (mic) launcher (installed by lillith-voice-kit/install.sh)
+LV_HOME="${LILLITH_VOICE_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/lillith-voice}"
+export PYTHONPATH="$LV_HOME/lib"
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1
+export PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1
+exec "$LV_HOME/venv/bin/python" -s -m lillith_voice.listen "$@"
