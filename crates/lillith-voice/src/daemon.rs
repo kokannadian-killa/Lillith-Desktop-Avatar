@@ -186,6 +186,9 @@ pub struct PingInfo {
     pub default: Option<String>,
     pub speaking: bool,
     pub stt_loaded: bool,
+    /// `cloned_voice` from `ping`: whether the cloned 'lillith' voice
+    /// (Pocket TTS) loaded. `None` = not reported (older daemon).
+    pub cloned_voice: Option<bool>,
 }
 
 impl PingInfo {
@@ -207,14 +210,38 @@ impl PingInfo {
                 .get("stt_loaded")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            cloned_voice: v.get("cloned_voice").and_then(Value::as_bool),
         }
+    }
+
+    /// `true` for a preset that needs the cloned voice (`lillith*`).
+    fn is_clone_preset(p: &str) -> bool {
+        p.starts_with(crate::config::DEFAULT_PRESET)
+    }
+
+    /// Warning to log / show when `want` is the cloned voice but the daemon
+    /// can't give it (`cloned_voice:false`, or the preset is missing).
+    pub fn fallback_warning(&self, want: &str) -> Option<String> {
+        if !Self::is_clone_preset(want) {
+            return None;
+        }
+        let picked = self.pick_preset(want);
+        if picked.as_deref() == Some(want) {
+            return None;
+        }
+        let fb = picked.unwrap_or_else(|| "daemon default".into());
+        Some(format!(
+            "using fallback voice {fb} (cloned '{}' voice unavailable)",
+            crate::config::DEFAULT_PRESET
+        ))
     }
 
     /// The preset to request: `want` if the daemon has it (or lists none),
     /// else [`crate::config::FALLBACK_PRESET`] if it has that, else `None`
     /// (the daemon's own default).
     pub fn pick_preset(&self, want: &str) -> Option<String> {
-        if self.presets.is_empty() || self.presets.iter().any(|p| p == want) {
+        let clone_gone = self.cloned_voice == Some(false) && Self::is_clone_preset(want);
+        if !clone_gone && (self.presets.is_empty() || self.presets.iter().any(|p| p == want)) {
             return Some(want.to_string());
         }
         let fb = crate::config::FALLBACK_PRESET;
@@ -1206,6 +1233,36 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert!(daemon_healthy());
+    }
+
+    #[test]
+    fn missing_cloned_voice_falls_back_to_p1_with_a_warning() {
+        let ok: Value = serde_json::from_str(
+            r#"{"ok":true,"protocol":2,"presets":["lillith","p1"],"default":"lillith","cloned_voice":true}"#,
+        )
+        .unwrap();
+        let info = PingInfo::from_value(&ok);
+        assert_eq!(info.cloned_voice, Some(true));
+        assert_eq!(info.pick_preset("lillith").as_deref(), Some("lillith"));
+        assert_eq!(info.fallback_warning("lillith"), None);
+        let gone: Value = serde_json::from_str(
+            r#"{"ok":true,"protocol":2,"presets":["lillith","p1"],"default":"lillith","cloned_voice":false}"#,
+        )
+        .unwrap();
+        let info = PingInfo::from_value(&gone);
+        assert_eq!(info.pick_preset("lillith").as_deref(), Some("p1"));
+        assert_eq!(
+            info.fallback_warning("lillith").as_deref(),
+            Some("using fallback voice p1 (cloned 'lillith' voice unavailable)")
+        );
+        // A non-clone preset the user chose is not a fallback.
+        assert_eq!(info.fallback_warning("bella"), None);
+        // Older daemon (no field) but no lillith preset: also a fallback.
+        let old = PingInfo {
+            presets: vec!["p1".into()],
+            ..PingInfo::default()
+        };
+        assert!(old.fallback_warning("lillith").is_some());
     }
 
     #[test]

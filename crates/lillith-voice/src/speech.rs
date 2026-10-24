@@ -161,6 +161,7 @@ impl Shared {
 pub struct Voice {
     cfg: VoiceConfig,
     engine_name: &'static str,
+    voice_warning: Option<String>,
     shared: Arc<Shared>,
     worker: Option<JoinHandle<()>>,
     gate: Gate,
@@ -235,6 +236,7 @@ impl Voice {
             enabled: AtomicBool::new(cfg.enabled),
         });
         let engine_name = engine.name();
+        let voice_warning = engine.voice_warning();
         // Spawned even while disabled so the speakers switch works live.
         let worker = engine.is_real().then(|| {
             let sh = Arc::clone(&shared);
@@ -248,6 +250,7 @@ impl Voice {
             gate: Gate::new(cfg.cooldown_s, cfg.repeat_cooldown_s),
             cfg,
             engine_name,
+            voice_warning,
             shared,
             worker,
             lines,
@@ -257,6 +260,11 @@ impl Voice {
 
     pub fn engine_name(&self) -> &'static str {
         self.engine_name
+    }
+    /// Degraded-voice notice for the UI, e.g. "using fallback voice p1
+    /// (cloned 'lillith' voice unavailable)". `None` when all is well.
+    pub fn voice_warning(&self) -> Option<&str> {
+        self.voice_warning.as_deref()
     }
     /// `true` if lines can actually be heard (enabled + a real engine).
     pub fn is_active(&self) -> bool {

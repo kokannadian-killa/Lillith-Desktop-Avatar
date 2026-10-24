@@ -46,6 +46,10 @@ pub trait Engine: Send {
         true
     }
     fn start(&mut self, text: &str, opts: &SpeakOpts) -> std::io::Result<Box<dyn Playback>>;
+    /// Degraded-voice notice for the UI (e.g. cloned voice unavailable).
+    fn voice_warning(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Says nothing (no engine installed or `engine = "none"`).
@@ -234,15 +238,22 @@ pub struct DaemonEngine {
     pub client: DaemonClient,
     /// Preset to request (`None` = the daemon's default).
     pub preset: Option<String>,
+    /// Set when the cloned 'lillith' voice is unavailable (fallback p1).
+    pub fallback: Option<String>,
 }
 
 impl DaemonEngine {
     /// For a daemon that answered `ping` with `info`; `want` is
     /// `[voice] preset` (falls back to `p1`).
     pub fn new(client: DaemonClient, info: &PingInfo, want: &str) -> Self {
+        let fallback = info.fallback_warning(want);
+        if let Some(w) = &fallback {
+            tracing::warn!("voice: {w}");
+        }
         Self {
             client,
             preset: info.pick_preset(want),
+            fallback,
         }
     }
 }
@@ -287,6 +298,9 @@ impl Playback for DaemonPlayback {
 impl Engine for DaemonEngine {
     fn name(&self) -> &'static str {
         "voiced"
+    }
+    fn voice_warning(&self) -> Option<String> {
+        self.fallback.clone()
     }
     fn start(&mut self, text: &str, o: &SpeakOpts) -> std::io::Result<Box<dyn Playback>> {
         let text: String = text.chars().filter(|c| !c.is_control()).collect();
