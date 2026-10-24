@@ -1088,21 +1088,21 @@
     "height": 400,
     "frame_count": 72,
     "fps": 12.0,
-    "bytes": 843984,
+    "bytes": 842789,
     "quality": {
-      "edge_mae": 2.119,
-      "edge_p99": 18.42,
-      "halo_dark": 0.023,
-      "halo_light": -0.084,
-      "alpha_mae": 0.0524
+      "edge_mae": 2.121,
+      "edge_p99": 18.94,
+      "halo_dark": 0.025,
+      "halo_light": -0.089,
+      "alpha_mae": 0.0519
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 2,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "e758210698795abaf24d02f01146b9e0a7fd1123caae64c7baa937dcb9f7fa22",
+    "sheet_sha256": "2d62e30fc0669582895257c8e13d851048ba2512e4831b74815d55143280f06a",
     "source_sha256": "87fedae639f083b95596b38dcb4c9d642ae1cb6959333794b7e75def4da35884",
-    "post_fix": "b7fix: floor shadow/smear removed below contact line + finger-gap backdrop cleared + baseline re-snap (frames 10,12,13,26,32-34) + gate despill f32,33,46-49 + fringe_pass f13,f32 | b9fix: removed f27 purple floor speck and faint floor haze/dot f19-21 (islands <=20px, alpha<64 >2px from body, y>=335); faint dust f48,f55"
+    "post_fix": "b7fix: floor shadow/smear removed below contact line + finger-gap backdrop cleared + baseline re-snap (frames 10,12,13,26,32-34) + gate despill f32,33,46-49 + fringe_pass f13,f32 | b9fix: removed f27 purple floor speck and faint floor haze/dot f19-21 (islands <=20px, alpha<64 >2px from body, y>=335); faint dust f48,f55 | shinfix: removed opaque mid-grey floor-shadow slivers under shin/boot toe f11,17,21,27,30,38,40,45 (floor zone y>=318, low-sat grey outside closed leg/boot silhouette, blob seeds only, skin/boot/pink protected; dark detached nubs <=40px)"
   }
 }
