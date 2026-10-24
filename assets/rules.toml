@@ -674,10 +674,10 @@ status = "PY-missing"
 # same twice in a row). Clips missing from the loaded art set are skipped;
 # with none left the event falls back to [rule_clips] / its pose.
 [rule_clip_pools]
-"input.hover"       = ["hip_pop_wink", "blow_kiss", "lean_tease", "idle_flirt_lip_bite", "tail_tease"]
-"input.click.left"  = ["blow_kiss", "hip_pop_wink", "lean_tease", "cheeky_tongue_wink", "hair_flip", "knife_tap"]
-"input.hover_long"  = ["lean_tease", "idle_flirt_look_away", "tail_tease", "event_input_hover_long"]
-"input.click.double" = ["blow_kiss", "heart_hands", "event_input_click_double"]
+"input.hover"       = ["hip_pop_wink", "blow_kiss", "lean_tease", "idle_flirt_lip_bite", "tail_tease", "smug_smirk", "seduce_lip_bite_glance", "hungry_lip_lick"]
+"input.click.left"  = ["blow_kiss", "hip_pop_wink", "lean_tease", "cheeky_tongue_wink", "hair_flip", "knife_tap", "knife_tap_neon", "dom_beckon_finger", "seduce_tap_glass"]
+"input.hover_long"  = ["lean_tease", "idle_flirt_look_away", "tail_tease", "event_input_hover_long", "dom_arms_crossed_demand", "predator_lean_in", "hug_screen_possessive", "seduce_lean_to_screen_whisper"]
+"input.click.double" = ["blow_kiss", "heart_hands", "event_input_click_double", "kiss_then_come_here", "seduce_blow_kiss_screen", "tail_wrap_pull"]
 
 # ── Key map (README-SP; active only while she has keyboard focus) ─────────
 # Each entry is either { pose = "<pose>" } or { action = "<action>" }.
