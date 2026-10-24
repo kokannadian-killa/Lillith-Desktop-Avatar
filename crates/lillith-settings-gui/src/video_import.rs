@@ -531,6 +531,9 @@ pub enum JobMsg {
 
 /// A running pipeline.
 pub struct Job {
+    /// Shared with the waiter thread. Only Linux's last-resort kill touches
+    /// it here: Windows never force-terminates (CTRL_BREAK only).
+    #[cfg_attr(windows, allow(dead_code))]
     child: Arc<Mutex<Child>>,
     pid: u32,
     rx: Receiver<JobMsg>,
