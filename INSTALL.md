@@ -227,18 +227,20 @@ local daemon (`lillith-voiced`) that she finds on her own (`[voice] engine =
 "auto"` tries the daemon first). It talks only over a Unix socket, and its
 network guard blocks everything that isn't loopback.
 
-The kit's source is in the repo at `tools/lillith-voice/`. The **models and
-Python wheels are not in the repo or the app zip**. They come in the separate
-full kit tarball `lillith-voice-kit.tar.gz` (about 731 MiB). That tarball
-isn't published as a release asset yet, so get it from Ko. With it, in a git
-checkout of the repo:
+The kit's source is in the repo at `tools/lillith-voice/`. The models and
+Python wheels aren't in the git repo, but **the release's
+`Lillith-main-linux.zip` already contains them** (in
+`tools/lillith-voice/models/` and `wheels/`), so `bash install.sh` sets the
+voice up for you, offline. To (re)run only the voice part from the unzipped
+folder:
 
 ```fish
-tar xzf lillith-voice-kit.tar.gz lillith-voice-kit/models lillith-voice-kit/wheels
-mv lillith-voice-kit/models lillith-voice-kit/wheels tools/lillith-voice/
-cd tools/lillith-voice
+cd ~/Downloads/Lillith-main-linux/tools/lillith-voice
 bash install.sh --systemd      # offline: ./models + ./wheels only, no sudo; --systemd also starts the daemon
 ```
+
+Voice is Linux-only in release #3 (the bundled wheels are for Python 3.13
+and 3.14 on x86_64).
 
 What the installer does:
 - It never downloads anything by default. Without the wheels it stops. You

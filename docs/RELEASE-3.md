@@ -219,6 +219,8 @@ telemetry.
 - Voice kit:
   - Voice needs Python 3.13 or 3.14 (the bundled wheels). With another
     Python the installer says so and carries on without voice.
+  - Voice is Linux-only in release #3: Windows and Android voice aren't in
+    scope (no Windows or Android build bundles the kit).
   - On Windows, only the named-pipe transport has been tested, and only
     under wine. Audio, the mic and the full daemon haven't run on real
     Windows, and no Windows installer bundles the kit.

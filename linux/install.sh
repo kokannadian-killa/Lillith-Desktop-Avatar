@@ -348,7 +348,7 @@ fi
 step "2/8  System packages"
 # ffmpeg plays her MP4 poses; the X11/GL libraries are for the Settings
 # window and the X11 fallback (a normal Plasma desktop already has them).
-PKGS=(libxkbcommon wayland dbus libpulse systemd-libs alsa-lib python ffmpeg
+PKGS=(libxkbcommon wayland dbus libpulse systemd-libs alsa-lib python ffmpeg pipewire-audio
       libx11 libxcb libxcursor libxi libxrender libglvnd mesa)
 # Building needs the toolchain too; the prebuilt programs don't.
 [[ -n $PREBUILT ]] || PKGS=(base-devel git pkgconf "${PKGS[@]}")
@@ -669,8 +669,11 @@ fi
 # The all-in-one zip ships the voice kit's models/ and wheels/ inside
 # tools/lillith-voice/. Its own installer makes a venv and pip-installs
 # from those wheels only (--no-index); nothing is downloaded.
-VKIT="$ROOT/tools/lillith-voice"
-if [[ $VOICE != 0 && -f $VKIT/install.sh && -f $VKIT/models/kokoro-v1.0.onnx && -d $VKIT/wheels ]]; then
+VKIT=""
+for k in "$ROOT/tools/lillith-voice" "$ROOT/../tools/lillith-voice"; do
+  if [[ -f $k/install.sh && -f $k/models/kokoro-v1.0.onnx && -d $k/wheels ]]; then VKIT="$(cd "$k" && pwd)"; break; fi
+done
+if [[ $VOICE != 0 && -n $VKIT ]]; then
   step "7b/8 Her voice (offline kit bundled in this zip; nothing is downloaded)"
   VPY=""
   # The bundled wheels are for CPython 3.13 and 3.14.
