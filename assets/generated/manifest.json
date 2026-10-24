@@ -4944,6 +4944,94 @@
     "variant_of:perch_sit"
    ],
    "video": "chest_press_tease/chest_press_tease.mp4"
+  },
+  {
+   "name": "arch_trace",
+   "frame_count": 84,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "front (seated on an edge, legs dangling)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "arch_trace/",
+   "sheet": "arch_trace/arch_trace_sheet.png",
+   "manifest": "arch_trace/arch_trace.json",
+   "preview": "arch_trace/arch_trace_preview.gif",
+   "tags": [
+    "baked_motion",
+    "variant_of:perch_sit"
+   ],
+   "video": "arch_trace/arch_trace.mp4"
+  },
+  {
+   "name": "perch_lounge",
+   "frame_count": 84,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "side (lying on her side along the top edge, head left)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "perch_lounge/",
+   "sheet": "perch_lounge/perch_lounge_sheet.png",
+   "manifest": "perch_lounge/perch_lounge.json",
+   "preview": "perch_lounge/perch_lounge_preview.gif",
+   "tags": [
+    "baked_motion",
+    "lounge_base"
+   ],
+   "video": "perch_lounge/perch_lounge.mp4"
+  },
+  {
+   "name": "blend_drag_held_to_perch_sit",
+   "frame_count": 70,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": false,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "front (drops in from above, lands seated on the edge)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "blend_drag_held_to_perch_sit/",
+   "sheet": "blend_drag_held_to_perch_sit/blend_drag_held_to_perch_sit_sheet.png",
+   "manifest": "blend_drag_held_to_perch_sit/blend_drag_held_to_perch_sit.json",
+   "preview": "blend_drag_held_to_perch_sit/blend_drag_held_to_perch_sit_preview.gif",
+   "tags": [
+    "baked_motion"
+   ],
+   "blend": true,
+   "from": "drag_held",
+   "to": "perch_sit",
+   "from_frame": 0,
+   "to_frame": 0,
+   "video": "blend_drag_held_to_perch_sit/blend_drag_held_to_perch_sit.mp4"
   }
  ]
 }
