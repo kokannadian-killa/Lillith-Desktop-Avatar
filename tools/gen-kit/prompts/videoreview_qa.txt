@@ -1,0 +1,10 @@
+(Optional, paste into videoReview with the raw take or the preview GIF. Files must live under /workspace.)
+Review this Lillith clip for {RECIPE}. Answer each with PASS/FAIL and the frame/time:
+1. Character: same face, adult proportions, blonde twin pigtails with ribbons, purple-blue horns, violet eyes, cyan tattoos, black spade tail.
+2. Outfit: black latex top with heart gem, mesh sleeves, magenta shorts, magenta thigh-highs with straps, black boots; stays on, opaque and in place on every frame (no see-through, no slip).
+3. Hands/limbs: five fingers, no warping, no extra or missing limbs, tail single.
+4. Background: pure white throughout, no floor shadow, no props, nothing touching the frame edges, no camera move.
+5. Pacing: slow, eased motion; flag any jerk, snap, twitch or sped-up section.
+6. Appeal: chest-forward pose reads clearly, sultry eye contact, smirk/lip bite; soft natural bounce on each weight shift (rate 1-5).
+7. Loop: last frame matches the first; peak pose reached near {PEAK_AT_S}s.
+Verdict: KEEP / RETAKE (+ the single biggest fix for the next prompt).

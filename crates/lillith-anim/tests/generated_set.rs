@@ -65,7 +65,7 @@ fn every_generated_clip_plays_and_renders() {
         "blink_wink gives blink frames"
     );
     // Baked-walk clips (video walk/strut/run takes + their idle blends,
-    // plus the batch-13 walk variants)
+    // plus the batch-13 walk variants and the batch-16 stalk prowls)
     // suppress the engine gait; nothing else does.
     let mut baked: Vec<&str> = m
         .clips
@@ -83,6 +83,8 @@ fn every_generated_clip_plays_and_renders() {
             "blend_walk_right_to_idle",
             "run_left",
             "run_right",
+            "stalk_prowl_left",
+            "stalk_prowl_right",
             "strut_left",
             "strut_right",
             "walk_left",

@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_firewall_block_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -160,38 +160,38 @@
       392
     ],
     [
-      46,
+      42,
       271,
       28,
       392
     ],
     [
-      34,
+      32,
       277,
       24,
       392
     ],
     [
-      22,
+      20,
       286,
       22,
       392
     ],
     [
-      19,
+      16,
       289,
       25,
       392
     ],
     [
-      15,
+      13,
       289,
       30,
       392
     ],
     [
-      12,
-      287,
+      10,
+      288,
       28,
       392
     ],
@@ -202,13 +202,13 @@
       392
     ],
     [
-      9,
+      8,
       277,
       22,
       392
     ],
     [
-      37,
+      35,
       270,
       27,
       392
@@ -223,14 +223,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 10.0,
-    "bytes": 154298,
+    "fps": 8.0,
+    "bytes": 173287,
     "quality": {
-      "edge_mae": 2.702,
+      "edge_mae": 2.63,
       "edge_p99": 23.0,
-      "halo_dark": 0.065,
-      "halo_light": -0.177,
-      "alpha_mae": 0.0826
+      "halo_dark": 0.053,
+      "halo_light": -0.144,
+      "alpha_mae": 0.0744
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

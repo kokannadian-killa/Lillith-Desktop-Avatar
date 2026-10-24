@@ -50,12 +50,25 @@ jobs:
       - uses: ./.github/actions/setup-lillith
         with:
           cache-key: default
+          smoke-deps: "true"
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: cargo build
         run: cargo build --workspace --locked
+      # Headless end-to-end check of the binary just built: under Xvfb with a
+      # stub llama-server on 127.0.0.1, she maps a non-black first frame, the
+      # right-click menu opens and draws, and `lillith chat` round-trips.
+      - name: smoke test (Xvfb)
+        run: SMOKE_NO_BUILD=1 tools/smoke.sh
+      - name: Upload smoke artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke
+          path: target/smoke
+          if-no-files-found: ignore
       - name: cargo test
         run: cargo test --workspace --locked --no-fail-fast
 

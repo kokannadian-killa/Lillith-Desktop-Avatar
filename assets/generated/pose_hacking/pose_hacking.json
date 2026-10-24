@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "pose_hacking_sheet.png",
   "frames_dir": "frames/",
-  "fps": 12.0,
+  "fps": 11.0,
   "loop": true,
   "baseline_y": 392,
   "anchor": [
@@ -110,13 +110,13 @@
     ],
     [
       143,
-      282,
+      281,
       18,
       392
     ],
     [
       142,
-      282,
+      281,
       19,
       392
     ],
@@ -165,7 +165,7 @@
     [
       128,
       271,
-      27,
+      28,
       392
     ],
     [
@@ -181,7 +181,7 @@
       392
     ],
     [
-      151,
+      153,
       277,
       20,
       392
@@ -256,14 +256,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 24,
-    "fps": 12.0,
-    "bytes": 275858,
+    "fps": 11.0,
+    "bytes": 303200,
     "quality": {
-      "edge_mae": 2.363,
-      "edge_p99": 16.76,
-      "halo_dark": 0.06,
-      "halo_light": -0.176,
-      "alpha_mae": 0.0707
+      "edge_mae": 2.346,
+      "edge_p99": 16.86,
+      "halo_dark": 0.044,
+      "halo_light": -0.154,
+      "alpha_mae": 0.0695
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

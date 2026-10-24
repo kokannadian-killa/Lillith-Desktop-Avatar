@@ -52,7 +52,7 @@ impl Shared {
 
 /// One tab of the settings window.
 pub trait SettingsTab {
-    /// Stable id (`companion`, `brain`, `sealed-1`...), used by `--tab`.
+    /// Stable id (`companion`, `brain`, `access`, `sealed-2`...), used by `--tab`.
     fn id(&self) -> &str;
     /// Label on the carved tab.
     fn title(&self) -> &str;

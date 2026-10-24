@@ -98,6 +98,9 @@ pub fn delete_phrase(rows: &[PlanRow], items: &BTreeSet<usize>) -> Option<String
     }
 }
 
+/// Below this inner width the plan lays out for a small window.
+const NARROW_WIDTH: f32 = 360.0;
+
 fn mono(s: impl Into<String>, size: f32, c: Rgba) -> RichText {
     RichText::new(s)
         .font(FontId::new(size, FontFamily::Monospace))
@@ -131,6 +134,9 @@ pub fn plan_review_popup(
     let all: BTreeSet<usize> = view.rows.iter().map(|r| r.n).collect();
     let resp = modal.show(ctx, |ui| {
         ui.set_width(w - 24.0);
+        // In a small window (the 300 px chat bubble) the heading shrinks and
+        // the rows / buttons stack, so nothing runs off the plate's edges.
+        let narrow = ui.available_width() < NARROW_WIDTH;
         let mut out = None;
         let (r, _) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), 40.0), egui::Sense::hover());
@@ -143,7 +149,8 @@ pub fn plan_review_popup(
             pal::EMBER.lerp(pal::EMBER_CORE, flick * 0.6),
         );
         ui.vertical_centered(|ui| {
-            ui.label(mono("SOUL CONTRACT — THE PLAN", 17.0, pal::BLOOD_NEON));
+            let heading = if narrow { 13.0 } else { 17.0 };
+            ui.label(mono("SOUL CONTRACT — THE PLAN", heading, pal::BLOOD_NEON));
             ui.label(
                 RichText::new("Check every step. Nothing happens until you approve.")
                     .color(c32(pal::TEXT)),
@@ -152,7 +159,7 @@ pub fn plan_review_popup(
         if let Some(n) = view.note.filter(|n| !n.is_empty()) {
             ui.label(RichText::new(n).color(c32(pal::WARN)));
         }
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui
                 .small_button(RichText::new("select all").color(c32(pal::BONE)))
                 .clicked()
@@ -268,7 +275,7 @@ pub fn plan_review_popup(
         let sel_phrase = delete_phrase(view.rows, &state.checked);
         let all_phrase = delete_phrase(view.rows, &all);
         if all_phrase.is_some() {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.radio_value(
                     &mut state.permanent,
                     false,
@@ -302,8 +309,12 @@ pub fn plan_review_popup(
         let all_ok = typed_ok(&all_phrase);
         let sel_ok = !state.checked.is_empty() && typed_ok(&sel_phrase);
         ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            let third = (ui.available_width() - 16.0) / 3.0;
+        let buttons = |ui: &mut egui::Ui| {
+            let third = if narrow {
+                ui.available_width()
+            } else {
+                (ui.available_width() - 16.0) / 3.0
+            };
             let no = ui.add_sized(
                 [third, 30.0],
                 egui::Button::new(RichText::new("DECLINE").color(c32(pal::BONE)))
@@ -348,7 +359,12 @@ pub fn plan_review_popup(
                     permanent: state.permanent,
                 });
             }
-        });
+        };
+        if narrow {
+            ui.vertical(buttons);
+        } else {
+            ui.horizontal(buttons);
+        }
         ui.label(
             RichText::new(
                 "Only what you approve runs, exactly as listed. Every decision is logged.",
@@ -405,15 +421,24 @@ mod tests {
         ]
     }
 
-    fn raw(events: Vec<egui::Event>) -> egui::RawInput {
+    fn raw(events: Vec<egui::Event>, size: Vec2) -> egui::RawInput {
         egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(420.0, 560.0))),
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)),
             events,
             ..Default::default()
         }
     }
 
     fn frame(ctx: &Context, ev: Vec<egui::Event>, s: &mut PlanState) -> Option<PlanChoice> {
+        frame_sized(ctx, ev, s, Vec2::new(420.0, 560.0))
+    }
+
+    fn frame_sized(
+        ctx: &Context,
+        ev: Vec<egui::Event>,
+        s: &mut PlanState,
+        size: Vec2,
+    ) -> Option<PlanChoice> {
         let rows = rows();
         let view = PlanView {
             rows: &rows,
@@ -421,7 +446,7 @@ mod tests {
             note: None,
         };
         let mut out = None;
-        let _ = ctx.run(raw(ev), |ctx| {
+        let _ = ctx.run(raw(ev, size), |ctx| {
             egui::CentralPanel::default().show(ctx, |_| {});
             out = plan_review_popup(ctx, Id::new("plan-test"), &view, s);
         });
@@ -501,6 +526,28 @@ mod tests {
                 click(&ctx, &mut s, rect(&ctx, "no-rect").center()),
                 Some(PlanChoice::Decline)
             );
+        }
+    }
+
+    #[test]
+    fn the_buttons_stay_inside_the_small_chat_bubble() {
+        // The chat bubble is 300 px wide: the plan must fit, buttons and all.
+        for themed in [false, true] {
+            let ctx = Context::default();
+            if themed {
+                crate::egui_theme::install(&ctx);
+            }
+            let mut s = PlanState::default();
+            for _ in 0..3 {
+                let _ = frame_sized(&ctx, vec![], &mut s, Vec2::new(300.0, 380.0));
+            }
+            for key in ["no-rect", "some-rect", "all-rect"] {
+                let r = rect(&ctx, key);
+                assert!(
+                    r.left() >= 0.0 && r.right() <= 300.0,
+                    "{key} {r:?} runs off a 300 px window"
+                );
+            }
         }
     }
 }

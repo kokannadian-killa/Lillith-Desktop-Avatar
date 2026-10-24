@@ -19,10 +19,13 @@ use egui::RichText;
 use lillith_core::build::{self, Action, Language};
 use lillith_core::config::BuildConfig;
 use lillith_core::soul_contract::{PendingAction, SoulContract};
-use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView};
+#[cfg(test)]
+use lillith_theme::egui_contract::summary_line;
+use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView, Initiator};
 use lillith_theme::egui_theme::c32;
 use lillith_theme::palette as pal;
 use std::path::PathBuf;
+use std::sync::mpsc::{channel, Receiver};
 
 /// Config key: the projects root.
 const KEY_PROJECTS_DIR: &[&str] = &["build", "projects_dir"];
@@ -40,6 +43,12 @@ pub struct BuildTab {
     pending: Option<Proposed>,
     /// A build/run/scaffold in flight.
     running: Option<Task<Result<String, String>>>,
+    /// Output lines of the in-flight action, streamed while it runs
+    /// (drained into `log` every frame).
+    stream: Option<Receiver<String>>,
+    /// Whether any line was streamed for the in-flight action (then only
+    /// the `[exit N]` tail of the final output is added).
+    streamed: bool,
     /// The rolling output / status log.
     log: String,
     /// Where confirmed/denied actions are audited (`<data>/lillith/audit.log`).
@@ -68,6 +77,8 @@ impl BuildTab {
             template: language.default_template().to_string(),
             pending: None,
             running: None,
+            stream: None,
+            streamed: false,
             log: String::new(),
             audit: lillith_core::config::data_dir().map(|d| d.join("audit.log")),
         }
@@ -140,9 +151,63 @@ impl BuildTab {
         self.log_line(&format!("▶ {}", p.summary));
         let action = p.action;
         let audit = self.audit.clone();
+        let (tx, rx) = channel::<String>();
+        let repaint = ctx.clone();
+        self.stream = Some(rx);
+        self.streamed = false;
         self.running = Some(Task::spawn(ctx, "build-action", move || {
-            run_confirmed(action, audit)
+            run_confirmed(action, audit, &mut |line: &str| {
+                let _ = tx.send(line.to_string());
+                repaint.request_repaint();
+            })
         }));
+    }
+
+    /// Calls `f` with the Soul Contract view for the pending action, if any.
+    fn with_view<R>(&self, f: impl FnOnce(&ContractView<'_>) -> R) -> Option<R> {
+        let p = self.pending.as_ref()?;
+        let prompt = p.action.prompt().with_detail(p.preview.clone());
+        let view = ContractView {
+            title: prompt.title,
+            summary: &p.summary,
+            target: prompt.target.as_deref(),
+            detail: prompt.detail.as_deref(),
+            busy: self.busy(),
+            // Every Build tab action comes from Ko's own button press.
+            initiator: Initiator::You,
+        };
+        Some(f(&view))
+    }
+
+    /// Moves streamed output lines into the log.
+    fn drain_stream(&mut self) {
+        let lines: Vec<String> = match &self.stream {
+            Some(rx) => rx.try_iter().collect(),
+            None => return,
+        };
+        if !lines.is_empty() {
+            self.streamed = true;
+        }
+        for l in lines {
+            self.log_line(&l);
+        }
+    }
+
+    /// Logs the finished action's result. When its output was already
+    /// streamed line by line, only the closing `[exit N]` line is added.
+    fn finish(&mut self, r: Result<String, String>) {
+        self.drain_stream();
+        self.stream = None;
+        match r {
+            Ok(out) if self.streamed => {
+                if let Some(tail) = out.lines().last().filter(|l| l.starts_with("[exit ")) {
+                    self.log_line(tail);
+                }
+            }
+            Ok(out) => self.log_line(&out),
+            Err(e) => self.log_line(&format!("✕ {e}")),
+        }
+        self.streamed = false;
     }
 
     /// Soul Contract **No**: discard and audit a `DENY`.
@@ -185,11 +250,16 @@ impl BuildTab {
 }
 
 /// Runs a confirmed action through a fresh Soul Contract (audits `CONFIRM`)
-/// and returns its captured output. Runs on a worker thread.
-fn run_confirmed(action: PendingAction, audit: Option<PathBuf>) -> Result<String, String> {
+/// and returns its captured output, handing build/run output lines to
+/// `sink` as they arrive. Runs on a worker thread.
+fn run_confirmed(
+    action: PendingAction,
+    audit: Option<PathBuf>,
+    sink: &mut dyn FnMut(&str),
+) -> Result<String, String> {
     let mut sc = SoulContract::new(audit);
     let id = sc.request(action);
-    sc.confirm(id)
+    sc.confirm_streaming(id, sink)
         .map(|c| c.output.unwrap_or_default())
         .map_err(|e| e.to_string())
 }
@@ -209,13 +279,11 @@ impl SettingsTab for BuildTab {
     }
 
     fn tick(&mut self, _ctx: &egui::Context, _shared: &mut Shared) {
+        self.drain_stream();
         if let Some(t) = &mut self.running {
             if let Some(r) = t.poll() {
                 self.running = None;
-                match r {
-                    Ok(out) => self.log_line(&out),
-                    Err(e) => self.log_line(&format!("✕ {e}")),
-                }
+                self.finish(r);
             }
         }
     }
@@ -313,26 +381,19 @@ impl SettingsTab for BuildTab {
                 }
             });
             if self.busy() {
-                chrome::hint(ui, "running… output lands in the log below");
+                chrome::hint(ui, "running… output streams into the log below");
             }
         });
 
-        if let Some(p) = &self.pending {
-            let prompt = p.action.prompt().with_detail(p.preview.clone());
-            let view = ContractView {
-                title: prompt.title,
-                summary: &p.summary,
-                target: prompt.target.as_deref(),
-                detail: prompt.detail.as_deref(),
-                busy: self.busy(),
-            };
-            let choice = soul_contract_popup(ui.ctx(), egui::Id::new("build-soul-contract"), &view);
-            match choice {
-                // The popup disables Yes while busy; check again anyway.
-                Some(ContractChoice::Yes) if !self.busy() => self.confirm(ui.ctx()),
-                Some(ContractChoice::No) => self.deny(),
-                _ => {}
-            }
+        let busy = self.busy();
+        let choice = self.with_view(|view| {
+            soul_contract_popup(ui.ctx(), egui::Id::new("build-soul-contract"), view)
+        });
+        match choice.flatten() {
+            // The popup disables Yes while busy; check again anyway.
+            Some(ContractChoice::Yes) if !busy => self.confirm(ui.ctx()),
+            Some(ContractChoice::No) => self.deny(),
+            _ => {}
         }
 
         chrome::section(ui, "LOG", Some("local only"), |ui| {
@@ -411,6 +472,77 @@ mod tests {
         tab.deny();
         assert!(tab.pending.is_none());
         assert!(tab.log.contains("denied"), "{}", tab.log);
+    }
+
+    #[test]
+    fn contract_wording_says_you_asked() {
+        let s = shared();
+        let mut tab = BuildTab::new(&s);
+        tab.root_buf = "/tmp/lillith-builds-wording".into();
+        tab.name = "proj".into();
+        tab.propose(Action::Build);
+        let line = tab.with_view(summary_line).expect("pending");
+        assert!(line.starts_with("You asked to "), "{line}");
+        assert!(!line.contains("She wants"), "{line}");
+    }
+
+    #[test]
+    fn run_output_streams_into_log_while_running() {
+        let s = shared();
+        let mut sh = shared();
+        let mut tab = BuildTab::new(&s);
+        let dir = std::env::temp_dir().join(format!("lillith-build-stream-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let proj = dir.join("root").join("streamy");
+        std::fs::create_dir_all(&proj).unwrap();
+        // Not flushed on purpose: the Python runner must not buffer.
+        std::fs::write(
+            proj.join("main.py"),
+            "import sys, time\nprint('first line')\nprint('to stderr', file=sys.stderr)\ntime.sleep(1.5)\nprint('last line')\n",
+        )
+        .unwrap();
+        let audit = dir.join("audit.log");
+        tab.audit = Some(audit.clone());
+        tab.root_buf = dir.join("root").display().to_string();
+        tab.name = "streamy".into();
+        tab.language = Language::Python;
+        tab.propose(Action::Run);
+        let ctx = egui::Context::default();
+        tab.confirm(&ctx);
+        assert!(tab.busy());
+        let t0 = std::time::Instant::now();
+        let mut seen_while_running = false;
+        while tab.busy() && t0.elapsed() < std::time::Duration::from_secs(20) {
+            tab.tick(&ctx, &mut sh);
+            // Both early lines are in the log while she is still asleep
+            // (before "last line" was even printed).
+            if tab.busy()
+                && tab.log.contains("first line")
+                && tab.log.contains("to stderr")
+                && !tab.log.contains("last line")
+            {
+                seen_while_running = true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(!tab.busy(), "the run finished");
+        assert!(
+            seen_while_running,
+            "lines showed up before the end: {}",
+            tab.log
+        );
+        assert!(
+            tab.log.contains("last line") && tab.log.ends_with("[exit 0]"),
+            "{}",
+            tab.log
+        );
+        assert_eq!(tab.log.matches("first line").count(), 1, "{}", tab.log);
+        let log = std::fs::read_to_string(&audit).unwrap_or_default();
+        assert!(
+            log.contains("CONFIRM") && log.contains("run_project"),
+            "{log}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Draws the tab once (headless) with `events`.

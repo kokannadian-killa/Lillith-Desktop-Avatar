@@ -1,0 +1,19 @@
+{
+ "mode": "loop",
+ "take_s": 6,
+ "video_fps": 24,
+ "start": 1,
+ "stop": 143,
+ "step": 2,
+ "fps": 12,
+ "scale": 0.54,
+ "anchor_x": 200,
+ "center": "fixed",
+ "finalize": "keyframed",
+ "seated": false,
+ "peak_at_s": 3.0,
+ "peak_pose": "leaning slightly toward the viewer with chest forward, one hand raised near her lips after blowing a kiss, the other hand on her hip, hip cocked",
+ "expression": "eyes half-closed with a slow wink, lips puckered then curving into a smirk",
+ "motion": "She leans toward the viewer, raises her fingertips to her lips and blows a slow kiss, her shoulders rolling forward so her chest gives a soft follow-through bounce; she winks, pops her hip with a gentle settle-bounce, then returns smoothly to the start pose.",
+ "name": "blow_a_kiss"
+}

@@ -80,6 +80,10 @@ pub struct BubbleOptions {
     pub chat: ChatConfig,
     /// Knowledge + skills folders and the skill-authoring gate (`[mind]`).
     pub mind: MindConfig,
+    /// The config file in use (`--config`, else the default path). Its
+    /// `[llm] system_prompt` applies unless `[chat] system_prompt` is set
+    /// (`None` = only the default config path is consulted).
+    pub config_path: Option<PathBuf>,
     /// `--no-llm`: answer with an in-character "switched off" line.
     pub offline: bool,
     /// History file (`None` = in-memory only).
@@ -274,7 +278,7 @@ fn kill_everything() {
 
 // lillith-theme's hellforge bubble look (DemonOS palette).
 use lillith_theme::bubble::{self as look, BG, CRIMSON, EMBER, HER_TEXT, ME_TEXT, NEON};
-use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView};
+use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView, Initiator};
 use lillith_theme::egui_deletion::{
     deletion_contract_popup, DeletionChoice, DeletionState, DeletionView,
 };
@@ -324,10 +328,21 @@ pub fn demo_lines() -> Vec<(bool, &'static str)> {
     ]
 }
 
+/// The bubble's chat session (no history yet): `[mind]` attached, and the
+/// system prompt resolved against [`BubbleOptions::config_path`] so a custom
+/// `--config` file's `[llm] system_prompt` reaches the model.
+pub fn new_session(opts: &BubbleOptions) -> ChatSession {
+    let mut session = ChatSession::new(&opts.chat, opts.offline);
+    if let Some(p) = &opts.config_path {
+        session = session.with_config_file(&opts.chat.system_prompt, p);
+    }
+    session.with_mind(&opts.mind)
+}
+
 fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Receiver<Ui>) {
     let (req_tx, req_rx) = channel::<Req>();
     let (ui_tx, ui_rx) = channel::<Ui>();
-    let mut session = ChatSession::new(&opts.chat, opts.offline).with_mind(&opts.mind);
+    let mut session = new_session(opts);
     if let Some(p) = &opts.history {
         session = session.with_history_file(p.clone());
     }
@@ -766,10 +781,43 @@ fn serde_json_lines(s: &str) -> Option<Vec<Message>> {
     serde_json::from_str(s).ok()
 }
 
+/// What the bubble says when the safeword stops work mid-reply.
+const SAFEWORD_STOPPED: &str =
+    "Stopped. Every running command is dead and the admin helper is gone.";
+
+/// If `text` is the safeword, stops every running command and the admin
+/// helper immediately (no queue) and returns true.
+fn stop_now_if_safeword(text: &str) -> bool {
+    if !lillith_core::access::kill_switch::is_safeword(text) {
+        return false;
+    }
+    lillith_core::access::kill_switch::stop_all();
+    lillith_core::access::admin_broker::shutdown();
+    true
+}
+
 impl Bubble {
     fn send(&mut self) {
         let text = self.input.trim().to_string();
-        if text.is_empty() || self.streaming.is_some() {
+        if text.is_empty() {
+            return;
+        }
+        // The safeword works right now, on the UI thread: the chat worker
+        // may be blocked running the very command it has to stop, so a
+        // queued "red" would only land after the command ended by itself.
+        if stop_now_if_safeword(&text) && self.streaming.is_some() {
+            self.lines.push(Line {
+                me: true,
+                text: text.clone(),
+            });
+            self.lines.push(Line {
+                me: false,
+                text: SAFEWORD_STOPPED.to_string(),
+            });
+            self.input.clear();
+            return;
+        }
+        if self.streaming.is_some() {
             return;
         }
         let from_voice = self.voice_text.take().is_some_and(|v| v.trim() == text);
@@ -933,6 +981,8 @@ impl Bubble {
             target: p.target.as_deref(),
             detail: p.detail.as_deref(),
             busy: false,
+            // Chat contracts are Lillith's own proposals.
+            initiator: Initiator::Her,
         };
         if let Some(choice) =
             soul_contract_popup(ctx, egui::Id::new("lillith-soul-contract"), &view)
@@ -1356,6 +1406,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn safeword_stops_on_the_ui_thread_without_the_worker() {
+        let before = lillith_core::access::kill_switch::epoch();
+        assert!(!stop_now_if_safeword("I read a red book"));
+        assert!(stop_now_if_safeword("Red."));
+        assert!(lillith_core::access::kill_switch::stopped_since(before));
+    }
+
+    #[test]
     fn confirm_command_parses_only_explicit_answers() {
         // Generic /contract form.
         assert_eq!(parse_confirm_command("/contract yes"), Some(true));
@@ -1656,6 +1714,7 @@ mod tests {
             pos: None,
             chat: ChatConfig::default(),
             mind: MindConfig::default(),
+            config_path: None,
             offline: true,
             history: Some(path),
             emit: Arc::new(|_, _| {}),
@@ -1666,6 +1725,36 @@ mod tests {
         let lines = history_lines(&opts);
         assert_eq!(lines.len(), 3);
         assert!(lines.iter().all(|l| !l.text.starts_with("[tool result]")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn custom_config_path_supplies_llm_system_prompt() {
+        let dir =
+            std::env::temp_dir().join(format!("lillith-bubble-cfgprompt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("custom.toml");
+        std::fs::write(&cfg, "[llm]\nsystem_prompt = \"From the custom config.\"\n").unwrap();
+        let mut opts = BubbleOptions {
+            pos: None,
+            chat: ChatConfig::default(),
+            mind: MindConfig::default(),
+            config_path: Some(cfg.clone()),
+            offline: true,
+            history: None,
+            emit: Arc::new(|_, _| {}),
+            screenshot: None,
+            demo: false,
+            demo_contract: false,
+        };
+        assert_eq!(
+            new_session(&opts).system_prompt(),
+            "From the custom config."
+        );
+        // [chat] system_prompt still wins over the file's [llm] one.
+        opts.chat.system_prompt = "Chat wins.".into();
+        assert_eq!(new_session(&opts).system_prompt(), "Chat wins.");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

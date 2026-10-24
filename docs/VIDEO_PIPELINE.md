@@ -177,3 +177,26 @@ PNG sheet stays the fallback and the bounds-check reference.
     frames with the first frame after about 65 ms, so playback does not stall.
   - New `_long` takes from `generated_v2` are registered once their matte, finalize and jiggle steps
     are done: `new_pose.py <clip>_long --from copy --allure --tag baked_motion`.
+
+## Dominant-persona set (batch 16)
+
+Image-to-video from the v3 design still (`_stills/v3_design/idle_v3.png`, white BG, first frame =
+last frame), then the standard `new_pose.py ... --allure --tag dom --to pack` flow. Every clip is
+tagged `baked_motion`, `allure`, `dom` and uses the canonical outfit. The dominance is carried by
+expression, gaze, gestures and body language toward the viewer. There is no added skin and no
+chest-, crotch- or butt-focused framing. Takes that zoomed in, bent toward the camera or glitched
+were retaken (see `generated_v2/STATUS.md`).
+
+- Gestures: `dom_beckon_finger`, `dom_point_down`, `dom_arms_crossed_demand`, `smug_smirk`,
+  `hungry_lip_lick`, `predator_lean_in`, `tail_wrap_pull`, `kiss_then_come_here`,
+  `hug_screen_possessive`, `kneel_pout_beg` (6 s), `soul_contract_sign` (6 s, neon-red DemonOS
+  contract), and the `seduce_*` set (`seduce_beckon_finger`, `seduce_lip_bite_glance`,
+  `seduce_lean_to_screen_whisper`, `seduce_blow_kiss_screen`, `seduce_tap_glass`).
+- Locomotion: `stalk_prowl_right` / `stalk_prowl_left` (mirror), tagged
+  `variant_of:walk_right` / `variant_of:walk_left`. They are kept out of the pose menu.
+- `knife_tap_neon` with `blend_idle_to_knife_tap_neon` / `blend_knife_tap_neon_to_idle`
+  (neon blood splat FX, see `tools/video-pipeline/neon_blood_overlay.py`).
+
+_Review note (batch 15):_ `arch_back_over_shoulder`, `bend_forward_wink` and `slow_turn_spin_tease` (+ `_long`) failed
+the batch 15 content review (chest/butt-focused framing). They are left unchanged on this branch
+at the lead's request, and a separate keep/remove decision is pending.

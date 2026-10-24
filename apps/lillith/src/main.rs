@@ -340,12 +340,20 @@ async fn main() -> Result<()> {
             no_history,
             ref endpoint,
         }) => {
-            let full = load_config(&cli).0;
+            let (full, config_path) = load_config(&cli);
             let mut cfg = full.chat;
             if let Some(e) = endpoint {
                 cfg.endpoint = e.clone();
             }
-            chat::cli_chat(cfg, full.mind, message.clone(), spawn_server, no_history).await?;
+            chat::cli_chat(
+                cfg,
+                full.mind,
+                config_path,
+                message.clone(),
+                spawn_server,
+                no_history,
+            )
+            .await?;
         }
         Some(Cmd::UndoOrganize { list }) => {
             let journal = lillith_core::config::data_dir()
@@ -439,11 +447,12 @@ async fn main() -> Result<()> {
             demo,
             demo_contract,
         }) => {
-            let full = load_config(&cli).0;
+            let (full, config_path) = load_config(&cli);
             let pos = x.zip(y);
             chat::bubble_main(
                 full.chat,
                 full.mind,
+                config_path,
                 pos,
                 offline || cli.no_llm,
                 screenshot.clone(),
@@ -513,8 +522,18 @@ fn kwin_pre_start(enabled: bool) {
 /// `lillith fix-kwin`.
 fn fix_kwin_cmd(check: bool) -> Result<()> {
     use lillith_overlay::kde_effects::{fix_kwin, FixOutcome};
-    let outcomes = fix_kwin(check)
-        .map_err(|e| anyhow::anyhow!("fix-kwin needs kreadconfig6/kwriteconfig6 (KDE): {e}"))?;
+    let outcomes = match fix_kwin(check) {
+        Ok(o) => o,
+        // No KDE tools at all: not a Plasma session, so there is no KWin
+        // blur to fix. That is a clean "nothing to do", not a failure.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            println!(
+                "Not a KDE Plasma session (kreadconfig6/kwriteconfig6 not found): nothing to do."
+            );
+            return Ok(());
+        }
+        Err(e) => anyhow::bail!("fix-kwin needs kreadconfig6/kwriteconfig6 (KDE): {e}"),
+    };
     if outcomes.is_empty() {
         println!("No force-blur effect (Better Blur DX / Better Blur) is enabled: nothing to do.");
     }

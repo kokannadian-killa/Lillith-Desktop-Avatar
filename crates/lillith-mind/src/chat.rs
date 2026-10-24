@@ -112,6 +112,7 @@ impl ChatSession {
             opts: ChatOptions {
                 temperature: cfg.temperature,
                 max_tokens: cfg.max_tokens.max(1),
+                ..ChatOptions::default()
             },
             history_turns: cfg.history_turns,
             history: Vec::new(),
@@ -365,13 +366,14 @@ impl ChatSession {
     /// history (so the next try resends the same context).
     pub async fn send<F: FnMut(&str)>(&mut self, user: &str, mut on_token: F) -> Outcome {
         if lillith_core::access::kill_switch::is_safeword(user) {
-            lillith_core::access::kill_switch::stop_all();
-            lillith_core::access::admin_broker::shutdown();
+            // stop_all force-kills the admin helper out-of-band (registered
+            // hook); the report's line only says the helper is gone when
+            // that kill was confirmed.
+            let report = lillith_core::access::kill_switch::stop_all();
             // Drop any pending plan / skill so nothing is still waiting.
             self.pending_tool = None;
             self.pending_skill = None;
-            let line =
-                "Stopped. Every running command is dead and the admin helper is gone.".to_string();
+            let line = report.chat_line();
             on_token(&line);
             return Outcome::Reply(line);
         }

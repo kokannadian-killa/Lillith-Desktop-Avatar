@@ -3,6 +3,7 @@
 //! walk; nothing is downloaded.
 
 use crate::gguf::{self, GgufHeader};
+use crate::host::HostInfo;
 use crate::paths;
 use crate::template::ChatTemplate;
 use serde::Serialize;
@@ -526,15 +527,37 @@ pub fn model_ram_budget(total_ram: Option<u64>) -> u64 {
     total_ram.unwrap_or(8 * 1024 * 1024 * 1024) / 2
 }
 
-/// Ranks `models` for a CPU-only laptop with `total_ram` bytes of RAM
-/// (target: i5-7200U, 8 GB). Best first. Prefers ~3B Q4_K_M chat models.
+/// Ranks `models` for this machine's CPU with `total_ram` bytes of RAM
+/// (target: i5-7200U, 8 GB). Best first. Prefers ~3B Q4_K_M chat models,
+/// uncensored/abliterated ones first within a size tier. See [`recommend_for`].
 pub fn recommend(models: &[ModelInfo], total_ram: Option<u64>) -> Vec<Recommendation> {
-    let budget = model_ram_budget(total_ram);
+    recommend_for(
+        models,
+        &HostInfo {
+            cpu: crate::host::cpu_info(),
+            total_ram,
+        },
+    )
+}
+
+/// Ranks `models` for `host` (injectable CPU + RAM). Best first.
+///
+/// - On a low-power CPU (U-series such as the i5-7200U, or 4 threads or
+///   fewer) with 8-16 GB, ~3B models get a boost and 7-8B ones a penalty:
+///   Dolphin 3.0 Llama 3.2 3B Q4_K_M is the pick there.
+/// - Within a size tier, uncensored models ([`is_uncensored`]: dolphin,
+///   uncensored, abliterated, hermes, nous) rank above stock instruct ones.
+/// - If nothing would be recommended (e.g. the only GGUF is Mistral 7B on
+///   8 GB), the best readable model that fits in RAM is kept as a fallback
+///   (tier `Ok`) instead of being written off. Nothing is ever downloaded;
+///   see [`preferred_model_hint`] for what to fetch by hand.
+pub fn recommend_for(models: &[ModelInfo], host: &HostInfo) -> Vec<Recommendation> {
+    let budget = model_ram_budget(host.total_ram);
     let mut out: Vec<Recommendation> = models
         .iter()
         .enumerate()
         .map(|(i, m)| {
-            let (score, reasons) = score_model(m, budget);
+            let (score, reasons) = score_model(m, budget, host);
             let tier = if m.header_error.is_some() || score < 20 {
                 Tier::NotRecommended
             } else if score >= 70 {
@@ -553,14 +576,95 @@ pub fn recommend(models: &[ModelInfo], total_ram: Option<u64>) -> Vec<Recommenda
         })
         .collect();
     out.sort_by(|a, b| b.score.cmp(&a.score).then(a.path.cmp(&b.path)));
+    if !out.iter().any(|r| r.tier != Tier::NotRecommended) {
+        let ram = host.total_ram.unwrap_or(8 * GIB_U64);
+        if let Some(r) = out.iter_mut().find(|r| {
+            let m = &models[r.index];
+            m.header_error.is_none()
+                && m.est_ram_bytes <= ram / 10 * 9
+                && !matches!(
+                    m.quant.as_deref().map(str::to_ascii_uppercase).as_deref(),
+                    Some("F16" | "BF16" | "F32")
+                )
+        }) {
+            r.tier = Tier::Ok;
+            r.reasons.push(format!(
+                "fallback: the best usable model found; for speed get {PREFERRED_3B_FILE} into ~/models/"
+            ));
+        }
+    }
     out
+}
+
+const GIB_U64: u64 = 1024 * 1024 * 1024;
+
+/// Ko's pick for a low-power laptop: Dolphin 3.0 Llama 3.2 3B, Q4_K_M (~2 GB).
+pub const PREFERRED_3B_FILE: &str = "dolphin3.0-llama3.2-3b-q4_k_m.gguf";
+/// Human name of [`PREFERRED_3B_FILE`].
+pub const PREFERRED_3B_NAME: &str = "Dolphin 3.0 Llama 3.2 3B (Q4_K_M)";
+
+/// Name keywords of uncensored (unmoderated) fine-tunes.
+pub const UNCENSORED_KEYWORDS: &[&str] =
+    &["dolphin", "uncensored", "abliterated", "hermes", "nous"];
+
+/// Whether `m` is an uncensored / abliterated fine-tune, judged from the file
+/// name and the GGUF `general.name`.
+pub fn is_uncensored(m: &ModelInfo) -> bool {
+    let n = format!("{} {}", m.name, m.file_name).to_ascii_lowercase();
+    UNCENSORED_KEYWORDS.iter().any(|k| n.contains(k))
+}
+
+/// What to fetch by hand when the preferred 3B model is missing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ModelHint {
+    /// Exact file name to get.
+    pub file_name: String,
+    /// Where to put it (`~/models`, expanded when `$HOME` is known).
+    pub dir: PathBuf,
+    /// One line for the wizard to show.
+    pub message: String,
+}
+
+/// If [`PREFERRED_3B_FILE`] is not among `models` and this host wants a 3B
+/// model (or nothing found is recommended), the exact file name to get and
+/// the folder to put it in. The wizard never downloads it.
+pub fn preferred_model_hint(models: &[ModelInfo], host: &HostInfo) -> Option<ModelHint> {
+    if models
+        .iter()
+        .any(|m| m.file_name.eq_ignore_ascii_case(PREFERRED_3B_FILE))
+    {
+        return None;
+    }
+    let need = host.prefers_3b()
+        || !recommend_for(models, host)
+            .iter()
+            .any(|r| r.tier == Tier::Recommended);
+    if !need {
+        return None;
+    }
+    let dir = paths::home_dir()
+        .map(|h| h.join("models"))
+        .unwrap_or_else(|| PathBuf::from("~/models"));
+    let why = if host.prefers_3b() {
+        "is the right size for this low-power CPU"
+    } else {
+        "is the recommended model"
+    };
+    Some(ModelHint {
+        file_name: PREFERRED_3B_FILE.into(),
+        message: format!(
+            "{PREFERRED_3B_NAME} {why}. Get {PREFERRED_3B_FILE} and put it in ~/models/ ({}), then rescan. Lillith never downloads models.",
+            dir.display()
+        ),
+        dir,
+    })
 }
 
 fn gib(b: u64) -> String {
     format!("{:.1} GB", b as f64 / (1024.0 * 1024.0 * 1024.0))
 }
 
-fn score_model(m: &ModelInfo, budget: u64) -> (i32, Vec<String>) {
+fn score_model(m: &ModelInfo, budget: u64, host: &HostInfo) -> (i32, Vec<String>) {
     let mut s = 0i32;
     let mut why = Vec::new();
     if let Some(e) = &m.header_error {
@@ -591,6 +695,24 @@ fn score_model(m: &ModelInfo, budget: u64) -> (i32, Vec<String>) {
         }
         None => {}
     }
+    if host.prefers_3b() {
+        let cpu = if host.cpu.is_u_series() {
+            "low-power U-series CPU"
+        } else {
+            "4-thread CPU"
+        };
+        match m.params_b {
+            Some(p) if (2.5..=4.5).contains(&p) => {
+                s += 20;
+                why.push(format!("3B class: the right size for this {cpu}"));
+            }
+            Some(p) if (4.5..=8.5).contains(&p) => {
+                s -= 10;
+                why.push(format!("7-8B: slow replies on this {cpu} (fallback only)"));
+            }
+            _ => {}
+        }
+    }
     let q = m.quant.as_deref().unwrap_or("").to_ascii_uppercase();
     let (qs, qwhy) = match q.as_str() {
         "Q4_K_M" => (25, "Q4_K_M: best size/quality balance"),
@@ -620,13 +742,28 @@ fn score_model(m: &ModelInfo, budget: u64) -> (i32, Vec<String>) {
         ));
     }
     let lname = format!("{} {}", m.name, m.file_name).to_ascii_lowercase();
-    if lname.contains("dolphin") {
-        s += 5;
-        why.push("Dolphin: Ko's preferred brain".into());
+    if is_uncensored(m) {
+        // Beats a stock instruct of the same size tier even one quant step
+        // better (Q4_K_M vs Q4_K_S: 7), never a whole tier (10+).
+        s += 9;
+        why.push(if lname.contains("dolphin") {
+            "Dolphin, uncensored: Ko's preferred brain".into()
+        } else {
+            "uncensored / abliterated: no refusals".into()
+        });
     }
-    if ["instruct", "chat", "dolphin", "hermes", "-it"]
-        .iter()
-        .any(|k| lname.contains(k))
+    if [
+        "instruct",
+        "chat",
+        "dolphin",
+        "hermes",
+        "nous",
+        "abliterated",
+        "uncensored",
+        "-it",
+    ]
+    .iter()
+    .any(|k| lname.contains(k))
     {
         s += 5;
     } else if lname.contains("base") {
@@ -644,6 +781,7 @@ fn score_model(m: &ModelInfo, budget: u64) -> (i32, Vec<String>) {
 mod tests {
     use super::*;
     use crate::gguf::tests::{build_gguf, TestVal};
+    use crate::host::CpuInfo;
 
     fn fake(name: &str, size_mb: u64, quant: Option<&str>, params: f64) -> ModelInfo {
         ModelInfo {
@@ -688,6 +826,173 @@ mod tests {
         assert_eq!(r[0].tier, Tier::Recommended);
         assert_eq!(r.last().unwrap().tier, Tier::NotRecommended);
         assert!(r.last().unwrap().name.contains("f16"));
+    }
+
+    const GIB: u64 = 1024 * 1024 * 1024;
+
+    /// Ko's HP Spectre x360: i5-7200U (2 cores / 4 threads), 8 GB (~7.6 GiB).
+    fn spectre() -> HostInfo {
+        HostInfo {
+            cpu: CpuInfo {
+                model_name: "Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz".into(),
+                logical: 4,
+                physical: Some(2),
+            },
+            total_ram: Some(7 * GIB + 600 * 1024 * 1024),
+        }
+    }
+
+    fn workstation() -> HostInfo {
+        HostInfo {
+            cpu: CpuInfo {
+                model_name: "AMD Ryzen 9 7950X 16-Core Processor".into(),
+                logical: 32,
+                physical: Some(16),
+            },
+            total_ram: Some(64 * GIB),
+        }
+    }
+
+    fn mistral7b() -> ModelInfo {
+        fake(
+            "mistral-7b-instruct-v0.3.Q4_K_M.gguf",
+            4170,
+            Some("Q4_K_M"),
+            7.2,
+        )
+    }
+
+    fn dolphin3b() -> ModelInfo {
+        fake(PREFERRED_3B_FILE, 1930, Some("Q4_K_M"), 3.2)
+    }
+
+    #[test]
+    fn low_power_8g_prefers_3b_over_7b() {
+        let models = vec![
+            mistral7b(),
+            fake(
+                "llama-3.2-3b-instruct-q4_k_m.gguf",
+                1930,
+                Some("Q4_K_M"),
+                3.2,
+            ),
+            dolphin3b(),
+        ];
+        let r = recommend_for(&models, &spectre());
+        assert_eq!(r[0].name, PREFERRED_3B_FILE, "{r:#?}");
+        assert_eq!(r[0].tier, Tier::Recommended);
+        assert!(
+            r[0].reasons.iter().any(|w| w.contains("U-series")),
+            "{:?}",
+            r[0].reasons
+        );
+        assert!(r[1].name.starts_with("llama-3.2-3b"));
+        let m = r.iter().find(|x| x.name.starts_with("mistral")).unwrap();
+        assert!(
+            m.reasons.iter().any(|w| w.contains("slow")),
+            "{:?}",
+            m.reasons
+        );
+        // 4-thread (non-U) part with 16 GB: still 3B first.
+        let quad = HostInfo {
+            cpu: CpuInfo {
+                model_name: "Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz".into(),
+                logical: 4,
+                physical: Some(4),
+            },
+            total_ram: Some(16 * GIB),
+        };
+        assert!(quad.prefers_3b());
+        assert_eq!(recommend_for(&models, &quad)[0].name, PREFERRED_3B_FILE);
+        assert!(
+            preferred_model_hint(&models, &spectre()).is_none(),
+            "already present"
+        );
+    }
+
+    #[test]
+    fn mistral_7b_alone_stays_as_fallback_with_hint() {
+        let models = vec![mistral7b()];
+        let host = spectre();
+        let r = recommend_for(&models, &host);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].tier, Tier::Ok, "{r:#?}");
+        assert!(r[0].reasons.iter().any(|w| w.starts_with("fallback")));
+        let h = preferred_model_hint(&models, &host).expect("hint");
+        assert_eq!(h.file_name, "dolphin3.0-llama3.2-3b-q4_k_m.gguf");
+        assert!(h.dir.ends_with("models"));
+        assert!(
+            h.message.contains("dolphin3.0-llama3.2-3b-q4_k_m.gguf"),
+            "{}",
+            h.message
+        );
+        assert!(h.message.contains("~/models/"), "{}", h.message);
+        assert!(h.message.contains("never downloads"));
+        // ~/models is scanned by default.
+        if let Some(home) = paths::home_dir() {
+            assert!(default_scan_dirs().contains(&home.join("models")));
+        }
+        // A big machine with a recommended model needs no hint.
+        let big = vec![fake(
+            "qwen2.5-7b-instruct-q4_k_m.gguf",
+            4400,
+            Some("Q4_K_M"),
+            7.6,
+        )];
+        let r = recommend_for(&big, &workstation());
+        assert_eq!(r[0].tier, Tier::Ok);
+        assert!(!r[0].reasons.iter().any(|w| w.starts_with("fallback")));
+        // An F16 that doesn't fit is never promoted.
+        let f16 = vec![fake(
+            "llama-3.1-8b-instruct-f16.gguf",
+            15300,
+            Some("F16"),
+            8.0,
+        )];
+        assert_eq!(recommend_for(&f16, &host)[0].tier, Tier::NotRecommended);
+    }
+
+    #[test]
+    fn uncensored_ranks_above_stock_within_a_size_tier() {
+        let stock = fake(
+            "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            1930,
+            Some("Q4_K_M"),
+            3.2,
+        );
+        let ablit = fake(
+            "Llama-3.2-3B-Instruct-abliterated.Q4_K_S.gguf",
+            1830,
+            Some("Q4_K_S"),
+            3.2,
+        );
+        // Detected from the GGUF general.name too, not just the file name.
+        let mut hermes = fake("model-3b-q4_k_m.gguf", 1930, Some("Q4_K_M"), 3.2);
+        hermes.name = "Hermes 3 Llama 3.2 3B".into();
+        assert!(is_uncensored(&ablit) && is_uncensored(&hermes) && is_uncensored(&dolphin3b()));
+        assert!(!is_uncensored(&stock) && !is_uncensored(&mistral7b()));
+        for host in [spectre(), workstation()] {
+            let models = vec![stock.clone(), ablit.clone()];
+            let r = recommend_for(&models, &host);
+            assert!(r[0].name.contains("abliterated"), "{r:#?}");
+            let models = vec![stock.clone(), hermes.clone()];
+            assert_eq!(
+                recommend_for(&models, &host)[0].name,
+                "Hermes 3 Llama 3.2 3B"
+            );
+            // ...but the size tier still wins: a 1.5B uncensored never beats a 3B.
+            let small = fake(
+                "qwen2.5-1.5b-instruct-uncensored-q4_k_m.gguf",
+                990,
+                Some("Q4_K_M"),
+                1.5,
+            );
+            let r = recommend_for(&[small, stock.clone()], &host);
+            assert!(r[0].name.starts_with("Llama-3.2-3B"), "{r:#?}");
+        }
+        // Dolphin 3.0 3B stays the top pick on Ko's laptop.
+        let all = vec![stock, ablit, hermes, mistral7b(), dolphin3b()];
+        assert_eq!(recommend_for(&all, &spectre())[0].name, PREFERRED_3B_FILE);
     }
 
     #[test]

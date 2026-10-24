@@ -57,15 +57,30 @@ pub fn hint(ui: &mut Ui, text: &str) -> Response {
     ui.label(egui::RichText::new(text).small().color(c32(pal::TEXT_MUTE)))
 }
 
-/// A row label of fixed width, then `add` on the same line.
+/// Width of a [`row`] label column: 134 px, or the text plus a gap when it
+/// is longer.
+fn row_label_width(text_w: f32) -> f32 {
+    (text_w + 8.0).max(134.0)
+}
+
+/// A row label of fixed width (wider only when the label needs it), then
+/// `add` on the same line.
 pub fn row<R>(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
     ui.horizontal(|ui| {
-        let (r, _) = ui.allocate_exact_size(vec2(134.0, 22.0), Sense::hover());
+        let font = egui::FontId::monospace(12.5);
+        // A label longer than the column pushes the control right instead
+        // of being painted underneath it.
+        let text_w = ui
+            .painter()
+            .layout_no_wrap(label.to_string(), font.clone(), c32(pal::TEXT_DIM))
+            .size()
+            .x;
+        let (r, _) = ui.allocate_exact_size(vec2(row_label_width(text_w), 22.0), Sense::hover());
         ui.painter().text(
             pos2(r.left(), r.center().y),
             Align2::LEFT_CENTER,
             label,
-            egui::FontId::monospace(12.5),
+            font,
             c32(pal::TEXT_DIM),
         );
         add(ui)

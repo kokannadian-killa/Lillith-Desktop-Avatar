@@ -246,31 +246,64 @@ pub fn scaffold(dir: &Path, lang: Language, template: &str) -> std::io::Result<S
     }
 }
 
+/// Receives each output line (stdout or stderr) as soon as the command
+/// prints it. See [`build_streaming`] / [`run_streaming`].
+pub type LineSink<'a> = &'a mut dyn FnMut(&str);
+
 /// Builds (compiles / syntax-checks) the project in `dir`, offline.
 pub fn build(dir: &Path, lang: Language) -> std::io::Result<String> {
+    build_impl(dir, lang, None)
+}
+
+/// [`build`], but every stdout/stderr line also goes to `sink` while the
+/// command runs. The returned text is the same full log.
+pub fn build_streaming(dir: &Path, lang: Language, sink: LineSink<'_>) -> std::io::Result<String> {
+    build_impl(dir, lang, Some(sink))
+}
+
+fn build_impl(dir: &Path, lang: Language, sink: Option<LineSink<'_>>) -> std::io::Result<String> {
     match lang {
         Language::Rust => run_cmd(
             "cargo",
             &["build", "--offline"],
             dir,
             &[("CARGO_NET_OFFLINE", "true")],
+            sink,
         ),
-        Language::Python => run_cmd("python3", &["-m", "py_compile", "main.py"], dir, &[]),
-        Language::Fish => run_cmd("fish", &["-n", "main.fish"], dir, &[]),
+        Language::Python => run_cmd("python3", &["-m", "py_compile", "main.py"], dir, &[], sink),
+        Language::Fish => run_cmd("fish", &["-n", "main.fish"], dir, &[], sink),
     }
 }
 
 /// Runs the project in `dir`, offline.
 pub fn run(dir: &Path, lang: Language) -> std::io::Result<String> {
+    run_impl(dir, lang, None)
+}
+
+/// [`run`], but every stdout/stderr line also goes to `sink` while the
+/// program runs. The returned text is the same full log.
+pub fn run_streaming(dir: &Path, lang: Language, sink: LineSink<'_>) -> std::io::Result<String> {
+    run_impl(dir, lang, Some(sink))
+}
+
+fn run_impl(dir: &Path, lang: Language, sink: Option<LineSink<'_>>) -> std::io::Result<String> {
     match lang {
         Language::Rust => run_cmd(
             "cargo",
             &["run", "--offline"],
             dir,
             &[("CARGO_NET_OFFLINE", "true")],
+            sink,
         ),
-        Language::Python => run_cmd("python3", &["main.py"], dir, &[]),
-        Language::Fish => run_cmd("fish", &["main.fish"], dir, &[]),
+        // Unbuffered so print() output streams to the log as it happens.
+        Language::Python => run_cmd(
+            "python3",
+            &["main.py"],
+            dir,
+            &[("PYTHONUNBUFFERED", "1")],
+            sink,
+        ),
+        Language::Fish => run_cmd("fish", &["main.fish"], dir, &[], sink),
     }
 }
 
@@ -285,7 +318,7 @@ fn scaffold_rust(dir: &Path, template: &str) -> std::io::Result<String> {
     let dir_str = dir.to_string_lossy().to_string();
     args.push(&dir_str);
     let cwd = dir.parent().unwrap_or(Path::new("."));
-    run_cmd("cargo", &args, cwd, &[("CARGO_NET_OFFLINE", "true")])
+    run_cmd("cargo", &args, cwd, &[("CARGO_NET_OFFLINE", "true")], None)
 }
 
 fn scaffold_python(dir: &Path, template: &str) -> std::io::Result<String> {
@@ -422,28 +455,38 @@ fn dir_has_entries(dir: &Path) -> std::io::Result<bool> {
 /// stdout+stderr and appending an `[exit N]` line. A non-zero exit is returned
 /// as `Ok` (the output carries the code); only a failure to launch is an
 /// `Err`. No network is ever used by the commands this module builds.
+///
+/// With a `sink`, stdout and stderr are read line by line on two reader
+/// threads and each line is handed to `sink` as it arrives (interleaved in
+/// arrival order, which is also the order of the returned text).
 fn run_cmd(
     program: &str,
     args: &[&str],
     cwd: &Path,
     envs: &[(&str, &str)],
+    sink: Option<LineSink<'_>>,
 ) -> std::io::Result<String> {
     let mut cmd = std::process::Command::new(program);
     cmd.args(args).current_dir(cwd);
     for (k, v) in envs {
         cmd.env(k, v);
     }
-    let out = cmd.output()?;
-    let mut text = String::new();
-    text.push_str(&String::from_utf8_lossy(&out.stdout));
-    if !out.stderr.is_empty() {
-        if !text.is_empty() && !text.ends_with('\n') {
-            text.push('\n');
+    let (mut text, status) = match sink {
+        None => {
+            let out = cmd.output()?;
+            let mut text = String::new();
+            text.push_str(&String::from_utf8_lossy(&out.stdout));
+            if !out.stderr.is_empty() {
+                if !text.is_empty() && !text.ends_with('\n') {
+                    text.push('\n');
+                }
+                text.push_str(&String::from_utf8_lossy(&out.stderr));
+            }
+            (text, out.status)
         }
-        text.push_str(&String::from_utf8_lossy(&out.stderr));
-    }
-    let code = out
-        .status
+        Some(sink) => stream_cmd(&mut cmd, sink)?,
+    };
+    let code = status
         .code()
         .map(|c| c.to_string())
         .unwrap_or_else(|| "signal".into());
@@ -454,6 +497,64 @@ fn run_cmd(
     Ok(text)
 }
 
+/// Spawns `cmd` with piped stdout/stderr and forwards each line to `sink`
+/// as soon as it is read. Returns the collected text and the exit status.
+fn stream_cmd(
+    cmd: &mut std::process::Command,
+    sink: LineSink<'_>,
+) -> std::io::Result<(String, std::process::ExitStatus)> {
+    use std::io::BufRead;
+    use std::process::Stdio;
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    let mut readers = Vec::new();
+    let out: Option<Box<dyn std::io::Read + Send>> = child
+        .stdout
+        .take()
+        .map(|o| Box::new(o) as Box<dyn std::io::Read + Send>);
+    let err: Option<Box<dyn std::io::Read + Send>> = child
+        .stderr
+        .take()
+        .map(|e| Box::new(e) as Box<dyn std::io::Read + Send>);
+    for pipe in [out, err].into_iter().flatten() {
+        let tx = tx.clone();
+        readers.push(std::thread::spawn(move || {
+            let mut r = std::io::BufReader::new(pipe);
+            let mut buf = Vec::new();
+            loop {
+                buf.clear();
+                match r.read_until(b'\n', &mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        let line = String::from_utf8_lossy(&buf);
+                        let line = line.trim_end_matches(['\n', '\r']).to_string();
+                        if tx.send(line).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        }));
+    }
+    drop(tx);
+    let mut text = String::new();
+    // Ends once both pipes are closed (the child exited or closed them).
+    for line in rx {
+        sink(&line);
+        text.push_str(&line);
+        text.push('\n');
+    }
+    for r in readers {
+        let _ = r.join();
+    }
+    let status = child.wait()?;
+    Ok((text, status))
+}
+
 fn io_err(msg: String) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::InvalidInput, msg)
 }
@@ -461,6 +562,51 @@ fn io_err(msg: String) -> std::io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn streaming_delivers_lines_before_the_command_exits() {
+        use std::time::{Duration, Instant};
+        let t0 = Instant::now();
+        let mut seen: Vec<(String, Duration)> = Vec::new();
+        let mut sink = |l: &str| seen.push((l.to_string(), t0.elapsed()));
+        let out = run_cmd(
+            "sh",
+            &["-c", "echo first; sleep 1; echo oops >&2; echo last"],
+            &std::env::temp_dir(),
+            &[],
+            Some(&mut sink),
+        )
+        .unwrap();
+        let total = t0.elapsed();
+        let lines: Vec<&str> = seen.iter().map(|(l, _)| l.as_str()).collect();
+        assert_eq!(lines.len(), 3, "{lines:?}");
+        assert_eq!(lines[0], "first");
+        assert!(lines.contains(&"oops"), "stderr is streamed too: {lines:?}");
+        assert!(lines.contains(&"last"));
+        // "first" arrived while the command was still sleeping.
+        assert!(
+            seen[0].1 + Duration::from_millis(500) < total,
+            "first line at {:?}, finished at {total:?}",
+            seen[0].1
+        );
+        assert!(out.starts_with("first\n"), "{out}");
+        assert!(out.contains("oops") && out.ends_with("[exit 0]"), "{out}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_streaming_output_is_unchanged() {
+        let out = run_cmd(
+            "sh",
+            &["-c", "echo a; echo b >&2; exit 3"],
+            &std::env::temp_dir(),
+            &[],
+            None,
+        )
+        .unwrap();
+        assert_eq!(out, "a\nb\n[exit 3]");
+    }
 
     fn tmpdir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!(

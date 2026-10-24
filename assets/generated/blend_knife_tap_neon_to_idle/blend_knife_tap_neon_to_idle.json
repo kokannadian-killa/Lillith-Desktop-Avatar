@@ -1,0 +1,242 @@
+{
+  "name": "blend_knife_tap_neon_to_idle",
+  "placeholder": false,
+  "frame_count": 19,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "blend_knife_tap_neon_to_idle_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.535,
+  "body_anchor_x": 200,
+  "facing": "3/4 front -> front",
+  "source_files": [
+    "../../source/video/blend_knife_tap_neon_to_idle/blend_knife_tap_neon_to_idle_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 73,
+    "step": 4,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8,
+    615.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 576,
+    "ref_hue_median": 268.7,
+    "mean_hue_shift_deg_per_frame": [
+      0.0,
+      0.4,
+      0.0,
+      -0.3,
+      -0.6,
+      -0.3,
+      0.0,
+      -0.9,
+      0.5,
+      0.9,
+      -0.3,
+      -2.8,
+      -2.0,
+      -5.1,
+      -4.2,
+      -4.6,
+      -4.0,
+      -4.2,
+      -3.9
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "v3 design. Transition knife_tap_neon -> idle (first = knife_tap_start_v3.png, last = idle_v3.png): knife twirl and tuck, settles to the front stance.",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      105,
+      324,
+      22,
+      392
+    ],
+    [
+      104,
+      370,
+      20,
+      392
+    ],
+    [
+      103,
+      355,
+      20,
+      392
+    ],
+    [
+      105,
+      362,
+      20,
+      392
+    ],
+    [
+      104,
+      361,
+      20,
+      392
+    ],
+    [
+      104,
+      348,
+      20,
+      392
+    ],
+    [
+      104,
+      328,
+      20,
+      392
+    ],
+    [
+      103,
+      345,
+      20,
+      392
+    ],
+    [
+      99,
+      302,
+      21,
+      392
+    ],
+    [
+      94,
+      268,
+      22,
+      392
+    ],
+    [
+      88,
+      256,
+      20,
+      392
+    ],
+    [
+      88,
+      240,
+      20,
+      392
+    ],
+    [
+      106,
+      260,
+      23,
+      392
+    ],
+    [
+      136,
+      263,
+      22,
+      392
+    ],
+    [
+      147,
+      253,
+      24,
+      392
+    ],
+    [
+      147,
+      249,
+      24,
+      392
+    ],
+    [
+      141,
+      264,
+      22,
+      392
+    ],
+    [
+      135,
+      269,
+      21,
+      392
+    ],
+    [
+      132,
+      272,
+      22,
+      392
+    ]
+  ],
+  "placement_ramp": {
+    "note": "scale/shift ramped linearly about anchor (200,392) so frame 0 matches the from-clip and the last frame the to-clip",
+    "end_scale_factor": 1.0093,
+    "end_dx": -4,
+    "end_dy": 2
+  },
+  "from_clip": "knife_tap_neon",
+  "to_clip": "idle_a",
+  "source_frames": {
+    "knife_tap_neon": 0,
+    "idle_a": 0
+  },
+  "video": {
+    "file": "blend_knife_tap_neon_to_idle.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 19,
+    "fps": 12.0,
+    "bytes": 274293,
+    "quality": {
+      "edge_mae": 2.65,
+      "edge_p99": 20.0,
+      "halo_dark": 0.097,
+      "halo_light": -0.211,
+      "alpha_mae": 0.0912
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
+}

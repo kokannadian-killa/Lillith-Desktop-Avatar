@@ -1,0 +1,19 @@
+{
+ "mode": "loop",
+ "take_s": 6,
+ "video_fps": 24,
+ "start": 1,
+ "stop": 143,
+ "step": 2,
+ "fps": 12,
+ "scale": 0.54,
+ "anchor_x": 200,
+ "center": "fixed",
+ "finalize": "keyframed",
+ "seated": false,
+ "peak_at_s": 3.0,
+ "peak_pose": "both hands lifting her pigtails up behind her head, back deeply arched, chest lifted forward toward the viewer, ribcage stretched, chin raised",
+ "expression": "eyes half-closed in a slow sultry look down at the viewer, soft parted lips",
+ "motion": "She slowly lifts both pigtails up behind her head and arches her back, chest rising forward; she releases her hair with a slow toss so the pigtails fall and swing, and her chest drops into a soft, delayed double bounce; then she lowers her arms back to the start pose.",
+ "name": "hair_toss_arch"
+}

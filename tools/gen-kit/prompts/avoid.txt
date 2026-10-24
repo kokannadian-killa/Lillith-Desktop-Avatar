@@ -1,0 +1,6 @@
+AVOID (append to every still and every video prompt):
+see-through or sheer top, wardrobe malfunction, missing or changed clothing, nudity, nipples, sex acts, fluids, lingerie swap, outfit colour change,
+childlike face or body, extra limbs, extra fingers, fused or warped hands, broken wrists, duplicate tail, missing horns, horn colour change,
+background, floor, floor shadow, drop shadow, props, furniture, window frame, text, watermark, vignette, gradient backdrop, grey backdrop,
+camera move, zoom, pan, dolly, cut, crop of head/horns/boots, body touching frame edge,
+fast motion, jerky motion, twitching, sped-up, snapping poses, motion blur smears, morphing face, flicker.

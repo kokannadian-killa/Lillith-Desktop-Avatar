@@ -6,6 +6,11 @@
 //! session token on every frame, run them via `cmd` / PowerShell with
 //! captured output, and exit on Stop, idle timeout, or when Lillith dies.
 //!
+//! Stop is handled on a dedicated reader thread so an in-flight command
+//! cannot delay it: the reader calls `ExitProcess`, which closes every
+//! handle — including Job Objects created with `KILL_ON_JOB_CLOSE` for
+//! command children — so the whole tree dies with the helper.
+//!
 //! Nothing here decides what is allowed: Lillith only sends a command
 //! after Ko approved it on the Soul Contract card. There is no network
 //! listener — only `\\.\pipe\lillith-admin-<hex>`.
@@ -56,6 +61,7 @@ fn run(cfg: HelperArgs) -> Result<(), String> {
 mod win {
     use super::*;
     use std::os::windows::io::{FromRawHandle, IntoRawHandle};
+    use std::sync::{mpsc, Arc, Mutex};
     use windows_sys::Win32::Foundation::{
         CloseHandle, ERROR_PIPE_BUSY, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
         WAIT_OBJECT_0, WAIT_TIMEOUT,
@@ -68,46 +74,103 @@ mod win {
         OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
     };
 
+    enum Msg {
+        Run {
+            id: u64,
+            shell: winshell::WinShell,
+            cwd: String,
+            timeout_s: u64,
+            cap: usize,
+            command: String,
+        },
+        /// Pipe died or parent gone — main should exit.
+        Bye,
+    }
+
     pub fn serve(cfg: HelperArgs) -> Result<(), String> {
-        let mut pipe = connect_pipe(&cfg.pipe)?;
+        let pipe = Arc::new(Mutex::new(connect_pipe(&cfg.pipe)?));
         let idle = Duration::from_secs(cfg.idle_min.saturating_mul(60).max(60));
         let parent = open_parent(cfg.parent_pid);
+        let token = cfg.token.clone();
+        let (tx, rx) = mpsc::channel::<Msg>();
+
+        // Reader thread: always blocked in read_frame. Stop → ExitProcess so
+        // an in-flight command on the main thread cannot delay the kill.
+        let pipe_r = pipe.clone();
+        let token_r = token.clone();
+        std::thread::spawn(move || {
+            loop {
+                let frame = {
+                    let mut p = pipe_r.lock().unwrap_or_else(|e| e.into_inner());
+                    read_frame(&mut *p)
+                };
+                let frame = match frame {
+                    Ok(f) => f,
+                    Err(_) => {
+                        let _ = tx.send(Msg::Bye);
+                        break;
+                    }
+                };
+                match Request::decode(&frame, &token_r) {
+                    Ok(Request::Stop) => {
+                        // Immediate: closes Job handles → KILL_ON_JOB_CLOSE
+                        // wipes command children.
+                        std::process::exit(0);
+                    }
+                    Ok(Request::Run {
+                        id,
+                        shell,
+                        cwd,
+                        timeout_s,
+                        cap,
+                        command,
+                    }) => {
+                        if tx
+                            .send(Msg::Run {
+                                id,
+                                shell,
+                                cwd,
+                                timeout_s,
+                                cap,
+                                command,
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(lillith_core::access::admin_proto::ProtoError::BadToken) => {
+                        std::process::exit(1);
+                    }
+                    Err(_) => continue,
+                }
+            }
+        });
+
         let mut last = Instant::now();
         loop {
-            // Exit when Lillith is gone.
             if parent_dead(parent) {
                 break;
             }
-            // Idle timeout between requests.
             if last.elapsed() >= idle {
                 break;
             }
-            // Peek / short wait: try a non-blocking-ish read by checking the
-            // parent every half second while we wait on the pipe. Windows
-            // pipes block in ReadFile; we use a short WaitNamedPipe style by
-            // running the read in a loop with timeouts via overlapped would
-            // be heavy — instead we just block on the frame and rely on
-            // Lillith sending Stop or dying. Between frames we check idle
-            // after each completed request.
-            let frame = match read_frame(&mut pipe) {
-                Ok(f) => f,
-                Err(e) => {
-                    // Pipe closed → Lillith went away.
-                    let _ = e;
-                    break;
-                }
+            let msg = match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(m) => m,
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
             };
-            last = Instant::now();
-            match Request::decode(&frame, &cfg.token) {
-                Ok(Request::Stop) => break,
-                Ok(Request::Run {
+            match msg {
+                Msg::Bye => break,
+                Msg::Run {
                     id,
                     shell,
                     cwd,
                     timeout_s,
                     cap,
                     command,
-                }) => {
+                } => {
+                    last = Instant::now();
                     let cwd = (!cwd.is_empty()).then(|| Path::new(&cwd).to_path_buf());
                     let out = winshell::run(
                         shell,
@@ -123,21 +186,15 @@ mod win {
                             message: e.to_string(),
                         },
                     };
-                    if write_frame(&mut pipe, &reply.encode(&cfg.token)).is_err() {
-                        break;
+                    {
+                        let mut p = pipe.lock().unwrap_or_else(|e| e.into_inner());
+                        if write_frame(&mut *p, &reply.encode(&token)).is_err() {
+                            break;
+                        }
                     }
                     if cfg.per_command {
                         break;
                     }
-                }
-                Err(lillith_core::access::admin_proto::ProtoError::BadToken) => {
-                    // Wrong token: drop the connection and exit. Never run
-                    // anything from an unauthenticated peer.
-                    break;
-                }
-                Err(_) => {
-                    // Malformed: refuse and continue (or exit if hostile).
-                    continue;
                 }
             }
         }
@@ -151,7 +208,6 @@ mod win {
 
     fn connect_pipe(name: &str) -> Result<std::fs::File, String> {
         let w: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
-        // Retry briefly while Lillith finishes CreateNamedPipe / ConnectNamedPipe.
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             unsafe {
@@ -204,7 +260,6 @@ mod win {
         unsafe { WaitForSingleObject(h, 0) == WAIT_OBJECT_0 }
     }
 
-    // Silence unused-import warnings on some windows-sys builds.
     #[allow(dead_code)]
     fn _link(_: WAIT_TIMEOUT, f: std::fs::File) {
         let _ = f.into_raw_handle();
