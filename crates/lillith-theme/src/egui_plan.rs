@@ -9,6 +9,11 @@
 //! approved, a Trash (default) / Permanent choice and the typed phrase are
 //! required too. The caller still checks everything against the plan
 //! (`SoulContract::approve_plan`); this widget only reports the choice.
+//!
+//! Approving is mouse-only, like the Yes plate and SIGN: APPROVE ALL and
+//! APPROVE SELECTED sense clicks but are never focusable (Tab skips them),
+//! and only a real primary pointer click counts. Enter / Space on a focused
+//! widget never approves; DECLINE (and `Esc`) still work from the keyboard.
 
 use crate::egui_theme::{additive, c32, skull};
 use crate::palette::{self as pal, Rgba};
@@ -328,7 +333,9 @@ pub fn plan_review_popup(
                             .color(c32(pal::TEXT)),
                     )
                     .fill(c32(pal::IRON_MID))
-                    .stroke(Stroke::new(1.0, c32(pal::EMBER))),
+                    .stroke(Stroke::new(1.0, c32(pal::EMBER)))
+                    // Mouse-only: never focusable, see the module docs.
+                    .sense(egui::Sense::CLICK),
                 )
             });
             let every = ui.add_enabled_ui(all_ok, |ui| {
@@ -336,23 +343,29 @@ pub fn plan_review_popup(
                     [third, 30.0],
                     egui::Button::new(RichText::new("APPROVE ALL").strong().color(c32(pal::TEXT)))
                         .fill(c32(pal::BLOOD_DEEP))
-                        .stroke(Stroke::new(1.5, c32(pal::BLOOD_NEON))),
+                        .stroke(Stroke::new(1.5, c32(pal::BLOOD_NEON)))
+                        .sense(egui::Sense::CLICK),
                 )
             });
             ui.ctx().data_mut(|d| {
                 d.insert_temp(id.with("no-rect"), no.rect);
                 d.insert_temp(id.with("some-rect"), some.inner.rect);
                 d.insert_temp(id.with("all-rect"), every.inner.rect);
+                d.insert_temp(id.with("some-id"), some.inner.id);
+                d.insert_temp(id.with("all-id"), every.inner.id);
             });
+            // `clicked()` also fires for Enter/Space on a focused widget;
+            // approving needs a real primary pointer click.
+            let pointer = |r: &egui::Response| r.clicked_by(egui::PointerButton::Primary);
             if no.clicked() {
                 out = Some(PlanChoice::Decline);
-            } else if every.inner.clicked() && all_ok {
+            } else if pointer(&every.inner) && all_ok {
                 out = Some(PlanChoice::Approve {
                     items: all.iter().copied().collect(),
                     typed: state.typed.clone(),
                     permanent: state.permanent,
                 });
-            } else if some.inner.clicked() && sel_ok {
+            } else if pointer(&some.inner) && sel_ok {
                 out = Some(PlanChoice::Approve {
                     items: state.checked.iter().copied().collect(),
                     typed: state.typed.clone(),
@@ -469,6 +482,93 @@ mod tests {
     fn rect(ctx: &Context, key: impl std::hash::Hash) -> Rect {
         ctx.data(|d| d.get_temp::<Rect>(Id::new("plan-test").with(key)))
             .expect("laid out")
+    }
+
+    fn key(k: egui::Key, pressed: bool) -> egui::Event {
+        egui::Event::Key {
+            key: k,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// Presses and releases `k` over two frames and returns any choice.
+    fn tap(ctx: &Context, s: &mut PlanState, k: egui::Key) -> Option<PlanChoice> {
+        let a = frame(ctx, vec![key(k, true)], s);
+        let b = frame(ctx, vec![key(k, false)], s);
+        a.or(b)
+    }
+
+    #[test]
+    fn keyboard_never_approves() {
+        for activate in [egui::Key::Enter, egui::Key::Space] {
+            let ctx = Context::default();
+            // Phrase typed and everything ticked: both APPROVE buttons are
+            // live, so only a click may approve.
+            let mut s = PlanState::default();
+            for _ in 0..3 {
+                assert_eq!(frame(&ctx, vec![], &mut s), None);
+            }
+            // Type the phrase after the first frame seeds the state.
+            s.typed = "delete 3 items".into();
+            for _ in 0..2 {
+                assert_eq!(frame(&ctx, vec![], &mut s), None);
+            }
+            assert_eq!(s.checked.len(), 4);
+            let live = s.clone();
+            // Tab through every focus stop (and wrap), pressing the
+            // activation key at each one: never Approve.
+            for _ in 0..16 {
+                let t = tap(&ctx, &mut s, egui::Key::Tab);
+                assert!(!matches!(t, Some(PlanChoice::Approve { .. })));
+                let r = tap(&ctx, &mut s, activate);
+                assert!(
+                    !matches!(r, Some(PlanChoice::Approve { .. })),
+                    "Tab+{activate:?} approved"
+                );
+                // A toggle may have changed the selection (or typed into
+                // the phrase): restore it so both APPROVE buttons stay live.
+                s = live.clone();
+            }
+            for key in ["some-id", "all-id"] {
+                let bid = ctx
+                    .data(|d| d.get_temp::<Id>(Id::new("plan-test").with(key)))
+                    .expect("laid out");
+                assert!(!ctx.memory(|m| m.has_focus(bid)), "Tab landed on {key}");
+                // Even with focus forced onto it, the key does nothing.
+                ctx.memory_mut(|m| m.request_focus(bid));
+                let _ = frame(&ctx, vec![], &mut s);
+                let r = tap(&ctx, &mut s, activate);
+                assert!(
+                    !matches!(r, Some(PlanChoice::Approve { .. })),
+                    "focused {key} + {activate:?} approved"
+                );
+            }
+            // A real click still approves.
+            s = live.clone();
+            ctx.memory_mut(|m| m.stop_text_input());
+            for _ in 0..2 {
+                let _ = frame(&ctx, vec![], &mut s);
+            }
+            assert_eq!(
+                click(&ctx, &mut s, rect(&ctx, "all-rect").center()),
+                Some(PlanChoice::Approve {
+                    items: vec![1, 2, 3, 4],
+                    typed: "delete 3 items".into(),
+                    permanent: false
+                })
+            );
+            s = live.clone();
+            for _ in 0..2 {
+                let _ = frame(&ctx, vec![], &mut s);
+            }
+            assert!(matches!(
+                click(&ctx, &mut s, rect(&ctx, "some-rect").center()),
+                Some(PlanChoice::Approve { .. })
+            ));
+        }
     }
 
     #[test]
