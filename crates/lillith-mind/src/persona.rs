@@ -124,7 +124,7 @@ mod persona_prompt_tests {
     #[test]
     fn temperature_defaults_match_lily() {
         let t = lillith_setup::modelfile::LILY_TEMPERATURE;
-        assert_eq!(t, 0.85);
+        assert_eq!(t, 0.95);
         assert_eq!(lillith_core::config::ChatConfig::default().temperature, t);
         assert_eq!(crate::llm::ChatOptions::default().temperature, t);
     }

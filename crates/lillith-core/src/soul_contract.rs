@@ -296,6 +296,15 @@ impl PendingAction {
     /// any textual output (for reads and shell). The caller must have already
     /// vetted the path/command against the allowlist.
     fn execute(&self) -> std::io::Result<(Option<PathBuf>, Option<String>)> {
+        self.execute_with(None)
+    }
+
+    /// [`execute`](Self::execute); project build/run output also goes to
+    /// `sink` line by line while the command runs.
+    fn execute_with(
+        &self,
+        sink: Option<crate::build::LineSink<'_>>,
+    ) -> std::io::Result<(Option<PathBuf>, Option<String>)> {
         match self {
             PendingAction::WriteSkill { path, body } | PendingAction::WriteFile { path, body } => {
                 atomic_write(path, body.as_bytes())?;
@@ -357,12 +366,20 @@ impl PendingAction {
                 Some(dir.clone()),
                 Some(crate::build::scaffold(dir, *language, template)?),
             )),
-            PendingAction::BuildProject { dir, language } => {
-                Ok((None, Some(crate::build::build(dir, *language)?)))
-            }
-            PendingAction::RunProject { dir, language } => {
-                Ok((None, Some(crate::build::run(dir, *language)?)))
-            }
+            PendingAction::BuildProject { dir, language } => Ok((
+                None,
+                Some(match sink {
+                    Some(s) => crate::build::build_streaming(dir, *language, s)?,
+                    None => crate::build::build(dir, *language)?,
+                }),
+            )),
+            PendingAction::RunProject { dir, language } => Ok((
+                None,
+                Some(match sink {
+                    Some(s) => crate::build::run_streaming(dir, *language, s)?,
+                    None => crate::build::run(dir, *language)?,
+                }),
+            )),
         }
     }
 }
@@ -589,6 +606,25 @@ impl SoulContract {
     /// A deletion is refused with [`ContractError::NeedsSignature`] and stays
     /// pending: it only runs through [`sign_deletion`](Self::sign_deletion).
     pub fn confirm(&mut self, id: RequestId) -> Result<Confirmed, ContractError> {
+        self.confirm_impl(id, None)
+    }
+
+    /// [`confirm`](Self::confirm), streaming a project build/run's output
+    /// lines to `sink` while it runs (other actions ignore `sink`). Same gate
+    /// and the same `CONFIRM` audit line as `confirm`.
+    pub fn confirm_streaming(
+        &mut self,
+        id: RequestId,
+        sink: crate::build::LineSink<'_>,
+    ) -> Result<Confirmed, ContractError> {
+        self.confirm_impl(id, Some(sink))
+    }
+
+    fn confirm_impl(
+        &mut self,
+        id: RequestId,
+        sink: Option<crate::build::LineSink<'_>>,
+    ) -> Result<Confirmed, ContractError> {
         match self.pending.iter().find(|(i, _)| *i == id) {
             Some((_, PendingAction::DeletePaths { .. })) => {
                 return Err(ContractError::NeedsSignature(id))
@@ -599,7 +635,7 @@ impl SoulContract {
             _ => {}
         }
         let action = self.take(id)?;
-        let res = action.execute();
+        let res = action.execute_with(sink);
         self.log_command("CONFIRM", &action, &res);
         let (path, output) = res?;
         self.audit("CONFIRM", &action);
@@ -744,7 +780,8 @@ impl SoulContract {
     ///   [`ContractError::NeedsSignature`]; still pending).
     ///
     /// Every item is audited `APPROVED`/`DECLINED` and then `RESULT-OK` /
-    /// `RESULT-ERR`; `plans.log` gets the whole story.
+    /// `RESULT-ERR` / `RESULT-STOPPED` (the safeword killed it); `plans.log`
+    /// gets the whole story.
     ///
     /// [`ChangePlan::deletion_manifest`]: crate::access::plan::ChangePlan::deletion_manifest
     pub fn approve_plan(
@@ -803,9 +840,13 @@ impl SoulContract {
         let ts = format_utc((self.clock)());
         for it in &now.items {
             let line = match results.iter().find(|(n, _)| *n == it.n) {
-                Some((_, Ok(o))) => {
-                    self.audit_line("RESULT-OK", it.req.op(), &it.line);
-                    format!("{}. done: {}", it.n, o.trim_end())
+                Some((_, r @ Ok(o))) => {
+                    self.audit_line(result_label(r), it.req.op(), &it.line);
+                    if crate::access::commands::was_stopped(o) {
+                        format!("{}. STOPPED by the safeword: {}", it.n, o.trim_end())
+                    } else {
+                        format!("{}. done: {}", it.n, o.trim_end())
+                    }
                 }
                 Some((_, Err(e))) => {
                     self.audit_line("RESULT-ERR", it.req.op(), &format!("{} ({e})", it.line));
@@ -1145,6 +1186,15 @@ pub(crate) fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
     (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// The audit label for one executed plan item's result.
+pub(crate) fn result_label(r: &Result<String, String>) -> &'static str {
+    match r {
+        Ok(o) if crate::access::commands::was_stopped(o) => "RESULT-STOPPED",
+        Ok(_) => "RESULT-OK",
+        Err(_) => "RESULT-ERR",
+    }
 }
 
 #[cfg(test)]
@@ -1951,5 +2001,15 @@ mod tests {
         assert!(log.contains("APPROVED\ttouch"), "{log}");
         assert!(log.contains("DECLINED\ttouch"), "{log}");
         assert!(log.contains("DECLINED\t[launch]"), "{log}");
+    }
+
+    #[test]
+    fn safeword_stopped_results_audit_as_stopped_not_ok() {
+        assert_eq!(
+            result_label(&Ok("partial\n[stopped by the safeword]".into())),
+            "RESULT-STOPPED"
+        );
+        assert_eq!(result_label(&Ok("hi\n[exit 0]".into())), "RESULT-OK");
+        assert_eq!(result_label(&Err("boom".into())), "RESULT-ERR");
     }
 }

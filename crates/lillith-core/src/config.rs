@@ -303,7 +303,7 @@ impl Default for ChatConfig {
             system_prompt: String::new(),
             // Matches lillith_setup::modelfile::LILY_TEMPERATURE (pinned by a
             // test in lillith-mind, which depends on both crates).
-            temperature: 0.85,
+            temperature: 0.95,
             max_tokens: 320,
             history_turns: 12,
             timeout_s: 120.0,
@@ -712,7 +712,8 @@ impl Default for AvatarConfig {
     }
 }
 
-/// Overlay scale used when config `scale` is left at 1.0 (its default):
+/// The default overlay scale (and the one used when an older config has
+/// `scale = 1.0`, the previous default):
 /// ~220 px tall from the 400 px cells (Ko's choice).
 pub const DEFAULT_OVERLAY_SCALE: f32 = 0.55;
 
@@ -777,8 +778,10 @@ impl Default for Config {
         Self {
             springs: Springs::default(),
             mode: MoveMode::default(),
-            // A 300 px tall window from the 400 px cells.
-            scale: 1.0,
+            // ~220 px tall from the 400 px cells, the same as the bundled
+            // config.toml (`scale = 1.0` still means this too, see
+            // `overlay_scale`).
+            scale: DEFAULT_OVERLAY_SCALE,
             opacity: 1.0,
             physics_hz: 120.0,
             render_hz: 30.0,
@@ -809,8 +812,8 @@ impl Default for Config {
 }
 
 impl Config {
-    /// The overlay scale this config asks for: `scale = 1.0` (the default)
-    /// means [`DEFAULT_OVERLAY_SCALE`]; any other positive value is used
+    /// The overlay scale this config asks for: `scale = 1.0` (the old
+    /// default) means [`DEFAULT_OVERLAY_SCALE`]; any other positive value is used
     /// as is.
     pub fn overlay_scale(&self) -> f32 {
         let s = self.scale;
@@ -1023,7 +1026,9 @@ mod tests {
     #[test]
     fn scale_one_means_the_055_default() {
         let mut c = Config::default();
-        assert_eq!(c.scale, 1.0);
+        assert_eq!(c.scale, DEFAULT_OVERLAY_SCALE);
+        assert_eq!(c.overlay_scale(), DEFAULT_OVERLAY_SCALE);
+        c.scale = 1.0;
         assert_eq!(c.overlay_scale(), DEFAULT_OVERLAY_SCALE);
         assert_eq!(DEFAULT_OVERLAY_SCALE, 0.55);
         for (s, want) in [(0.75, 0.75), (1.25, 1.25), (0.45, 0.45)] {

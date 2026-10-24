@@ -12,12 +12,20 @@
 //!   In `per-command` mode the helper exits after each command, so every
 //!   elevated command brings its own UAC prompt.
 //!
+//! **Safeword / stop:** the broker keeps the helper's process handle in a
+//! separate lock from the pipe session. [`force_kill`] terminates that
+//! process (and, inside the helper, a Job Object with `KILL_ON_JOB_CLOSE`
+//! tears down any command children) without waiting on an in-flight
+//! `read_frame`. The pipe session lock is only held around short
+//! write/read setup, never across the blocking reply wait.
+//!
 //! On non-Windows the whole thing is an error, so the plan's elevated branch
 //! compiles everywhere but only runs on Windows.
 
 use std::path::Path;
 use std::time::Duration;
 
+use super::winjob::HelperKill;
 use super::winshell::WinShell;
 
 /// Inputs for one approved elevated run (bundled so the call site stays tidy).
@@ -48,11 +56,23 @@ pub fn run_elevated(req: ElevatedRun<'_>) -> std::io::Result<String> {
     }
 }
 
-/// Tells any running helper to exit (app shutdown; the safeword hook calls
-/// this). No-op when none is running or off Windows.
-pub fn shutdown() {
+/// Force-kills the elevated helper out-of-band (safeword / app shutdown).
+/// Does not wait on the pipe session lock held by an in-flight command.
+pub fn force_kill() -> HelperKill {
     #[cfg(windows)]
-    imp::shutdown();
+    {
+        imp::force_kill()
+    }
+    #[cfg(not(windows))]
+    {
+        HelperKill::Idle
+    }
+}
+
+/// Soft shutdown: try a Stop frame, then [`force_kill`]. Same as the safeword
+/// path; kept as a name for app-exit call sites.
+pub fn shutdown() -> HelperKill {
+    force_kill()
 }
 
 /// The default helper path: `lillith-admin.exe` beside the running exe.
@@ -68,26 +88,99 @@ mod imp {
         pipe_sddl, random_hex, read_frame, write_frame, HelperArgs, Reply, Request, PIPE_PREFIX,
     };
     use std::io::{Read, Write};
-    use std::path::Path;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
-    struct Helper {
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
+        WAIT_TIMEOUT,
+    };
+    use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows_sys::Win32::Security::Authorization::{
+        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    };
+    use windows_sys::Win32::Security::{
+        GetTokenInformation, TokenUser, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
+    };
+    use windows_sys::Win32::System::Pipes::{
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE,
+        PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
+    };
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, OpenProcessToken, TerminateProcess, WaitForSingleObject,
+    };
+    use windows_sys::Win32::UI::Shell::{
+        ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
+
+    /// Pipe + token for Run/Reply. Never held across the blocking reply wait
+    /// in a way that blocks [`force_kill`] — force_kill uses [`PROC`] only.
+    struct Session {
         pipe: std::fs::File,
         token: String,
         per_command: bool,
     }
 
-    static HELPER: Mutex<Option<Helper>> = Mutex::new(None);
-    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    /// Process handle of the elevated helper. Separate from [`SESSION`] so
+    /// the safeword can TerminateProcess while a Run is mid-`read_frame`.
+    struct Proc {
+        handle: HANDLE,
+    }
 
-    pub fn shutdown() {
-        let mut g = HELPER.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(h) = g.as_mut() {
-            let _ = write_frame(&mut h.pipe, &Request::Stop.encode(&h.token));
+    // SAFETY: HANDLEs are opaque kernel objects; we only call Win32 APIs.
+    unsafe impl Send for Proc {}
+
+    static SESSION: Mutex<Option<Session>> = Mutex::new(None);
+    static PROC: Mutex<Option<Proc>> = Mutex::new(None);
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    static HOOKED: AtomicU64 = AtomicU64::new(0);
+
+    fn ensure_hook() {
+        if HOOKED.swap(1, Ordering::SeqCst) == 0 {
+            crate::access::kill_switch::on_stop(force_kill);
         }
-        *g = None;
+    }
+
+    pub fn force_kill() -> HelperKill {
+        // 1) Soft Stop on the pipe if we can grab the session without waiting.
+        if let Ok(mut g) = SESSION.try_lock() {
+            if let Some(s) = g.as_mut() {
+                let _ = write_frame(&mut s.pipe, &Request::Stop.encode(&s.token));
+            }
+            *g = None;
+        }
+
+        // 2) Out-of-band: terminate the helper process (its Job Object with
+        //    KILL_ON_JOB_CLOSE then wipes command children).
+        let proc = {
+            let mut g = PROC.lock().unwrap_or_else(|e| e.into_inner());
+            g.take()
+        };
+        let Some(proc) = proc else {
+            return HelperKill::Idle;
+        };
+
+        let term_ok = unsafe { TerminateProcess(proc.handle, 1) != 0 };
+        // Wait briefly to confirm exit.
+        let wait = unsafe { WaitForSingleObject(proc.handle, 2_000) };
+        unsafe {
+            CloseHandle(proc.handle);
+        }
+        // Clear session if still present (best-effort).
+        if let Ok(mut g) = SESSION.try_lock() {
+            *g = None;
+        }
+
+        if wait == WAIT_OBJECT_0 {
+            HelperKill::Gone
+        } else if term_ok {
+            HelperKill::Unconfirmed
+        } else {
+            let _ = WAIT_TIMEOUT; // referenced on all SDK builds
+            HelperKill::Failed
+        }
     }
 
     pub fn run_elevated(req: super::ElevatedRun<'_>) -> std::io::Result<String> {
@@ -101,14 +194,19 @@ mod imp {
             idle_min,
             helper,
         } = req;
-        // The safeword kills the helper too (registered once).
-        crate::access::kill_switch::on_stop(shutdown);
+        ensure_hook();
 
-        let mut g = HELPER.lock().unwrap_or_else(|e| e.into_inner());
-        if g.is_none() {
-            *g = Some(launch(helper, per_command, idle_min)?);
+        // Launch under both locks briefly.
+        {
+            let mut session = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+            let mut proc = PROC.lock().unwrap_or_else(|e| e.into_inner());
+            if session.is_none() || proc.is_none() {
+                let (s, p) = launch(helper, per_command, idle_min)?;
+                *session = Some(s);
+                *proc = Some(p);
+            }
         }
-        let h = g.as_mut().unwrap();
+
         let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
         let frame = Request::Run {
             id,
@@ -118,24 +216,51 @@ mod imp {
             cap,
             command: command.to_string(),
         };
-        write_frame(&mut h.pipe, &frame.encode(&h.token))?;
-        let reply = read_frame(&mut h.pipe)
-            .map_err(|e| std::io::Error::other(format!("admin helper: {e}")))?;
-        let out = match Reply::decode(&reply, &h.token)
-            .map_err(|e| std::io::Error::other(format!("admin helper: {e}")))?
-        {
-            Reply::Ok { id: rid, output } if rid == id => Ok(output),
-            Reply::Err { id: rid, message } if rid == id => Err(std::io::Error::other(message)),
-            _ => Err(std::io::Error::other("admin helper: id mismatch")),
+
+        // Take the session out of the mutex for the whole write/read so
+        // force_kill's try_lock soft-Stop never waits on us. The out-of-band
+        // path (PROC + TerminateProcess) does not need SESSION at all.
+        let epoch = crate::access::kill_switch::epoch();
+        let mut session = {
+            let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+            g.take()
+                .ok_or_else(|| std::io::Error::other("admin helper session gone"))?
         };
-        if per_command {
-            let _ = write_frame(&mut h.pipe, &Request::Stop.encode(&h.token));
-            *g = None;
+        let write_res = write_frame(&mut session.pipe, &frame.encode(&session.token));
+        let read_res = write_res.and_then(|()| {
+            read_frame(&mut session.pipe)
+                .map_err(|e| std::io::Error::other(format!("admin helper: {e}")))
+        });
+
+        let out = match read_res {
+            Ok(reply) => match Reply::decode(&reply, &session.token)
+                .map_err(|e| std::io::Error::other(format!("admin helper: {e}")))?
+            {
+                Reply::Ok { id: rid, output } if rid == id => Ok(output),
+                Reply::Err { id: rid, message } if rid == id => Err(std::io::Error::other(message)),
+                _ => Err(std::io::Error::other("admin helper: id mismatch")),
+            },
+            // The safeword killed the helper mid-command: report it as
+            // stopped (audited RESULT-STOPPED), not as a pipe error.
+            Err(_) if crate::access::kill_switch::stopped_since(epoch) => {
+                Ok(crate::access::commands::STOPPED_LINE.to_string())
+            }
+            Err(e) => Err(e),
+        };
+
+        // Put the session back only if the helper process is still tracked
+        // (force_kill may have cleared PROC mid-read).
+        let helper_alive = PROC.lock().unwrap_or_else(|e| e.into_inner()).is_some();
+        if helper_alive && !per_command {
+            let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+            *g = Some(session);
+        } else if per_command {
+            let _ = force_kill();
         }
         out
     }
 
-    fn launch(helper: &Path, per_command: bool, idle_min: u64) -> std::io::Result<Helper> {
+    fn launch(helper: &Path, per_command: bool, idle_min: u64) -> std::io::Result<(Session, Proc)> {
         if !helper.is_file() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -153,50 +278,25 @@ mod imp {
             parent_pid: std::process::id(),
             allow_sid: sid.clone(),
         };
-        // Create the pipe server first (ACL to Ko only) so the helper, which
-        // connects as a client, has something to attach to and cannot be
-        // pre-empted by another listener squatting the name.
         let server = create_pipe(&pipe_name, &sid)?;
-        shell_execute_runas(helper, &args.to_args())?;
+        let proc_handle = shell_execute_runas(helper, &args.to_args())?;
         let pipe = connect_server(server)?;
-        let mut h = Helper {
-            pipe,
-            token,
-            per_command,
-        };
-        // Handshake: the helper echoes a Stop-less ping by accepting our first
-        // real request; nothing to do here beyond having the connection.
-        let _ = &mut h;
-        Ok(h)
+        Ok((
+            Session {
+                pipe,
+                token,
+                per_command,
+            },
+            Proc {
+                handle: proc_handle,
+            },
+        ))
     }
-
-    // --- Win32 glue -------------------------------------------------------
-
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
-    };
-    use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
-    use windows_sys::Win32::Security::Authorization::{
-        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
-    };
-    use windows_sys::Win32::Security::{
-        GetTokenInformation, TokenUser, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
-    };
-    use windows_sys::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE,
-        PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
-    };
-    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-    use windows_sys::Win32::UI::Shell::{
-        ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
-    /// Ko's account SID as a string (`S-1-5-21-…`).
     fn current_user_sid() -> std::io::Result<String> {
         unsafe {
             let mut token: HANDLE = std::ptr::null_mut();
@@ -268,11 +368,9 @@ mod imp {
     fn connect_server(server: PipeServer) -> std::io::Result<std::fs::File> {
         use std::os::windows::io::FromRawHandle;
         unsafe {
-            // Waits for the elevated helper to connect as a client.
             let ok = ConnectNamedPipe(server.0, std::ptr::null_mut());
             if ok == 0 {
                 let err = std::io::Error::last_os_error();
-                // ERROR_PIPE_CONNECTED (535) means it connected first: fine.
                 if err.raw_os_error() != Some(535) {
                     CloseHandle(server.0);
                     return Err(err);
@@ -284,7 +382,8 @@ mod imp {
         }
     }
 
-    fn shell_execute_runas(exe: &Path, args: &[String]) -> std::io::Result<()> {
+    /// Launches the helper elevated; returns its process handle (caller owns).
+    fn shell_execute_runas(exe: &Path, args: &[String]) -> std::io::Result<HANDLE> {
         unsafe {
             let verb = wide("runas");
             let file = wide(&exe.display().to_string());
@@ -299,14 +398,50 @@ mod imp {
             if ShellExecuteExW(&mut info) == 0 {
                 return Err(std::io::Error::last_os_error());
             }
-            if !info.hProcess.is_null() {
-                CloseHandle(info.hProcess);
+            if info.hProcess.is_null() {
+                return Err(std::io::Error::other(
+                    "ShellExecuteExW returned no process handle",
+                ));
             }
-            Ok(())
+            Ok(info.hProcess)
         }
     }
 
-    // Keep otherwise-unused imports referenced on all Windows builds.
     #[allow(dead_code)]
-    fn _link(_: Instant, _: GENERIC_READ, _: GENERIC_WRITE) {}
+    fn _link(_: Instant, _: Duration, _: GENERIC_READ, _: GENERIC_WRITE) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::access::winjob::HelperKill;
+    use std::sync::{Arc, Barrier, Mutex};
+    use std::time::{Duration, Instant};
+
+    /// force_kill must finish while a simulated session lock is held (the
+    /// old bug blocked on that lock until the in-flight command finished).
+    #[test]
+    fn force_kill_does_not_wait_on_session_lock() {
+        // On non-Windows force_kill is Idle and returns immediately — still
+        // proves the public API never blocks on a session mutex we hold here.
+        let session = Arc::new(Mutex::new(()));
+        let barrier = Arc::new(Barrier::new(2));
+        let s2 = session.clone();
+        let b2 = barrier.clone();
+        let holder = std::thread::spawn(move || {
+            let _g = s2.lock().unwrap();
+            b2.wait();
+            std::thread::sleep(Duration::from_millis(400));
+        });
+        barrier.wait();
+        let start = Instant::now();
+        let r = force_kill();
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed < Duration::from_millis(300),
+            "force_kill blocked: {elapsed:?}"
+        );
+        assert_eq!(r, HelperKill::Idle);
+        holder.join().unwrap();
+    }
 }

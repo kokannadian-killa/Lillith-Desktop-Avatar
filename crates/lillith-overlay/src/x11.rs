@@ -12,8 +12,11 @@
 //! - Drag: global pointer position from `QueryPointer`, window moved with
 //!   `set_outer_position`; position saved as `(left, bottom)` relative to
 //!   the monitor so it matches the Wayland margins.
-//! - Transparency has two modes, picked at startup and re-checked every
-//!   [`CM_RECHECK`]:
+//! - Transparency has two modes, picked at startup and switched live when
+//!   the compositing manager starts or stops: a watcher thread asks XFixes
+//!   for `_NET_WM_CM_S<n>` owner changes and wakes the event loop at once
+//!   ([`CM_RECHECK_NOTIFY`] is then only a safety net); without XFixes the
+//!   selection is polled every [`CM_RECHECK`]:
 //!   - **composited** (32-bit ARGB visual *and* a compositing manager owns
 //!     `_NET_WM_CM_S<n>`, e.g. KWin or picom): softbuffer presents
 //!     premultiplied `0xAARRGGBB`, transparent pixels are `0x00000000` and
@@ -24,6 +27,12 @@
 //!     **bounding** shape is then set to her silhouette (alpha ≥
 //!     [`SHAPE_ALPHA`]) so nothing outside her is drawn at all, and the
 //!     pixels are presented opaque and un-premultiplied (hard edge, no box).
+//! - Resizes (tease, peek, speech area) move + resize the window in one
+//!   `ConfigureWindow`, set the new bounding shape and round-trip our
+//!   connection before softbuffer presents the new-size frame in the same
+//!   tick, so the server never shows a mis-sized/mis-shaped window; the frame
+//!   is presented again on `WindowEvent::Resized` in case a window manager
+//!   applied the configure late.
 //! - Right-click menu: a second, override-redirect `_NET_WM_WINDOW_TYPE_POPUP_MENU`
 //!   window at the pointer showing [`crate::menu_popup`], with the same
 //!   transparency mode. While it is open our own X connection grabs the
@@ -44,13 +53,15 @@ use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key as WKey, NamedKey};
 use winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11, WindowType};
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{CursorIcon, Window, WindowId, WindowLevel};
 use x11rb::connection::{Connection as _, RequestConnection as _};
+use x11rb::properties::WmSizeHints;
 use x11rb::protocol::shape::{self, ConnectionExt as _};
+use x11rb::protocol::xfixes::{self, ConnectionExt as _, SelectionEventMask};
 use x11rb::protocol::xproto::{self, ClientMessageEvent, ConnectionExt as _, EventMask, Rectangle};
 use x11rb::protocol::Event as XEvent;
 use x11rb::rust_connection::RustConnection;
@@ -58,9 +69,80 @@ use x11rb::rust_connection::RustConnection;
 pub use softbuffer;
 pub use winit;
 
-/// How often the compositing-manager selection is re-checked (KWin can
-/// suspend/resume compositing at runtime, e.g. Alt+Shift+F12).
-pub const CM_RECHECK: Duration = Duration::from_secs(2);
+/// How often the compositing-manager selection is polled when XFixes
+/// selection notifications are unavailable (KWin can suspend/resume
+/// compositing at runtime, e.g. Alt+Shift+F12). Short, because until the
+/// switch to [`AlphaMode::Shaped`] lands every transparent pixel is black.
+pub const CM_RECHECK: Duration = Duration::from_millis(250);
+
+/// Safety-net re-check while the XFixes watcher reports owner changes.
+pub const CM_RECHECK_NOTIFY: Duration = Duration::from_secs(2);
+
+/// Wakes the event loop: the `_NET_WM_CM_S<n>` owner changed.
+#[derive(Debug, Clone, Copy)]
+pub struct CmChanged;
+
+/// Watches `_NET_WM_CM_S<screen>` with XFixes on its own X connection
+/// (blocking, so it can wake winit immediately) and sends [`CmChanged`]
+/// on every owner change. `false` when XFixes is unavailable.
+fn spawn_cm_watcher(proxy: EventLoopProxy<CmChanged>) -> bool {
+    let setup = || -> Option<RustConnection> {
+        let (conn, screen) = x11rb::connect(None).ok()?;
+        conn.extension_information(xfixes::X11_EXTENSION_NAME)
+            .ok()
+            .flatten()?;
+        // XFixes requires the version handshake before any other request.
+        conn.xfixes_query_version(5, 0).ok()?.reply().ok()?;
+        let root = conn.setup().roots[screen].root;
+        let atom = conn
+            .intern_atom(false, format!("_NET_WM_CM_S{screen}").as_bytes())
+            .ok()?
+            .reply()
+            .ok()?
+            .atom;
+        conn.xfixes_select_selection_input(
+            root,
+            atom,
+            SelectionEventMask::SET_SELECTION_OWNER
+                | SelectionEventMask::SELECTION_WINDOW_DESTROY
+                | SelectionEventMask::SELECTION_CLIENT_CLOSE,
+        )
+        .ok()?
+        .check()
+        .ok()?;
+        Some(conn)
+    };
+    let Some(conn) = setup() else {
+        tracing::info!(
+            poll = ?CM_RECHECK,
+            "no XFixes selection notify: polling the compositing manager"
+        );
+        return false;
+    };
+    let spawned = std::thread::Builder::new()
+        .name("x11-cm-watch".into())
+        .spawn(move || loop {
+            match conn.wait_for_event() {
+                Ok(XEvent::XfixesSelectionNotify(_)) => {
+                    if proxy.send_event(CmChanged).is_err() {
+                        return; // event loop gone
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => return,
+            }
+        });
+    match spawned {
+        Ok(_) => {
+            tracing::debug!("watching the compositing manager via XFixes");
+            true
+        }
+        Err(e) => {
+            tracing::warn!("cm watcher thread: {e}");
+            false
+        }
+    }
+}
 
 /// How the window gets a transparent background (see the module docs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,6 +265,38 @@ impl Xc {
             }
         }
         let _ = self.conn.flush();
+    }
+
+    /// Moves and resizes her window in one `ConfigureWindow` (no
+    /// moved-but-not-resized intermediate state), keeping the fixed-size
+    /// WM_NORMAL_HINTS a non-resizable window carries in step. Not flushed:
+    /// the bounding shape and [`Xc::sync`] follow.
+    fn configure(&self, x: i32, y: i32, size: Option<(u32, u32)>) {
+        let mut aux = xproto::ConfigureWindowAux::new().x(x).y(y);
+        if let Some((w, h)) = size {
+            let (wi, hi) = (w as i32, h as i32);
+            if let Ok(Ok(Some(mut hints))) =
+                WmSizeHints::get(&self.conn, self.win, xproto::AtomEnum::WM_NORMAL_HINTS)
+                    .map(|c| c.reply())
+            {
+                hints.min_size = Some((wi, hi));
+                hints.max_size = Some((wi, hi));
+                let _ = hints.set(&self.conn, self.win, xproto::AtomEnum::WM_NORMAL_HINTS);
+            }
+            aux = aux.width(w).height(h);
+        }
+        let _ = self.conn.configure_window(self.win, &aux);
+    }
+
+    /// Round-trip: the server has processed every request sent so far on
+    /// this connection (configure + shape) before softbuffer presents on
+    /// winit's connection.
+    fn sync(&self) {
+        let _ = self
+            .conn
+            .get_input_focus()
+            .ok()
+            .and_then(|c| c.reply().ok());
     }
 
     /// Input shape = these rectangles (empty = fully click-through).
@@ -355,6 +469,11 @@ struct App {
     exit_after: Option<Duration>,
     pixels_dirty: bool,
     mask_dirty: bool,
+    /// Round-trip our X connection before the next present (a configure
+    /// / shape for a resize is in flight).
+    sync_present: bool,
+    /// The XFixes watcher thread reports compositor changes.
+    cm_watch: bool,
     cursor: (f64, f64),
     error: Option<OverlayError>,
 }
@@ -364,10 +483,11 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
     let ctl = Controller::new(opts)?;
     // Always X11: on a Wayland session this means XWayland, even when
     // WAYLAND_DISPLAY is set (winit would otherwise pick Wayland).
-    let event_loop = EventLoop::builder()
+    let event_loop = EventLoop::<CmChanged>::with_user_event()
         .with_x11()
         .build()
         .map_err(|e| OverlayError::X11(e.to_string()))?;
+    let cm_watch = spawn_cm_watcher(event_loop.create_proxy());
     let now = Instant::now();
     let mut app = App {
         ctl,
@@ -380,6 +500,8 @@ pub fn run(opts: &OverlayOptions) -> Result<(), OverlayError> {
         exit_after: opts.exit_after,
         pixels_dirty: true,
         mask_dirty: true,
+        sync_present: false,
+        cm_watch,
         cursor: (0.0, 0.0),
         error: None,
     };
@@ -478,19 +600,30 @@ impl App {
             monitor,
             depth,
             alpha,
-            next_cm_check: Instant::now() + CM_RECHECK,
+            next_cm_check: Instant::now() + self.cm_interval(),
         })
     }
 
-    /// Re-checks the compositor and switches between composited / shaped.
-    fn check_compositor(&mut self, now: Instant) {
-        let Some(live) = self.live.as_mut() else {
-            return;
-        };
-        if now < live.next_cm_check {
-            return;
+    fn cm_interval(&self) -> Duration {
+        if self.cm_watch {
+            CM_RECHECK_NOTIFY
+        } else {
+            CM_RECHECK
         }
-        live.next_cm_check = now + CM_RECHECK;
+    }
+
+    /// Re-checks the compositor (when due, or now with `force`: the XFixes
+    /// watcher saw the selection owner change) and switches between
+    /// composited / shaped. `true` when the mode changed.
+    fn check_compositor(&mut self, now: Instant, force: bool) -> bool {
+        let interval = self.cm_interval();
+        let Some(live) = self.live.as_mut() else {
+            return false;
+        };
+        if !force && now < live.next_cm_check {
+            return false;
+        }
+        live.next_cm_check = now + interval;
         let compositor = live.xc.compositor();
         let alpha = AlphaMode::pick(live.depth, compositor);
         if alpha != live.alpha {
@@ -504,7 +637,11 @@ impl App {
                 "x11 compositing changed; transparency mode switched"
             );
             self.pixels_dirty = true;
+            // Shape change processed before the re-presented pixels.
+            self.sync_present = true;
+            return true;
         }
+        false
     }
 
     fn draw(&mut self) {
@@ -524,6 +661,11 @@ impl App {
                     1,
                 );
                 live.xc.set_bounding(Some(&rects));
+            }
+            if self.sync_present {
+                // Configure (+ shape) processed before these pixels land.
+                live.xc.sync();
+                self.sync_present = false;
             }
             match live.surface.buffer_mut() {
                 Ok(mut buf) => {
@@ -550,6 +692,13 @@ impl App {
     }
 
     fn move_to(&mut self, p: Placement) {
+        self.place(p, false);
+    }
+
+    /// Moves her window to `p` (clamped on screen), resizing it to the
+    /// stage size too with `resize`, in one request on our connection so
+    /// position and size never land separately.
+    fn place(&mut self, p: Placement, resize: bool) {
         let Some(live) = self.live.as_ref() else {
             return;
         };
@@ -557,34 +706,42 @@ impl App {
         let (mx, my, mw, mh) = live.monitor;
         let p = p.clamped((w, h), (mw, mh), KEEP_ON_SCREEN);
         let (x, y) = p.to_xy(h, mh);
-        live.window
-            .set_outer_position(PhysicalPosition::new(mx + x, my + y));
+        live.xc.configure(mx + x, my + y, resize.then_some((w, h)));
+        if !resize {
+            let _ = live.xc.conn.flush();
+        }
         self.ctl.placement = p;
     }
 
     /// Resizes her window when the stage changed size (Resize, peek,
     /// speech area); the bottom-left stays put.
+    ///
+    /// The new-size frame is rendered first, then in this same tick: one
+    /// `ConfigureWindow` (position + size), the new bounding shape, a
+    /// round-trip, and the present — so neither a stale-size frame nor an
+    /// empty / mis-shaped window is ever on screen.
     fn apply_resize(&mut self) {
         if !self.ctl.take_resized() {
             return;
         }
+        if let Err(e) = self.ctl.stage.render() {
+            tracing::warn!("render after resize: {e}");
+        }
         let (w, h) = self.ctl.stage.size();
         if let Some(live) = self.live.as_mut() {
-            let _ = live.window.request_inner_size(PhysicalSize::new(w, h));
             if let (Some(nw), Some(nh)) = (NonZeroU32::new(w), NonZeroU32::new(h)) {
                 if let Err(e) = live.surface.resize(nw, nh) {
                     tracing::warn!("softbuffer resize: {e}");
                 }
             }
         }
-        if let Err(e) = self.ctl.stage.render() {
-            tracing::warn!("render after resize: {e}");
-        }
         // Bottom-based placement: the feet stay put (peek moves too).
         let p = self.ctl.take_move().unwrap_or(self.ctl.placement);
-        self.move_to(p);
+        self.place(p, true);
         self.pixels_dirty = true;
         self.mask_dirty = true;
+        self.sync_present = true;
+        self.draw();
         tracing::debug!(size = ?(w, h), "overlay resized");
     }
 
@@ -763,7 +920,19 @@ impl App {
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler<CmChanged> for App {
+    fn user_event(&mut self, _el: &ActiveEventLoop, _ev: CmChanged) {
+        // Switch (re-shape + re-present) right away: until then a stopped
+        // compositor leaves every transparent pixel black.
+        if self.check_compositor(Instant::now(), true) {
+            self.draw();
+            if self.popup.is_some() {
+                self.ctl.invalidate_menu();
+                self.draw_popup();
+            }
+        }
+    }
+
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if self.live.is_some() {
             return;
@@ -823,6 +992,15 @@ impl App {
             WindowEvent::RedrawRequested => {
                 self.pixels_dirty = true;
                 self.draw();
+            }
+            // The configure landed (possibly late, via a window manager):
+            // present the current frame + shape again at that size.
+            WindowEvent::Resized(size) => {
+                if (size.width, size.height) == self.ctl.stage.size() {
+                    self.pixels_dirty = true;
+                    self.mask_dirty = true;
+                    self.draw();
+                }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x, position.y);
@@ -919,7 +1097,7 @@ impl App {
             return;
         }
         let now = Instant::now();
-        self.check_compositor(now);
+        self.check_compositor(now, false);
         if let Some(limit) = self.exit_after {
             if now - self.started >= limit {
                 el.exit();
@@ -1023,5 +1201,14 @@ mod tests {
         assert_eq!(AlphaMode::pick(32, false), AlphaMode::Shaped);
         assert_eq!(AlphaMode::pick(24, true), AlphaMode::Shaped);
         assert_eq!(AlphaMode::pick(24, false), AlphaMode::Shaped);
+    }
+
+    #[test]
+    fn compositor_poll_fallback_is_fast() {
+        // Without XFixes every transparent pixel is black until the poll
+        // notices a stopped compositor: keep that window short.
+        assert!(CM_RECHECK >= Duration::from_millis(100));
+        assert!(CM_RECHECK <= Duration::from_millis(500));
+        assert!(CM_RECHECK_NOTIFY > CM_RECHECK);
     }
 }

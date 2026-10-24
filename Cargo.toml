@@ -113,5 +113,10 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
+# Line tables only in dev builds: backtraces keep file:line, but
+# target/ stays much smaller (the shared build dir is tight on disk).
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.dev.package."*"]
 opt-level = 2

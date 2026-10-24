@@ -588,6 +588,259 @@ pub fn skull(c: Pt, s: f32) -> Skull {
 }
 
 // ---------------------------------------------------------------------------
+// death-metal skull (Soul Contract header)
+// ---------------------------------------------------------------------------
+
+/// The Soul Contract's horned skull: a long, angular cranium with a heavy
+/// brow, slanted hollow sockets, an inverted-heart nasal cavity, cracked
+/// bone, a jaw of uneven fangs and big ridged horns that sweep up and curl
+/// in. Centred on `c`; `s` ≈ height of the bare skull (crown to chin).
+///
+/// Outlines marked *star-shaped* can be drawn as a triangle fan from their
+/// matching centre point.
+#[derive(Debug, Clone)]
+pub struct DeathSkull {
+    /// Cranium + face down to the upper teeth (closed, star-shaped about
+    /// `cranium_c`).
+    pub cranium: Vec<Pt>,
+    pub cranium_c: Pt,
+    /// Lower jaw (closed, star-shaped about `mandible_c`).
+    pub mandible: Vec<Pt>,
+    pub mandible_c: Pt,
+    /// The dark gap between the upper and lower teeth.
+    pub mouth: RectF,
+    /// Eye sockets (left, right): closed, star-shaped about `socket_c`.
+    pub sockets: [Vec<Pt>; 2],
+    pub socket_c: [Pt; 2],
+    /// Brow-ridge highlight lines (left, right), inner end first.
+    pub brow: [Vec<Pt>; 2],
+    /// The two lobes of the inverted-heart nasal cavity (closed, convex).
+    pub nose: [Vec<Pt>; 2],
+    /// Upper fangs then lower fangs: `[base a, base b, tip]`.
+    pub fangs: Vec<[Pt; 3]>,
+    /// Fissures in the bone (open polylines).
+    pub cracks: Vec<Vec<Pt>>,
+    /// Shallow grooves that break the cranium into planes (open polylines).
+    pub grooves: Vec<Vec<Pt>>,
+    /// Blood running from the right socket (centreline, top first).
+    pub drip: Vec<Pt>,
+    /// Horn centrelines (left, right), base first.
+    pub horns: [Vec<Pt>; 2],
+    /// Horn width at the base and at the tip.
+    pub horn_width: f32,
+    pub horn_tip: f32,
+}
+
+impl DeathSkull {
+    /// Highest point drawn (horn tips included).
+    pub fn top(&self) -> f32 {
+        let mut top = self.cranium.iter().map(|q| q[1]).fold(f32::MAX, f32::min);
+        for h in &self.horns {
+            for q in tapered_quads(h, self.horn_width, self.horn_tip) {
+                for pt in q {
+                    top = top.min(pt[1]);
+                }
+            }
+        }
+        top
+    }
+
+    /// Lowest point drawn (the chin).
+    pub fn bottom(&self) -> f32 {
+        self.mandible.iter().map(|q| q[1]).fold(f32::MIN, f32::max)
+    }
+}
+
+pub fn death_skull(c: Pt, s: f32) -> DeathSkull {
+    let [cx, cy] = c;
+    let at = |x: f32, y: f32| -> Pt { [cx + x * s, cy + y * s] };
+    // Right half (top → bottom) mirrored into a closed outline that runs
+    // clockwise from the top centre.
+    let mirrored = |half: &[(f32, f32)]| -> Vec<Pt> {
+        let mut v: Vec<Pt> = half.iter().map(|&(x, y)| at(x, y)).collect();
+        v.extend(
+            half.iter()
+                .rev()
+                .filter(|(x, _)| *x != 0.0)
+                .map(|&(x, y)| at(-x, y)),
+        );
+        v
+    };
+    let cranium = mirrored(&[
+        (0.0, -0.60),
+        (0.12, -0.585),
+        (0.23, -0.53),
+        (0.315, -0.44),
+        (0.36, -0.32),
+        (0.375, -0.20),
+        (0.385, -0.10),
+        (0.37, -0.02),
+        (0.385, 0.06),
+        (0.37, 0.12),
+        (0.30, 0.16),
+        (0.25, 0.20),
+        (0.22, 0.26),
+        (0.20, 0.30),
+    ]);
+    let mandible = mirrored(&[
+        (0.20, 0.33),
+        (0.27, 0.30),
+        (0.27, 0.39),
+        (0.22, 0.47),
+        (0.13, 0.54),
+        (0.05, 0.58),
+        (0.0, 0.59),
+    ]);
+    let socket = |side: f32| -> Vec<Pt> {
+        let v: Vec<Pt> = [
+            (0.055, -0.03),
+            (0.17, -0.095),
+            (0.30, -0.145),
+            (0.325, -0.06),
+            (0.30, 0.04),
+            (0.215, 0.10),
+            (0.115, 0.095),
+            (0.06, 0.05),
+        ]
+        .iter()
+        .map(|&(x, y)| at(side * x, y))
+        .collect();
+        if side < 0.0 {
+            v.into_iter().rev().collect()
+        } else {
+            v
+        }
+    };
+    let brow = |side: f32| -> Vec<Pt> {
+        [
+            (0.035, -0.075),
+            (0.17, -0.14),
+            (0.32, -0.19),
+            (0.385, -0.15),
+        ]
+        .iter()
+        .map(|&(x, y)| at(side * x, y))
+        .collect()
+    };
+    let lobe = |side: f32| -> Vec<Pt> {
+        let v: Vec<Pt> = [
+            (0.0, 0.055),
+            (0.045, 0.12),
+            (0.058, 0.168),
+            (0.038, 0.195),
+            (0.012, 0.19),
+            (0.0, 0.16),
+        ]
+        .iter()
+        .map(|&(x, y)| at(side * x, y))
+        .collect();
+        if side < 0.0 {
+            v.into_iter().rev().collect()
+        } else {
+            v
+        }
+    };
+    // Uneven fangs: long canines, crooked tips, seeded so they never shimmer.
+    let mut rng = Rng::new(0x666);
+    let mut fangs = Vec::new();
+    for i in 0..7 {
+        let x = -0.18 + i as f32 * 0.06;
+        let canine = i == 1 || i == 5;
+        let half = if canine {
+            0.033
+        } else {
+            rng.range(0.022, 0.03)
+        };
+        let len = if canine {
+            rng.range(0.13, 0.15)
+        } else {
+            rng.range(0.05, 0.085)
+        };
+        let lean = rng.range(-0.012, 0.012);
+        fangs.push([
+            at(x - half, 0.268),
+            at(x + half, 0.268),
+            at(x + lean, 0.268 + len),
+        ]);
+    }
+    for i in 0..6 {
+        let x = -0.15 + i as f32 * 0.06;
+        let half = rng.range(0.02, 0.028);
+        let len = rng.range(0.045, 0.075);
+        let lean = rng.range(-0.012, 0.012);
+        fangs.push([
+            at(x + half, 0.372),
+            at(x - half, 0.372),
+            at(x + lean, 0.372 - len),
+        ]);
+    }
+    let line = |v: &[(f32, f32)]| -> Vec<Pt> { v.iter().map(|&(x, y)| at(x, y)).collect() };
+    let cracks = vec![
+        line(&[
+            (0.04, -0.595),
+            (0.07, -0.50),
+            (0.035, -0.44),
+            (0.085, -0.36),
+            (0.06, -0.28),
+            (0.095, -0.21),
+        ]),
+        line(&[(0.07, -0.50), (0.14, -0.475), (0.165, -0.41), (0.22, -0.39)]),
+        line(&[
+            (-0.36, -0.30),
+            (-0.31, -0.29),
+            (-0.29, -0.23),
+            (-0.22, -0.245),
+            (-0.18, -0.19),
+        ]),
+        line(&[
+            (-0.21, 0.10),
+            (-0.245, 0.16),
+            (-0.215, 0.205),
+            (-0.235, 0.255),
+        ]),
+        line(&[(0.37, 0.05), (0.32, 0.085), (0.30, 0.13)]),
+    ];
+    let grooves = vec![
+        line(&[(0.0, -0.59), (0.0, -0.42), (0.0, -0.17)]),
+        line(&[(0.35, -0.13), (0.31, -0.30), (0.20, -0.46), (0.09, -0.545)]),
+        line(&[
+            (-0.35, -0.13),
+            (-0.31, -0.30),
+            (-0.20, -0.46),
+            (-0.09, -0.545),
+        ]),
+    ];
+    let drip = line(&[(0.165, 0.095), (0.17, 0.15), (0.162, 0.21), (0.168, 0.255)]);
+    let horn = |side: f32| {
+        cubic(
+            at(side * 0.28, -0.34),
+            at(side * 0.80, -0.42),
+            at(side * 1.06, -0.78),
+            at(side * 0.66, -1.0),
+            18,
+        )
+    };
+    DeathSkull {
+        cranium,
+        cranium_c: at(0.0, -0.1),
+        mandible,
+        mandible_c: at(0.0, 0.43),
+        mouth: [cx - 0.205 * s, cy + 0.27 * s, cx + 0.205 * s, cy + 0.37 * s],
+        sockets: [socket(-1.0), socket(1.0)],
+        socket_c: [at(-0.185, -0.01), at(0.185, -0.01)],
+        brow: [brow(-1.0), brow(1.0)],
+        nose: [lobe(-1.0), lobe(1.0)],
+        fangs,
+        cracks,
+        grooves,
+        drip,
+        horns: [horn(-1.0), horn(1.0)],
+        horn_width: 0.26 * s,
+        horn_tip: 0.4,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // sigil: neon horns + spade tail (abstract emblem, not the character)
 // ---------------------------------------------------------------------------
 
@@ -791,6 +1044,37 @@ mod tests {
         let k = skull([50.0, 50.0], 40.0);
         assert!((k.eyes[0].0[0] + k.eyes[1].0[0] - 100.0).abs() < 1e-3);
         assert_eq!(k.teeth.len(), 5);
+    }
+
+    #[test]
+    fn death_skull_is_symmetric_and_fan_drawable() {
+        let k = death_skull([50.0, 50.0], 40.0);
+        for (l, r) in k.horns[0].iter().zip(&k.horns[1]) {
+            assert!((100.0 - l[0] - r[0]).abs() < 1e-3);
+            assert!((l[1] - r[1]).abs() < 1e-3);
+        }
+        assert!((k.socket_c[0][0] + k.socket_c[1][0] - 100.0).abs() < 1e-3);
+        // Fan outlines wind one way around their centre (star-shaped).
+        let star = |ring: &[Pt], c: Pt| {
+            let n = ring.len();
+            let crosses: Vec<f32> = (0..n)
+                .map(|i| {
+                    let (a, b) = (ring[i], ring[(i + 1) % n]);
+                    (a[0] - c[0]) * (b[1] - c[1]) - (a[1] - c[1]) * (b[0] - c[0])
+                })
+                .collect();
+            crosses.iter().all(|x| *x > 0.0) || crosses.iter().all(|x| *x < 0.0)
+        };
+        assert!(star(&k.cranium, k.cranium_c));
+        assert!(star(&k.mandible, k.mandible_c));
+        for (ring, c) in k.sockets.iter().zip(k.socket_c) {
+            assert!(star(ring, c));
+        }
+        assert!(k.nose.iter().all(|lobe| is_convex(lobe)));
+        assert_eq!(k.fangs.len(), 13);
+        // Horns tower over the crown; the chin is the lowest point.
+        assert!(k.top() < k.cranium[0][1] - 10.0);
+        assert!(k.bottom() > k.mouth[3]);
     }
 
     #[test]

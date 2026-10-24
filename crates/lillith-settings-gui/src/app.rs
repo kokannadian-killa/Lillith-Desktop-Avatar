@@ -43,10 +43,34 @@ pub struct SettingsApp {
     closing: bool,
 }
 
+/// `[chat] endpoint` from config text, but only when `[llm] server_url` is
+/// not set (an explicit `server_url` always wins).
+fn chat_endpoint_fallback(text: &str) -> Option<String> {
+    let doc: toml_edit::DocumentMut = text.parse().ok()?;
+    let has_llm_url = doc
+        .get("llm")
+        .and_then(|t| t.get("server_url"))
+        .and_then(|v| v.as_str())
+        .is_some();
+    if has_llm_url {
+        return None;
+    }
+    let ep = doc.get("chat")?.get("endpoint")?.as_str()?.trim();
+    (!ep.is_empty()).then(|| ep.to_string())
+}
+
 fn detect_options(path: &std::path::Path) -> DetectOptions {
     let mut o = DetectOptions::default();
     if let Ok(c) = lillith_setup::config::load(path) {
         o.llama_server_url = c.server_url;
+        // No `[llm] server_url` but a `[chat] endpoint`: that is the server
+        // the overlay actually talks to, so probe (and show) that one.
+        if let Some(ep) = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|t| chat_endpoint_fallback(&t))
+        {
+            o.llama_server_url = ep;
+        }
         o.ollama_host = c.ollama_host;
         if !c.llama_server_bin.trim().is_empty() {
             if let Some(d) = lillith_setup::paths::expand_tilde(&c.llama_server_bin).parent() {
@@ -1145,5 +1169,22 @@ impl eframe::App for SettingsApp {
         }
         self.screenshot(ctx);
         ctx.request_repaint_after(std::time::Duration::from_millis(80));
+    }
+}
+
+#[cfg(test)]
+mod detect_tests {
+    use super::chat_endpoint_fallback;
+
+    #[test]
+    fn chat_endpoint_is_used_only_without_llm_server_url() {
+        let chat = "[chat]\nendpoint = \"http://127.0.0.1:8089\"\n";
+        assert_eq!(
+            chat_endpoint_fallback(chat).as_deref(),
+            Some("http://127.0.0.1:8089")
+        );
+        let both = format!("{chat}[llm]\nserver_url = \"http://127.0.0.1:8080\"\n");
+        assert_eq!(chat_endpoint_fallback(&both), None);
+        assert_eq!(chat_endpoint_fallback("[voice]\nenabled = true\n"), None);
     }
 }

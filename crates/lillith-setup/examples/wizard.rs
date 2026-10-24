@@ -1,15 +1,17 @@
 //! Terminal front-end for the setup wizard (usable before the GUI panel).
+//! The release zip ships it as `bin/lillith-setup-wizard`; from a source
+//! checkout, run `cargo run -p lillith-setup --example wizard -- <command>`.
 //!
 //! ```text
-//! cargo run -p lillith-setup --example wizard -- scan [--dir D]... [--bin-dir D]... [--json]
-//! cargo run -p lillith-setup --example wizard -- detect [--json]
-//! cargo run -p lillith-setup --example wizard -- modelfile [--gguf P] [--out FILE]
-//! cargo run -p lillith-setup --example wizard -- write-config [--gguf P] [--backend llama-server|ollama]
-//!                                                  [--config FILE] [--modelfile FILE] [--sync-chat]
-//! cargo run -p lillith-setup --example wizard -- launch-cmd [--config FILE]
-//! cargo run -p lillith-setup --example wizard -- check-modelfile FILE
-//! cargo run -p lillith-setup --example wizard -- ollama-create [--config FILE] [--modelfile FILE]
-//! cargo run -p lillith-setup --example wizard -- check [--config FILE] [--server-url U] [PROMPT]
+//! lillith-setup-wizard scan [--dir D]... [--bin-dir D]... [--json]
+//! lillith-setup-wizard detect [--json]
+//! lillith-setup-wizard modelfile [--gguf P] [--out FILE]
+//! lillith-setup-wizard write-config [--gguf P] [--backend llama-server|ollama]
+//!                      [--config FILE] [--modelfile FILE] [--sync-chat]
+//! lillith-setup-wizard launch-cmd [--config FILE]
+//! lillith-setup-wizard check-modelfile FILE
+//! lillith-setup-wizard ollama-create [--config FILE] [--modelfile FILE]
+//! lillith-setup-wizard check [--config FILE] [--server-url U] [PROMPT]
 //! ```
 //! Without `--gguf`, the top-ranked scanned model is used. Local-only: the
 //! only network traffic is loopback health checks.
@@ -238,19 +240,24 @@ fn config_path(a: &Args) -> Result<PathBuf, String> {
         .ok_or("no $HOME; pass --config".into())
 }
 
+/// The command list from this file's doc comment (the `text` block),
+/// as the shipped `lillith-setup-wizard` binary is called.
+fn usage() -> String {
+    let lines: Vec<&str> = include_str!("wizard.rs")
+        .lines()
+        .take_while(|l| l.starts_with("//!"))
+        .map(|l| l.trim_start_matches("//!").strip_prefix(' ').unwrap_or(""))
+        .skip_while(|l| *l != "```text")
+        .skip(1)
+        .take_while(|l| *l != "```")
+        .collect();
+    format!("usage:\n  {}", lines.join("\n  "))
+}
+
 fn run(a: Args) -> Result<(), String> {
     match a.cmd.as_str() {
         "help" => {
-            println!(
-                "{}",
-                include_str!("wizard.rs")
-                    .lines()
-                    .skip(2)
-                    .take(11)
-                    .map(|l| l.trim_start_matches("//!"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            );
+            println!("{}", usage());
         }
         "detect" => {
             let r = detect(&detect_opts(&a));
@@ -264,13 +271,18 @@ fn run(a: Args) -> Result<(), String> {
             let cfg = config_path(&a).ok().and_then(|p| config::load(&p).ok());
             let r = detect(&detect_opts(&a));
             let rep = scan(&scan_opts(&a, cfg.as_ref()));
-            let recs = recommend(&rep.models, scan::total_ram_bytes());
+            let host = HostInfo::detect();
+            let recs = recommend_for(&rep.models, &host);
+            let hint = preferred_model_hint(&rep.models, &host);
             if a.json {
-                let v = serde_json::json!({ "runtimes": r, "scan": rep, "recommendations": recs });
+                let v = serde_json::json!({ "runtimes": r, "scan": rep, "recommendations": recs, "host": host, "hint": hint });
                 println!("{}", serde_json::to_string_pretty(&v).unwrap());
             } else {
                 print_detect(&r);
                 print_scan(&rep, &recs);
+                if let Some(h) = &hint {
+                    println!("== Get this model ==\n  {}", h.message);
+                }
                 if let Some(top) = recs.first() {
                     let m = &rep.models[top.index];
                     let c = wizard::config_for_model(

@@ -7,6 +7,7 @@
 
 use crate::detect::{DEFAULT_LLAMA_SERVER_URL, DEFAULT_OLLAMA_HOST};
 use crate::local::{LocalUrl, LocalUrlError};
+use crate::modelfile::with_read_aloud_rule;
 use crate::template::ChatTemplate;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -234,7 +235,13 @@ impl LlmConfig {
         set(t, "chat_template", value(self.chat_template.clone()));
         set(t, "llama_server_bin", value(self.llama_server_bin.clone()));
         set(t, "modelfile_path", value(self.modelfile_path.clone()));
-        set(t, "system_prompt", value(self.system_prompt.clone()));
+        // Empty = built-in persona (which already has the read-aloud rule).
+        let prompt = if self.system_prompt.trim().is_empty() {
+            self.system_prompt.clone()
+        } else {
+            with_read_aloud_rule(&self.system_prompt)
+        };
+        set(t, "system_prompt", value(prompt));
         set(t, "threads", value(self.threads as i64));
         let mut a = Array::new();
         for p in &self.scan_paths {
@@ -248,7 +255,21 @@ impl LlmConfig {
     /// Optional bridge for `feat/chat-bubble-llama`: points `[chat]` and
     /// `[chat.server]` at this choice (endpoint, model, temperature,
     /// model_path, ctx_size, `--chat-template`). Other `[chat]` keys are kept.
+    ///
+    /// `[chat.server]` gets `threads` (configured, else physical cores) and
+    /// `--jinja` in `extra_args`; a stale `--chat-template <name>` pair is
+    /// dropped (with `--jinja` a name is read as literal template text).
+    /// Other extra args are kept.
     pub fn sync_chat_tables(&self, doc: &mut DocumentMut) -> Result<(), ConfigError> {
+        self.sync_chat_tables_with(doc, crate::host::physical_cores())
+    }
+
+    /// [`Self::sync_chat_tables`] with the physical core count injected.
+    pub fn sync_chat_tables_with(
+        &self,
+        doc: &mut DocumentMut,
+        physical_cores: u32,
+    ) -> Result<(), ConfigError> {
         self.validate()?;
         if doc.get("chat").and_then(Item::as_table).is_none() {
             doc["chat"] = Item::Table(Table::new());
@@ -267,7 +288,11 @@ impl LlmConfig {
         }
         set(chat, "temperature", value(round3(self.temperature)));
         if !self.system_prompt.trim().is_empty() {
-            set(chat, "system_prompt", value(self.system_prompt.clone()));
+            set(
+                chat,
+                "system_prompt",
+                value(with_read_aloud_rule(&self.system_prompt)),
+            );
         }
         if self.backend == Backend::LlamaServer && !self.gguf_path.is_empty() {
             if chat.get("server").and_then(Item::as_table).is_none() {
@@ -279,12 +304,29 @@ impl LlmConfig {
             }
             set(srv, "model_path", value(self.gguf_path.clone()));
             set(srv, "ctx_size", value(self.ctx_size as i64));
-            if self.threads > 0 {
-                set(srv, "threads", value(self.threads as i64));
-            }
+            let threads = crate::launch::effective_threads(self.threads, physical_cores);
+            set(srv, "threads", value(threads as i64));
+            let old: Vec<String> = srv
+                .get("extra_args")
+                .and_then(Item::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
             let mut a = Array::new();
-            a.push("--chat-template");
-            a.push(self.chat_template.as_str());
+            a.push("--jinja");
+            let mut it = old.iter();
+            while let Some(x) = it.next() {
+                match x.as_str() {
+                    "--jinja" | "--no-jinja" => {}
+                    "--chat-template" => {
+                        it.next();
+                    }
+                    _ => a.push(x.as_str()),
+                }
+            }
             set(srv, "extra_args", value(a));
         }
         Ok(())
@@ -373,6 +415,79 @@ custom_key = "keep me"
 enabled = true
 max_tokens = 320
 "#;
+
+    #[test]
+    fn written_prompts_carry_read_aloud_rule() {
+        use crate::modelfile::READ_ALOUD_RULE;
+        let c = LlmConfig {
+            gguf_path: "/m/q.gguf".into(),
+            system_prompt: "You are Lily. Be brief.".into(),
+            ..Default::default()
+        };
+        let mut doc = DocumentMut::new();
+        c.write_to_document(&mut doc).unwrap();
+        c.sync_chat_tables_with(&mut doc, 2).unwrap();
+        assert_eq!(
+            doc["llm"]["system_prompt"]
+                .as_str()
+                .unwrap()
+                .matches(READ_ALOUD_RULE)
+                .count(),
+            1
+        );
+        assert_eq!(
+            doc["chat"]["system_prompt"]
+                .as_str()
+                .unwrap()
+                .matches(READ_ALOUD_RULE)
+                .count(),
+            1
+        );
+        // Round trip does not append it twice.
+        let back = LlmConfig::from_document(&doc).unwrap();
+        back.write_to_document(&mut doc).unwrap();
+        assert_eq!(
+            doc["llm"]["system_prompt"]
+                .as_str()
+                .unwrap()
+                .matches(READ_ALOUD_RULE)
+                .count(),
+            1
+        );
+        // Empty stays empty: the built-in persona already has the rule.
+        let mut doc = DocumentMut::new();
+        LlmConfig::default().write_to_document(&mut doc).unwrap();
+        assert_eq!(doc["llm"]["system_prompt"].as_str(), Some(""));
+    }
+
+    #[test]
+    fn chat_server_gets_jinja_and_physical_threads() {
+        let mut doc: DocumentMut = "[chat.server]\nextra_args = [\"--chat-template\", \"llama3\", \"-ngl\", \"0\", \"--no-jinja\"]\n"
+            .parse()
+            .unwrap();
+        let c = LlmConfig {
+            gguf_path: "/m/q.gguf".into(),
+            ..Default::default()
+        };
+        c.sync_chat_tables_with(&mut doc, 2).unwrap();
+        let srv = &doc["chat"]["server"];
+        assert_eq!(srv["threads"].as_integer(), Some(2));
+        let a: Vec<&str> = srv["extra_args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert_eq!(a, ["--jinja", "-ngl", "0"]);
+        let c = LlmConfig { threads: 3, ..c };
+        c.sync_chat_tables_with(&mut doc, 2).unwrap();
+        assert_eq!(doc["chat"]["server"]["threads"].as_integer(), Some(3));
+        // Loopback endpoint only.
+        assert_eq!(
+            doc["chat"]["endpoint"].as_str(),
+            Some("http://127.0.0.1:8080")
+        );
+    }
 
     #[test]
     fn reads_defaults_when_missing() {
@@ -476,7 +591,8 @@ max_tokens = 320
         assert!(out.contains("enabled = true"));
         assert!(out.contains("[chat.server]"));
         assert!(out.contains("model_path = \"/m/q.gguf\""));
-        assert!(out.contains("extra_args = [\"--chat-template\", \"chatml\"]"));
+        assert!(out.contains("extra_args = [\"--jinja\"]"), "{out}");
+        assert!(out.contains("threads = "), "{out}");
         let o = LlmConfig {
             backend: Backend::Ollama,
             ..Default::default()

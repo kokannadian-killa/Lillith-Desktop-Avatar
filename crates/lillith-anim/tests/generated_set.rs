@@ -65,7 +65,7 @@ fn every_generated_clip_plays_and_renders() {
         "blink_wink gives blink frames"
     );
     // Baked-walk clips (video walk/strut/run takes + their idle blends,
-    // plus the batch-13 walk variants)
+    // plus the batch-13 walk variants and the batch-16 stalk prowls)
     // suppress the engine gait; nothing else does.
     let mut baked: Vec<&str> = m
         .clips
@@ -83,6 +83,8 @@ fn every_generated_clip_plays_and_renders() {
             "blend_walk_right_to_idle",
             "run_left",
             "run_right",
+            "stalk_prowl_left",
+            "stalk_prowl_right",
             "strut_left",
             "strut_right",
             "walk_left",
@@ -164,5 +166,33 @@ fn every_generated_clip_plays_and_renders() {
             j.tick(1.0 / 60.0);
         }
         assert_eq!(frames.len(), m.clips[v].frames.len(), "{v}");
+    }
+}
+
+#[test]
+fn perch_sit_is_a_seated_base_with_its_variants() {
+    let Some(path) = find_manifest() else {
+        eprintln!("generated manifest not found; skipping");
+        return;
+    };
+    let m = Manifest::load(&path).unwrap();
+    let Some(perch) = m.clips.get("perch_sit") else {
+        eprintln!("{} has no perch_sit; skipping", path.display());
+        return;
+    };
+    // The overlay's sit_clips picks seated bases by the `sit_base` tag plus a seat line.
+    assert!(perch.has_tag("sit_base") && perch.seat_y.is_some());
+    let variants = lillith_anim::animator::variant_map(&m);
+    assert_eq!(
+        variants["perch_sit"],
+        ["arch_trace", "chest_press_tease", "cleavage_beckon"]
+    );
+    for v in &variants["perch_sit"] {
+        assert!(m.clips[v].seat_y.is_some(), "{v}: no seat line");
+    }
+    // perch_lounge carries a tag the engine doesn't act on yet (`lounge_base`):
+    // it must still load, and it isn't a seated base.
+    if let Some(lounge) = m.clips.get("perch_lounge") {
+        assert!(lounge.has_tag("lounge_base") && !lounge.has_tag("sit_base"));
     }
 }

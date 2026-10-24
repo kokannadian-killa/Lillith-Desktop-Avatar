@@ -1,423 +1,311 @@
 # Installing Lillith
 
-This guide covers building Lillith from source, running her, configuring her,
-and fixing the usual overlay problems. For what she does, see the
-[README](README.md).
+How to install and start Lillith from the release zip. The zip ships **Linux
+binaries only**. On Windows you build from source with Rust 1.85. On Android you chat
+with her model in Termux (plus an experimental APK, see below).
 
-> **Just want to install?** Use the per-platform installers:
-> [`linux/`](linux/README.md) (Arch/Garuda, one command: `./linux/install.sh`),
-> [`windows/`](windows/README.md) and [`android/`](android/INSTALL-android.md).
-> This guide is for building and running by hand.
+Everything runs on your own machine. Lillith only talks to `127.0.0.1`
+(loopback), and nothing is downloaded while she runs. You get the model file
+yourself.
 
-- [Tested environment](#tested-environment)
-- [1. Prerequisites](#1-prerequisites)
-- [2. Clone and build](#2-clone-and-build)
-- [3. Point her at an animation set](#3-point-her-at-an-animation-set)
-- [4. Run](#4-run)
-- [5. Configuration](#5-configuration)
-- [6. Troubleshooting](#6-troubleshooting)
+- [Linux (Garuda / Arch, KDE Plasma 6 Wayland)](#linux-garuda--arch-kde-plasma-6-wayland)
+- [Windows (build from source)](#windows-build-from-source)
+- [Android (Termux chat, experimental APK)](#android-termux-chat-experimental-apk)
+- [The safeword (kill switch)](#the-safeword-kill-switch)
+- [Troubleshooting](#troubleshooting)
 
-## Tested environment
+---
 
-| | |
-|---|---|
-| Distro | **Garuda Linux** (Arch-based) |
-| Desktop | **KDE Plasma 6 on Wayland** (X11 / XWayland fallback) |
-| Shell | **fish** (bash equivalents are given alongside) |
-| Toolchain | Rust **1.85+** |
+## Linux (Garuda / Arch, KDE Plasma 6 Wayland)
 
-Other Linux distributions work as long as the libraries below are installed.
-On Wayland you need a compositor that implements **`wlr-layer-shell`** (KWin,
-Sway, Hyprland and other wlroots compositors do; GNOME/Mutter does not — there
-she falls back to X11/XWayland automatically). On a plain X11 session the X11
-backend is used directly; a compositing window manager is needed for
-transparency.
+All commands are for the **fish** shell.
 
-> Status: the X11 path is verified; the Wayland layer-shell path is
-> implemented but still awaiting its first on-machine Plasma 6 smoke test. If
-> anything misbehaves on Wayland, try `--backend x11` (see
-> [Troubleshooting](#6-troubleshooting)).
-
-## 1. Prerequisites
-
-### Rust 1.85 or newer
+### 1. Install the dependencies
 
 ```fish
-# via rustup (recommended)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-rustup update stable
-rustc --version   # must be ≥ 1.85
+sudo pacman -S --needed unzip ffmpeg libxkbcommon wayland dbus libpulse systemd-libs alsa-lib \
+    libx11 libxcb libxcursor libxi libxrender libglvnd mesa
 ```
 
-On Arch/Garuda you can instead use the distro package (`sudo pacman -S rust`)
-or `sudo pacman -S rustup && rustup default stable`.
+`ffmpeg` decodes her MP4 poses. Without it she falls back to the PNG sheets.
+A normal Plasma desktop already has most of the rest.
 
-### System libraries
+For chat you also need llama.cpp's `llama-server` (the `llama.cpp` package,
+from pacman or an AUR helper you run yourself).
 
-You also need a C compiler (SQLite is built from source via `rusqlite`'s
-`bundled` feature) and `pkg-config`. The full list below is what CI installs
-for the all-features build ([`.github/workflows/ci.yml`](.github/workflows/ci.yml));
-the default build (both overlay backends + the egui panel) mostly needs
-`libxkbcommon` and `wayland`, which every Plasma install already has.
-
-**Arch / Garuda / Manjaro (pacman):**
+### 2. Unzip and start her
 
 ```fish
-sudo pacman -S --needed base-devel git pkgconf libxkbcommon wayland dbus libpulse systemd-libs alsa-lib
+unzip Lillith-Desktop-Avatar-<sha>.zip      # <sha> = the build's commit, e.g. 46ed853
+cd Lillith-Desktop-Avatar-<sha>
+chmod +x bin/lillith bin/lillith-settings bin/lillith-setup-wizard run.sh run.fish kwin-blur-exclude.sh   # if unzip dropped the executable bits
+./run.fish
 ```
 
-**Debian / Ubuntu (apt)** — exactly the CI list:
-
-```sh
-sudo apt-get install -y --no-install-recommends build-essential git \
-  pkg-config libxkbcommon-dev libwayland-dev libdbus-1-dev \
-  libpulse-dev libsystemd-dev libasound2-dev
-```
-
-**Fedora (dnf)** — untested equivalents:
-
-```sh
-sudo dnf install gcc git pkgconf-pkg-config libxkbcommon-devel wayland-devel \
-  dbus-devel pulseaudio-libs-devel systemd-devel alsa-lib-devel
-```
-
-| CI (Debian) package | Arch package | Needed for |
-|---|---|---|
-| `pkg-config` | `pkgconf` | locating the libraries below |
-| `libxkbcommon-dev` | `libxkbcommon` | Wayland keyboard input, egui panel |
-| `libwayland-dev` | `wayland` | Wayland overlay + panel |
-| `libdbus-1-dev` | `dbus` | D-Bus monitors, tray (feature `full`) |
-| `libpulse-dev` | `libpulse` | volume monitor (`lillith-sense/pulse`) |
-| `libsystemd-dev` | `systemd-libs` | journald monitor (`lillith-sense/journal`) |
-| `libasound2-dev` | `alsa-lib` | audio / SFX (`lillith-voice/audio`) |
-
-## 2. Clone and build
+`run.fish` does the following:
+- sets `LILLITH_MANIFEST` to the bundled art
+- uses `~/.config/lillith/config.toml` if it exists, otherwise the bundled `config.toml` (unless you pass `--config`)
+- adds `--backend wayland` in a Wayland session
+- passes every other argument to `bin/lillith`
 
 ```fish
-git clone https://github.com/kokannadian-killa/Lillith-Desktop-Avatar.git
-cd Lillith-Desktop-Avatar
-
-# Release build of the app (default features: Wayland + X11 backends)
-cargo build --release -p lillith
-
-# Optional: everything (Bluetooth, volume, journald, clipboard, X11 window
-# list, audio, portals, text shaping) — needs all the libraries above
-cargo build --release -p lillith --features full
+./run.fish --fix-kwin          # first exclude her from KDE force blur (the dark box), then start her
+./run.fish --backend x11       # force the X11 / XWayland fallback
+./run.fish status              # subcommands work too: rules, preview --list, panel …
 ```
 
-The binary lands in `./target/release/lillith`. To put it on your `PATH`:
+To stop her, click her and press `Q` or `Esc`, or run `pkill lillith`.
+
+### 3. Her brain: a local GGUF model on 127.0.0.1:8080
+
+Lillith animates and reacts without a model. To **chat** with her you need a
+GGUF model and `llama-server`, both on your machine.
+
+1. **Get the model yourself.** Ko uses **Dolphin 3.0 Llama 3.2 3B
+   Q4_K_M**. Download the `.gguf` file from the model's Hugging Face page in
+   your browser. Lillith never downloads anything. Then put it in `~/models/`:
+
+   ```fish
+   mkdir -p ~/models
+   mv ~/Downloads/*.gguf ~/models/
+   ```
+
+2. **Run the first-run setup.** It points her at the model and at
+   `llama-server`, and it writes `[llm]`, `[chat]` and `[chat.server]` to
+   `~/.config/lillith/config.toml` (loopback only, `--jinja` included):
+
+   ```fish
+   if command -q llama-server
+       ./bin/lillith setup --gguf ~/models/<model>.gguf --llama-server (command -s llama-server)
+   else
+       echo "llama-server not found: install llama.cpp first (step 1)"
+   end
+   ```
+
+   If `llama-server` isn't on your `PATH`, give its full path instead,
+   e.g. `--llama-server ~/llama.cpp/build/bin/llama-server`.
+
+   If you'd rather use the GUI, run `./bin/lillith-settings` and open the
+   **Brain** tab. That's the setup wizard, and it can also scan your disks
+   for GGUF files. After setup, Lillith starts `llama-server` herself
+   (hidden, on 127.0.0.1) and stops it when she quits.
+
+3. **Or start llama-server by hand** on 127.0.0.1:8080:
+
+   ```fish
+   llama-server -m ~/models/<model>.gguf --host 127.0.0.1 --port 8080 -c 4096 --jinja
+   ```
+
+   Then test it from the terminal with `./bin/lillith chat "hi"`.
+
+**Ollama (optional).** The setup code also supports `backend = "ollama"`
+(loopback `http://127.0.0.1:11434`). The **Brain** tab can write Lily's
+Modelfile, whose `FROM` must be a local GGUF file, and run
+`ollama create lily -f <Modelfile>`. llama-server is the default.
+
+### 4. KDE: the dark or black box around her
+
+KDE's force-blur effects (Better Blur DX on Garuda) can draw a dark box
+around her. At start-up she excludes her own window class automatically
+(`[overlay] auto_fix_kwin = true`). To do it by hand:
 
 ```fish
-cargo install --path apps/lillith --locked     # → ~/.cargo/bin/lillith
+./bin/lillith fix-kwin --check     # report only
+./bin/lillith fix-kwin             # exclude the `lillith` window class from the effect
+./bin/lillith fix-kwin --revert    # undo it
 ```
 
-| `lillith` feature | Enables |
-|---|---|
-| `wayland` *(default)* | layer-shell overlay (smithay-client-toolkit) |
-| `x11` *(default)* | winit + softbuffer fallback window (X11/XWayland) |
-| `full` | all of the above + Bluetooth, volume, journald, clipboard, X11 window list, audio, portals, text shaping |
+`./run.fish --fix-kwin` (or `env LILLITH_FIX_KWIN=1 ./run.fish`) runs
+`lillith fix-kwin` before it starts her.
 
-## 3. Point her at an animation set
-
-The character art is not committed to the repo yet (it will arrive via Git
-LFS), so you need a local generated set with a `manifest.toml`. Lillith looks
-for it in this order:
-
-1. `--manifest <path>`
-2. `$LILLITH_MANIFEST`
-3. `./assets/generated/manifest.toml`
-4. `~/.local/share/lillith/generated/manifest.toml`
-5. `<dir>/lillith/generated/manifest.toml` for each dir in `$XDG_DATA_DIRS`
-   (default `/usr/local/share:/usr/share`; used by the `linux/PKGBUILD` package)
-
-If you only have a `manifest.json` from the image pipeline, convert it first:
+### 5. Optional: window perching (KWin script)
 
 ```fish
-cargo run -p import-manifest -- --input /path/to/generated/manifest.json --tag canonical --check
-```
-
-Set the variable for your session:
-
-```fish
-# fish
-set -x LILLITH_MANIFEST /path/to/generated/manifest.toml
-# make it permanent (universal variable):
-set -Ux LILLITH_MANIFEST /path/to/generated/manifest.toml
-```
-
-```bash
-# bash / zsh
-export LILLITH_MANIFEST=/path/to/generated/manifest.toml
-```
-
-Or copy the set so no variable is needed:
-
-```fish
-mkdir -p ~/.local/share/lillith
-cp -r /path/to/generated ~/.local/share/lillith/
-```
-
-## 4. Run
-
-```fish
-./target/release/lillith                    # Wayland if WAYLAND_DISPLAY is set, else X11
-```
-
-Stop her with `Q` / `Esc` (click her first so she has keyboard focus) or
-`pkill lillith`.
-
-### Flags
-
-| Flag | Meaning |
-|---|---|
-| `--backend wayland\|x11` | Force a backend. Default: Wayland when `WAYLAND_DISPLAY` is set. Forcing `wayland` turns a missing layer-shell into an error instead of a fallback. |
-| `--manifest <PATH>` | Animation set `manifest.toml` (see [§3](#3-point-her-at-an-animation-set)) |
-| `--config <PATH>` | Config file (default `~/.config/lillith/config.toml`) |
-| `--scale <F>` | Size multiplier on the 400 px cell (default `0.55` → 220 px) |
-| `--opacity <0..1>` | Whole-sprite opacity |
-| `--fps <HZ>` | Redraw cap (default 30) |
-| `--mode wander\|stay\|follow` | Movement mode (default `wander`; `follow` currently behaves like `stay` — real Follow needs the M5 KWin bridge) |
-| `--sleepy-after <SECONDS>` | Idle time until drowsy (default 300) |
-| `--asleep-after <SECONDS>` | Idle time until asleep (default 900) |
-| `--reset-position` | Ignore the saved position, start at the default spot |
-| `--baked-jiggle` | Draw the baked `<clip>_jiggle` variants when the animation set has them (engine chest/pigtail/hip springs off while one plays); same as config `baked_jiggle = true` |
-| `--no-save` | Don't write the position back to `config.toml` after a drag |
-| `--exit-after <SECONDS>` | Quit after N seconds (smoke tests, CPU measurements) |
-| `--no-tray`, `--no-voice`, `--no-llm` | Accepted, reserved for M6–M8 (tray, voice and LLM aren't wired yet) |
-
-Run `lillith --help` for the authoritative list.
-
-### Examples
-
-```fish
-# Smaller, slightly see-through, parked in place
-./target/release/lillith --scale 0.6 --opacity 0.9 --mode stay
-
-# Force the X11/XWayland fallback, lower redraw rate
-./target/release/lillith --backend x11 --fps 15
-
-# Demo the sleep cycle quickly without touching the saved position
-./target/release/lillith --sleepy-after 10 --asleep-after 20 --no-save
-
-# Debug logging (fish sets env vars per command with `env`)
-env RUST_LOG=lillith=info,lillith_overlay=debug ./target/release/lillith
-# bash: RUST_LOG=lillith=info,lillith_overlay=debug ./target/release/lillith
-```
-
-### Subcommands
-
-```fish
-lillith rules                              # list all event rules and their clips
-lillith event battery.low                  # fire an event through the rule table
-lillith event notify.received "New mail"   # …with a detail
-lillith preview --list                     # list clips in the manifest
-lillith preview knife_tap --physics        # render a clip through the animator → ./preview/
-lillith preview --all --out preview        # contact sheet for every clip
-lillith panel                              # egui window, Poses tab = clip browser
-lillith settings                           # interim window: avatar import/anchors, jiggle/speed/chat (right-click ▸ Settings… opens lillith-settings)
-lillith settings --section avatar --import ~/Pictures/me.png
-lillith icon --list                        # the 15 app icons (* = current)
-lillith icon glitch                        # save icon = "glitch" + update the menu entry / shortcuts
-```
-
-The app icon can also be picked in **Settings ▸ Icon** (right-click her ▸
-**Icon…**). On Linux it rewrites `~/.local/share/icons/hicolor/*/apps/lillith.png`
-(the `Icon=lillith` theme icon) and refreshes the icon caches; on Windows it
-re-points the Start-menu / Desktop shortcuts at `icons\<id>.ico` (the icon
-inside `lillith.exe` stays Phantomcore Red); on Android the setup screen has
-its own picker.
-
-```fish
-```
-
-Right-click her for the menu (poses, chat, avatar, resize, minimize,
-settings, close). See [docs/MENU_SETTINGS_AVATAR.md](docs/MENU_SETTINGS_AVATAR.md).
-
-## 5. Configuration
-
-Config lives at **`~/.config/lillith/config.toml`** (or
-`$XDG_CONFIG_HOME/lillith/config.toml`). Every key is optional; missing keys
-use the defaults shown. CLI flags override the file. The `[overlay]` table is
-rewritten when you drag her (other keys are kept).
-
-```toml
-# Top-level keys (must come before any [table])
-mode = "wander"        # wander | stay | follow  (default wander; G toggles while she has focus)
-scale = 1.0            # 1.0 here means "use the 0.55 default" (220 px); set e.g. 0.7 to override
-opacity = 1.0
-render_hz = 30.0
-physics_hz = 120.0
-baked_jiggle = false   # true: use the baked _jiggle clip variants when present
-# jiggle_mode = "springs"  # baked | springs | off (overrides baked_jiggle)
-always_on_top = true
-click_through = false  # true: only her head takes clicks
-autostart = false      # true: writes ~/.config/autostart/lillith.desktop
-icon = "phantomcore-red"  # app icon (menu entry, desktop/Start-menu shortcuts); ids: `lillith icon --list`
-muted = false
-
-[anim]
-playback_speed = 0.7
-talk_speed = 0.62
-smooth_frames = true   # cross-fade consecutive sprite frames
-crossfade = 0.5
-
-[avatar]               # custom single-image avatars (Settings ▸ Avatar)
-pace = 0.8
-render_hz = 60.0
-
-[overlay]              # where she sits (px from the bottom-left corner)
-margin_left = 80
-margin_bottom = 48
-# output = "eDP-1"     # stored, not applied yet
-
-[behavior]             # M3 behaviour timings
-sleepy_after_s = 300.0
-asleep_after_s = 900.0
-pose_cycle_s = 45.0          # automatic pose change while idle
-left_repeat_s = 4.0          # second left click within this → wave
-wander_every_s = [20.0, 45.0]   # pause between calm walks in wander mode
-wander_speed_px_s = 45.0        # glide speed for walk takes without root motion
-wander_min_step_px = 120.0
-event_wake_priority = 80     # events at/above this priority wake her
-mood_tau_s = 45.0
-
-[behavior.idle]              # idle life: rotating flirty poses, never the same twice in a row
-breath_period_s = [3.5, 4.5]
-blink_every_s = [4.0, 6.0]
-transition_every_s = [8.0, 15.0]   # hip sway / hip lean / shimmy / tail curl …
-transition_len_s = [1.2, 2.0]
-reaction_every_s = [15.0, 30.0]    # unprompted gestures: idle_flirt_*, hip_pop_wink, blow_kiss …
-variant_hold_s = 12.0              # keep one idle take at least this long (0 = every loop)
-walk_variant_hold_s = 1.0          # plain walk this long before a sultry take (saunter / sassy / strut)
-
-floor_offset_px = 48         # floor (window-bottom margin) without the KWin bridge's work area
-
-[behavior.gravity]           # after a drop she falls, bounces softly and lands
-g_px_s2 = 2600.0             # gravity, px/s² (0 = no falling: she stays where dropped)
-max_fall_speed = 2200.0      # terminal speed, px/s
-bounce = 0.22                # rebound fraction of the impact speed (0 = none, max 0.9)
-perch_enabled = true         # land on window tops (needs the KWin bridge, below)
-sit_every_s = [8.0, 20.0]    # while perched: calm time before she sits on the edge
-sit_for_s = [20.0, 45.0]     # how long a sit lasts (sit_swing + its variants)
-
-[behavior.gestures]
-double_click_s = 0.35
-secret_window_s = 3.0
-hover_long_s = 1.2
-
-[behavior.mischief]
-poke = 0.15
-decay_tau_s = 60.0
-high = 0.7
-boredom_s = 150.0
-```
-
-Spring tuning lives in a `[springs]` table, and the tuned jiggle physics in
-[`assets/physics.toml`](assets/physics.toml). Event reactions and the key map
-are data, in [`assets/rules.toml`](assets/rules.toml).
-
-### KWin bridge: window events and perching on windows
-
-On Plasma the `kwin/lillith-bridge` KWin script tells her about windows
-(Wayland hides them from normal clients): open/close/minimize reactions,
-and for gravity the stacking order of visible normal windows plus the
-usable screen area. With it, a drop above a window lands her on its top
-edge; she strolls along it, sits on the edge now and then, and falls again
-when the window moves, minimizes or closes. Without it she lands on the
-floor (`[behavior] floor_offset_px`) and logs a hint. Same steps on Wayland
-and X11 sessions; from the repo root (fish):
-
-```fish
-# install, or upgrade an older copy
 kpackagetool6 --type=KWin/Script --install kwin/lillith-bridge
-or kpackagetool6 --type=KWin/Script --upgrade kwin/lillith-bridge
-
-# enable (same as System Settings → Window Management → KWin Scripts →
-# tick "Lillith Bridge" → Apply) and make KWin load it
 kwriteconfig6 --file kwinrc --group Plugins --key lillith-bridgeEnabled true
 qdbus6 org.kde.KWin /KWin reconfigure
-
-# check: prints "true"
-qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded lillith-bridge
 ```
 
-After an upgrade, reload it: untick and tick it again in KWin Scripts, or
-set the key to `false`, `reconfigure`, then back to `true`, `reconfigure`.
-With Lillith running (`[monitor] kwin_bridge = true`, the default) her log
-shows `KWin bridge: window stack received`; `dbus-monitor --session
-"interface='org.lillith.Bridge'"` shows the `Stack`/`Area` calls once a
-second. Script errors land in the journal:
-`journalctl --user -b | grep -i lillith-bridge`.
+### 6. Autostart
 
-## 6. Troubleshooting
+To start her with your desktop session, set `autostart = true` in
+`~/.config/lillith/config.toml`, or use the setting in her right-click menu or
+Settings. Either one writes `~/.config/autostart/lillith.desktop`.
 
-**She doesn't appear / "no manifest.toml found".** Pass `--manifest` or set
-`LILLITH_MANIFEST` ([§3](#3-point-her-at-an-animation-set)). If only
-`manifest.json` exists, run `import-manifest` as shown.
+### Full install (menu entry, `~/.local/bin`)
 
-**Wayland layer-shell vs. X11 fallback.** On Wayland she uses
-`zwlr_layer_shell_v1` (Overlay layer), supported by KWin and wlroots-based
-compositors. If the compositor lacks it (e.g. GNOME), or `WAYLAND_DISPLAY`
-isn't set, she falls back to an X11/XWayland window automatically; the log
-says which backend was chosen. Use `--backend x11` to force the fallback.
+From the unzipped release folder, run
+`./source/linux/install.sh --assets assets/generated` (it builds from
+`source/`, so it needs Rust). It asks a few questions. Undo it with
+`./source/linux/install.sh --uninstall`. In a git checkout of the repo the
+script is `./linux/install.sh` (the zip keeps the repo's files under `source/`).
 
-**She sits below a fullscreen app (X11 fallback).** Add a KWin window rule
-*Keep above* for window class `lillith` (System Settings → Window Management →
-Window Rules). KWin rules don't apply to layer-shell surfaces.
+---
 
-**A dark, rounded, see-through box around her (KDE Plasma).** That panel is
-drawn by a KDE *force blur* effect, usually **Better Blur DX** (Garuda's
-default, plugin `better_blur_dx`) or **Better Blur** (`forceblur`), when its
-window-class list covers her. She now opens as a *dock*-type surface, which
-these effects skip by default, and `install.sh` excludes her class `lillith`
-from the effect (other windows keep their blur; `--uninstall` undoes it). To do
-it by hand on an existing install:
+## Windows (build from source)
 
-```fish
-lillith fix-kwin --check          # report only
-lillith fix-kwin                  # add `lillith` to the effect's excluded classes
-./linux/kwin-blur-exclude.sh apply    # same, from the repo; `revert` undoes it
+The release zip has no Windows build, so you build it.
+
+**Option A: cross-build from Linux or WSL** (makes the installer and a
+portable zip). Run it in a git checkout of the repo with the art pulled
+(`git lfs pull`): the zip's `source/` folder has the script at
+`source/windows/build.sh`, but not the `assets/` it packs.
+
+```sh
+rustup toolchain install 1.85
+rustup target add x86_64-pc-windows-gnu
+# needs mingw-w64 (x86_64-w64-mingw32-gcc), nsis (makensis) and python3
+windows/build.sh
+# → target/dist/windows/Lillith-<version>-setup.exe and Lillith-<version>-windows-x64.zip
 ```
 
-Or in System Settings → Desktop Effects → Better Blur DX: with "Blur all
-except matching", add `lillith` to the window classes; with "Blur only
-matching", remove it. As a last resort turn the effect off:
+**Option B: build natively on Windows** (untested on real Windows):
 
-```fish
-qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect better_blur_dx
-kwriteconfig6 --file kwinrc --group Plugins --key better_blur_dxEnabled false
+```bat
+rustup toolchain install 1.85
+cargo +1.85 build --release --locked -p lillith --no-default-features --features windows
+cargo +1.85 build --release --locked -p lillith-settings-gui -p lillith-admin
 ```
 
-The startup log says which window type she uses (`LILLITH_WINDOW_TYPE=dock`,
-the default, `utility` or `normal` overrides it) and warns when an enabled
-force-blur effect still targets her. The KDE blur protocol can't opt her out:
-force blur ignores the blur region a window asks for.
+Keep `lillith.exe`, `lillith-settings.exe` and `lillith-admin.exe` together.
+She needs `lillith-admin.exe` for elevated commands. Point her at the art with
+`--manifest <path>\manifest.toml`.
 
-**A black box around her.** Her window is transparent only while a
-compositor blends it. On Wayland (layer-shell) KWin always does. On X11 the
-startup log has a `transparency:` line: `alpha=Composited` means a 32-bit ARGB
-visual and a running compositing manager (soft edges); `alpha=Shaped` means
-compositing is off or suspended (KWin X11: Alt+Shift+F12, or System Settings →
-Display & Monitor → Compositor), so she is clipped to her silhouette with the
-X Shape extension instead — no box, but hard edges. She switches modes live
-within ~2 s when compositing is toggled. Include that log line in bug reports.
-During the "come closer" tease her window grows once to its peak size and
-shrinks once at the end (she scales inside it), and each resize is committed
-together with a fully drawn transparent buffer, so no black or empty frame
-should flash. If you still see a box, say whether it was at startup, during
-the tease, or with the menu open, and attach the log.
+**Starting her:** run `Lillith-<version>-setup.exe`. It isn't signed, so
+SmartScreen may block it: click **More info ▸ Run anyway**. Or unzip the
+portable zip and run `lillith.exe`. The installer can add a desktop shortcut
+and **Start Lillith when I sign in** (autostart).
 
-**Build fails with `xkbcommon` / `wayland-client` / `Package … was not found`.**
-Install `libxkbcommon` and `wayland` (Arch) or `libxkbcommon-dev` and
-`libwayland-dev` (Debian/Ubuntu) and `pkg-config`/`pkgconf`. The egui panel
-(`lillith panel`) also needs `libxkbcommon` at runtime on Wayland. For
-`--features full`, install the whole list from [§1](#1-prerequisites).
+**Brain:** get the model file yourself (Lillith never downloads anything) and
+put it in `%USERPROFILE%\models\`. That's the Windows `~/models`, and the
+**Brain** tab scans it (along with `%USERPROFILE%\Downloads`,
+`%LOCALAPPDATA%\lillith\models` and the LM Studio / Ollama folders). On a
+low-power CPU with 8–16 GB of RAM it recommends
+`dolphin3.0-llama3.2-3b-q4_k_m.gguf` (Dolphin 3.0 Llama 3.2 3B Q4_K_M), and
+it ranks uncensored models (Dolphin, abliterated, Hermes) above stock ones of
+the same size. A Mistral 7B GGUF still works as a fallback if it's the only one
+you have, but it's slow on that kind of CPU. Unzip a llama.cpp Windows release
+into `C:\llama.cpp\` or `%LOCALAPPDATA%\Programs\llama.cpp\`, where the Brain
+tab finds it on its own (keep the DLLs next to `llama-server.exe`). Then run:
 
-**Keys do nothing.** Click her first — she only gets keyboard focus on demand.
+```bat
+lillith.exe setup --gguf "%USERPROFILE%\models\dolphin3.0-llama3.2-3b-q4_k_m.gguf" --llama-server "C:\llama.cpp\llama-server.exe"
+```
 
-**Clicks next to her hit her instead of the window below.** Only pixels with
-alpha ≥ 40 are part of her input region; report it with
-`RUST_LOG=lillith_overlay=debug` output.
+Or use **Lillith Settings ▸ Brain**. Either way, this writes `[llm]`, `[chat]`
+and `[chat.server]` to `%APPDATA%\lillith\config.toml`, and she then starts
+llama-server herself, hidden and on loopback only:
 
-**High CPU.** Lower the redraw cap (`--fps 15`); she should stay around a few
-percent of one core at idle.
+```bat
+llama-server.exe -m <model>.gguf --host 127.0.0.1 --port 8080 -c 4096 -t <physical cores> --jinja
+```
+
+Chat needs `--jinja` (the model's own chat template). Windows doesn't expose the
+CPU name or core count to her, so there "low-power" means 4 threads or fewer,
+and `-t` is half the thread count unless you set `[llm] threads`. Lily's sampler settings
+(temperature 0.95, top_p 0.95, min_p 0.1, repeat_penalty 1.1 over the last 256
+tokens, 160 reply tokens) are sent with every chat request, so they aren't on
+the command line. If you use Ollama instead (`backend = "ollama"`), it must be
+on `http://127.0.0.1:11434`. The **kill switch** on Windows is the same safeword
+(see below), and it also shuts down the elevated `lillith-admin` helper.
+More detail: `source/windows/INSTALL-windows.md` in the release zip
+([`windows/INSTALL-windows.md`](windows/INSTALL-windows.md) in the repo).
+
+---
+
+## Android (Termux chat, experimental APK)
+
+**What runs on Android today.** The Linux desktop overlay in this zip does not
+run on Android. The repo has a separate Android app in `android/`. It's a
+floating overlay that uses the same brain and clips over JNI, with on-device
+llama.cpp chat and no `INTERNET` permission. So far it ships only as an
+experimental **debug APK**:
+[Lillith-f8cd236-android-arm64-debug.apk](https://github.com/kokannadian-killa/Lillith-Desktop-Avatar/releases/download/test-build-f8cd236/Lillith-f8cd236-android-arm64-debug.apk)
+(from the `test-build-f8cd236` release, arm64 only). **It's untested and older
+than this release**, so expect bugs and missing features. The full desktop
+overlay experience isn't on Android yet. The APK isn't in this zip. For
+install steps, see `source/android/INSTALL-android.md`.
+
+**Chat with her model in Termux** (fully local, no cloud):
+
+1. Install **Termux from F-Droid** (the Play Store build is outdated).
+2. Install llama.cpp. The Termux package is `llama-cpp` (64-bit ARM / x86-64
+   only):
+
+   ```sh
+   pkg update
+   pkg install llama-cpp
+   ```
+
+   Or build llama.cpp yourself in Termux (`pkg install git cmake clang`, then
+   `cmake -B build && cmake --build build --config Release -t llama-server`).
+3. **Copy the GGUF to the phone yourself** over USB or with a file manager.
+   Nothing is downloaded. Then make it reachable from Termux:
+
+   ```sh
+   termux-setup-storage                 # once, grants access to shared storage
+   mkdir -p ~/models
+   cp ~/storage/downloads/<model>.gguf ~/models/   # e.g. dolphin3.0-llama3.2-3b-q4_k_m.gguf
+   ```
+
+4. **Start llama-server on 127.0.0.1:8080** with Lily's sampler settings
+   from `source/crates/lillith-setup/src/modelfile.rs`: temperature 0.95, top_p 0.95, min_p 0.1,
+   repeat_penalty 1.1 over the last 256 tokens, 160 reply tokens and a 4096 context:
+
+   ```sh
+   llama-server -m ~/models/<model>.gguf --host 127.0.0.1 --port 8080 --jinja \
+       -c 4096 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160
+   ```
+
+   **System prompt:** Lily's persona is `LILY_SYSTEM_PROMPT` in
+   `source/crates/lillith-setup/src/modelfile.rs` (also saved as `setup/persona.txt` in the zip, which includes the
+   source). llama-server has no command-line flag for a system prompt. Paste
+   the text into the system message field in the web UI's settings.
+5. **Chat:** open `http://127.0.0.1:8080` in the phone's browser (llama-server's
+   built-in web UI), or chat in the terminal with
+   `llama-cli -m ~/models/<model>.gguf --jinja -c 4096 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160`.
+   `llama-cli --help` lists its system-prompt option.
+
+Keep `--host 127.0.0.1` so nothing else on the network can reach the server.
+
+---
+
+## The safeword (kill switch)
+
+To stop everything she's doing, type the safeword in her chat: **`red`** on
+its own, or a message that starts with **`OOC: stop`**. It works right away,
+even in the middle of a reply. It kills every running command's process tree,
+and on Windows it also shuts down the elevated admin helper.
+
+Every file change, command and program launch is a **Soul Contract** plan
+that you approve with Yes or No. Nothing runs before you approve it, and every
+action goes into the audit log (`~/.local/share/lillith/audit.log`). To undo
+her last file-organize batch, run `lillith undo-organize`.
+
+## Art kit (optional)
+
+The zip's `art-kit/` folder holds the tools that made her clips (`gen-kit`,
+`video-pipeline`, `slice-sheets`, `import-manifest`) and the source I2V takes.
+Lillith doesn't need it to run. See `art-kit/README.md`. No model weights are
+included; get any you need yourself.
+
+---
+
+## Troubleshooting
+
+- **"no manifest.toml found" / she doesn't appear.** Start her with
+  `./run.fish`, or pass `--manifest <path>/manifest.toml`.
+- **Dark or black box around her (KDE).** Run `./bin/lillith fix-kwin`, or
+  `./run.fish --fix-kwin`. On X11, a black box means compositing is off.
+- **Log says `ffmpeg unavailable: pose videos off, using PNG pages`.** Run
+  `sudo pacman -S --needed ffmpeg`, or set `LILLITH_FFMPEG` to your ffmpeg
+  binary.
+- **Wayland trouble.** Try `./run.fish --backend x11`.
+- **Chat says she's offline.** Check that llama-server answers on
+  `http://127.0.0.1:8080` and that `[llm] gguf_path` points at a file in
+  `~/models/`. Re-run `lillith setup`. A non-loopback URL is refused on
+  purpose.
+- **No voice.** Install `espeak-ng` or piper, and tick **Speak out loud
+  (speakers)** in the right-click menu. `--no-voice` starts her with the
+  speakers off.
+- **Debug log:** `env RUST_LOG=info,lillith=debug ./run.fish 2>&1 | tee ~/lillith.log`

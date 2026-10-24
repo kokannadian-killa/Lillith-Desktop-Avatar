@@ -1,0 +1,20 @@
+{
+ "mode": "loop",
+ "take_s": 6,
+ "video_fps": 24,
+ "start": 1,
+ "stop": 143,
+ "step": 2,
+ "fps": 12,
+ "scale": 0.54,
+ "anchor_x": 200,
+ "center": "fixed",
+ "finalize": "matte",
+ "seated": true,
+ "peak_at_s": 3.0,
+ "peak_pose": "sitting on an invisible ledge facing the viewer, hands planted beside her hips, leaning slightly forward with her chest pushed forward, one leg slowly crossed over the other, boots dangling",
+ "expression": "bedroom eyes on the viewer and a slow lip bite",
+ "motion": "Seated, she slowly uncrosses and recrosses her legs, leaning her chest forward as the top leg lifts; her chest and thighs give a soft, weighty settle-bounce as the leg lands; she holds the lean with a smirk, then sits back; hips stay planted on the seat line the whole time.",
+ "name": "sit_cross_legs",
+ "build_args": []
+}

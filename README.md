@@ -104,7 +104,9 @@ Python/Tk prototypes). Everything runs locally.
 - 🗓️ **Tray, settings panel, autostart, PKGBUILD (M6)** — an egui panel
   already exists for previewing poses (`lillith panel`).
 - 🗓️ **Local LLM chat + persistent memory (M7)** — Ollama or `llama-server`.
-- 🗓️ **Voice (M8)** — Piper / espeak-ng TTS, push-to-talk via whisper.cpp.
+- 🗓️ **Voice (M8)** — her own voice: Ko's cloned voice via the offline `lillith-voice` kit (Pocket TTS + local
+  whisper/VAD for the mic; see [INSTALL.md](INSTALL.md#her-voice-kos-cloned-voice-lillith-voice-kit-optional-fully-offline)),
+  else Piper / espeak-ng.
 
 ## Status / Roadmap
 
@@ -245,6 +247,27 @@ cargo test --workspace --locked
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs exactly that
 on Rust 1.85 for pushes to `main` and pull requests, plus a
 `clippy --all-features` job with the system libraries installed.
+
+### Headless smoke test
+
+[`tools/smoke.sh`](tools/smoke.sh) starts the real overlay under a private
+Xvfb (X11 backend) against a stub llama-server on 127.0.0.1, with a temporary
+`HOME`/`XDG_CONFIG_HOME` (your own config is never touched) and voice, tray and
+system monitor off. It fails unless her window maps, the first frame is not
+black (>1% lit pixels in her window), a right click on her opens the
+"Lillith menu" popup window, and `lillith chat` gets the stub's reply.
+
+```sh
+sudo apt-get install xvfb xdotool x11-utils ffmpeg python3 python3-pil
+tools/smoke.sh                               # cargo build -p lillith, then test
+SMOKE_BIN=target/debug/lillith tools/smoke.sh  # test a prebuilt binary
+```
+
+It prints one `SMOKE PASS: …` / `SMOKE FAIL: <reason>` line (exit 0 / 1) and
+keeps the screenshots and logs in `target/smoke/` (`SMOKE_OUT`). Without Git
+LFS art it draws a generated test sheet. Other knobs (`SMOKE_COMPOSITOR=1` for
+the composited ARGB path, `SMOKE_DISPLAY`, `SMOKE_WAIT`) are listed in the
+script header. Wayland and Windows are not covered.
 
 Design docs: [`docs/PLAN.md`](docs/PLAN.md) (build plan, milestones),
 [`docs/FEATURES.md`](docs/FEATURES.md) (every feature and its source),

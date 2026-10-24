@@ -23,15 +23,28 @@
 //! `lillith-core`; `ContractPrompt` maps onto it field by field.
 
 use crate::egui_theme::{
-    additive, blade_divider, blood_drips, c32, glow_blob, gradient_rect, iron_frame, neon_line,
-    neon_rect, skull,
+    additive, blood_drips, c32, glow_blob, gradient_rect, gradient_rect_h, iron_frame, neon_line,
+    neon_rect,
 };
 use crate::geom::{self, Pt};
 use crate::palette::{self as pal, Rgba};
+use egui::text::{LayoutJob, TextFormat};
+use egui::Galley;
 use egui::{
     Align2, Color32, Context, CornerRadius, FontFamily, FontId, Id, Painter, Pos2, Rect, Sense,
     Stroke, StrokeKind, Vec2,
 };
+use std::sync::Arc;
+
+/// Who asked for the action; picks the summary wording.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Initiator {
+    /// Lillith proposed it (chat tools, skills): "She wants to …".
+    #[default]
+    Her,
+    /// Ko started it himself (e.g. a Build tab button): "You asked to …".
+    You,
+}
 
 /// What the popup shows. Mirrors `lillith_core::soul_contract::ContractPrompt`.
 #[derive(Debug, Clone, Copy, Default)]
@@ -46,6 +59,127 @@ pub struct ContractView<'a> {
     pub detail: Option<&'a str>,
     /// Something is still running: Yes is shown but disabled.
     pub busy: bool,
+    /// Who asked for it (default: Lillith).
+    pub initiator: Initiator,
+}
+
+/// The sentence under the heading: "She wants to …." when Lillith proposed
+/// the action, "You asked to …." when Ko started it himself.
+pub fn summary_line(view: &ContractView<'_>) -> String {
+    let what = lower_first(view.summary);
+    match view.initiator {
+        Initiator::Her => format!("She wants to {what}."),
+        Initiator::You => format!("You asked to {what}."),
+    }
+}
+
+/// Clear space between the horn tips and the top of the skull emblem's
+/// inner well (logical px).
+pub const SKULL_TOP_GAP: f32 = 5.0;
+
+/// The photoreal horned skull on the emblem: an RGBA PNG cut out of the
+/// approved art (black keyed to a feathered alpha edge, sockets kept
+/// opaque), aged to desaturated bone and trimmed to its bounds so its top
+/// row is the horn crowns.
+const SKULL_PNG: &[u8] = include_bytes!("../assets/soul_skull.png");
+/// Pixel size of [`SKULL_PNG`] (`[w, h]`); a test keeps this in sync.
+const SKULL_PX: [u32; 2] = [396, 320];
+/// Thickness of the emblem's iron frame around its dark well.
+const EMBLEM_INSET: f32 = 5.0;
+/// Padding inside the gold-ruled header plate.
+const HEADER_PAD: f32 = 8.0;
+/// Gap between the emblem and the header text column.
+const HEADER_GUTTER: f32 = 12.0;
+
+/// Antique gold, as on LifeCraft's Soul Forge card.
+const GOLD_PALE: Rgba = Rgba::hex(0xf6e7b2);
+const GOLD: Rgba = Rgba::hex(0xc9a24a);
+const GOLD_DARK: Rgba = Rgba::hex(0x8a6420);
+const GOLD_RULE: Rgba = Rgba::hex(0x8a7044);
+
+/// Size of the skull emblem that sits at the left of the header.
+fn emblem_size(narrow: bool) -> Vec2 {
+    if narrow {
+        Vec2::new(80.0, 68.0)
+    } else {
+        Vec2::new(108.0, 90.0)
+    }
+}
+
+/// Where the skull art is drawn inside an emblem: centred in the well, at
+/// the art's own aspect, as large as fits under [`SKULL_TOP_GAP`].
+fn skull_rect(emblem: Rect) -> Rect {
+    let well = emblem.shrink(EMBLEM_INSET);
+    let aspect = SKULL_PX[0] as f32 / SKULL_PX[1] as f32;
+    let h = (well.height() - SKULL_TOP_GAP - 2.0).min((well.width() - 4.0) / aspect);
+    let size = Vec2::new(h * aspect, h);
+    Rect::from_min_size(
+        Pos2::new(well.center().x - size.x / 2.0, well.top() + SKULL_TOP_GAP),
+        size,
+    )
+}
+
+/// Width left for the header text column on a plate whose inner width is
+/// `inner_w`.
+fn header_text_width(inner_w: f32, narrow: bool) -> f32 {
+    inner_w - 2.0 * HEADER_PAD - emblem_size(narrow).x - HEADER_GUTTER
+}
+
+/// Small spaced capitals, like the Soul Forge card's header row.
+fn caps(painter: &Painter, text: &str, size: f32, spacing: f32, color: Rgba) -> Arc<Galley> {
+    let job = LayoutJob::single_section(
+        text.to_string(),
+        TextFormat {
+            font_id: FontId::new(size, FontFamily::Proportional),
+            color: c32(color),
+            extra_letter_spacing: spacing,
+            ..Default::default()
+        },
+    );
+    painter.layout_job(job)
+}
+
+/// Decodes [`SKULL_PNG`] to straight-alpha RGBA8 (`[w, h]`, pixels).
+fn decode_skull() -> ([usize; 2], Vec<u8>) {
+    let mut dec = png::Decoder::new(SKULL_PNG);
+    dec.set_transformations(png::Transformations::EXPAND);
+    let mut reader = dec.read_info().expect("bundled skull PNG header");
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).expect("bundled skull PNG data");
+    buf.truncate(info.buffer_size());
+    let (w, h) = (info.width as usize, info.height as usize);
+    let rgba = match info.color_type {
+        png::ColorType::Rgba => buf,
+        png::ColorType::Rgb => buf
+            .chunks(3)
+            .flat_map(|c| [c[0], c[1], c[2], 255])
+            .collect(),
+        png::ColorType::GrayscaleAlpha => buf
+            .chunks(2)
+            .flat_map(|c| [c[0], c[0], c[0], c[1]])
+            .collect(),
+        png::ColorType::Grayscale => buf.iter().flat_map(|&g| [g, g, g, 255]).collect(),
+        png::ColorType::Indexed => unreachable!("EXPAND turns palettes into RGB(A)"),
+    };
+    ([w, h], rgba)
+}
+
+/// The skull texture, uploaded once per egui context and kept in its
+/// temp data.
+fn skull_texture(ctx: &Context) -> egui::TextureHandle {
+    let key = Id::new("lillith-soul-contract-skull");
+    if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(key)) {
+        return t;
+    }
+    let (size, rgba) = decode_skull();
+    let img = egui::ColorImage::from_rgba_unmultiplied(size, &rgba);
+    let opts = egui::TextureOptions {
+        mipmap_mode: Some(egui::TextureFilter::Linear),
+        ..egui::TextureOptions::LINEAR
+    };
+    let t = ctx.load_texture("lillith-soul-skull", img, opts);
+    ctx.data_mut(|d| d.insert_temp(key, t.clone()));
+    t
 }
 
 /// The click (or `Esc`) the popup saw this frame.
@@ -104,7 +238,6 @@ fn family_or(ctx: &Context, name: &str, fallback: FontFamily) -> FontFamily {
 
 struct Fonts {
     head: FontId,
-    label: FontId,
     body: FontId,
     mono: FontId,
     button: FontId,
@@ -113,12 +246,10 @@ struct Fonts {
 impl Fonts {
     fn new(ctx: &Context, narrow: bool) -> Self {
         let carved = family_or(ctx, "carved", FontFamily::Proportional);
-        let display = family_or(ctx, "display", FontFamily::Monospace);
         let bold = family_or(ctx, "bold", FontFamily::Proportional);
         let k = if narrow { 0.88 } else { 1.0 };
         Self {
             head: FontId::new(22.0 * k, carved),
-            label: FontId::new(11.0 * k, display.clone()),
             body: FontId::new(14.0 * k, FontFamily::Proportional),
             mono: FontId::new(11.5 * k, FontFamily::Monospace),
             button: FontId::new(12.0 * k, bold),
@@ -168,23 +299,47 @@ fn plate(
     let painter = ui.painter().clone();
 
     // --- measure ---------------------------------------------------------
-    let skull_s = if narrow { 40.0 } else { 52.0 };
-    let head = painter.layout_no_wrap("SOUL CONTRACT".into(), f.head.clone(), c32(pal::TEXT));
-    let label = painter.layout_no_wrap(
-        if view.title.is_empty() {
-            "PACT".into()
-        } else {
-            view.title.to_string()
-        },
-        f.label.clone(),
-        c32(pal::EMBER_CORE),
+    let k = if narrow { 0.88 } else { 1.0 };
+    let em = emblem_size(narrow);
+    let col_w = header_text_width(inner_w, narrow);
+    let kind = if view.title.is_empty() {
+        "PACT"
+    } else {
+        view.title
+    };
+    let caps_l = caps(&painter, "SOUL CONTRACT", 10.0 * k, 1.4 * k, GOLD);
+    let caps_r = caps(&painter, &kind.to_uppercase(), 10.0 * k, 1.4 * k, GOLD_PALE);
+    // Split left / right like the forge card when it fits, else stack.
+    let split = caps_l.size().x + caps_r.size().x + 10.0 <= col_w;
+    let caps_h = if split {
+        caps_l.size().y.max(caps_r.size().y)
+    } else {
+        caps_l.size().y + 2.0 + caps_r.size().y
+    };
+    let heading = {
+        let mut job = LayoutJob::default();
+        job.wrap.max_width = col_w;
+        let fmt = |c: Rgba| TextFormat {
+            font_id: FontId::new(16.0 * k, f.head.family.clone()),
+            color: c32(c),
+            ..Default::default()
+        };
+        job.append("Seal it in ", 0.0, fmt(GOLD_PALE));
+        job.append("blood", 0.0, fmt(pal::EMBER));
+        painter.layout_job(job)
+    };
+    let fine_l = caps(&painter, "BLOOD OATH", 8.5 * k, 0.7 * k, GOLD_DARK);
+    let fine_r = caps(
+        &painter,
+        if view.busy { "SEALING" } else { "UNSIGNED" },
+        8.5 * k,
+        0.7 * k,
+        GOLD_DARK,
     );
-    let summary = painter.layout(
-        format!("She wants to {}.", lower_first(view.summary)),
-        f.body.clone(),
-        c32(pal::TEXT),
-        inner_w,
-    );
+    let text_h = caps_h + 6.0 + heading.size().y + 6.0 + 4.0 + 6.0 + fine_l.size().y;
+    let plate_h = em.y.max(text_h) + 2.0 * HEADER_PAD;
+    let header_top = if narrow { 8.0 } else { 12.0 };
+    let summary = painter.layout(summary_line(view), f.body.clone(), c32(pal::TEXT), inner_w);
     let target = view
         .target
         .filter(|s| !s.is_empty())
@@ -204,7 +359,7 @@ fn plate(
         inner_w,
     );
     let btn_h = if narrow { 30.0 } else { 34.0 };
-    let mut h = frame_t + 10.0 + skull_s * 1.05 + 6.0 + head.size().y + 8.0 + 14.0 + 10.0;
+    let mut h = frame_t + header_top + plate_h + 14.0;
     h += summary.size().y + 8.0;
     if let Some(g) = &target {
         h += g.size().y + 8.0;
@@ -259,72 +414,158 @@ fn plate(
         30.0,
     );
 
-    // --- header: forge-lit horned skull ---------------------------------------
-    let cx = rect.center().x;
-    let mut y = inner.top() + 10.0;
-    let sc = Pos2::new(cx, y + skull_s * 0.55);
-    glow_blob(
-        &p,
-        sc + Vec2::new(0.0, skull_s * 0.1),
-        skull_s * 1.1,
-        pal::EMBER,
-        0.9 + 0.5 * flick,
-    );
-    glow_blob(&p, sc, skull_s * 0.8, pal::CRIMSON, 0.8);
-    flames(&p, sc + Vec2::new(0.0, skull_s * 0.42), skull_s, t);
-    skull(
-        &p,
-        sc,
-        skull_s,
-        pal::EMBER.lerp(pal::EMBER_CORE, flick * 0.6),
-    );
-    y += skull_s * 1.05 + 6.0;
-
-    // title with a crimson neon bleed
-    let hp = Pos2::new(cx - head.size().x / 2.0, y);
-    for (dx, dy, a) in [
-        (-1.5, 0.0, 0.35),
-        (1.5, 0.0, 0.35),
-        (0.0, -1.5, 0.3),
-        (0.0, 1.5, 0.3),
-    ] {
-        p.galley_with_override_text_color(
-            hp + Vec2::new(dx, dy),
-            head.clone(),
-            additive(pal::BLOOD_NEON, a),
-        );
-    }
-    p.galley_with_override_text_color(
-        hp + Vec2::new(0.0, 2.0),
-        head.clone(),
-        c32(Rgba::hex(0x000000).alpha(200)),
-    );
-    p.galley_with_override_text_color(
-        hp,
-        head.clone(),
-        c32(pal::CRIMSON.lerp(pal::BLOOD_SHEEN, 0.35)),
-    );
-    y += head.size().y + 8.0;
-
-    // action heading on a bleeding blade
+    // --- header: a Soul Forge card with a memento-mori skull emblem ---------
     let lx = inner.left() + pad;
     let rx = inner.right() - pad;
-    blade_divider(&p, lx, rx, y + 3.0);
-    let lw = label.size().x + 18.0;
-    let lr = Rect::from_center_size(Pos2::new(cx, y + 5.0), Vec2::new(lw, label.size().y + 6.0));
-    p.rect_filled(lr, CornerRadius::same(2), c32(Rgba::hex(0x0a0204)));
+    let mut y = inner.top() + header_top;
+    let hr = Rect::from_min_max(Pos2::new(lx, y), Pos2::new(rx, y + plate_h));
+    // iron card, thin antique-gold border, inset dark double rule
+    gradient_rect(
+        &p,
+        hr,
+        c32(Rgba::hex(0x201a14).alpha(245)),
+        c32(Rgba::hex(0x0e0b0e).alpha(245)),
+    );
     p.rect_stroke(
-        lr,
-        CornerRadius::same(2),
-        Stroke::new(1.0, c32(pal::EMBER.alpha(200))),
+        hr,
+        CornerRadius::ZERO,
+        Stroke::new(1.0, c32(GOLD_RULE)),
         StrokeKind::Inside,
     );
-    p.galley(
-        lr.center() - label.size() / 2.0,
-        label.clone(),
-        c32(pal::EMBER_CORE),
+    p.rect_stroke(
+        hr.shrink(1.0),
+        CornerRadius::ZERO,
+        Stroke::new(1.0, c32(Rgba::hex(0x120e0a))),
+        StrokeKind::Inside,
     );
-    y += 14.0 + 10.0;
+    p.rect_stroke(
+        hr.shrink(2.0),
+        CornerRadius::ZERO,
+        Stroke::new(2.0, c32(Rgba::hex(0x000000).alpha(90))),
+        StrokeKind::Inside,
+    );
+
+    // the emblem: a dark iron frame round a shadowed well, skull inside
+    let er = Rect::from_min_size(hr.min + Vec2::splat(HEADER_PAD), em);
+    gradient_rect(&p, er, c32(pal::IRON_HI), c32(pal::IRON));
+    p.rect_stroke(
+        er,
+        CornerRadius::ZERO,
+        Stroke::new(1.0, c32(GOLD_DARK)),
+        StrokeKind::Inside,
+    );
+    let well = er.shrink(EMBLEM_INSET);
+    p.rect_filled(well, CornerRadius::ZERO, c32(Rgba::hex(0x070405)));
+    // a dying ember low in the well, nothing brighter
+    glow_blob(
+        &p,
+        Pos2::new(well.center().x, well.bottom() - well.height() * 0.2),
+        well.width() * 0.42,
+        pal::BLOOD,
+        0.35 + 0.15 * flick,
+    );
+    // vignette: shadow closing in from the well's edges (behind the skull)
+    let step = well.width().min(well.height()) * 0.03;
+    for i in 0..12 {
+        p.rect_stroke(
+            well.shrink(i as f32 * step),
+            CornerRadius::ZERO,
+            Stroke::new(step + 0.5, c32(Rgba::hex(0x000000).alpha(60 - i * 5))),
+            StrokeKind::Inside,
+        );
+    }
+    let tex = skull_texture(&ctx);
+    let sr = skull_rect(er);
+    p.image(
+        tex.id(),
+        sr,
+        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+        Color32::WHITE,
+    );
+    // ember deep in the sockets (the art's own sockets sit ~45% down)
+    for dx in [-0.16, 0.16] {
+        glow_blob(
+            &p,
+            Pos2::new(
+                sr.center().x + dx * sr.width(),
+                sr.top() + sr.height() * 0.45,
+            ),
+            sr.height() * 0.08,
+            pal::EMBER,
+            0.12 + 0.12 * flick,
+        );
+    }
+    p.rect_stroke(
+        well,
+        CornerRadius::ZERO,
+        Stroke::new(1.0, c32(Rgba::hex(0x000000))),
+        StrokeKind::Outside,
+    );
+    // rivets in the frame corners
+    for c in [
+        er.left_top(),
+        er.right_top(),
+        er.left_bottom(),
+        er.right_bottom(),
+    ] {
+        let q = c + (er.center() - c).normalized() * (EMBLEM_INSET * 0.9);
+        p.circle_filled(q, 1.4, c32(GOLD_DARK));
+        p.circle_filled(q - Vec2::splat(0.4), 0.6, c32(GOLD));
+    }
+    // blood running off the bottom of the emblem
+    blood_drips(
+        &p,
+        er.left() + 6.0,
+        er.right() - 6.0,
+        er.bottom() - 1.0,
+        0x5a11,
+        if narrow { 7.0 } else { 10.0 },
+        26.0,
+    );
+
+    // text column: caps row, serif heading, forge rule, fine row
+    let tx = er.right() + HEADER_GUTTER;
+    let tr = hr.right() - HEADER_PAD;
+    let mut ty = hr.center().y - text_h / 2.0;
+    p.galley(Pos2::new(tx, ty), caps_l.clone(), c32(GOLD));
+    if split {
+        p.galley(
+            Pos2::new(tr - caps_r.size().x, ty),
+            caps_r.clone(),
+            c32(GOLD_PALE),
+        );
+    } else {
+        p.galley(
+            Pos2::new(tx, ty + caps_l.size().y + 2.0),
+            caps_r.clone(),
+            c32(GOLD_PALE),
+        );
+    }
+    ty += caps_h + 6.0;
+    p.galley(Pos2::new(tx, ty), heading.clone(), c32(GOLD_PALE));
+    ty += heading.size().y + 6.0;
+    let bar = Rect::from_min_max(Pos2::new(tx, ty), Pos2::new(tr, ty + 4.0));
+    let mid = bar.center().x;
+    gradient_rect_h(
+        &p,
+        Rect::from_min_max(bar.min, Pos2::new(mid, bar.bottom())),
+        c32(Rgba::hex(0x9a2a4a)),
+        c32(pal::EMBER),
+    );
+    gradient_rect_h(
+        &p,
+        Rect::from_min_max(Pos2::new(mid, bar.top()), bar.max),
+        c32(pal::EMBER),
+        c32(GOLD),
+    );
+    ty += 4.0 + 6.0;
+    p.galley(Pos2::new(tx, ty), fine_l.clone(), c32(GOLD_DARK));
+    p.galley(
+        Pos2::new(tr - fine_r.size().x, ty),
+        fine_r.clone(),
+        c32(GOLD_DARK),
+    );
+    y += plate_h + 14.0;
 
     // --- body -------------------------------------------------------------------
     p.galley(Pos2::new(lx, y), summary.clone(), c32(pal::TEXT));
@@ -400,7 +641,8 @@ fn plate(
     }
 }
 
-/// "Write skill …" → "write skill …" so it reads after "She wants to".
+/// "Write skill …" → "write skill …" so it reads after "She wants to" /
+/// "You asked to".
 fn lower_first(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
@@ -429,33 +671,6 @@ fn corner_spikes(p: &Painter, r: Rect, s: f32) {
         }
         crate::egui_theme::fill_convex(p, &poly, c32(pal::IRON_MID));
         neon_line(p, &[tri[1], tri[0], tri[2]], pal::CRIMSON, 1.0, 2.0, false);
-    }
-}
-
-/// Licking forge flames under the skull (crimson → ember → hot core).
-fn flames(p: &Painter, base: Pos2, s: f32, t: f32) {
-    let cols = [pal::CRIMSON, pal::EMBER, pal::EMBER_CORE];
-    let tongues = 7;
-    for (layer, col) in cols.iter().enumerate() {
-        let k = 1.0 - layer as f32 * 0.3;
-        for i in 0..tongues {
-            let u = i as f32 / (tongues - 1) as f32 - 0.5;
-            let wob = (t * (3.0 + i as f32 * 0.7) + i as f32).sin();
-            let x = base.x + u * s * 1.3 * k;
-            let hgt = s * (0.32 + 0.18 * (1.0 - u.abs() * 2.0)) * k * (0.85 + 0.15 * wob);
-            let half = s * 0.11 * k;
-            let tri: Vec<Pt> = vec![
-                [x - half, base.y],
-                [x + half, base.y],
-                [x + wob * s * 0.04, base.y - hgt],
-            ];
-            let poly = if geom::is_convex(&tri) {
-                tri
-            } else {
-                tri.into_iter().rev().collect()
-            };
-            crate::egui_theme::fill_convex(p, &poly, c32(col.fade(0.85)));
-        }
     }
 }
 
@@ -582,6 +797,95 @@ mod tests {
             target: Some("/tmp/x.txt"),
             detail: Some("hello\nworld"),
             busy: false,
+            initiator: Initiator::Her,
+        }
+    }
+
+    #[test]
+    fn summary_wording_follows_who_asked() {
+        let her = view();
+        assert_eq!(
+            summary_line(&her),
+            "She wants to write file /tmp/x.txt (5 bytes)."
+        );
+        let you = ContractView {
+            initiator: Initiator::You,
+            ..view()
+        };
+        assert_eq!(
+            summary_line(&you),
+            "You asked to write file /tmp/x.txt (5 bytes)."
+        );
+        assert_eq!(ContractView::default().initiator, Initiator::Her);
+    }
+
+    #[test]
+    fn skull_art_decodes_at_its_declared_size() {
+        let (size, rgba) = decode_skull();
+        assert_eq!(size, [SKULL_PX[0] as usize, SKULL_PX[1] as usize]);
+        assert_eq!(rgba.len(), size[0] * size[1] * 4);
+        // Cut out: transparent corners, opaque bone in the middle (sockets
+        // and all, nothing keyed out of the interior).
+        let a = |x: usize, y: usize| rgba[(y * size[0] + x) * 4 + 3];
+        for (x, y) in [
+            (0, 0),
+            (size[0] - 1, 0),
+            (0, size[1] - 1),
+            (size[0] - 1, size[1] - 1),
+        ] {
+            assert_eq!(a(x, y), 0, "corner {x},{y}");
+        }
+        assert_eq!(a(size[0] / 2, size[1] / 2), 255);
+        assert!(SKULL_PNG.len() < 300 * 1024);
+    }
+
+    /// Topmost and bottommost rows with visible art, and the widest columns.
+    fn opaque_bounds() -> (usize, usize, usize, usize) {
+        let ([w, h], rgba) = decode_skull();
+        let vis = |x: usize, y: usize| rgba[(y * w + x) * 4 + 3] > 8;
+        let rows: Vec<usize> = (0..h).filter(|&y| (0..w).any(|x| vis(x, y))).collect();
+        let cols: Vec<usize> = (0..w).filter(|&x| (0..h).any(|y| vis(x, y))).collect();
+        (
+            rows[0],
+            *rows.last().unwrap(),
+            cols[0],
+            *cols.last().unwrap(),
+        )
+    }
+
+    #[test]
+    fn horn_tips_clear_the_top_of_the_plate() {
+        let (top, bottom, left, right) = opaque_bounds();
+        assert!(top <= 4, "skull art is trimmed (top row {top})");
+        for narrow in [true, false] {
+            let er = Rect::from_min_size(Pos2::new(10.0, 20.0), emblem_size(narrow));
+            let well = er.shrink(EMBLEM_INSET);
+            let sr = skull_rect(er);
+            let aspect = SKULL_PX[0] as f32 / SKULL_PX[1] as f32;
+            assert!((sr.width() / sr.height() - aspect).abs() < 1e-4);
+            assert!(
+                well.contains_rect(sr),
+                "narrow={narrow}: {sr:?} in {well:?}"
+            );
+            let per_px = sr.height() / SKULL_PX[1] as f32;
+            let horn_top = sr.top() + top as f32 * per_px;
+            assert!(
+                horn_top >= well.top() + SKULL_TOP_GAP - 0.01,
+                "narrow={narrow}: horn reaches y={horn_top}"
+            );
+            assert!(sr.top() + bottom as f32 * per_px <= well.bottom());
+            assert!(sr.left() + left as f32 * per_px >= well.left());
+            assert!(sr.left() + right as f32 * per_px <= well.right());
+        }
+    }
+
+    #[test]
+    fn header_text_column_has_room_on_every_plate() {
+        for w in [MIN_WIDTH, plate_width(300.0), MAX_WIDTH] {
+            let narrow = w < 340.0;
+            let (frame_t, pad) = if narrow { (7.0, 12.0) } else { (9.0, 18.0) };
+            let inner_w = w - 2.0 * (frame_t + pad);
+            assert!(header_text_width(inner_w, narrow) > 70.0, "plate {w}");
         }
     }
 
