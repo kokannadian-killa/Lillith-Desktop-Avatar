@@ -143,8 +143,9 @@ struct ServerCard {
     slot: ServerCardSlot,
     /// The UI has taken it (shown).
     raised: bool,
-    /// Yes was clicked and audited; consumed by the start.
-    approved: bool,
+    /// Yes was clicked and audited (the card and when); consumed by the
+    /// start. A stale one (never started) expires, see `file_server_card`.
+    approved: Option<(PendingAction, Instant)>,
     /// No new card before this.
     cooldown_until: Option<Instant>,
 }
@@ -868,8 +869,19 @@ impl ChatSession {
     /// card UI also `NO_UI` (text-only, cooldown).
     fn file_server_card(&mut self) {
         let Some(cfg) = &self.restart else { return };
+        // An approval nobody acted on (the bubble died between Yes and the
+        // start) must not block every later card.
+        if self
+            .server_card
+            .approved
+            .as_ref()
+            .is_some_and(|(_, at)| at.elapsed() > 2 * RESTART_WAIT_MAX)
+        {
+            tracing::warn!("chat: dropping a stale model-server approval");
+            self.server_card.approved = None;
+        }
         let card = &self.server_card;
-        if card.slot.pending() || card.approved {
+        if card.slot.pending() || card.approved.is_some() {
             tracing::debug!("chat: model-server card already pending");
             return;
         }
@@ -927,13 +939,20 @@ impl ChatSession {
         };
         self.server_card.raised = false;
         let mut sc = SoulContract::new(log);
+        let kept = action.clone();
         let approved = match choice {
             CardChoice::Clicked(Answer::Yes) => {
                 let id = sc.request(action);
                 match sc.confirm(id) {
                     Ok(_) => true,
                     Err(e) => {
+                        // Close the card in the log: no CONFIRM was written.
                         tracing::warn!("chat: model-server approval failed: {e}");
+                        sc.record_note(
+                            "CANCELLED",
+                            &kept,
+                            &format!("approval could not be recorded: {e}"),
+                        );
                         false
                     }
                 }
@@ -952,11 +971,27 @@ impl ChatSession {
                 false
             }
         };
-        self.server_card.approved = approved;
+        self.server_card.approved = approved.then(|| (kept, Instant::now()));
         if !approved {
-            self.server_card.cooldown_until = Some(Instant::now() + SERVER_CARD_COOLDOWN);
+            self.cool_down();
         }
         approved
+    }
+
+    fn cool_down(&mut self) {
+        self.server_card.cooldown_until = Some(Instant::now() + SERVER_CARD_COOLDOWN);
+    }
+
+    /// The approved (clicked Yes, not yet started) model-server card: its
+    /// id and the argv it showed. The app that spawns the server sends both
+    /// to the overlay, which re-checks them against the audit log.
+    pub fn approved_server_card(&self) -> Option<(String, Vec<String>)> {
+        match &self.server_card.approved {
+            Some((PendingAction::StartModelServer { argv, card, .. }, _)) => {
+                Some((card.clone(), argv.clone()))
+            }
+            _ => None,
+        }
     }
 
     /// After a clicked Yes: starts the configured llama-server owned by this
@@ -964,11 +999,30 @@ impl ChatSession {
     /// approval (nothing is started) or when it didn't come up. The outcome
     /// is remembered as the `restart_llama_server` fix.
     pub async fn start_approved_server(&mut self) -> bool {
-        if !std::mem::take(&mut self.server_card.approved) {
+        let Some((action, _)) = self.server_card.approved.take() else {
             return false;
+        };
+        // One card, one start: the audit log must hold its unused CONFIRM.
+        if let PendingAction::StartModelServer { argv, card, .. } = &action {
+            let sc = self.server_contract();
+            let bin = argv.first().map(String::as_str).unwrap_or_default();
+            if let Err(e) = sc.claim_model_server_approval(card, bin) {
+                tracing::warn!("chat: model server not started: {e}");
+                self.cool_down();
+                return false;
+            }
         }
         let ok = self.restart_server().await;
         self.record_restart(ok);
+        if !ok {
+            if let PendingAction::StartModelServer { argv, card, .. } = &action {
+                let bin = argv.first().map(String::as_str).unwrap_or_default();
+                self.server_contract()
+                    .record_model_server_failure(card, bin, "did not come up");
+            }
+            // Don't put the same card straight back up after a failed start.
+            self.cool_down();
+        }
         ok
     }
 
@@ -976,15 +1030,31 @@ impl ChatSession {
     /// server: only waits (plain loopback health checks, no card needed)
     /// up to `timeout`. `false` without an approval.
     pub async fn wait_for_approved_server(&mut self, timeout: Duration) -> bool {
-        if !std::mem::take(&mut self.server_card.approved) {
+        self.wait_for_approved_server_or(timeout, || false).await
+    }
+
+    /// [`wait_for_approved_server`](Self::wait_for_approved_server) that
+    /// also gives up as soon as `stop()` is true (the safeword, or the
+    /// overlay reporting it refused or failed the start).
+    pub async fn wait_for_approved_server_or(
+        &mut self,
+        timeout: Duration,
+        stop: impl Fn() -> bool,
+    ) -> bool {
+        let Some((action, _)) = self.server_card.approved.take() else {
             return false;
-        }
+        };
         let Some(cfg) = self.restart.clone() else {
             return false;
         };
+        let card = action.card_id().unwrap_or_default().to_string();
+        let sc = self.server_contract();
+        // The app records SPAWN_REFUSED / SPAWN_FAILED when it won't or
+        // can't start it: no point waiting out the full timeout then.
+        let gave_up = || stop() || sc.model_server_start_failed(&card);
         let t0 = Instant::now();
         let mut ok = false;
-        while t0.elapsed() < timeout {
+        while t0.elapsed() < timeout && !gave_up() {
             if crate::server::already_running(&cfg.endpoint).await {
                 ok = true;
                 break;
@@ -992,6 +1062,9 @@ impl ChatSession {
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
         self.record_restart(ok);
+        if !ok {
+            self.cool_down();
+        }
         ok
     }
 
@@ -1928,7 +2001,7 @@ mod tests {
         assert!(p.summary.contains("local model server?"), "{}", p.summary);
         let detail = p.detail.unwrap();
         assert!(
-            detail.contains("--api-key ***") && !detail.contains("sekrit"),
+            detail.contains("    --api-key\n    ***\n") && !detail.contains("sekrit"),
             "{detail}"
         );
         assert!(s.answer_server_card(CardChoice::Clicked(Answer::Yes)));
@@ -1942,8 +2015,22 @@ mod tests {
             "{}",
             f.audit()
         );
+        // The start used the card up, and its failure is on record.
+        assert_eq!(
+            (f.count("USED"), f.count("SPAWN_FAILED")),
+            (1, 1),
+            "{}",
+            f.audit()
+        );
         // One approval, one start.
         assert!(!s.start_approved_server().await);
+        // A failed start cools down: no card straight back up.
+        s.send("hi again", |_| {}).await;
+        assert!(
+            s.take_server_request().is_none(),
+            "cooldown after a failed start"
+        );
+        assert_eq!(f.count("PROPOSED"), 1, "{}", f.audit());
         let k = s
             .memory()
             .unwrap()
@@ -2005,6 +2092,36 @@ mod tests {
         s.send("hi again", |_| {}).await;
         assert_eq!(f.count("PROPOSED"), 1, "cooldown: no audit spam");
         assert!(!f.ran.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn the_approved_card_is_handed_to_the_app_and_a_stop_ends_the_wait() {
+        let f = FakeLlama::new("handoff");
+        let mut s = f.session(true);
+        s.send("hi", |_| {}).await;
+        let shown = s.take_server_request().expect("card raised");
+        assert!(s.approved_server_card().is_none(), "nothing approved yet");
+        assert!(s.answer_server_card(CardChoice::Clicked(Answer::Yes)));
+        let (card, argv) = s.approved_server_card().expect("approved");
+        assert_eq!(Some(card.as_str()), shown.card_id());
+        assert_eq!(Some(argv), crate::server::display_argv(&f.cfg));
+        let t0 = Instant::now();
+        assert!(
+            !s.wait_for_approved_server_or(Duration::from_secs(60), || true)
+                .await
+        );
+        assert!(
+            t0.elapsed() < Duration::from_secs(5),
+            "the stop ends the wait"
+        );
+        assert!(s.approved_server_card().is_none(), "consumed");
+        assert!(!f.ran.exists(), "the session started nothing itself");
+        s.send("hi again", |_| {}).await;
+        assert!(
+            s.take_server_request().is_none(),
+            "cooldown after a failed start"
+        );
     }
 
     #[cfg(unix)]

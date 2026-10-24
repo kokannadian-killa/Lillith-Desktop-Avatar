@@ -80,7 +80,8 @@ pub fn command_args(
 /// endpoint has no host/port.
 pub fn display_argv(cfg: &ChatConfig) -> Option<Vec<String>> {
     let (host, port) = host_port(&cfg.endpoint)?;
-    let mut argv = vec![cfg.server.binary.trim().to_string()];
+    let bin = lillith_setup::launch::resolve_program(&cfg.server.binary);
+    let mut argv = vec![bin.display().to_string()];
     let mut mask = false;
     for a in command_args(&cfg.server, &host, port, &cfg.api_key) {
         argv.push(if mask { "***".into() } else { a.clone() });
@@ -104,7 +105,8 @@ impl LlamaServer {
         // Loopback only: never bind the model to a network interface.
         lillith_setup::local::ensure_local(&cfg.endpoint, 80)?;
         let s = &cfg.server;
-        let bin = PathBuf::from(s.binary.trim());
+        // The same absolute path the card showed (`display_argv`).
+        let bin = lillith_setup::launch::resolve_program(&s.binary);
         let model = PathBuf::from(s.model_path.trim());
         if !bin.exists() && which(&bin).is_none() {
             return Err(ServerError::MissingBinary(bin));
@@ -121,6 +123,7 @@ impl LlamaServer {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        lillith_setup::launch::scrub_model_env(&mut cmd);
         // Prebuilt Linux releases ship their .so files next to the binary.
         if let Some(dir) = bin.parent().filter(|d| !d.as_os_str().is_empty()) {
             #[cfg(target_os = "linux")]
