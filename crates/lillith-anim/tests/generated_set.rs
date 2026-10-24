@@ -185,9 +185,14 @@ fn perch_sit_is_a_seated_base_with_its_variants() {
     let variants = lillith_anim::animator::variant_map(&m);
     assert_eq!(
         variants["perch_sit"],
-        ["chest_press_tease", "cleavage_beckon"]
+        ["arch_trace", "chest_press_tease", "cleavage_beckon"]
     );
     for v in &variants["perch_sit"] {
         assert!(m.clips[v].seat_y.is_some(), "{v}: no seat line");
+    }
+    // perch_lounge carries a tag the engine doesn't act on yet (`lounge_base`):
+    // it must still load, and it isn't a seated base.
+    if let Some(lounge) = m.clips.get("perch_lounge") {
+        assert!(lounge.has_tag("lounge_base") && !lounge.has_tag("sit_base"));
     }
 }
