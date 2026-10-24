@@ -28,10 +28,11 @@ One JSON object per line, one JSON reply per line. "cmd" and "op" are synonyms.
   {"cmd":"listen","action":"start"|"stop"}   push-to-talk -> {"ok":true,"text":"...","safeword":false,...}
   {"cmd":"listen"}          one utterance, ends on silence (VAD)
   {"cmd":"listen_mode","on":true|false}      always-listening; transcripts arrive as events
-  Mic gate: starting the mic needs Ko's mouse-click Yes on a Soul Contract card. Either pass
-  "token" from {"cmd":"mic_card","kind":"listen"|"always"} (one-time, 120 s) or let the daemon show
-  the card inline. No / timeout / no card UI -> {"ok":false,"need_card":true,...}, mic stays off.
-  {"cmd":"mic_revoke"}      forget the push-to-talk session grant and unused tokens
+  Mic gate: starting the mic needs Ko's mouse-click Yes on a Soul Contract card, on EVERY push-to-talk
+  press / listen and every always-listening switch-on (no session grant). Either pass "token" from
+  {"cmd":"mic_card","kind":"listen"|"always"} (one-time, 120 s) or let the daemon show the card
+  inline. No / timeout / no card UI -> {"ok":false,"need_card":true,...}, mic stays off.
+  {"cmd":"mic_revoke"}      drop unused mic tokens
   {"cmd":"stt","wav":"/abs/file.wav"}        transcribe a file
   {"op":"subscribe","topics":["lipsync","stt"]}   this connection then only receives events
   {"cmd":"shutdown"}
@@ -71,6 +72,12 @@ class Core:
                     "listening_always": bool(self._listener and self._listener.always)}
         if cmd == "stop":
             sp.stop(reason=r.get("reason", "stop"))
+            if r.get("reason") == "safeword":
+                # A mic card still waiting for its Yes is closed (CANCELLED); the mic never opens for it.
+                if self._listener is not None:
+                    self._listener.cancel_pending("safeword")
+                else:
+                    self.gate.cancel()
             return {"ok": True}
         if cmd == "shutdown":
             sp.stop()

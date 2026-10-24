@@ -102,10 +102,12 @@ The reply includes `audio_s`, `rtf`, `out` and `rate`. `out` must be absolute. T
 (24000, or 44100 for `p1`).
 
 ### listen (microphone, push-to-talk)
-- `{"cmd":"listen","action":"start"}` → `{"ok":true,"listening":true}`
-  - Opens the mic and buffers audio.
+- `{"cmd":"listen","action":"start"}` → `{"ok":true,"listening":true,"card":"mic-..."}`
+  - Opens the mic (after this press's card Yes, see the mic gate) and buffers audio.
   - **If Lillith is speaking she is stopped (barge-in).**
-- `{"cmd":"listen","action":"stop"}` → closes the mic, VAD-trims the buffer, transcribes it and replies:
+- `{"cmd":"listen","action":"stop"}` (the release) → **always** closes the mic, VAD-trims the buffer, transcribes
+  it and replies as below. A release while this press's card is still open closes the card instead and replies
+  at once `{"ok":true,"text":"","cancelled":true,...}`:
   ```json
   {"ok":true,"text":"hey lillith what's up","audio_s":3.1,"speech_s":2.2,"stt_s":0.4,
    "safeword":false,"affirmation":false,"voice":true,"consent_ok":false}
@@ -132,9 +134,22 @@ target, then detail lines; stdout: `yes` / `no` / `timeout` / `cancelled` / `no_
   (kind `always`).
 - **No token**: the daemon shows the card inline, and the reply waits until Ko answers (at most about 70 s).
   On Yes it mints a one-time token and uses it immediately, so existing clients keep working unchanged.
-- **Push-to-talk / listen once** (`kind:"listen"`): after one Yes, later push-to-talk and listen starts are
-  allowed for the rest of the daemon session. `{"cmd":"mic_revoke"}` → `{"ok":true,"revoked":true}` ends that
-  grant and drops any unused tokens.
+- **Push-to-talk / listen once** (`kind:"listen"`): **every press needs its own fresh Yes** (inline card or a
+  one-time token). There is no session-long grant: one Yes covers exactly one capture, and the next press
+  asks again (Ko: "Push-to-talk: card on every press"). The only exception is a press while always-listening
+  is already on: the mic is already open under that switch-on's Yes, so nothing new starts.
+  - **The card belongs to that one press.** If the press is released (`listen`/`stop` on any connection),
+    the safeword is said or typed (`{"cmd":"stop","reason":"safeword"}`, or a transcript that is the
+    safeword), or the card times out before Yes, the card is closed and the mic **never** opens for that
+    press, even when a Yes lands a moment later. The press replies
+    `{"ok":false,"released":true,"need_card":true,...}` (released or safeword) or the usual timeout refusal, and
+    the audit log gets `CANCELLED` (`TIMEOUT` for a timeout) for that card; no speech text is logged.
+    A release after the Yes always stops the mic.
+  `{"cmd":"mic_revoke"}` → `{"ok":true,"revoked":true}` drops any unused tokens.
+  - Hold-to-talk clients: the card's reply waits for Ko's click, and clicking Yes means letting go of the
+    talk button, so start-on-press / stop-on-release would capture almost nothing. Such a client should
+    treat the Yes as the start of the capture and stop on the next press (or use `listen` once, which ends
+    on silence).
 - **Always listening** (`kind:"always"`): every switch-on needs its own Yes (inline card or token). Turning it
   off (`"on":false`) is never gated.
 - Refusals: No, timeout, a closed card, no card UI (no display, or no `lillith` binary), or a bad, used,
@@ -172,8 +187,11 @@ target, then detail lines; stdout: `yes` / `no` / `timeout` / `cancelled` / `no_
 - **Safeword.** A transcript of exactly "red", or one containing "OOC: stop" / "O.O.C. stop" / "out of character stop", gets `"safeword":true`.
   - The daemon **stops speech immediately** and emits `{"ev":"safeword","text":...}`.
   - Clients must end the scene and must not send the transcript to the model as chat.
+- **Safeword and mic cards.** `{"cmd":"stop","reason":"safeword"}` (the app's typed or spoken "red") also
+  closes any mic card still waiting for its Yes (audited `CANCELLED`), so the mic never opens afterwards.
+  `stop` is never gated and does not wait for the card.
 - **No voice consent.** Every voice transcript carries `"voice":true,"consent_ok":false`, and `"affirmation":true` when it starts with yes / yeah / sure / okay / I agree / I accept / deal / confirm...
-  - **A voice transcript must never count as "Yes" to a Soul Contract or a plan.** The UI must require a typed or clicked confirmation.
+  - **A voice transcript must never count as "Yes" to a Soul Contract or a plan.** The UI must require a mouse click on the card.
   - `lillith-chat --mic/--ptt` implements this. When the last assistant turn asked about a contract or plan, an affirmation is not forwarded.
 - **Echo safety.** While Lillith is playing, plus a 250 ms tail, mic audio is **not** transcribed by default
   (`~/.config/lillith-voice/mic.json` `"echo":"mute"`).
