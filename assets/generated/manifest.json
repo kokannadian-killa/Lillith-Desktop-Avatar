@@ -6660,6 +6660,76 @@
    ],
    "allure": true,
    "video": "squeeze_hands_press_tease/squeeze_hands_press_tease.mp4"
+  },
+  {
+   "name": "valentines_strawberry_lick",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "valentines_strawberry_lick/",
+   "sheet": "valentines_strawberry_lick/valentines_strawberry_lick_sheet.png",
+   "manifest": "valentines_strawberry_lick/valentines_strawberry_lick.json",
+   "preview": "valentines_strawberry_lick/valentines_strawberry_lick_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "outfit:valentines",
+    "season:valentines",
+    "seasonal"
+   ],
+   "allure": true,
+   "video": "valentines_strawberry_lick/valentines_strawberry_lick.mp4",
+   "season": "valentines",
+   "outfit": "valentines"
+  },
+  {
+   "name": "spring_lollipop_lick",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "spring_lollipop_lick/",
+   "sheet": "spring_lollipop_lick/spring_lollipop_lick_sheet.png",
+   "manifest": "spring_lollipop_lick/spring_lollipop_lick.json",
+   "preview": "spring_lollipop_lick/spring_lollipop_lick_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "outfit:spring",
+    "season:spring",
+    "seasonal"
+   ],
+   "allure": true,
+   "video": "spring_lollipop_lick/spring_lollipop_lick.mp4",
+   "season": "spring",
+   "outfit": "spring"
   }
  ]
 }
