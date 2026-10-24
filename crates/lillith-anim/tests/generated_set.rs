@@ -168,3 +168,26 @@ fn every_generated_clip_plays_and_renders() {
         assert_eq!(frames.len(), m.clips[v].frames.len(), "{v}");
     }
 }
+
+#[test]
+fn perch_sit_is_a_seated_base_with_its_variants() {
+    let Some(path) = find_manifest() else {
+        eprintln!("generated manifest not found; skipping");
+        return;
+    };
+    let m = Manifest::load(&path).unwrap();
+    let Some(perch) = m.clips.get("perch_sit") else {
+        eprintln!("{} has no perch_sit; skipping", path.display());
+        return;
+    };
+    // The overlay's sit_clips picks seated bases by the `sit_base` tag plus a seat line.
+    assert!(perch.has_tag("sit_base") && perch.seat_y.is_some());
+    let variants = lillith_anim::animator::variant_map(&m);
+    assert_eq!(
+        variants["perch_sit"],
+        ["chest_press_tease", "cleavage_beckon"]
+    );
+    for v in &variants["perch_sit"] {
+        assert!(m.clips[v].seat_y.is_some(), "{v}: no seat line");
+    }
+}
