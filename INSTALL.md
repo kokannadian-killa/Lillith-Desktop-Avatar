@@ -185,9 +185,12 @@ More detail: [`windows/INSTALL-windows.md`](windows/INSTALL-windows.md).
 run on Android. The repo has a separate Android app in `android/`. It's a
 floating overlay that uses the same brain and clips over JNI, with on-device
 llama.cpp chat and no `INTERNET` permission. So far it ships only as an
-experimental **debug APK** (`Lillith-f8cd236-android-arm64-debug.apk`, from
-the `test-build-f8cd236` release). It isn't in this zip. For that APK, see
-`source/android/INSTALL-android.md`.
+experimental **debug APK**:
+[Lillith-f8cd236-android-arm64-debug.apk](https://github.com/kokannadian-killa/Lillith-Desktop-Avatar/releases/download/test-build-f8cd236/Lillith-f8cd236-android-arm64-debug.apk)
+(from the `test-build-f8cd236` release, arm64 only). **It's untested and older
+than this release**, so expect bugs and missing features. The full desktop
+overlay experience isn't on Android yet. The APK isn't in this zip. For
+install steps, see `source/android/INSTALL-android.md`.
 
 **Chat with her model in Termux** (fully local, no cloud):
 
