@@ -46,7 +46,9 @@ fn focus_events_keep_only_the_app_name_and_debounce() {
     assert!(f.admit(&focus("firefox"), MON + 5.0).is_none());
     assert!(f.admit(&focus("konsole"), MON + 6.0).is_some());
     assert!(f.admit(&focus("firefox"), MON + 300.0).is_none());
-    assert!(f.admit(&focus("firefox"), MON + FOCUS_REPEAT_S + 1.0).is_some());
+    assert!(f
+        .admit(&focus("firefox"), MON + FOCUS_REPEAT_S + 1.0)
+        .is_some());
 }
 
 #[test]
@@ -54,7 +56,10 @@ fn private_and_captioned_events_are_never_admitted() {
     let mut f = EventFilter::new(20);
     // window.opened carries the window caption: never stored.
     assert!(f
-        .admit(&Event::with_detail("window.opened", "Bank — statement.pdf"), MON)
+        .admit(
+            &Event::with_detail("window.opened", "Bank — statement.pdf"),
+            MON
+        )
         .is_none());
     assert!(f.admit(&Event::new("window.private"), MON).is_none());
     assert!(f
@@ -80,12 +85,13 @@ fn errors_are_reduced_to_kind_and_app_and_deduped() {
     assert!(f
         .admit(&Event::with_detail("app.crash", "steam again"), MON + 10.0)
         .is_none());
-    let e = f
-        .admit(&Event::new("journal.error"), MON + 11.0)
-        .unwrap();
+    let e = f.admit(&Event::new("journal.error"), MON + 11.0).unwrap();
     assert_eq!(e.detail.as_deref(), Some("journal.error"));
     assert!(f
-        .admit(&Event::with_detail("app.crash", "steam"), MON + ERROR_REPEAT_S + 1.0)
+        .admit(
+            &Event::with_detail("app.crash", "steam"),
+            MON + ERROR_REPEAT_S + 1.0
+        )
         .is_some());
 }
 
@@ -93,7 +99,10 @@ fn errors_are_reduced_to_kind_and_app_and_deduped() {
 fn events_per_minute_are_capped() {
     let mut f = EventFilter::new(3);
     let admitted = (0..10)
-        .filter(|i| f.admit(&focus(&format!("app{i}")), MON + *i as f64).is_some())
+        .filter(|i| {
+            f.admit(&focus(&format!("app{i}")), MON + *i as f64)
+                .is_some()
+        })
         .count();
     assert_eq!(admitted, 3);
     assert!(f.admit(&focus("late"), MON + 61.0).is_some());
@@ -101,10 +110,12 @@ fn events_per_minute_are_capped() {
 
 #[test]
 fn proactive_needs_confidence_and_respects_cooldown_and_cap() {
-    let mut cfg = MemoryConfig::default();
-    cfg.proactive_min_confidence = 0.6;
-    cfg.proactive_cooldown_min = 60.0;
-    cfg.proactive_max_per_hour = 2;
+    let cfg = MemoryConfig {
+        proactive_min_confidence: 0.6,
+        proactive_cooldown_min: 60.0,
+        proactive_max_per_hour: 2,
+        ..MemoryConfig::default()
+    };
     let mut p = Proactive::from_config(&cfg);
     let none = |_: &str, _: &str| false;
     assert_eq!(
@@ -112,12 +123,17 @@ fn proactive_needs_confidence_and_respects_cooldown_and_cap() {
         Err(Quiet::NothingConfident)
     );
     assert_eq!(
-        p.choose(&[pred("steam", 0.9)], calm(MON), none).unwrap().subject,
+        p.choose(&[pred("steam", 0.9)], calm(MON), none)
+            .unwrap()
+            .subject,
         "steam"
     );
     // Same subject inside the cooldown: skipped, the next one is picked.
     let two = [pred("steam", 0.9), pred("krita", 0.7)];
-    assert_eq!(p.choose(&two, calm(MON + 60.0), none).unwrap().subject, "krita");
+    assert_eq!(
+        p.choose(&two, calm(MON + 60.0), none).unwrap().subject,
+        "krita"
+    );
     // Two in the last hour: capped.
     assert_eq!(
         p.choose(&[pred("blender", 0.9)], calm(MON + 120.0), none),
@@ -244,9 +260,11 @@ const NEXT_MON_EVENING: f64 = MON + 7.0 * DAY + 20.25 * 3600.0;
 #[test]
 fn disabled_memory_spawns_nothing_and_writes_no_file() {
     let dir = std::env::temp_dir().join(format!("lillith-bridge-off-{}", std::process::id()));
-    let mut cfg = MemoryConfig::default();
-    cfg.enabled = false;
-    cfg.db_path = dir.join("memory.db").to_string_lossy().into_owned();
+    let cfg = MemoryConfig {
+        enabled: false,
+        db_path: dir.join("memory.db").to_string_lossy().into_owned(),
+        ..MemoryConfig::default()
+    };
     let b = MemoryBridge::spawn(&cfg, Box::new(|_| panic!("must not speak")));
     assert!(!b.is_enabled());
     b.observe(&focus("firefox"));
@@ -323,7 +341,11 @@ fn no_suggestion_after_safeword_or_while_chatting_or_using_the_app() {
 #[test]
 fn thread_runs_the_error_fix_loop() {
     let r = rig(MemoryConfig::default(), None);
-    let cands = [SafeFix::RetryBackoff, SafeFix::RestartLlamaServer, SafeFix::TextOnly];
+    let cands = [
+        SafeFix::RetryBackoff,
+        SafeFix::RestartLlamaServer,
+        SafeFix::TextOnly,
+    ];
     let text = "llm: server unreachable";
     let first = r
         .bridge
@@ -341,15 +363,21 @@ fn thread_runs_the_error_fix_loop() {
         .unwrap();
     assert_eq!(
         next,
-        vec![SafeFix::RestartLlamaServer, SafeFix::TextOnly, SafeFix::RetryBackoff],
+        vec![
+            SafeFix::RestartLlamaServer,
+            SafeFix::TextOnly,
+            SafeFix::RetryBackoff
+        ],
         "known fix first, failed one last"
     );
 }
 
 #[test]
 fn observe_never_blocks_when_the_queue_is_full() {
-    let mut cfg = MemoryConfig::default();
-    cfg.events_per_minute = 10_000;
+    let cfg = MemoryConfig {
+        events_per_minute: 10_000,
+        ..MemoryConfig::default()
+    };
     // The factory parks the thread so nothing drains the queue.
     let (gate_tx, gate_rx) = channel::<()>();
     let mut opts = BridgeOptions::new(&cfg, Box::new(|_| {}));

@@ -45,7 +45,10 @@ pub fn app_name(class: &str) -> Option<String> {
     if c.is_empty() || c.chars().any(char::is_whitespace) {
         return None;
     }
-    let c = c.strip_suffix(".exe").or(c.strip_suffix(".EXE")).unwrap_or(c);
+    let c = c
+        .strip_suffix(".exe")
+        .or(c.strip_suffix(".EXE"))
+        .unwrap_or(c);
     let last = c.rsplit(['.', '/', '\\']).find(|s| !s.is_empty())?;
     let name: String = last
         .to_lowercase()
@@ -123,7 +126,11 @@ impl EventFilter {
         } else {
             return None;
         };
-        while self.window.front().is_some_and(|t| now - t >= 60.0 || *t > now) {
+        while self
+            .window
+            .front()
+            .is_some_and(|t| now - t >= 60.0 || *t > now)
+        {
             self.window.pop_front();
         }
         if self.window.len() >= self.per_minute as usize {
@@ -132,7 +139,8 @@ impl EventFilter {
         self.window.push_back(now);
         self.seen.insert(key, now);
         if self.seen.len() > 512 {
-            self.seen.retain(|_, t| now - *t < FOCUS_REPEAT_S.max(ERROR_REPEAT_S));
+            self.seen
+                .retain(|_, t| now - *t < FOCUS_REPEAT_S.max(ERROR_REPEAT_S));
         }
         Some(out)
     }
@@ -398,7 +406,12 @@ impl MemoryBridge {
                 let Some(brain) = open().filter(Brain::is_enabled) else {
                     // Drain so callers never block (they only try_send anyway).
                     for m in rx.iter() {
-                        if let Msg::Error { candidates, reply: Some(r), .. } = m {
+                        if let Msg::Error {
+                            candidates,
+                            reply: Some(r),
+                            ..
+                        } = m
+                        {
                             let _ = r.try_send(candidates);
                         }
                     }
@@ -601,7 +614,14 @@ impl Worker {
                     || now - load(&self.signals.last_safeword) < SAFEWORD_QUIET_S;
                 let busy = now - load(&self.signals.last_chat) < CHAT_QUIET_S
                     || now < load(&self.signals.busy_until);
-                self.check(brain, Moment { now, safeword, busy });
+                self.check(
+                    brain,
+                    Moment {
+                        now,
+                        safeword,
+                        busy,
+                    },
+                );
             }
         }
     }

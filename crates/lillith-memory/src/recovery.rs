@@ -58,9 +58,8 @@ pub fn plan(known: Option<&KnownFix>, candidates: &[SafeFix]) -> Vec<SafeFix> {
     if let Some(f) = good {
         out.push(f);
     }
-    let failed = |f: &SafeFix| {
-        known.is_some_and(|k| k.failed_fixes.iter().any(|x| x == f.as_str()))
-    };
+    let failed =
+        |f: &SafeFix| known.is_some_and(|k| k.failed_fixes.iter().any(|x| x == f.as_str()));
     for f in candidates {
         if !out.contains(f) && !failed(f) {
             out.push(*f);
@@ -77,7 +76,12 @@ pub fn plan(known: Option<&KnownFix>, candidates: &[SafeFix]) -> Vec<SafeFix> {
 /// Records the failure `text` (from `context`) and returns the fixes to try,
 /// best first. With memory off (`brain` `None` or disabled) nothing is
 /// stored and the caller's order is used.
-pub fn begin(brain: Option<&Brain>, text: &str, context: &str, candidates: &[SafeFix]) -> Vec<SafeFix> {
+pub fn begin(
+    brain: Option<&Brain>,
+    text: &str,
+    context: &str,
+    candidates: &[SafeFix],
+) -> Vec<SafeFix> {
     let Some(b) = brain.filter(|b| b.is_enabled()) else {
         return candidates.to_vec();
     };
@@ -179,7 +183,10 @@ mod tests {
             recurrences: 2,
             failed_fixes: vec!["retry_backoff".into()],
         };
-        assert_eq!(plan(Some(&k), &c), [SafeFix::RestartLlamaServer, SafeFix::RetryBackoff]);
+        assert_eq!(
+            plan(Some(&k), &c),
+            [SafeFix::RestartLlamaServer, SafeFix::RetryBackoff]
+        );
         // A remembered fix that is not a candidate (or not built in) is ignored.
         let k2 = KnownFix {
             fix: Some("sudo reboot".into()),
@@ -227,10 +234,16 @@ mod tests {
     fn memory_off_still_recovers_but_stores_nothing() {
         let off = Brain::disabled(&MemoryConfig::disabled());
         let mut tried = Vec::new();
-        let r = recover(Some(&off), "voice: engine failed", "voice", &[SafeFix::TextOnly], |f| {
-            tried.push(f);
-            true
-        });
+        let r = recover(
+            Some(&off),
+            "voice: engine failed",
+            "voice",
+            &[SafeFix::TextOnly],
+            |f| {
+                tried.push(f);
+                true
+            },
+        );
         assert_eq!(r, Some(SafeFix::TextOnly));
         assert_eq!(tried, [SafeFix::TextOnly]);
         assert_eq!(off.lookup_error("voice: engine failed"), None);

@@ -73,16 +73,20 @@ if let Some(cmd) = parse_forget("forget the last 30 minutes") {
   first by the kill switch in `ChatSession::send`.
 - `lillith chat` and `lillith chat-bubble` pass `Config::memory` through.
 
-## For the lead (not wired yet)
+## Desktop wiring
 
-- Feed sensor events into memory: in the overlay event loop, the bubble's
-  session is a separate process, so the simplest path is a second
-  `Brain::open(&cfg.memory)` in the overlay process (SQLite WAL handles two
-  writers) and `brain.observe_event(&ev, &Ctx::now())` for each
-  `lillith_core::event::Event`. Keep it off the render thread.
-- Surface `brain.predict(..)` as proactive banter (e.g. when confidence > 0.6).
-- `ChatSession::memory()` exposes the brain for the error-recovery path
-  (`record_error` / `known_fix` around llama-server restarts).
+- `bridge::MemoryBridge` (overlay process): a non-blocking, rate-limited
+  event bridge on its own thread and connection (debounced app focus, crash
+  / error kinds, nothing else), plus proactive `memory.suggest` lines from
+  `Brain::predict` behind a confidence / cooldown / hourly-cap / safeword /
+  chat-busy gate. `apps/lillith/src/memory_wiring.rs` tees the overlay feed
+  into it and runs the voice recovery ladder.
+- `recovery`: record a failure with a stable text, order the built-in
+  `SafeFix`es (`retry_backoff`, `restart_llama_server`, `text_only`) by
+  what worked before, record each outcome. `ChatSession::send` uses it for
+  an unreachable / loading llama-server.
+
+See `docs/MEMORY.md` ("Desktop wiring").
 
 ## Tests
 
@@ -91,4 +95,7 @@ retrieval ranking, neighbour expansion, token budget, forget (all / topic /
 last N minutes incl. rewritten rows; rows, FTS and file bytes scrubbed; 2-char
 topics; whole words only; busy WAL reported), two-connection locking, file
 and folder permissions, error cap, opt-out, safeword short-circuit (incl.
-`record_fix`), error-fix recall, habit prediction, migrations (v1 → v2).
+`record_fix`), error-fix recall, habit prediction, migrations (v1 → v2), the event bridge (debounce, rate cap, privacy,
+disabled = no thread / file, full queue never blocks), proactive gating
+(threshold, cooldown, hourly cap, safeword, chat-busy, recent use) and the
+error → known fix → outcome loop.
