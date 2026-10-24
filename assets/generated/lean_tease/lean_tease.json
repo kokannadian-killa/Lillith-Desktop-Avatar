@@ -284,13 +284,13 @@
     "height": 400,
     "frame_count": 24,
     "fps": 9.92,
-    "bytes": 348121,
+    "bytes": 348404,
     "quality": {
       "edge_mae": 2.437,
       "edge_p99": 21.18,
-      "halo_dark": 0.049,
-      "halo_light": -0.154,
-      "alpha_mae": 0.0689
+      "halo_dark": 0.05,
+      "halo_light": -0.155,
+      "alpha_mae": 0.069
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -309,7 +309,18 @@
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "38f3c549d7fc42221299e4cb7c35f877fdcc55af019230bac86aab5d9a645213",
+    "sheet_sha256": "e9df966d1cb388edb185d1bf468d31018ace6526ee9c28940ccbacb5ae001ada",
     "source_sha256": "538fa1c74cedd0dcb173af1a22d863144368377d7a06116ced1da6bd3e8a09ec"
+  },
+  "fringe_polish2": {
+    "tool": "/workspace/verify/polish2/fix_blobs.py (enclosed opaque backdrop blobs cleared)",
+    "px_cleared": 21,
+    "frames": [
+      [
+        22,
+        21
+      ]
+    ],
+    "px_new_edge_despilled": 3
   }
 }
