@@ -308,6 +308,7 @@ const PRANKS: &[&str] = &[
     "kneel_pout_beg",
     "dom_throne_lean",
     "dom_chin_tilt_summon",
+    "dom_snap_kneel_order",
 ];
 /// The pool for an event, with a `'static` key for the no-repeat memory.
 fn banter_key(key: &str) -> Option<(&'static str, &'static [&'static str])> {

@@ -73,6 +73,7 @@ impl Default for TeaseConfig {
                 "hip_sway",
                 "hip_sway_slow",
                 "hair_twirl_lip_bite",
+                "lean_doorframe_smolder",
             ]),
             beat_clips: strings(&[
                 "tease_closeup",
@@ -83,6 +84,9 @@ impl Default for TeaseConfig {
                 "tail_heart_wink",
                 "trace_heart_on_glass",
                 "dom_chin_tilt_summon",
+                "kiss_mark_on_glass",
+                "finger_walk_on_glass",
+                "dom_snap_kneel_order",
                 "lean_tease",
                 "idle_flirt_lip_bite",
                 "hip_pop_wink",
