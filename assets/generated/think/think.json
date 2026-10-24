@@ -79,7 +79,7 @@
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
-      154,
+      155,
       270,
       22,
       392
@@ -145,7 +145,7 @@
       392
     ],
     [
-      153,
+      154,
       270,
       24,
       392
@@ -161,14 +161,21 @@
     "height": 400,
     "frame_count": 12,
     "fps": 6.0,
-    "bytes": 173258,
+    "bytes": 174599,
     "quality": {
-      "edge_mae": 2.15,
-      "edge_p99": 16.23,
-      "halo_dark": 0.052,
-      "halo_light": -0.147,
-      "alpha_mae": 0.0554
+      "edge_mae": 2.147,
+      "edge_p99": 17.0,
+      "halo_dark": 0.051,
+      "halo_light": -0.13,
+      "alpha_mae": 0.0551
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 2,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "eaf8259765a26f2e4657f7e27a93dc6ed6e92886b38c8089dca84cd77994d7dd",
+    "source_sha256": "a8a9fad889c3f669d41999f3d33120272f1a3e666c76e1a57d577f856777293c",
+    "hand_pass": "sz_polish (white-fringe s-z hand pass, see commit message)"
   }
 }
