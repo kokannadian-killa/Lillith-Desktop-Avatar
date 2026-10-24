@@ -331,23 +331,27 @@
   "variant_of:perch_sit"
  ],
  "perch_sit_handoff": {
-  "ease_frames": [
-   0,
-   1,
-   2,
-   3,
-   80,
-   81,
-   82,
-   83
-  ],
-  "perch_sit_frame0_weight": [
+  "start_frame_weights_of_perch_sit_f0": [
    1.0,
    0.84375,
    0.5,
    0.15625
   ],
-  "method": "premultiplied-alpha crossfade with perch_sit frame 0 (smoothstep weights); first and last frame are perch_sit frame 0",
+  "end_frame_weights_of_perch_sit_f0_last_first": [
+   0.84375,
+   0.5,
+   0.15625
+  ],
+  "tail_zone_never_mixed": {
+   "box_xyxy": [
+    205,
+    244,
+    399,
+    399
+   ],
+   "except": "opaque pink stocking in both sources (blended)"
+  },
+  "method": "premultiplied-alpha smoothstep crossfade with perch_sit frame 0 at the clip ends; inside the tail zone (x >= 205, y >= 244, except stocking pixels that are pink in both sources) pixels are taken whole from whichever source weighs >= 0.5, so only one tail ever shows",
   "tool": "perch_work/handoff.py"
  },
  "canvas_compliant": true,
@@ -833,14 +837,14 @@
    386
   ],
   [
-   126,
+   127,
    274,
    44,
-   387
+   386
   ],
   [
    126,
-   275,
+   274,
    45,
    387
   ],
@@ -868,13 +872,13 @@
   "height": 400,
   "frame_count": 84,
   "fps": 12.0,
-  "bytes": 846614,
+  "bytes": 838178,
   "quality": {
-   "edge_mae": 2.2,
-   "edge_p99": 24.0,
-   "halo_dark": 0.066,
-   "halo_light": -0.147,
-   "alpha_mae": 0.0509
+   "edge_mae": 2.195,
+   "edge_p99": 22.0,
+   "halo_dark": 0.068,
+   "halo_light": -0.142,
+   "alpha_mae": 0.0501
   },
   "tool": "tools/video-pipeline/pack_mp4.py"
  }
