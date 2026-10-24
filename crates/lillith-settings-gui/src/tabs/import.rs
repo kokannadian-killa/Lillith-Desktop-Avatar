@@ -12,14 +12,14 @@
 //! MP4 in-app), the QA result, an editable name and Approve / Reject.
 //! Approve is a file write, so it has its own Soul Contract card; it copies
 //! the clip add-only into `<data>/lillith/user-clips/` and adds it to
-//! `user_manifest.toml` ([`lillith_anim::user_clips::install_clip`]: a
+//! `user_manifest.toml` ([`lillith_anim::user_clips::install_candidate`]: a
 //! taken name gets a `_2` suffix, nothing is ever overwritten). The overlay
 //! and the Poses lists merge those with the built-in set.
 
 use super::{SettingsTab, Shared};
 use crate::chrome;
 use crate::task::Task;
-use crate::video_import::{self as vi, Candidate, Event, ImportCmd, Job, JobMsg, Outcome};
+use crate::video_import::{self as vi, Candidate, Event, ImportCmd, Job, JobMsg, Matte, Outcome};
 use egui::RichText;
 use lillith_anim::user_clips;
 use lillith_core::soul_contract::{PendingAction, SoulContract};
@@ -42,8 +42,9 @@ const MAX_LOG: usize = 200;
 struct Tools {
     python: PathBuf,
     script: PathBuf,
-    ffmpeg: PathBuf,
-    ffprobe: PathBuf,
+    /// Bundled `bin/` copies (passed on); otherwise the pipeline looks.
+    ffmpeg: Option<PathBuf>,
+    ffprobe: Option<PathBuf>,
 }
 
 /// The decision waiting on the card.
@@ -55,6 +56,8 @@ enum Pending {
     Approve {
         card: usize,
         name: String,
+        /// The QA verdict failed: the card says so loudly.
+        qa_failed: bool,
         action: PendingAction,
     },
 }
@@ -79,9 +82,14 @@ impl Pending {
                 file_name(&cmd.input),
                 cmd.out.display()
             ),
-            Pending::Approve { name, .. } => {
-                format!("Add the clip \"{name}\" to your poses (add-only)")
-            }
+            Pending::Approve {
+                name,
+                qa_failed: false,
+                ..
+            } => format!("Add the clip \"{name}\" to your poses (add-only)"),
+            Pending::Approve { name, .. } => format!(
+                "⚠ QA FAILED: this clip may show white edges or fringing. Add \"{name}\" to your poses anyway (add-only)?"
+            ),
         }
     }
 }
@@ -97,6 +105,10 @@ type Frames = Result<Vec<egui::ColorImage>, String>;
 
 struct Card {
     c: Candidate,
+    /// The candidate folder (a direct child of the job's staging folder)
+    /// and its files' stem.
+    folder: Option<PathBuf>,
+    stem: String,
     /// The candidate's files, confined to the job's staging folder.
     mp4: Option<PathBuf>,
     png: Option<PathBuf>,
@@ -131,6 +143,9 @@ pub struct ImportTab {
     clips_dir: Option<PathBuf>,
     /// Test hook: fixed tool paths instead of searching.
     tools_override: Option<Tools>,
+    /// Advanced: `--matte`, `--max-candidates`.
+    matte: Matte,
+    max_candidates: u32,
 }
 
 fn file_name(p: &Path) -> String {
@@ -158,6 +173,8 @@ impl ImportTab {
             staging_root: vi::staging_root(),
             clips_dir: user_clips::user_clips_dir(),
             tools_override: None,
+            matte: Matte::Auto,
+            max_candidates: 0,
         }
     }
 
@@ -211,8 +228,8 @@ impl ImportTab {
         Ok(Tools {
             python: python.unwrap_or_default(),
             script: script.unwrap_or_default(),
-            ffmpeg: ffmpeg.unwrap_or_default(),
-            ffprobe: ffprobe.unwrap_or_default(),
+            ffmpeg: vi::bundled_tool("ffmpeg"),
+            ffprobe: vi::bundled_tool("ffprobe"),
         })
     }
 
@@ -244,6 +261,8 @@ impl ImportTab {
             max_ram_mb: vi::DEFAULT_MAX_RAM_MB,
             ffmpeg: tools.ffmpeg,
             ffprobe: tools.ffprobe,
+            matte: self.matte,
+            max_candidates: self.max_candidates,
         };
         let action = PendingAction::RunCommand {
             command: cmd.display(),
@@ -263,15 +282,24 @@ impl ImportTab {
         let Some(card) = self.cards.get(i).filter(|c| c.state == CardState::Open) else {
             return;
         };
-        let (Some(mp4), Some(png)) = (&card.mp4, &card.png) else {
+        let Some(folder) = &card.folder else {
             self.error = Some("This clip's files are missing from staging.".into());
             return;
         };
         let base = user_clips::sanitize_name(&card.name);
+        let qa_failed = !card.c.qa.pass;
+        let warn = if qa_failed {
+            format!(
+                "⚠ QA FAILED: white edge {} · fringe {}\n\n",
+                or_dash(&card.c.qa.white_edge),
+                or_dash(&card.c.qa.fringe)
+            )
+        } else {
+            String::new()
+        };
         let body = format!(
-            "Copies (add-only; a taken name gets a _2, _3… suffix, nothing is overwritten):\n  {}\n  {}\ninto {}\nand adds [clips.{base}] ({} frames @ {} fps, tag \"user\") to {}",
-            mp4.display(),
-            png.display(),
+            "{warn}Copies the clip folder (add-only; a taken name gets a _2, _3… suffix, nothing is overwritten)\n  {}\ninto {} (files renamed to {base}.*, preview and qa/ left out)\nand adds [clips.{base}] ({} frames @ {} fps, tag \"user\") to {}",
+            folder.display(),
             dir.join(&base).display(),
             card.c.frames,
             card.c.fps,
@@ -284,6 +312,7 @@ impl ImportTab {
         self.pending = Some(Pending::Approve {
             card: i,
             name: base,
+            qa_failed,
             action,
         });
     }
@@ -375,15 +404,30 @@ impl ImportTab {
     fn on_event(&mut self, e: Event) {
         match e {
             Event::Progress { stage, pct, msg } => {
+                // pct covers the whole job and only rises; the stage can
+                // jump back (qa → matte) and is shown as text only.
                 self.stage = stage;
-                self.pct = pct;
+                self.pct = self.pct.max(pct);
                 self.msg = msg;
             }
             Event::Candidate(c) => {
                 let staging = self.staging.clone().unwrap_or_default();
                 let mp4 = vi::resolve_in_staging(&staging, &c.mp4);
                 let png = vi::resolve_in_staging(&staging, &c.preview_png);
-                if mp4.is_none() || png.is_none() {
+                // The candidate folder: the mp4's folder, a direct child of
+                // the staging folder.
+                let real_staging = staging.canonicalize().ok();
+                let folder = mp4
+                    .as_ref()
+                    .and_then(|m| m.parent())
+                    .filter(|f| real_staging.is_some() && f.parent() == real_staging.as_deref())
+                    .map(Path::to_path_buf);
+                let stem = mp4
+                    .as_ref()
+                    .and_then(|m| m.file_stem())
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                if mp4.is_none() || png.is_none() || folder.is_none() {
                     self.log_line(format!(
                         "⚠ candidate {} points outside staging or at a missing file; ignored",
                         c.id
@@ -397,6 +441,8 @@ impl ImportTab {
                 };
                 self.cards.push(Card {
                     c,
+                    folder,
+                    stem,
                     mp4,
                     png,
                     name,
@@ -409,8 +455,14 @@ impl ImportTab {
                     note: String::new(),
                 });
             }
-            Event::Done { candidates } => {
-                self.log_line(format!("✓ pipeline done: {candidates} candidate(s)"));
+            Event::Done {
+                candidates,
+                peak_rss_mb,
+            } => {
+                let peak = peak_rss_mb
+                    .map(|m| format!(", peak memory {m} MB"))
+                    .unwrap_or_default();
+                self.log_line(format!("✓ pipeline done: {candidates} candidate(s){peak}"));
             }
             Event::Error { msg } => {
                 self.log_line(format!("✕ {msg}"));
@@ -444,7 +496,10 @@ impl ImportTab {
                     self.error = Some(m);
                 }
                 self.stage = "failed".into();
-                self.clear_cards();
+                // Clips announced before the error stay valid and approvable.
+                if self.cards.is_empty() {
+                    self.drop_staging();
+                }
             }
         }
     }
@@ -476,29 +531,24 @@ impl ImportTab {
         let (Some(dir), Some(card)) = (self.clips_dir.clone(), self.cards.get(i)) else {
             return;
         };
-        let (Some(mp4), Some(png)) = (card.mp4.clone(), card.png.clone()) else {
+        let Some(folder) = card.folder.clone() else {
             return;
         };
         let builtin = builtin_names();
-        let r = user_clips::install_clip(
+        let r = user_clips::install_candidate(
             &dir,
-            &user_clips::NewClip {
+            &user_clips::Candidate {
+                folder: &folder,
+                stem: &card.stem,
                 name: &card.name,
-                mp4: &mp4,
-                preview_png: &png,
-                frames: card.c.frames,
-                fps: card.c.fps,
             },
             &|n: &str| builtin.contains(n),
         );
         match r {
             Ok(name) => {
                 self.log_line(format!("✓ added \"{name}\" to {}", dir.display()));
-                let card = &mut self.cards[i];
-                card.state = CardState::Approved(name);
-                for f in [&mp4, &png] {
-                    let _ = std::fs::remove_file(f);
-                }
+                self.cards[i].state = CardState::Approved(name);
+                self.remove_candidate(i);
                 self.maybe_finish();
             }
             Err(e) => {
@@ -507,17 +557,34 @@ impl ImportTab {
             }
         }
     }
-
-    fn reject(&mut self, i: usize) {
+    /// Deletes a decided candidate's staged folder (only a direct child of
+    /// this job's staging folder).
+    fn remove_candidate(&mut self, i: usize) {
+        let staging = self.staging.as_ref().and_then(|s| s.canonicalize().ok());
         let Some(card) = self.cards.get_mut(i) else {
             return;
         };
-        for f in [card.mp4.take(), card.png.take()].into_iter().flatten() {
-            let _ = std::fs::remove_file(f);
-        }
-        card.state = CardState::Rejected;
+        card.mp4 = None;
+        card.png = None;
         card.frames.clear();
         card.tex = None;
+        if let Some(f) = card.folder.take() {
+            if staging.is_some() && f.parent() == staging.as_deref() {
+                let _ = std::fs::remove_dir_all(&f);
+            }
+        }
+    }
+
+    fn reject(&mut self, i: usize) {
+        if !self
+            .cards
+            .get(i)
+            .is_some_and(|c| c.state == CardState::Open)
+        {
+            return;
+        }
+        self.cards[i].state = CardState::Rejected;
+        self.remove_candidate(i);
         self.maybe_finish();
     }
 
@@ -528,12 +595,7 @@ impl ImportTab {
         let (Some(mp4), Some(png)) = (card.mp4.clone(), card.png.clone()) else {
             return;
         };
-        let Some(ffmpeg) = self
-            .tools_override
-            .as_ref()
-            .map(|t| t.ffmpeg.clone())
-            .or_else(vi::find_ffmpeg)
-        else {
+        let Some(ffmpeg) = vi::find_ffmpeg() else {
             card.note = "✕ ffmpeg wasn't found, so the clip can't play here".into();
             return;
         };
@@ -726,7 +788,7 @@ impl ImportTab {
                         let (qa_text, qa_col) = if card.c.qa.pass {
                             ("QA pass", pal::OK)
                         } else {
-                            ("QA flagged", pal::WARN)
+                            ("QA FAIL", pal::BAD)
                         };
                         ui.horizontal(|ui| {
                             chrome::chip(ui, qa_text, qa_col, true);
@@ -923,6 +985,25 @@ impl SettingsTab for ImportTab {
                     self.propose_start();
                 }
             });
+            egui::CollapsingHeader::new("Advanced")
+                .id_salt("import-advanced")
+                .show(ui, |ui| {
+                    ui.add_enabled_ui(idle, |ui| {
+                        chrome::row(ui, "Cut-out", |ui| {
+                            egui::ComboBox::from_id_salt("import-matte")
+                                .selected_text(self.matte.label())
+                                .show_ui(ui, |ui| {
+                                    for m in Matte::ALL {
+                                        ui.selectable_value(&mut self.matte, m, m.label());
+                                    }
+                                });
+                        });
+                        chrome::row(ui, "Max clips", |ui| {
+                            ui.add(egui::DragValue::new(&mut self.max_candidates).range(0..=99));
+                            chrome::hint(ui, "0 = no limit");
+                        });
+                    });
+                });
             if self.job.is_some() || !self.stage.is_empty() {
                 ui.add_space(6.0);
                 self.progress(ui);
@@ -988,8 +1069,8 @@ mod tests {
         t.tools_override = Some(Tools {
             python: vi::find_python().unwrap_or_else(|| "python3".into()),
             script: script.to_path_buf(),
-            ffmpeg: "ffmpeg".into(),
-            ffprobe: "ffprobe".into(),
+            ffmpeg: None,
+            ffprobe: None,
         });
         t
     }
@@ -1094,32 +1175,58 @@ mod tests {
         assert!(t.pending.is_some() || t.error.is_some());
     }
 
-    /// A stub pipeline honouring the contract (stands in for
-    /// tools/video-pipeline/user_import.py).
-    fn stub_script(dir: &Path, png: &Path, hang: bool) -> PathBuf {
+    /// A stub pipeline honouring the contract and the real pipeline's
+    /// layout (stands in for tools/video-pipeline/user_import.py):
+    /// `<out>/user_v_NN/` with `<stem>.json/.mp4/_sheet.png/_preview.png`
+    /// and `qa/`. `mode`: "ok", "hang" (until cancelled) or "fail" (one
+    /// candidate, then an error).
+    fn stub_script(dir: &Path, mode: &str) -> PathBuf {
+        let (sheet, preview) = (dir.join("sheet.png"), dir.join("preview.png"));
+        image::RgbaImage::new(32, 16).save(&sheet).unwrap();
+        image::RgbaImage::new(8, 16).save(&preview).unwrap();
         let p = dir.join("user_import.py");
         let body = format!(
             r#"import json, os, shutil, signal, sys, time
 a = sys.argv
 out = a[a.index("--out") + 1]
-assert "--json-progress" in a and "--ffmpeg" in a and "--ffprobe" in a
-signal.signal(signal.SIGTERM if os.name != "nt" else signal.SIGBREAK, lambda *_: sys.exit(130))
+assert "--json-progress" in a and a[a.index("--threads") + 1] == "2"
+assert "--ffmpeg" not in a, "only a bundled ffmpeg is passed"
+def bye(*_):
+    shutil.rmtree(out, ignore_errors=True)
+    os._exit(130)
+signal.signal(signal.SIGTERM if os.name != "nt" else signal.SIGBREAK, bye)
 def say(**k): print(json.dumps(k), flush=True)
 say(event="progress", stage="probe", pct=10, msg="probing")
 print("a stray line", flush=True)
-if {hang}:
+if "{mode}" == "hang":
     while True: time.sleep(0.05)
-for n in ("wave", "idle"):
-    os.makedirs(os.path.join(out, n), exist_ok=True)
-    open(os.path.join(out, n, n + ".mp4"), "wb").write(b"mp4")
-    shutil.copy({png:?}, os.path.join(out, n, n + ".png"))
-    say(event="candidate", id=n, mp4=n + "/" + n + ".mp4", preview_png=n + "/" + n + ".png",
-        frames=4, fps=12, qa={{"pass": True, "white_edge": 0.0, "fringe": 0.1}}, suggested_name=n)
-say(event="candidate", id="evil", mp4="../../etc/passwd", preview_png="x.png", frames=1, fps=1, qa={{}})
-say(event="done", candidates=2)
+def cand(n, ok):
+    stem = "user_v_%02d" % n
+    d = os.path.join(out, stem)
+    os.makedirs(os.path.join(d, "qa"))
+    open(os.path.join(d, stem + ".mp4"), "wb").write(b"mp4")
+    shutil.copy({sheet:?}, os.path.join(d, stem + "_sheet.png"))
+    shutil.copy({preview:?}, os.path.join(d, stem + "_preview.png"))
+    json.dump({{"name": stem, "frame_count": 4, "frame_width": 8, "frame_height": 16, "fps": 12,
+               "loop": False, "baseline_y": 15, "anchor": [4, 15], "sheet": stem + "_sheet.png",
+               "video": {{"file": stem + ".mp4", "layout": "alpha_side_by_side"}}}},
+              open(os.path.join(d, stem + ".json"), "w"))
+    say(event="progress", stage="qa", pct=40 * n, msg=stem)
+    say(event="candidate", id=stem, mp4=os.path.abspath(os.path.join(d, stem + ".mp4")),
+        preview_png=os.path.abspath(os.path.join(d, stem + "_preview.png")), frames=4, fps=12,
+        qa={{"pass": ok, "white_edge": "ok", "fringe": "PASS" if ok else "FAIL max_white 9"}},
+        suggested_name=stem)
+cand(1, True)
+say(event="progress", stage="matte", pct=30, msg="back to matte; pct never drops")
+if "{mode}" == "fail":
+    say(event="error", msg="ran out of movements")
+    sys.exit(1)
+cand(2, False)
+say(event="candidate", id="evil", mp4="/etc/passwd", preview_png="/etc/hostname", frames=1, fps=1, qa={{}})
+say(event="done", candidates=2, peak_rss_mb=321)
 "#,
-            hang = if hang { "True" } else { "False" },
-            png = png.display().to_string(),
+            sheet = sheet.display().to_string(),
+            preview = preview.display().to_string(),
         );
         std::fs::write(&p, body).unwrap();
         p
@@ -1138,10 +1245,8 @@ say(event="done", candidates=2)
             return;
         }
         let d = tmp("run");
-        let png = d.join("p.png");
-        image::RgbaImage::new(8, 16).save(&png).unwrap();
         std::fs::write(d.join("v.mp4"), b"x").unwrap();
-        let script = stub_script(&d, &png, false);
+        let script = stub_script(&d, "ok");
         let mut t = tab_in(&d, &script);
         t.input = Some(d.join("v.mp4"));
         start_now(&mut t);
@@ -1149,6 +1254,7 @@ say(event="done", candidates=2)
         assert!(staging.starts_with(d.join("import-staging")));
         pump(&mut t, |t| t.job.is_none());
         assert_eq!(t.stage, "done");
+        assert_eq!(t.pct, 100.0);
         assert_eq!(
             t.cards.len(),
             2,
@@ -1156,23 +1262,57 @@ say(event="done", candidates=2)
             t.log
         );
         assert!(t.log.iter().any(|l| l == "a stray line"));
-        // Approve "wave" (renamed), reject "idle".
+        assert!(
+            t.log.iter().any(|l| l.contains("peak memory 321 MB")),
+            "{:?}",
+            t.log
+        );
+        assert!(t.cards[0].c.qa.pass && !t.cards[1].c.qa.pass);
+        // Approve the first (renamed).
         t.cards[0].name = "My Wave".into();
         t.propose_approve(0);
-        assert!(matches!(t.pending, Some(Pending::Approve { .. })));
+        assert!(matches!(
+            t.pending,
+            Some(Pending::Approve {
+                qa_failed: false,
+                ..
+            })
+        ));
         t.confirm(&egui::Context::default());
         assert_eq!(t.cards[0].state, CardState::Approved("my_wave".into()));
         let clips = d.join("user-clips");
-        assert!(clips.join("my_wave/my_wave.mp4").is_file());
+        for f in ["my_wave.mp4", "my_wave_sheet.png", "my_wave.json"] {
+            assert!(clips.join("my_wave").join(f).is_file(), "{f}");
+        }
+        assert!(!clips.join("my_wave/my_wave_preview.png").exists());
+        assert!(!clips.join("my_wave/qa").exists());
         let m = user_clips::load_user_manifest(&clips).unwrap();
         assert!(m.clips.contains_key("my_wave"));
+        assert!(
+            !staging.join("user_v_01").exists(),
+            "approved: staged copy gone"
+        );
         assert!(staging.exists(), "kept while a card is open");
+        // A failed-QA clip can still be approved, with a loud card.
+        t.propose_approve(1);
+        assert!(matches!(
+            t.pending,
+            Some(Pending::Approve {
+                qa_failed: true,
+                ..
+            })
+        ));
+        let p = t.pending.as_ref().unwrap();
+        assert!(p.summary().contains("QA FAILED"), "{}", p.summary());
+        t.deny();
+        assert_eq!(t.cards[1].state, CardState::Open, "No keeps the card");
         t.reject(1);
         assert_eq!(t.cards[1].state, CardState::Rejected);
         assert!(!staging.exists(), "all decided: staging removed");
         let log = std::fs::read_to_string(d.join("audit.log")).unwrap();
         assert_eq!(log.matches("CONFIRM").count(), 2, "{log}");
-        // A second import of the same name is suffixed, never overwritten.
+        assert_eq!(log.matches("DENY").count(), 1, "{log}");
+        // A second import under the same name is suffixed, never overwritten.
         start_now(&mut t);
         pump(&mut t, |t| t.job.is_none());
         t.cards[0].name = "my wave".into();
@@ -1184,15 +1324,36 @@ say(event="done", candidates=2)
     }
 
     #[test]
+    fn clips_announced_before_an_error_stay_approvable() {
+        if vi::find_python().is_none() {
+            return;
+        }
+        let d = tmp("fail");
+        std::fs::write(d.join("v.mp4"), b"x").unwrap();
+        let script = stub_script(&d, "fail");
+        let mut t = tab_in(&d, &script);
+        t.input = Some(d.join("v.mp4"));
+        start_now(&mut t);
+        pump(&mut t, |t| t.job.is_none());
+        assert_eq!(t.stage, "failed");
+        assert_eq!(t.error.as_deref(), Some("ran out of movements"));
+        assert_eq!(t.cards.len(), 1);
+        t.propose_approve(0);
+        t.confirm(&egui::Context::default());
+        assert_eq!(t.cards[0].state, CardState::Approved("user_v_01".into()));
+        assert!(d.join("user-clips/user_v_01/user_v_01.mp4").is_file());
+        assert!(t.staging.is_none(), "all decided: staging removed");
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
     fn cancel_stops_the_run_and_removes_staging() {
         if vi::find_python().is_none() {
             return;
         }
         let d = tmp("cancel");
-        let png = d.join("p.png");
-        image::RgbaImage::new(8, 16).save(&png).unwrap();
         std::fs::write(d.join("v.mp4"), b"x").unwrap();
-        let script = stub_script(&d, &png, true);
+        let script = stub_script(&d, "hang");
         let mut t = tab_in(&d, &script);
         t.input = Some(d.join("v.mp4"));
         start_now(&mut t);

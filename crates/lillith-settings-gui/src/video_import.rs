@@ -14,8 +14,12 @@
 //! `{"event":"candidate","id","mp4","preview_png","frames","fps","qa":{"pass","white_edge","fringe"},"suggested_name"}`,
 //! `{"event":"done","candidates"}`, `{"event":"error","msg"}`. Anything
 //! else on stdout is kept as a log line, never fatal. Exit 0 = ok, 1 =
-//! error, 130 = cancelled. Cancel is `SIGTERM` (Linux) / `CTRL_BREAK`
-//! (Windows), then a hard kill after [`CANCEL_GRACE`].
+//! error, 130 = cancelled (the pipeline then deletes everything that run
+//! created). Cancel is `SIGTERM` (Linux) / `CTRL_BREAK_EVENT` to the
+//! child's process group (Windows, started with `CREATE_NEW_PROCESS_GROUP`).
+//! A Linux pipeline still running after [`CANCEL_GRACE`] is SIGKILLed with
+//! its process group; on Windows the break is re-sent, never
+//! TerminateProcess.
 //!
 //! The input file is never read here: only its path is passed on.
 //! Staging is `<data>/lillith/import-staging/<job>/`; candidate files must
@@ -33,6 +37,8 @@ use std::time::{Duration, Instant};
 pub const ACCEPTED_EXT: &[&str] = &["mp4", "gif", "webm", "mov"];
 /// `--max-ram-mb` passed to the pipeline.
 pub const DEFAULT_MAX_RAM_MB: u32 = 1500;
+/// `--threads` passed to the pipeline (always 2: the box stays usable).
+pub const THREADS: u32 = 2;
 /// Time the pipeline gets to exit after the cancel signal before it is
 /// killed outright.
 pub const CANCEL_GRACE: Duration = Duration::from_secs(5);
@@ -85,6 +91,8 @@ pub enum Event {
     Candidate(Candidate),
     Done {
         candidates: u32,
+        /// Peak memory of the run, when reported.
+        peak_rss_mb: Option<u64>,
     },
     Error {
         msg: String,
@@ -164,6 +172,7 @@ pub fn parse_line(line: &str) -> Event {
         }
         Some("done") => Event::Done {
             candidates: v.get("candidates").and_then(Value::as_u64).unwrap_or(0) as u32,
+            peak_rss_mb: v.get("peak_rss_mb").and_then(Value::as_u64),
         },
         Some("error") => Event::Error { msg: s("msg") },
         _ => unknown(),
@@ -299,6 +308,23 @@ pub fn find_tool_in(
     which_in(tool, path_env)
 }
 
+/// The bundled copy of `tool` shipped in the install's `bin/`
+/// (`<exe dir>/bin/ffmpeg(.exe)`), only if that file exists. Passed to the
+/// pipeline as `--ffmpeg` / `--ffprobe`; without it the pipeline does its
+/// own lookup (`LILLITH_FFMPEG` / `LILLITH_FFPROBE`, ffprobe next to ffmpeg,
+/// then `PATH`).
+pub fn bundled_tool_in(tool: &str, exe_dir: Option<&Path>) -> Option<PathBuf> {
+    let p = exe_dir?
+        .join("bin")
+        .join(format!("{tool}{}", std::env::consts::EXE_SUFFIX));
+    p.is_file().then_some(p)
+}
+
+/// [`bundled_tool_in`] for this program.
+pub fn bundled_tool(tool: &str) -> Option<PathBuf> {
+    bundled_tool_in(tool, exe_dir().as_deref())
+}
+
 fn exe_dir() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
@@ -319,9 +345,16 @@ pub fn find_ffmpeg() -> Option<PathBuf> {
     find_media_tool("ffmpeg", "LILLITH_FFMPEG")
 }
 
-/// ffprobe for the pipeline (see [`find_tool_in`] for the order).
+/// ffprobe for the pipeline (see [`find_tool_in`] for the order); like the
+/// pipeline, also accepts one next to the ffmpeg that was found.
 pub fn find_ffprobe() -> Option<PathBuf> {
-    find_media_tool("ffprobe", "LILLITH_FFPROBE")
+    find_media_tool("ffprobe", "LILLITH_FFPROBE").or_else(|| {
+        let ff = find_ffmpeg()?;
+        let p = ff
+            .parent()?
+            .join(format!("ffprobe{}", std::env::consts::EXE_SUFFIX));
+        p.is_file().then_some(p)
+    })
 }
 
 /// The pipeline script: `$LILLITH_VIDEO_IMPORT`, then next to the binary
@@ -383,13 +416,48 @@ pub struct ImportCmd {
     pub input: PathBuf,
     pub out: PathBuf,
     pub max_ram_mb: u32,
-    pub ffmpeg: PathBuf,
-    pub ffprobe: PathBuf,
+    /// Bundled `bin/ffmpeg(.exe)` only; `None` lets the pipeline look.
+    pub ffmpeg: Option<PathBuf>,
+    pub ffprobe: Option<PathBuf>,
+    /// `--matte auto|isnet|key|alpha`.
+    pub matte: Matte,
+    /// `--max-candidates` (0 = no limit).
+    pub max_candidates: u32,
+}
+
+/// Background removal mode of the pipeline (`--matte`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Matte {
+    #[default]
+    Auto,
+    Isnet,
+    Key,
+    Alpha,
+}
+
+impl Matte {
+    pub const ALL: [Matte; 4] = [Matte::Auto, Matte::Isnet, Matte::Key, Matte::Alpha];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Matte::Auto => "auto",
+            Matte::Isnet => "isnet",
+            Matte::Key => "key",
+            Matte::Alpha => "alpha",
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Matte::Auto => "auto (best guess)",
+            Matte::Isnet => "isnet (AI cut-out)",
+            Matte::Key => "key (plain background)",
+            Matte::Alpha => "alpha (video has transparency)",
+        }
+    }
 }
 
 impl ImportCmd {
     pub fn argv(&self) -> Vec<String> {
-        vec![
+        let mut v = vec![
             self.python.display().to_string(),
             self.script.display().to_string(),
             "--input".into(),
@@ -399,11 +467,21 @@ impl ImportCmd {
             "--json-progress".into(),
             "--max-ram-mb".into(),
             self.max_ram_mb.to_string(),
-            "--ffmpeg".into(),
-            self.ffmpeg.display().to_string(),
-            "--ffprobe".into(),
-            self.ffprobe.display().to_string(),
-        ]
+            "--threads".into(),
+            THREADS.to_string(),
+        ];
+        if self.matte != Matte::Auto {
+            v.extend(["--matte".into(), self.matte.as_str().into()]);
+        }
+        if self.max_candidates > 0 {
+            v.extend(["--max-candidates".into(), self.max_candidates.to_string()]);
+        }
+        for (flag, p) in [("--ffmpeg", &self.ffmpeg), ("--ffprobe", &self.ffprobe)] {
+            if let Some(p) = p {
+                v.extend([flag.into(), p.display().to_string()]);
+            }
+        }
+        v
     }
 
     /// The argv as one shell-quoted line (for the card / audit log only;
@@ -429,10 +507,7 @@ impl ImportCmd {
     pub fn command(&self) -> Command {
         let argv = self.argv();
         let mut c = Command::new(&argv[0]);
-        c.args(&argv[1..])
-            .env("PYTHONUNBUFFERED", "1")
-            .env("LILLITH_FFMPEG", &self.ffmpeg)
-            .env("LILLITH_FFPROBE", &self.ffprobe);
+        c.args(&argv[1..]).env("PYTHONUNBUFFERED", "1");
         c
     }
 }
@@ -588,20 +663,29 @@ impl Job {
         }
         self.cancel_sent = Some(Instant::now());
         if let Err(e) = send_cancel(self.pid) {
-            eprintln!("lillith-settings: import cancel signal: {e}; killing it");
+            eprintln!("lillith-settings: import cancel signal: {e}");
             self.kill();
         }
     }
 
+    /// Last resort after [`CANCEL_GRACE`]. Linux: SIGKILL to the process
+    /// group (the pipeline and its ffmpeg). Windows: CTRL_BREAK is sent once
+    /// more, never TerminateProcess (the pipeline must get to clean up).
     fn kill(&mut self) {
         self.killed = true;
         #[cfg(unix)]
-        // SAFETY: plain syscall on our own child's process group.
-        unsafe {
-            libc::killpg(self.pid as libc::pid_t, libc::SIGKILL);
+        {
+            // SAFETY: plain syscall on our own child's process group.
+            unsafe {
+                libc::killpg(self.pid as libc::pid_t, libc::SIGKILL);
+            }
+            if let Ok(mut c) = self.child.lock() {
+                let _ = c.kill();
+            }
         }
-        if let Ok(mut c) = self.child.lock() {
-            let _ = c.kill();
+        #[cfg(windows)]
+        if let Err(e) = send_cancel(self.pid) {
+            eprintln!("lillith-settings: import still running after cancel: {e}");
         }
     }
 
@@ -755,8 +839,11 @@ mod tests {
             })
         );
         assert_eq!(
-            parse_line(r#"{"event":"done","candidates":3}"#),
-            Event::Done { candidates: 3 }
+            parse_line(r#"{"event":"done","candidates":3,"peak_rss_mb":812}"#),
+            Event::Done {
+                candidates: 3,
+                peak_rss_mb: Some(812)
+            }
         );
         assert_eq!(
             parse_line(r#"{"event":"error","msg":"no person found"}"#),
@@ -848,14 +935,27 @@ mod tests {
             input: "/home/ko/My Clip's.mp4".into(),
             out: "/home/ko/.local/share/lillith/import-staging/job-1".into(),
             max_ram_mb: 1500,
-            ffmpeg: "/opt/l/bin/ffmpeg".into(),
-            ffprobe: "/usr/bin/ffprobe".into(),
+            ffmpeg: None,
+            ffprobe: None,
+            matte: Matte::Auto,
+            max_candidates: 0,
         };
         assert_eq!(
             c.display(),
-            "/usr/bin/python3 /opt/l/tools/video-pipeline/user_import.py --input '/home/ko/My Clip'\\''s.mp4' --out /home/ko/.local/share/lillith/import-staging/job-1 --json-progress --max-ram-mb 1500 --ffmpeg /opt/l/bin/ffmpeg --ffprobe /usr/bin/ffprobe"
+            "/usr/bin/python3 /opt/l/tools/video-pipeline/user_import.py --input '/home/ko/My Clip'\\''s.mp4' --out /home/ko/.local/share/lillith/import-staging/job-1 --json-progress --max-ram-mb 1500 --threads 2"
         );
         assert_eq!(c.argv()[3], "/home/ko/My Clip's.mp4", "argv is unquoted");
+        // Bundled tools and the advanced options are passed only when set.
+        let c = ImportCmd {
+            ffmpeg: Some("/opt/l/bin/ffmpeg".into()),
+            ffprobe: Some("/opt/l/bin/ffprobe".into()),
+            matte: Matte::Key,
+            max_candidates: 3,
+            ..c
+        };
+        assert!(c.display().ends_with(
+            "--threads 2 --matte key --max-candidates 3 --ffmpeg /opt/l/bin/ffmpeg --ffprobe /opt/l/bin/ffprobe"
+        ), "{}", c.display());
     }
 
     #[test]
@@ -910,6 +1010,20 @@ mod tests {
         );
         assert_eq!(find("ffmpeg", Some("ffmpeg")), Some(on_path));
         assert_eq!(find("ffmpeg", Some("/nope/ffmpeg")), None);
+        // Only a bundled bin/ copy is passed to the pipeline.
+        assert_eq!(
+            bundled_tool_in("ffmpeg", Some(&exe)),
+            Some(
+                exe.join("bin")
+                    .join(format!("ffmpeg{}", std::env::consts::EXE_SUFFIX))
+            )
+        );
+        assert_eq!(
+            bundled_tool_in("ffprobe", Some(&exe)),
+            None,
+            "ffprobe only on PATH"
+        );
+        assert_eq!(bundled_tool_in("ffmpeg", None), None);
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -953,7 +1067,13 @@ echo '{"event":"done","candidates":0}'"#,
         assert_eq!(out, Outcome::Ok);
         assert_eq!(evs.len(), 3, "every line arrives before the exit: {evs:?}");
         assert!(matches!(evs[1], Event::Malformed(_)));
-        assert_eq!(evs[2], Event::Done { candidates: 0 });
+        assert_eq!(
+            evs[2],
+            Event::Done {
+                candidates: 0,
+                peak_rss_mb: None
+            }
+        );
     }
 
     #[cfg(unix)]
