@@ -1,0 +1,24 @@
+[Unit]
+Description=Lillith offline voice daemon (cloned-voice TTS + local STT, unix socket only)
+After=pipewire.service pipewire-pulse.service
+Wants=pipewire.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/lillith-voiced
+Restart=on-failure
+RestartSec=3
+# Leave the CPU to the foreground (llama-server, the desktop) when both are busy
+Nice=5
+# 4 threads = all logical CPUs of the i5-7200U; override with: systemctl --user edit lillith-voice
+Environment=LILLITH_THREADS=4
+Environment=HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1
+# Offline by construction: the daemon may only open unix sockets (its own + PipeWire).
+# No AF_INET/AF_INET6 at all, so it physically cannot reach the network.
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictRealtime=no
+
+[Install]
+WantedBy=default.target
