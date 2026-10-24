@@ -59,6 +59,28 @@ fn chat_endpoint_fallback(text: &str) -> Option<String> {
     (!ep.is_empty()).then(|| ep.to_string())
 }
 
+/// One plain `VERSION_PROBE` audit line (no card) per binary detection ran
+/// `<binary> --version` on. Runtime detection itself is not gated.
+fn audit_version_probes(
+    log: Option<std::path::PathBuf>,
+    probed: bool,
+    r: &lillith_setup::detect::RuntimeReport,
+) {
+    if !probed {
+        return;
+    }
+    let sc = lillith_core::soul_contract::SoulContract::new(log);
+    for b in [&r.llama_server, &r.llama_cli, &r.ollama]
+        .into_iter()
+        .flatten()
+    {
+        sc.record_ungated_launch(
+            lillith_core::soul_contract::VERSION_PROBE_TAG,
+            &[b.path.display().to_string(), "--version".into()],
+        );
+    }
+}
+
 fn detect_options(path: &std::path::Path) -> DetectOptions {
     let mut o = DetectOptions::default();
     if let Ok(c) = lillith_setup::config::load(path) {
@@ -990,6 +1012,11 @@ impl eframe::App for SettingsApp {
         // background jobs
         if let Some(h) = &mut self.detect {
             if let Some(r) = h.try_recv() {
+                audit_version_probes(
+                    lillith_core::config::audit_log_path(),
+                    detect_options(&self.shared.config_path).probe_versions,
+                    &r,
+                );
                 self.shared.runtime = Some(r);
                 self.shared.detecting = false;
                 self.detect = None;
@@ -1174,7 +1201,41 @@ impl eframe::App for SettingsApp {
 
 #[cfg(test)]
 mod detect_tests {
-    use super::chat_endpoint_fallback;
+    use super::{audit_version_probes, chat_endpoint_fallback};
+    use lillith_setup::detect::{BinaryInfo, RuntimeReport};
+
+    #[test]
+    fn every_version_probe_gets_a_plain_audit_line() {
+        let dir = std::env::temp_dir().join(format!("lillith-vprobe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let bin = |p: &str| {
+            Some(BinaryInfo {
+                path: p.into(),
+                version: None,
+            })
+        };
+        let r = RuntimeReport {
+            llama_server: bin("/opt/llama/llama-server"),
+            llama_cli: None,
+            ollama: bin("/usr/bin/ollama"),
+            llama_server_api: Default::default(),
+            ollama_api: Default::default(),
+        };
+        // Probing off: nothing ran, nothing is written.
+        audit_version_probes(Some(log.clone()), false, &r);
+        assert!(!log.exists());
+        audit_version_probes(Some(log.clone()), true, &r);
+        let text = std::fs::read_to_string(&log).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 2, "{text}");
+        assert!(lines[0].contains(
+            "\tVERSION_PROBE\tstart_model_server\t/opt/llama/llama-server\tno-card\t$ /opt/llama/llama-server --version"
+        ), "{text}");
+        assert!(lines[1].contains("\tVERSION_PROBE\tstart_model_server\t/usr/bin/ollama\t"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn chat_endpoint_is_used_only_without_llm_server_url() {

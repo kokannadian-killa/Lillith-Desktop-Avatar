@@ -159,6 +159,12 @@ handler of its own; the overlay check and the startup scan cover it.
 - `USED`, `SPAWN_REFUSED` and `SPAWN_FAILED` come after the decision and
   never open or close a card. Columns are sanitized (no tab or newline in a
   path or note) and a torn last line is never glued to the next one.
+- Two launches have no card and only leave a plain audit line (append-only,
+  `no-card` in the id column, the command with `--api-key` masked; they
+  never open or close a card): the settings window's "Start llama-server"
+  button (`SETTINGS_UNGATED`) and runtime detection's `<binary> --version`
+  (`VERSION_PROBE`, one line per probed binary), both with kind
+  `start_model_server`.
 - Saying the safeword while the bubble waits for the approved server ends
   the wait at once and nothing is resent.
 - Typed or spoken "yes" never approves: chat text (`yes`, `/contract yes`)

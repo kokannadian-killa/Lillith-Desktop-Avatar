@@ -1163,6 +1163,7 @@ impl BrainTab {
                                     self.server_note = Some("stopped".into());
                                 }
                             } else if chrome::stone_button(ui, "▶ Start llama-server").clicked() {
+                                audit_settings_start(lillith_core::config::audit_log_path(), c);
                                 match c
                                     .to_command()
                                     .stdin(std::process::Stdio::null())
@@ -1527,9 +1528,50 @@ impl BrainTab {
     }
 }
 
+/// The "Start llama-server" button runs without a card: it leaves one
+/// plain `SETTINGS_UNGATED` audit line with the command (api key masked).
+fn audit_settings_start(log: Option<PathBuf>, c: &launch::LaunchCommand) {
+    let argv: Vec<String> = std::iter::once(c.program.clone())
+        .chain(c.args.iter().cloned())
+        .collect();
+    lillith_core::soul_contract::SoulContract::new(log)
+        .record_ungated_launch(lillith_core::soul_contract::SETTINGS_UNGATED_TAG, &argv);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_start_button_leaves_a_plain_masked_audit_line() {
+        let dir = std::env::temp_dir().join(format!("lillith-ungated-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let c = launch::LaunchCommand {
+            program: "/opt/llama/llama-server".into(),
+            args: [
+                "-m",
+                "/m.gguf",
+                "--api-key",
+                "sekrit",
+                "--host",
+                "127.0.0.1",
+            ]
+            .map(String::from)
+            .to_vec(),
+        };
+        audit_settings_start(Some(log.clone()), &c);
+        audit_settings_start(Some(log.clone()), &c);
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert!(!text.contains("sekrit"), "{text}");
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 2, "one line per click, appended");
+        assert!(lines[0].contains(
+            "\tSETTINGS_UNGATED\tstart_model_server\t/opt/llama/llama-server\tno-card\t$ /opt/llama/llama-server -m /m.gguf --api-key *** --host 127.0.0.1"
+        ), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn llm_round_trip_with_rounding() {

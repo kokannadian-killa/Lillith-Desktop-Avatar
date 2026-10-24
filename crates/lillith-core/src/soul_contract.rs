@@ -143,10 +143,24 @@ pub const MODEL_SERVER_KIND: &str = "start_model_server";
 /// Card kinds whose `PROPOSED` lines are tracked until a decision (and
 /// closed as orphans at overlay start).
 pub const CARD_KINDS: &[&str] = &[MODEL_SERVER_KIND];
-/// Audit tags written *after* a model-server card was decided (the overlay
-/// claiming or refusing a `CONFIRM`, or the spawn failing). They never
-/// open or close a card.
-pub const AFTER_DECISION_TAGS: &[&str] = &["USED", "SPAWN_REFUSED", "SPAWN_FAILED"];
+/// Plain audit tag (no card): the settings window's "Start llama-server"
+/// button started it.
+pub const SETTINGS_UNGATED_TAG: &str = "SETTINGS_UNGATED";
+/// Plain audit tag (no card): runtime detection ran `<binary> --version`.
+pub const VERSION_PROBE_TAG: &str = "VERSION_PROBE";
+/// Audit tags that never open or close a card: the ones written *after* a
+/// model-server card was decided (the overlay claiming or refusing a
+/// `CONFIRM`, or the spawn failing) and the card-less launch records.
+pub const AFTER_DECISION_TAGS: &[&str] = &[
+    "USED",
+    "SPAWN_REFUSED",
+    "SPAWN_FAILED",
+    SETTINGS_UNGATED_TAG,
+    VERSION_PROBE_TAG,
+];
+
+/// The id column of a card-less launch line.
+pub const NO_CARD: &str = "no-card";
 
 /// A model-server card the audit log shows as `PROPOSED` with no decision.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1250,6 +1264,17 @@ impl SoulContract {
         }
     }
 
+    /// Appends a plain, card-less launch record:
+    /// `<ts>\t<tag>\tstart_model_server\t<argv[0]>\tno-card\t$ <argv>`,
+    /// the argv with `--api-key` values masked. For launches that are not
+    /// gated by a card ([`SETTINGS_UNGATED_TAG`], [`VERSION_PROBE_TAG`]):
+    /// it records, it approves nothing, and it never touches a card.
+    pub fn record_ungated_launch(&self, tag: &str, argv: &[String]) {
+        let bin = argv.first().cloned().unwrap_or_default();
+        let shown = format!("$ {}", mask_secret_args(argv).join(" "));
+        self.append_line(tag, MODEL_SERVER_KIND, &bin, NO_CARD, &shown);
+    }
+
     /// The overlay is about to start llama-server for model-server card
     /// `card`, whose command starts with `binary`. Allowed only once per
     /// card and only after its `CONFIRM` (a clicked Yes) with that binary
@@ -1801,6 +1826,41 @@ mod tests {
         assert!(!PendingAction::ListDir { path: "/x".into() }
             .prompt()
             .scrolls());
+    }
+
+    #[test]
+    fn ungated_launches_get_a_plain_masked_line_and_leave_cards_alone() {
+        let dir = tmpdir("ungated");
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let sc = SoulContract::new(Some(log.clone())).with_clock(fixed(1_700_000_000));
+        // An old id-less PROPOSED must stay open across these lines.
+        std::fs::write(&log, "t0\tPROPOSED\tstart_model_server\t/b\n").unwrap();
+        let argv: Vec<String> = ["/opt/llama-server", "--api-key", "sekrit", "--port", "8080"]
+            .map(String::from)
+            .to_vec();
+        sc.record_ungated_launch(SETTINGS_UNGATED_TAG, &argv);
+        sc.record_ungated_launch(
+            VERSION_PROBE_TAG,
+            &["/opt/llama-server".into(), "--version".into()],
+        );
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert!(!text.contains("sekrit"), "{text}");
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].starts_with("t0\tPROPOSED"), "append-only");
+        assert!(lines[1].ends_with(
+            "\tSETTINGS_UNGATED\tstart_model_server\t/opt/llama-server\tno-card\t$ /opt/llama-server --api-key *** --port 8080"
+        ), "{}", lines[1]);
+        assert!(lines[2].ends_with(
+            "\tVERSION_PROBE\tstart_model_server\t/opt/llama-server\tno-card\t$ /opt/llama-server --version"
+        ), "{}", lines[2]);
+        assert_eq!(
+            sc.open_model_server_cards().len(),
+            1,
+            "no card opened or closed"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
