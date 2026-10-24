@@ -339,14 +339,22 @@ impl std::fmt::Debug for OnlineResearch<'_> {
 
 impl<'f> OnlineResearch<'f> {
     /// The engine, or why online research is off ([`gate`]).
-    pub fn new(cfg: &Config, fetcher: &'f dyn Fetcher) -> Result<Self, Off> {
+    ///
+    /// `names` are the people a URL must never mention, on top of this
+    /// machine's user / host / time-zone names
+    /// ([`IdentityDenylist::from_local`]). The Brain has no read-only
+    /// person accessor and the config no user-name key, so the caller
+    /// supplies them: **production wiring must pass Ko's name and every
+    /// person name known to memory** (e.g. `name` attribute facts). Each
+    /// name is blocked whole and by its parts ([`IdentityDenylist::with_names`]).
+    pub fn new(cfg: &Config, fetcher: &'f dyn Fetcher, names: &[String]) -> Result<Self, Off> {
         gate(cfg)?;
         Ok(Self {
             fetcher,
             knowledge_dir: cfg.mind.resolved_knowledge_dir(),
             topics: cfg.learn.topics.clone(),
             audit_log: lillith_core::config::audit_log_path(),
-            deny: IdentityDenylist::from_local(),
+            deny: IdentityDenylist::from_local().with_names(names),
             block_hosts: cfg
                 .learn
                 .block_hosts
@@ -406,8 +414,12 @@ impl<'f> OnlineResearch<'f> {
         Ok(u)
     }
 
+    /// A best-effort trip line (the outcome is already fixed; the only
+    /// line that gates anything is `PROPOSED`, see [`run`](Self::run)).
     fn audit(&self, state: &str, card: &str, fields: &[String]) {
-        audit::record_online(self.audit_log.as_deref(), state, card, fields);
+        if let Err(e) = audit::record_online(self.audit_log.as_deref(), state, card, fields) {
+            tracing::warn!("online research audit ({state}): {e}");
+        }
     }
 
     /// Runs one trip: gates, card, fetch, ingest, report. `stop()` is the
@@ -497,7 +509,8 @@ impl<'f> OnlineResearch<'f> {
             max_bytes,
             card: card.clone(),
         };
-        self.audit(
+        let proposed = audit::record_online(
+            self.audit_log.as_deref(),
             "PROPOSED",
             &card,
             &[
@@ -508,6 +521,13 @@ impl<'f> OnlineResearch<'f> {
                 format!("urls={}", rep.approved.join(",")),
             ],
         );
+        // Fail-closed: no PROPOSED line on disk, no card and no request.
+        if let Err(e) = proposed {
+            return refuse(
+                rep,
+                format!("the audit log can't be written ({e}); nothing is shown or sent"),
+            );
+        }
         let p = action.prompt();
         let text = CardText {
             title: p.title.to_string(),
@@ -643,6 +663,25 @@ impl<'f> OnlineResearch<'f> {
                     match next {
                         Some(Ok(n)) if hops < MAX_REDIRECTS => {
                             let n = n.strip_tracking();
+                            // An https → http downgrade always stops the
+                            // trip, whatever `allow_http` says.
+                            if url.is_https() && !n.is_https() {
+                                rep.visits.push(Visit {
+                                    url: url.to_string(),
+                                    status: Some(page.status),
+                                    note: format!("redirect to {n}"),
+                                });
+                                rep.visits.push(Visit {
+                                    url: n.to_string(),
+                                    status: None,
+                                    note: "not fetched: https to http downgrade refused".into(),
+                                });
+                                partial = true;
+                                rep.reason = Some(format!(
+                                    "{url} redirected down to plain http ({n}); the trip stopped"
+                                ));
+                                break 'trip;
+                            }
                             rep.visits.push(Visit {
                                 url: url.to_string(),
                                 status: Some(page.status),

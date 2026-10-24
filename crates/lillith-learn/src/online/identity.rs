@@ -123,6 +123,20 @@ impl IdentityDenylist {
         self
     }
 
+    /// Adds person names (Ko's, names from memory): each whole name and
+    /// each of its parts (`Ko Kannadian` → `ko kannadian`, `ko`,
+    /// `kannadian`), so `q=Ko+Kannadian` or `/kannadian` is caught too.
+    pub fn with_names<I: IntoIterator<Item = S>, S: AsRef<str>>(mut self, names: I) -> Self {
+        for n in names {
+            let n = n.as_ref();
+            self.add(n);
+            for part in n.split(|c: char| !c.is_alphanumeric()) {
+                self.add(part);
+            }
+        }
+        self
+    }
+
     fn add(&mut self, w: &str) {
         let w = w.trim().to_lowercase();
         if w.chars().count() < 2 || GENERIC.contains(&w.as_str()) || self.words.contains(&w) {

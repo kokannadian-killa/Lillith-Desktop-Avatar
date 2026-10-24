@@ -171,7 +171,7 @@ impl Env {
         self.dir.join("audit.log")
     }
     fn engine<'f>(&self, cfg: &Config, f: &'f TestFetcher) -> OnlineResearch<'f> {
-        OnlineResearch::new(cfg, f)
+        OnlineResearch::new(cfg, f, &[])
             .unwrap()
             .with_knowledge_dir(Some(self.knowledge()))
             .with_audit_log(Some(self.log()))
@@ -227,7 +227,7 @@ fn online_defaults_off_and_every_switch_gates_it() {
     assert!(!d.learn.online, "[learn] online must ship false");
     assert_eq!(online::gate(&d), Err(Off::OnlineOff));
     let f = TestFetcher::new();
-    assert!(OnlineResearch::new(&d, &f).is_err());
+    assert!(OnlineResearch::new(&d, &f, &[]).is_err());
 
     let mut c = on_cfg();
     assert_eq!(online::gate(&c), Ok(()));
@@ -885,7 +885,8 @@ fn a_redirect_down_to_plain_http_stops_the_trip() {
         "the http hop is never requested"
     );
     let v = rep.visits.last().unwrap();
-    assert!(v.status.is_none() && v.note.contains("allow_http"), "{v:?}");
+    // Refused as a downgrade (S2) before the allow_http check is reached.
+    assert!(v.status.is_none() && v.note.contains("downgrade"), "{v:?}");
 }
 
 // ----------------------------------- loopback fake Tor (no real network)
@@ -1065,7 +1066,7 @@ fn https_trip_end_to_end_through_the_fake_tor() {
     let mut cfg = on_cfg();
     cfg.learn.tor_socks = addr;
     let f = TorFetcher::from_config(&cfg.learn).with_roots(test_roots());
-    let rep = OnlineResearch::new(&cfg, &f)
+    let rep = OnlineResearch::new(&cfg, &f, &[])
         .unwrap()
         .with_knowledge_dir(Some(env.knowledge()))
         .with_audit_log(Some(env.log()))
@@ -1232,4 +1233,134 @@ fn the_trip_clock_also_ends_an_in_flight_request() {
         );
     assert!(t.elapsed() < Duration::from_millis(1300));
     assert_eq!(rep.state, TripState::Timeout, "{}", rep.text());
+}
+
+// ------------------------------------------------- review fixes S1–S3
+
+#[test]
+fn an_unwritable_audit_log_refuses_the_trip_before_the_card() {
+    // S1: PROPOSED is fail-closed.
+    let env = Env::new("auditfail");
+    // A regular file where the log's folder should be: no write can work,
+    // whatever the user's permissions.
+    let blocker = env.dir.join("not-a-dir");
+    std::fs::write(&blocker, b"x").unwrap();
+    let bad_log = blocker.join("audit.log");
+    for log in [Some(bad_log), None] {
+        let f = TestFetcher::new().page("https://example.org/hooks", html(GOOD));
+        let c = card(CardAnswer::Yes);
+        let rep = env.engine(&on_cfg(), &f).with_audit_log(log.clone()).run(
+            &req(&["https://example.org/hooks"]),
+            &c,
+            NEVER,
+        );
+        assert_eq!(rep.state, TripState::Refused, "{log:?}: {rep:?}");
+        assert!(
+            rep.reason.as_deref().unwrap().contains("audit log"),
+            "{rep:?}"
+        );
+        assert_eq!(c.shown.get(), 0, "{log:?}: no card without a PROPOSED line");
+        assert!(f.calls.borrow().is_empty(), "{log:?}: nothing sent");
+        assert!(rep.visits.is_empty());
+        assert!(env.notes().is_empty());
+    }
+}
+
+#[test]
+fn an_https_to_http_downgrade_stops_the_trip_even_with_allow_http() {
+    // S2: allow_http never permits a downgrade from https.
+    let env = Env::new("downgrade-on");
+    let mut cfg = on_cfg();
+    cfg.learn.allow_http = true;
+    let f = TestFetcher::new()
+        .page("https://example.org/", redirect("http://example.org/plain"))
+        .page("http://example.org/plain", html(GOOD));
+    let rep = env.engine(&cfg, &f).run(
+        &req(&["https://example.org/"]),
+        &card(CardAnswer::Yes),
+        NEVER,
+    );
+    assert_eq!(rep.state, TripState::Partial, "{}", rep.text());
+    assert_eq!(
+        f.urls(),
+        ["https://example.org/"],
+        "the plaintext hop is never requested"
+    );
+    let v = rep.visits.last().unwrap();
+    assert_eq!(v.url, "http://example.org/plain");
+    assert!(v.status.is_none() && v.note.contains("downgrade"), "{v:?}");
+    assert!(rep.reason.unwrap().contains("plain http"));
+    assert!(env.notes().is_empty());
+    // A plain http start (allowed) may still redirect within http.
+    let env = Env::new("http-http");
+    let f = TestFetcher::new()
+        .page("http://example.org/a", redirect("/b"))
+        .page("http://example.org/b", html(GOOD));
+    let rep = env.engine(&cfg, &f).run(
+        &req(&["http://example.org/a"]),
+        &card(CardAnswer::Yes),
+        NEVER,
+    );
+    assert_eq!(rep.state, TripState::Done, "{}", rep.text());
+}
+
+#[test]
+fn names_passed_to_the_engine_are_blocked_even_when_not_the_login_name() {
+    // S3: Ko's name and names from memory reach the denylist.
+    let login = std::env::var("USER").unwrap_or_default().to_lowercase();
+    let names = vec!["Ko Kannadian".to_string(), "Nyxandra".to_string()];
+    for n in ["kannadian", "nyxandra", "ko kannadian"] {
+        assert_ne!(n, login, "the test names must differ from the login name");
+    }
+    let deny = IdentityDenylist::empty().with_names(&names);
+    assert!(deny
+        .hit("https://example.org/search?q=Ko+Kannadian")
+        .is_some());
+    assert!(deny.hit("https://example.org/u/kannadian").is_some());
+    assert!(
+        deny.hit("https://example.org/?q=ko").is_some(),
+        "short part, whole word"
+    );
+    assert!(
+        deny.hit("https://example.org/kotlin").is_none(),
+        "no false hit on a word"
+    );
+
+    let cfg = on_cfg();
+    for (i, url) in [
+        "https://example.org/search?q=Ko%20Kannadian",
+        "https://example.org/people/nyxandra",
+        "https://example.org/?who=KANNADIAN",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let env = Env::new(&format!("names-{i}"));
+        let f = TestFetcher::new();
+        let c = card(CardAnswer::Yes);
+        // Built through the production constructor (from_local + names),
+        // with no test denylist swapped in.
+        let rep = OnlineResearch::new(&cfg, &f, &names)
+            .unwrap()
+            .with_knowledge_dir(Some(env.knowledge()))
+            .with_audit_log(Some(env.log()))
+            .run(&req(&[url]), &c, NEVER);
+        assert_eq!(rep.state, TripState::Refused, "{url}: {rep:?}");
+        assert!(
+            rep.reason.as_deref().unwrap().contains("local identifier"),
+            "{rep:?}"
+        );
+        assert_eq!(c.shown.get(), 0);
+        assert!(f.calls.borrow().is_empty());
+    }
+    // Without the names the same address would have been proposed.
+    let env = Env::new("names-none");
+    let f = TestFetcher::new();
+    let c = card(CardAnswer::No);
+    let rep = OnlineResearch::new(&cfg, &f, &[])
+        .unwrap()
+        .with_knowledge_dir(Some(env.knowledge()))
+        .with_audit_log(Some(env.log()))
+        .run(&req(&["https://example.org/people/nyxandra"]), &c, NEVER);
+    assert_eq!(rep.state, TripState::Denied, "{rep:?}");
 }

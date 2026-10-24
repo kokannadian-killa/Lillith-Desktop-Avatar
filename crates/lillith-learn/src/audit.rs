@@ -64,8 +64,21 @@ pub fn online_line(t: f64, state: &str, card: &str, fields: &[String]) -> String
 }
 
 /// Appends an online research trip line to `log` (0600 when created).
-pub fn record_online(log: Option<&Path>, state: &str, card: &str, fields: &[String]) {
-    append(log, &online_line(crate::now_s(), state, card, fields));
+/// Fail-closed: no log, or a failed write, is an error the trip engine acts
+/// on (a trip whose `PROPOSED` line can't be written never starts).
+pub fn record_online(
+    log: Option<&Path>,
+    state: &str,
+    card: &str,
+    fields: &[String],
+) -> std::io::Result<()> {
+    let Some(log) = log else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no audit log path",
+        ));
+    };
+    write_line(log, &online_line(crate::now_s(), state, card, fields))
 }
 
 /// Appends a `LEARN` line to `log` (file 0600 when created). Failures are
@@ -76,23 +89,27 @@ pub fn record(log: Option<&Path>, op: &str, topic: &str, note_id: &str) {
 
 fn append(log: Option<&Path>, l: &str) {
     let Some(log) = log else { return };
-    let res = (|| -> std::io::Result<()> {
-        use std::io::Write;
-        if let Some(d) = log.parent() {
-            std::fs::create_dir_all(d)?;
-        }
-        let mut o = std::fs::OpenOptions::new();
-        o.create(true).append(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            o.mode(0o600);
-        }
-        o.open(log)?.write_all(l.as_bytes())
-    })();
-    if let Err(e) = res {
+    if let Err(e) = write_line(log, l) {
         tracing::warn!("learn audit: {e}");
     }
+}
+
+/// Appends `l` to `log` (created 0600, parents made), synced to disk.
+fn write_line(log: &Path, l: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(d) = log.parent() {
+        std::fs::create_dir_all(d)?;
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    let mut f = o.open(log)?;
+    f.write_all(l.as_bytes())?;
+    f.sync_data()
 }
 
 #[cfg(test)]
