@@ -247,3 +247,24 @@
 # enabled = true
 # projects_dir = ""            # empty = ~/Projects/lillith-builds
 # default_language = "rust"    # rust | python | fish
+
+# ── Learning memory ([memory]) ───────────────────────────────────────────────
+# Local SQLite graph, no network. ON by default: she learns
+# what you like, your habits and which fixes worked, and slips a short
+# "[Memory]" note (~300 tokens max) into each chat prompt.
+# Turn it OFF with `enabled = false` (then nothing is read or written).
+# Forget from chat: "forget everything", "forget about <topic>",
+# "forget the last 30 minutes" (rows are deleted, the file is vacuumed and
+# the WAL truncated). "forget everything" / "forget about X" ask first:
+# reply "yes" to confirm; anything else cancels.
+# The safeword ("red" / "OOC: stop") is never stored.
+# [memory]
+# enabled = true
+# db_path = ""            # empty = ~/.local/share/lillith/memory.db ($XDG_DATA_HOME aware; Windows: %LOCALAPPDATA%\lillith)
+# half_life_days = 14.0   # unused memories fade by half every N days
+# top_k = 6               # memories injected per chat turn
+# max_context_tokens = 300
+# prune_below = 0.05      # memories weaker than this are deleted
+# max_nodes = 5000
+# max_events = 5000       # habit-mining event log cap
+# max_errors = 1000       # remembered errors/fixes cap (least recently seen pruned)

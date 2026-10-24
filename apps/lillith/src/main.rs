@@ -380,6 +380,7 @@ async fn main() -> Result<()> {
             chat::cli_chat(
                 cfg,
                 full.mind,
+                full.memory,
                 config_path,
                 message.clone(),
                 spawn_server,
@@ -484,6 +485,7 @@ async fn main() -> Result<()> {
             chat::bubble_main(
                 full.chat,
                 full.mind,
+                full.memory,
                 config_path,
                 pos,
                 offline || cli.no_llm,

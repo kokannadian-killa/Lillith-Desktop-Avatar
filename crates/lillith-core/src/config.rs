@@ -610,11 +610,36 @@ fn resolve_dir(override_path: &str, name: &str) -> Option<PathBuf> {
 }
 
 /// `$XDG_DATA_HOME/lillith`, else `~/.local/share/lillith`.
+/// Windows: `$XDG_DATA_HOME`, else `%LOCALAPPDATA%` (then `%APPDATA%`), else
+/// `~/.local/share` (`HOME` is usually unset there), matching the chat
+/// history and icon cache paths.
 pub fn data_dir() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_DATA_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
+    let var = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty());
+    data_dir_from(
+        var("XDG_DATA_HOME"),
+        var("LOCALAPPDATA"),
+        var("APPDATA"),
+        var("HOME"),
+        cfg!(windows),
+    )
+}
+
+/// [`data_dir`] from explicit values (testable on every OS).
+pub fn data_dir_from(
+    xdg_data_home: Option<std::ffi::OsString>,
+    local_app_data: Option<std::ffi::OsString>,
+    app_data: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+    windows: bool,
+) -> Option<PathBuf> {
+    let base = xdg_data_home.map(PathBuf::from);
+    let base = if windows {
+        base.or_else(|| local_app_data.map(PathBuf::from))
+            .or_else(|| app_data.map(PathBuf::from))
+    } else {
+        base
+    };
+    let base = base.or_else(|| home.map(|h| PathBuf::from(h).join(".local/share")))?;
     Some(base.join("lillith"))
 }
 
@@ -714,6 +739,73 @@ impl Default for AvatarConfig {
     }
 }
 
+/// `[memory]`: Lillith's local learning memory graph (`lillith-memory`).
+///
+/// On by default (Ko's call). `enabled = false` turns it fully off: no
+/// database is opened, nothing is read or written. Everything stays in one
+/// local SQLite file; there is no network code. Say "forget everything",
+/// "forget about <topic>" or "forget the last 30 minutes" in chat to delete
+/// memories (rows are deleted and the file is vacuumed). Messages that are
+/// the safeword ("red", "OOC: stop") are never stored.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MemoryConfig {
+    /// Master switch. `false` = no reads, no writes, no file.
+    pub enabled: bool,
+    /// Database file. Empty = `<data>/lillith/memory.db`
+    /// (`$XDG_DATA_HOME/lillith/memory.db`, else `~/.local/share/...`;
+    /// Windows: `%LOCALAPPDATA%\lillith\memory.db`).
+    /// `~` is expanded.
+    pub db_path: String,
+    /// Half-life of a memory's strength, in days (unused memories fade).
+    pub half_life_days: f32,
+    /// How many memories are injected into a chat turn at most.
+    pub top_k: usize,
+    /// Rough token budget for the injected memory block (~4 chars/token).
+    pub max_context_tokens: usize,
+    /// Memories whose decayed strength falls below this are pruned.
+    pub prune_below: f32,
+    /// Hard cap on stored memory nodes (weakest pruned first).
+    pub max_nodes: usize,
+    /// Hard cap on the raw event log used for habit mining (oldest pruned).
+    pub max_events: usize,
+    /// Hard cap on remembered errors/fixes (least recently seen pruned).
+    pub max_errors: usize,
+}
+
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            // Opt-out (Ko's decision): flip to `false` to make memory opt-in.
+            enabled: true,
+            db_path: String::new(),
+            half_life_days: 14.0,
+            top_k: 6,
+            max_context_tokens: 300,
+            prune_below: 0.05,
+            max_nodes: 5000,
+            max_events: 5000,
+            max_errors: 1000,
+        }
+    }
+}
+
+impl MemoryConfig {
+    /// Resolved database path: the configured override (`~` expanded), else
+    /// `<data>/lillith/memory.db` (`None` only if no data dir can be found).
+    pub fn resolved_db_path(&self) -> Option<PathBuf> {
+        expand_tilde(&self.db_path).or_else(|| data_dir().map(|d| d.join("memory.db")))
+    }
+
+    /// A disabled config (tests and `--no-memory`-style callers).
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            ..Self::default()
+        }
+    }
+}
+
 /// The default overlay scale (and the one used when an older config has
 /// `scale = 1.0`, the previous default):
 /// ~220 px tall from the 400 px cells (Ko's choice).
@@ -773,6 +865,8 @@ pub struct Config {
     pub mind: MindConfig,
     /// Local project scaffolding/building (`[build]`, Phase 3).
     pub build: BuildConfig,
+    /// Local learning memory graph (`[memory]`).
+    pub memory: MemoryConfig,
 }
 
 impl Default for Config {
@@ -809,6 +903,7 @@ impl Default for Config {
             anim: AnimConfig::default(),
             mind: MindConfig::default(),
             build: BuildConfig::default(),
+            memory: MemoryConfig::default(),
         }
     }
 }
@@ -1001,6 +1096,49 @@ pub fn set_autostart(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn data_dir_has_a_windows_fallback() {
+        use std::ffi::OsString;
+        let o = |s: &str| Some(OsString::from(s));
+        // Windows without HOME (the usual case): %LOCALAPPDATA%, then %APPDATA%.
+        assert_eq!(
+            data_dir_from(None, o("C:/Users/ko/AppData/Local"), o("C:/R"), None, true),
+            Some(PathBuf::from("C:/Users/ko/AppData/Local").join("lillith"))
+        );
+        assert_eq!(
+            data_dir_from(None, None, o("C:/R"), None, true),
+            Some(PathBuf::from("C:/R").join("lillith"))
+        );
+        // XDG wins everywhere; unix ignores the Windows variables.
+        assert_eq!(
+            data_dir_from(o("/x"), o("C:/L"), None, o("/home/ko"), true),
+            Some(PathBuf::from("/x/lillith"))
+        );
+        assert_eq!(
+            data_dir_from(None, o("C:/L"), None, o("/home/ko"), false),
+            Some(PathBuf::from("/home/ko/.local/share/lillith"))
+        );
+        assert_eq!(data_dir_from(None, None, None, None, true), None);
+        assert_eq!(data_dir_from(None, o("C:/L"), None, None, false), None);
+    }
+
+    #[test]
+    fn memory_is_on_by_default_and_can_be_turned_off() {
+        let d = Config::default();
+        assert!(d.memory.enabled, "memory defaults to on (Ko's decision)");
+        assert_eq!(d.memory.max_context_tokens, 300);
+        let off: Config = toml::from_str("[memory]\nenabled = false\n").unwrap();
+        assert!(!off.memory.enabled);
+        assert_eq!(off.memory.top_k, MemoryConfig::default().top_k);
+        let custom: Config = toml::from_str("[memory]\ndb_path = \"/tmp/x/mem.db\"\n").unwrap();
+        assert_eq!(
+            custom.memory.resolved_db_path().unwrap(),
+            PathBuf::from("/tmp/x/mem.db")
+        );
+        assert!(!MemoryConfig::disabled().enabled);
+        assert_eq!(d.memory.max_errors, 1000);
+    }
 
     #[test]
     fn chat_max_tokens_default_is_160() {
