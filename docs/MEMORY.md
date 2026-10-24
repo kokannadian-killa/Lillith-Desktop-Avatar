@@ -17,7 +17,7 @@ Status: design + first implementation on `feat/memory-graph`.
 
 | Existing piece | Role for memory |
 | --- | --- |
-| `lillith-core::config` | New `[memory]` table (`MemoryConfig`), **`enabled = false` by default** (opt-in, Ko's standing rule). Flip the default in `MemoryConfig::default()` (one line) if that rule changes. |
+| `lillith-core::config` | New `[memory]` table (`MemoryConfig`), **`enabled = true` by default** (Ko's decision, 2026-10-23). The default is one line in `MemoryConfig::default()`; set it to `false` to make memory opt-in. |
 | `lillith-core::access::kill_switch::is_safeword` | Canonical safeword ("red" / "OOC: stop"). `lillith-memory::is_safeword` wraps it and is *stricter* for storage: any message containing the standalone word "red" or "OOC stop" anywhere is never stored. |
 | `lillith-core::event::Event` | Desktop/sensor events (`window.opened.<app>`, `app.crash`, ...). `Brain::observe_event` turns them into app-usage / error memories. These come from `lillith-sense` (monitor, KWin bridge). |
 | `lillith-mind::chat::ChatSession` | Chat path. `with_memory(&MemoryConfig)` attaches a `Brain`; the system prompt gets a `[Memory]` block; replies feed `observe_interaction`; "forget ..." commands are answered locally. |
@@ -58,6 +58,31 @@ Counts over the `events` ring: requests / app launches bucketed by
 (hour-of-day bucket of 3h, weekday class: weekday/weekend). The prediction for
 "now" ranks subjects by `count(bucket match) / total(bucket)` with Laplace
 smoothing, multiplied by a small-sample damping `n / (n + 3)`. O(events), no ML.
+
+## On by default; turning it off; forgetting
+
+Memory is **on by default**. To turn it off, put this in
+`~/.config/lillith/config.toml` (see `assets/config.example.toml`):
+
+```toml
+[memory]
+enabled = false
+```
+
+Off means off: no database file is opened or created, nothing is read into
+prompts and nothing is written. Existing memories stay on disk untouched until
+you delete `~/.local/share/lillith/memory.db` (or say "forget everything"
+while it is on).
+
+To forget from chat (handled locally, no model call):
+
+- "forget everything" / "wipe your memory": deletes every memory, event and
+  error record (and clears the chat history).
+- "forget about <topic>": deletes memories mentioning the topic, the
+  preferences hanging off it, and matching events/errors (and chat-history
+  messages containing it).
+- "forget the last 30 minutes" / "forget the last hour": deletes what was
+  created in that window (and the most recent chat turns).
 
 ## Privacy and safety
 
