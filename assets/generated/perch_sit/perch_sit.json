@@ -1005,20 +1005,20 @@
   "height": 400,
   "frame_count": 102,
   "fps": 12.0,
-  "bytes": 1025049,
+  "bytes": 1027964,
   "quality": {
-   "edge_mae": 2.889,
+   "edge_mae": 2.892,
    "edge_p99": 25.0,
-   "halo_dark": 0.045,
-   "halo_light": -0.143,
-   "alpha_mae": 0.0483
+   "halo_dark": 0.047,
+   "halo_light": -0.145,
+   "alpha_mae": 0.0482
   },
   "tool": "tools/video-pipeline/pack_mp4.py"
  },
  "matte_clean": {
   "version": 1,
   "tool": "tools/matte-clean/matte_clean.py",
-  "sheet_sha256": "33158f26e5d5d0fa3c4c0abb1cff82cd32afca05d186f0ba7a4b44978f9b5442",
+  "sheet_sha256": "7fbf26828bcf2bf5679782a3513a5b7797bfa5964c676cf0c800c41e62b53e91",
   "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
  },
  "source_frame_list": [
@@ -1127,7 +1127,7 @@
  ],
  "motion_fix": {
   "what": "leg cross (old f9->f10) and uncross (old f42->f44) snapped in about one frame: the in-between video frames 18, 20, 22, 84, 86, 88 were added (96 -> 102 frames, still 12 fps, so both moves take twice as long). Frame 0, the loop seam, the seat fields and every original frame are unchanged.",
-  "built": "same placement as the clip (scale 0.5, cx-src 633.5, ty 45 registered on the neighbouring frames, IoU 0.98), key_combined + horn_fix + deshadow rows 150-262, light-edge recolour, then matte_clean --force on the new frames only",
+  "built": "same placement as the clip (scale 0.5, cx-src 633.5, ty 45 registered on the neighbouring frames, IoU 0.98), key_combined + horn_fix + deshadow rows 150-262, light-edge recolour, then matte_clean --force on the new frames only; then an edge decontamination on the six new frames (ring 3 px: edge colour lighter than the nearest solid interior by >10 replaced by it; px per frame {\"9\": 978, \"11\": 1059, \"13\": 1132, \"45\": 1028, \"47\": 1086, \"49\": 1101}), as the mp4 fringe QA saw light rims (23-33 px) on them",
   "tool": "perch_motion_work/psit_build.py + psit_assemble.py (fix/perch-motion)"
  }
 }
