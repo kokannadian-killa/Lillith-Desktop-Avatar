@@ -551,7 +551,7 @@ impl MindConfig {
 
     /// Where skill writes and denials are logged (`<data>/lillith/audit.log`).
     pub fn audit_log_path(&self) -> Option<PathBuf> {
-        data_dir().map(|d| d.join("audit.log"))
+        audit_log_path()
     }
 
     /// Clamped token budget (at least 1).
@@ -622,6 +622,13 @@ pub fn data_dir() -> Option<PathBuf> {
         var("HOME"),
         cfg!(windows),
     )
+}
+
+/// Lillith's one audit log, `<data>/lillith/audit.log`: Soul Contract
+/// decisions and memory forgets (kind + counts) both go here, wherever
+/// `memory.db` itself lives.
+pub fn audit_log_path() -> Option<PathBuf> {
+    data_dir().map(|d| d.join("audit.log"))
 }
 
 /// [`data_dir`] from explicit values (testable on every OS).

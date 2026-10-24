@@ -85,13 +85,17 @@ To forget from chat (handled locally, no model call):
   Words match whole, plus only the exact singular/plural of the same word
   ("job"/"jobs", "box"/"boxes", "hobby"/"hobbies"; never "new"/"news", never
   "next"/"text" for `ex`). So "forget my new job" or "forget the news" never
-  touches "likes new wave music". Also deleted: the preferences hanging off a
+  touches "likes new wave music". An attribute also matches when a topic
+  word *is* its whole key: "forget about my new job" deletes `job = barista`
+  (key `job`), never `jobsite`. Also deleted: the preferences hanging off a
   matched entity, and the value of a matched attribute **as one whole
   phrase** ("my ex is Sarah" → events/entity `sarah`; job = "google
   engineer" → events containing "google engineer", never "google chrome"),
   matching events/errors (same rule), and chat-history messages that match
   the same rule. If nothing matches she says so ("I don't have anything
-  about X").
+  about X"); if only chat lines matched she says that too ("Nothing in my
+  memory matched X. I cleared 2 chat messages that mentioned it."), never
+  "Gone".
 - "forget the last 30 minutes" / "the last hour": deletes
   rows created **or rewritten** (`updated_at`, schema v2) in that window
   (and the most recent chat turns, ~1 turn a minute).
@@ -112,8 +116,8 @@ anything with a comma, more than six words, or a topic without content
 words.
 
 Every forget logs one audit line (`target: lillith_memory::audit`) **and**
-appends it to `audit.log` next to the DB (the data dir by default; created
-0600 on unix): `<UTC time>\tFORGET\tmemory:<all|topic|last_secs|last_turn>\t
+appends it to the shared `<data dir>/lillith/audit.log` (the same file the
+Soul Contract uses, even with a custom `db_path`; created 0600 on unix): `<UTC time>\tFORGET\tmemory:<all|topic|last_secs|last_turn>\t
 nodes=N edges=N events=N errors=N scrubbed=bool`. Kind and counts only,
 never the topic or any memory text. The chat history is only rewritten after
 the DB forget succeeded, under `chat_history.json.lock`, merged with what

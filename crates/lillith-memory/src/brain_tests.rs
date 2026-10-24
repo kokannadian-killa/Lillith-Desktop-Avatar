@@ -842,14 +842,42 @@ fn forget_my_new_job_keeps_new_wave_music() {
     assert!(b
         .strength_of(Kind::Preference, "likes:new wave music", &at(MON))
         .is_some());
-    // "my job" (all of its one content word) still finds the job.
-    let r = b
-        .forget(&parse_forget("forget my job").unwrap(), &at(MON + 6.0))
+    // Same without "about": the job goes (exact attr key), the music stays.
+    let b = brain();
+    b.observe_interaction("I love new wave music", "", &at(MON));
+    b.observe_interaction("my job is barista", "", &at(MON));
+    b.forget(&parse_forget("forget my new job").unwrap(), &at(MON + 5.0))
         .unwrap();
-    assert!(r.nodes >= 1, "{r:?}");
     assert!(b.strength_of(Kind::Entity, "attr:job", &at(MON)).is_none());
     assert!(b
         .strength_of(Kind::Preference, "likes:new wave music", &at(MON))
+        .is_some());
+}
+
+#[test]
+fn forget_about_my_new_job_matches_the_job_attr_by_its_exact_key() {
+    // A topic word equal to the attr key ("job" → `attr:job`) matches that
+    // row even though "new" is not in it.
+    let b = brain();
+    b.observe_interaction("I love new wave music", "", &at(MON));
+    b.observe_interaction("my job is barista", "", &at(MON));
+    b.observe_interaction("my jobsite is downtown", "", &at(MON));
+    let cmd = parse_forget("forget about my new job").unwrap();
+    let preview = b.forget_preview(&cmd, &at(MON + 5.0)).unwrap();
+    assert!(
+        preview.examples.iter().any(|e| e.contains("barista")),
+        "{preview:?}"
+    );
+    let r = b.forget(&cmd, &at(MON + 5.0)).unwrap();
+    assert!(r.nodes >= 1, "{r:?}");
+    assert!(b.strength_of(Kind::Entity, "attr:job", &at(MON)).is_none());
+    assert!(b.strength_of(Kind::Entity, "barista", &at(MON)).is_none());
+    assert!(b
+        .strength_of(Kind::Preference, "likes:new wave music", &at(MON))
+        .is_some());
+    // The key must be the whole word: `attr:jobsite` is not "job".
+    assert!(b
+        .strength_of(Kind::Entity, "attr:jobsite", &at(MON))
         .is_some());
 }
 
@@ -977,7 +1005,9 @@ fn reinforcing_inside_the_window_does_not_make_an_old_memory_new() {
 fn forget_writes_a_private_content_free_audit_line() {
     let d = tmp("forget-audit");
     let path = d.join("memory.db");
-    let b = Brain::open_path(&path, &cfg()).unwrap();
+    let b = Brain::open_path(&path, &cfg())
+        .unwrap()
+        .with_audit_log(Some(d.join("audit.log")));
     assert_eq!(b.audit_log(), Some(d.join("audit.log").as_path()));
     b.observe_interaction("My ex is Sarah", "ok", &at(MON));
     b.forget(&parse_forget("forget about my ex").unwrap(), &at(MON + 5.0))
@@ -1002,4 +1032,35 @@ fn forget_writes_a_private_content_free_audit_line() {
     // In-memory brains have no audit file.
     assert_eq!(brain().audit_log(), None);
     let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn custom_db_path_still_audits_to_the_shared_data_dir_log() {
+    // Hermetic: the data dir is a temp dir. No other memory test reads
+    // XDG_DATA_HOME (only enabled `Brain::open` resolves it).
+    let data = tmp("audit-xdg");
+    let elsewhere = tmp("audit-custom-db");
+    std::env::set_var("XDG_DATA_HOME", &data);
+    let c = MemoryConfig {
+        db_path: elsewhere.join("memory.db").to_string_lossy().into_owned(),
+        ..MemoryConfig::default()
+    };
+    let b = Brain::open(&c).unwrap();
+    std::env::remove_var("XDG_DATA_HOME");
+    let shared = data.join("lillith").join("audit.log");
+    assert_eq!(b.audit_log(), Some(shared.as_path()));
+    b.observe_interaction("I love glimmerwick candles", "", &at(MON));
+    b.forget(
+        &parse_forget("forget the last 5 minutes").unwrap(),
+        &at(MON + 5.0),
+    )
+    .unwrap();
+    let log = std::fs::read_to_string(&shared).unwrap();
+    assert!(log.contains("memory:last_secs"), "{log}");
+    assert!(!elsewhere.join("audit.log").exists(), "never beside the DB");
+    // open_path alone writes no audit file at all.
+    let p = Brain::open_path(&elsewhere.join("other.db"), &cfg()).unwrap();
+    assert_eq!(p.audit_log(), None);
+    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_dir_all(&elsewhere);
 }
