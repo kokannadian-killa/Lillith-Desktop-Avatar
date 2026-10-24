@@ -37,6 +37,7 @@
 //! std::fs::write(paths::default_modelfile_path().unwrap(), mf.render()).unwrap();
 //! ```
 
+pub mod bundle;
 pub mod check;
 pub mod config;
 pub mod detect;

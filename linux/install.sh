@@ -13,6 +13,9 @@
 #   a desktop shortcut, optional autostart, the KWin bridge (Plasma 6)
 #   excludes her from KDE force blur (Better Blur DX), see kwin-blur-exclude.sh
 #   ~/.config/lillith/config.toml              via `lillith setup` (local model)
+#   ~/.local/share/lillith/llama/linux-x64/    the bundled llama-server, if this
+#                                              is the all-in-one download
+#                                              (bundle/llama/, see INSTALL.md)
 #
 # LOCAL ONLY: the only network use is pacman installing distro packages,
 # Cargo fetching crates for the build and, for a GitHub "Download ZIP" whose
@@ -40,6 +43,13 @@ ICONS_DIR="$DATA_DIR/icons"          # the icon set (lillith finds it here)
 ICONS_TOML="$ROOT/branding/icons.toml"
 KWIN_ID="lillith-bridge"
 MARK="X-Lillith-Installer=linux/install.sh"
+LLAMA_DIR="$DATA_DIR/llama"           # installed copy of bundle/llama/<platform>/
+# The all-in-one download's prebuilt llama-server (tools/bundle/make-bundle.sh):
+# bundle/llama/ in this checkout, or next to source/ in the release zip.
+BUNDLE_LLAMA=""
+for d in "$ROOT/bundle/llama" "$ROOT/../bundle/llama"; do
+  if [[ -x $d/linux-x64/llama-server ]]; then BUNDLE_LLAMA="$(cd "$d" && pwd)"; break; fi
+done
 
 # ── options ─────────────────────────────────────────────────────────
 YES=0 UNINSTALL=0 SKIP_DEPS=0 SKIP_BUILD=0 PURGE=0 LIST_ICONS=0
@@ -217,7 +227,7 @@ fi
 # Uninstall
 # ════════════════════════════════════════════════════════════════════
 if [[ $UNINSTALL == 1 ]]; then
-  step "Uninstalling Lillith (your GGUF models and llama.cpp are never touched)"
+  step "Uninstalling Lillith (your GGUF models and own llama.cpp are never touched)"
   if running; then
     if ask "Lillith is running. Stop her now?" y; then pkill -x lillith || true; sleep 1; fi
   fi
@@ -234,6 +244,10 @@ if [[ $UNINSTALL == 1 ]]; then
   if [[ -d $ICONS_DIR ]]; then rm -rf -- "$ICONS_DIR"; fi
   ok "removed icons"
   if [[ -d $ASSET_DIR ]]; then rm -rf -- "$ASSET_DIR" && ok "removed $ASSET_DIR"; fi
+  # Only the bundled copy this installer made (marked by its BUNDLE.txt).
+  if compgen -G "$LLAMA_DIR/*/BUNDLE.txt" >/dev/null; then
+    rm -rf -- "$LLAMA_DIR" && ok "removed the bundled llama-server ($LLAMA_DIR)"
+  fi
   if have kpackagetool6 && kpackagetool6 --type=KWin/Script --show "$KWIN_ID" >/dev/null 2>&1; then
     if have kwriteconfig6; then kwriteconfig6 --file kwinrc --group Plugins --key "${KWIN_ID}Enabled" --delete || true; fi
     if kpackagetool6 --type=KWin/Script --remove "$KWIN_ID" >/dev/null 2>&1; then
@@ -421,6 +435,19 @@ fi
 # No env var or config key needed: Lillith looks in
 # $XDG_DATA_HOME/lillith/generated/manifest.toml by itself.
 
+# All-in-one download: copy the bundled llama-server (CPU build, plus the
+# optional Vulkan build) so the install keeps working without the zip.
+if [[ -n $BUNDLE_LLAMA ]]; then
+  for plat in linux-x64 linux-x64-vulkan; do
+    [[ -x $BUNDLE_LLAMA/$plat/llama-server ]] || continue
+    rm -rf -- "${LLAMA_DIR:?}/$plat"
+    mkdir -p "$LLAMA_DIR"
+    cp -a "$BUNDLE_LLAMA/$plat" "$LLAMA_DIR/$plat"
+    [[ -f $BUNDLE_LLAMA/llama.lock ]] && cp "$BUNDLE_LLAMA/llama.lock" "$LLAMA_DIR/"
+    ok "bundled llama-server -> $LLAMA_DIR/$plat"
+  done
+fi
+
 # The whole icon set (PNGs only; the .ico files are for Windows), so
 # Settings > Icon / `lillith icon` can switch without the checkout.
 if [[ -d $ICONS_DIR ]]; then rm -rf -- "$ICONS_DIR"; fi
@@ -559,7 +586,10 @@ HAS_SETUP=0
 
 find_gguf() {
   # Prefer Dolphin 3.0 Llama 3.2 3B Q4_K_M, then other chat models.
-  { find "$HOME" -xdev -maxdepth 6 \
+  { for d in "$ROOT/bundle/models" "$ROOT/../bundle/models"; do
+      [[ -d $d ]] && find "$d" -maxdepth 4 -type f -iname '*.gguf' ! -iname '*mmproj*' -print 2>/dev/null
+    done
+    find "$HOME" -xdev -maxdepth 6 \
       \( -path "$HOME/.local/share/Trash" -o -path "$HOME/.cargo" -o -path "$HOME/.rustup" \
          -o -name node_modules -o -name .git \) -prune -o \
       -type f -iname '*.gguf' ! -iname '*mmproj*' -size +50M -print 2>/dev/null
@@ -572,6 +602,12 @@ find_gguf() {
 }
 find_llama() {
   {
+    # The bundled one first (all-in-one download), then whatever is installed.
+    if [[ -x $LLAMA_DIR/linux-x64/llama-server ]]; then
+      echo "$LLAMA_DIR/linux-x64/llama-server"
+    elif [[ -n $BUNDLE_LLAMA ]]; then
+      echo "$BUNDLE_LLAMA/linux-x64/llama-server"
+    fi
     command -v llama-server 2>/dev/null || true
     for p in /usr/bin/llama-server /usr/local/bin/llama-server "$HOME/.local/bin/llama-server"; do
       [[ -x $p ]] && echo "$p"

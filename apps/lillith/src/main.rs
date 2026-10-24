@@ -713,6 +713,11 @@ fn setup(
             anyhow::bail!("{} is not a llama-server program", b.display());
         }
         llm.llama_server_bin = b.display().to_string();
+    } else if llm.llama_server_bin.trim().is_empty() {
+        // All-in-one download: the bundled llama-server (bundle/llama/<platform>/).
+        if let Some(b) = lillith_setup::bundle::find_llama_server() {
+            llm.llama_server_bin = b.display().to_string();
+        }
     }
     if let Some(c) = ctx_size {
         llm.ctx_size = c;

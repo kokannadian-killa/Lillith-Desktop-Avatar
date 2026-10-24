@@ -15,8 +15,13 @@
 # nsis (makensis), python3 + Pillow (icon only, if windows/lillith.ico is missing). Nothing is downloaded at
 # install or run time; this script only fetches crates if Cargo has to.
 #
+# All-in-one: if bundle/llama/windows-x64/ holds the pinned llama-server
+# (tools/bundle/make-bundle.sh --fetch-only, on this build machine), it is
+# staged as bundle\llama\windows-x64\ and the installer pre-selects it.
+#
 # Env: CARGO (cargo binary, default `cargo`), CARGO_TARGET_DIR, DIST,
-#      SKIP_BUILD=1 (reuse the last release build), NO_ZIP=1.
+#      SKIP_BUILD=1 (reuse the last release build), NO_ZIP=1,
+#      NO_LLAMA=1 (leave the bundled llama-server out).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -92,6 +97,16 @@ cp "$HERE/INSTALL-windows.md" "$STAGE/INSTALL-windows.txt"
 cp "$ROOT/LICENSE" "$STAGE/LICENSE.txt"
 cp "$ROOT/LICENSE-ASSETS.md" "$STAGE/LICENSE-ASSETS.txt"
 cp "$ROOT/assets/config.example.toml" "$STAGE/config.example.toml"
+LLAMA_SRC="$ROOT/bundle/llama/windows-x64"
+if [[ "${NO_LLAMA:-}" != 1 && -f "$LLAMA_SRC/llama-server.exe" ]]; then
+  echo "==> bundling llama-server ($(head -n1 "$LLAMA_SRC/BUNDLE.txt" 2>/dev/null || echo windows-x64))"
+  mkdir -p "$STAGE/bundle/llama" "$STAGE/bundle/models"
+  cp -r "$LLAMA_SRC" "$STAGE/bundle/llama/windows-x64"
+  cp "$ROOT/bundle/llama/llama.lock" "$STAGE/bundle/llama/"
+  cp "$ROOT/bundle/models/README.txt" "$STAGE/bundle/models/README.txt"
+else
+  echo "==> no bundled llama-server (run tools/bundle/make-bundle.sh --fetch-only to include it)"
+fi
 
 mkdir -p "$DIST"
 SETUP="$DIST/Lillith-$VERSION-setup.exe"

@@ -1376,6 +1376,22 @@ impl SettingsTab for BrainTab {
         4
     }
     fn tick(&mut self, ctx: &egui::Context, shared: &mut Shared) {
+        // All-in-one download: offer the bundled llama-server (a pending
+        // change, saved with the rest) when none is configured yet.
+        if self.cfg.llama_server_bin.trim().is_empty() {
+            if let Some(b) = shared
+                .runtime
+                .as_ref()
+                .and_then(|r| r.llama_server.as_ref())
+            {
+                if lillith_setup::bundle::llama_dirs()
+                    .iter()
+                    .any(|d| b.path.parent() == Some(d.as_path()))
+                {
+                    self.cfg.llama_server_bin = b.path.display().to_string();
+                }
+            }
+        }
         if let Some(h) = &mut self.scan {
             if let Some(p) = h.progress() {
                 self.scan_status =
