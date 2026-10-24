@@ -2555,6 +2555,7 @@ name = "lillith-theme"
 version = "0.0.1"
 dependencies = [
  "egui",
+ "png 0.17.16",
 ]
 
 [[package]]
