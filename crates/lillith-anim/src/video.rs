@@ -8,7 +8,8 @@
 //! video frame per clip frame (timing stays in the manifest:
 //! `frame_durations_ms` / `fps`).
 //!
-//! Decoding runs `ffmpeg` (found on `PATH`, or `$LILLITH_FFMPEG`) with the
+//! Decoding runs `ffmpeg` (`$LILLITH_FFMPEG`, else a bundled
+//! `<exe dir>/bin/ffmpeg(.exe)`, else `PATH`) with the
 //! file fed on stdin, so a *standby* process can be spawned ahead of time
 //! and the ~150 ms of ffmpeg start-up (dynamic linking) is off the critical
 //! path. Frames stream into a shared buffer from a reader thread as they
@@ -57,7 +58,8 @@ pub enum VideoError {
 pub struct VideoConfig {
     /// Use MP4 sources at all (`LILLITH_VIDEO=0` turns them off).
     pub enabled: bool,
-    /// ffmpeg binary (`$LILLITH_FFMPEG`, default `ffmpeg` on `PATH`).
+    /// ffmpeg binary (`$LILLITH_FFMPEG`, else `<exe dir>/bin/ffmpeg(.exe)`,
+    /// default `ffmpeg` on `PATH`).
     pub ffmpeg: PathBuf,
     /// Decoded-frame cache budget in bytes.
     pub budget_bytes: usize,
@@ -96,6 +98,15 @@ impl VideoConfig {
         // else is refused (logged) and `ffmpeg` on PATH is used.
         if let Some(p) = lillith_core::launch_audit::env_exe("LILLITH_FFMPEG") {
             c.ffmpeg = p;
+        } else if let Some(p) = bundled_ffmpeg_in(
+            std::env::current_exe()
+                .ok()
+                .as_deref()
+                .and_then(std::path::Path::parent),
+        ) {
+            // A bundled `<exe dir>/bin/ffmpeg(.exe)` (the Windows zip ships
+            // one) wins over `PATH`, the same order as Pose Builder's lookup.
+            c.ffmpeg = p;
         }
         if let Some(mb) = std::env::var("LILLITH_VIDEO_CACHE_MB")
             .ok()
@@ -105,6 +116,14 @@ impl VideoConfig {
         }
         c
     }
+}
+
+/// The bundled `<exe_dir>/bin/ffmpeg(.exe)`, only if that file exists.
+fn bundled_ffmpeg_in(exe_dir: Option<&std::path::Path>) -> Option<PathBuf> {
+    let p = exe_dir?
+        .join("bin")
+        .join(format!("ffmpeg{}", std::env::consts::EXE_SUFFIX));
+    p.is_file().then_some(p)
 }
 
 /// ffmpeg arguments that decode `input` (a path, or `pipe:0`) to packed
@@ -585,6 +604,21 @@ pub fn find_ffmpeg() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bundled_ffmpeg_is_only_used_when_the_file_exists() {
+        let d = std::env::temp_dir().join(format!("lillith-vid-bundled-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("bin")).unwrap();
+        assert_eq!(super::bundled_ffmpeg_in(Some(&d)), None);
+        assert_eq!(super::bundled_ffmpeg_in(None), None);
+        let f = d
+            .join("bin")
+            .join(format!("ffmpeg{}", std::env::consts::EXE_SUFFIX));
+        std::fs::write(&f, b"x").unwrap();
+        assert_eq!(super::bundled_ffmpeg_in(Some(&d)), Some(f));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     use super::*;
 
     /// Writes a tiny packed MP4 with ffmpeg (skips the caller if missing).

@@ -1,0 +1,38 @@
+name: video-pipeline
+
+# Pose Builder's import engine (tools/video-pipeline/user_import.py).
+# Runs only when its files change. Tests run OFFLINE: inside a network
+# namespace that has only loopback. The isnet matte path is skipped: no
+# model is present (U2NET_HOME points at an empty folder; nothing is ever
+# downloaded), so `--matte auto` uses the alpha / key paths.
+
+on:
+  push:
+    paths:
+      - "tools/video-pipeline/**"
+      - ".github/workflows/video-pipeline.yml"
+  pull_request:
+    paths:
+      - "tools/video-pipeline/**"
+      - ".github/workflows/video-pipeline.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: user_import pytest (offline)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - name: Install ffmpeg and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg python3-pytest python3-numpy python3-scipy python3-opencv python3-pil
+      - name: Run the video-pipeline tests with no network (loopback only)
+        run: |
+          U=$(id -u); G=$(id -g); M=$(mktemp -d)
+          sudo unshare --net -- bash -c "ip link set lo up && exec setpriv --reuid=$U --regid=$G --clear-groups env HOME=$HOME PATH=$PATH U2NET_HOME=$M PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tools/video-pipeline/tests"

@@ -759,11 +759,13 @@ fn read_events(o: impl Read, tx: &Sender<JobMsg>, notify: &dyn Fn()) {
     }
 }
 
-/// Sends the contract's cancel signal to `pid`.
+/// Sends the contract's cancel signal (`SIGTERM`) to `pid`'s process group
+/// (it was started with `process_group(0)`, so the group is the pipeline
+/// and its ffmpeg children).
 #[cfg(unix)]
 pub fn send_cancel(pid: u32) -> std::io::Result<()> {
-    // SAFETY: plain syscall; pid is our own child.
-    if unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) } == 0 {
+    // SAFETY: plain syscall; pid is our own child and its group's leader.
+    if unsafe { libc::killpg(pid as libc::pid_t, libc::SIGTERM) } == 0 {
         Ok(())
     } else {
         Err(std::io::Error::last_os_error())
