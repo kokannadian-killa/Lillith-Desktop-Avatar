@@ -1,4 +1,4 @@
-# Release #3 notes (draft, `ci/batch11`)
+# Release #3 notes (draft, `ci/batch12`)
 
 Draft notes for the next test build. They cover what changed since release #2
 (`test-build-d88ed30`). There's no release zip for this build yet, so the
@@ -141,6 +141,18 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   - The tail tip on `perch_sit` and the drag-to-perch blend no longer floats
     loose; it's joined back to the tail.
   - `tail_tease` was regenerated with a single tail.
+- **No more white fringe.** Her clips were re-matted to remove the thin
+  white edge and the white backdrop showing through gaps (between hair,
+  neck, arms and legs). That covers 177 of the 194 clip folders, including
+  the `event_*` clips, whose icons, panels and effects are kept. A final
+  pass re-cleaned about 91 clips on top of the earlier ones, with a guard so
+  no body part, outline or hole was eaten. Frame counts, timing and
+  placement are unchanged. The perch clips and `come_hither_crawl` keep
+  their own fixes from above.
+  - `dom_beckon_finger` and `smug_smirk` lost the white blobs at the neck.
+  - Some light pixels are part of the art and stay: skin highlights, the
+    collar, eye whites, `tail_tease`, the `soul_contract_sign` effects and
+    `event_screenshot`'s deliberate flash.
 - **Offline voice kit (source).** The Python source of the voice kit is now
   in the repo under `tools/lillith-voice/`. That covers the `lillith-voiced`
   daemon, `lillith-say` / `lillith-listen` / `lillith-chat`, fish shortcuts,
@@ -159,7 +171,8 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   everything under `assets/` (sheets, mp4 clips, manifest, configs). CI
   skips it.
 - **For artists:** `tools/matte-clean` re-mattes a clip folder in place to
-  remove white fringe, and `qa_all.py --white-edge` checks for it.
+  remove white fringe (with a protect guard and `regress.py` to catch
+  anything it eats), and `qa_all.py --white-edge [--mp4]` checks for it.
 - **Windows build:** clippy fixes in the elevated admin helper, so Windows
   is still build-from-source.
 
@@ -175,9 +188,9 @@ telemetry.
   `memory.db` now live. Files from release #2 under
   `%HOME%\.local\share\lillith` aren't moved, so an organize batch made
   with release #2 can't be undone from release #3.
-- The white-fringe cleanup is done for the six perch clips and the first five
-  new poses only. Other clips can still show a thin light edge (see *Coming
-  next*).
+- `qa_all.py --white-edge` still flags some clips. Most of what it finds is
+  the keep-as-art light pixels listed above (highlights, collar, eye whites,
+  effects), not backdrop fringe.
 - Voice kit:
   - The models aren't in any release yet (see above).
   - On Windows, only the named-pipe transport has been tested, and only
@@ -187,16 +200,6 @@ telemetry.
 - Windows is build-from-source (see INSTALL.md). The Android APK was not
   rebuilt; the older, untested one is on `test-build-f8cd236`.
 - Muting from the right-click menu isn't remembered after a restart.
-
-## Coming next (pending branches, not in this build)
-
-- **No white fringe** (`fix/no-white-fringe-ev`, `fix/no-white-fringe-gm`,
-  `fix/no-white-fringe-nr`). These re-matte the rest of her clips to remove
-  white edges:
-  - the `event_*` clips (keeping their icons, panels and effects)
-  - clips `g*`–`m*`, with a stricter pass that checks the frames as the
-    app decodes them
-  - clips `n*`–`r*`, including filling interior gaps on six of them
 
 ## Gate
 
