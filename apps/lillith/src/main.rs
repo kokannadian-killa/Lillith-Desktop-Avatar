@@ -30,6 +30,7 @@ use lillith_overlay::{Backend, OverlayOptions};
 use std::path::PathBuf;
 
 mod chat;
+mod contract_consent;
 mod memory_wiring;
 mod preview;
 mod server_consent;
