@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_battery_low_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.5,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -172,15 +172,15 @@
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
-      133,
-      319,
-      23,
+      132,
+      320,
+      22,
       392
     ],
     [
       132,
-      319,
-      23,
+      320,
+      22,
       392
     ],
     [
@@ -192,13 +192,13 @@
     [
       127,
       320,
-      36,
+      35,
       392
     ],
     [
-      135,
+      134,
       320,
-      56,
+      55,
       392
     ],
     [
@@ -208,9 +208,9 @@
       392
     ],
     [
-      145,
+      144,
       320,
-      69,
+      68,
       392
     ],
     [
@@ -221,25 +221,25 @@
     ],
     [
       131,
-      319,
-      31,
+      320,
+      30,
       392
     ],
     [
       127,
-      319,
+      320,
       22,
       392
     ],
     [
       128,
-      319,
+      322,
       22,
       392
     ],
     [
       131,
-      319,
+      320,
       22,
       392
     ]
@@ -253,14 +253,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 12,
-    "fps": 10.0,
-    "bytes": 153554,
+    "fps": 8.5,
+    "bytes": 171851,
     "quality": {
-      "edge_mae": 2.494,
-      "edge_p99": 18.0,
-      "halo_dark": 0.072,
-      "halo_light": -0.186,
-      "alpha_mae": 0.0778
+      "edge_mae": 2.491,
+      "edge_p99": 19.0,
+      "halo_dark": 0.049,
+      "halo_light": -0.164,
+      "alpha_mae": 0.0717
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

@@ -41,6 +41,7 @@ pub mod check;
 pub mod config;
 pub mod detect;
 pub mod gguf;
+pub mod host;
 pub mod http;
 pub mod launch;
 pub mod local;
@@ -57,11 +58,12 @@ pub use self::check as test;
 pub use check::{ping_server, test_chat, ServerHealth};
 pub use config::{Backend, LlmConfig};
 pub use detect::{detect, DetectHandle, DetectOptions, RuntimeReport};
+pub use host::HostInfo;
 pub use local::{LocalUrl, LocalUrlError};
 pub use modelfile::{lily_modelfile, LilyParams, Modelfile};
 pub use scan::{
-    recommend, scan, scan_with_progress, CancelToken, ModelInfo, Recommendation, ScanOptions,
-    ScanProgress, ScanReport,
+    preferred_model_hint, recommend, recommend_for, scan, scan_with_progress, CancelToken,
+    ModelHint, ModelInfo, Recommendation, ScanOptions, ScanProgress, ScanReport,
 };
 pub use template::ChatTemplate;
 pub use validate::{validate_all, FieldError};

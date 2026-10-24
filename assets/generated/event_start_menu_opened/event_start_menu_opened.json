@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_start_menu_opened_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -259,49 +259,49 @@
     ],
     [
       127,
-      343,
+      344,
       38,
       392
     ],
     [
       114,
-      350,
-      20,
+      352,
+      19,
       392
     ],
     [
-      102,
-      356,
+      101,
+      357,
       30,
       392
     ],
     [
       108,
-      359,
+      361,
       34,
       392
     ],
     [
-      104,
-      354,
+      103,
+      356,
       26,
       392
     ],
     [
       119,
-      345,
+      347,
+      19,
+      392
+    ],
+    [
+      136,
+      340,
       19,
       392
     ],
     [
       136,
       339,
-      19,
-      392
-    ],
-    [
-      136,
-      338,
       19,
       392
     ]
@@ -315,14 +315,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 10.0,
-    "bytes": 155605,
+    "fps": 8.0,
+    "bytes": 172193,
     "quality": {
-      "edge_mae": 2.425,
-      "edge_p99": 18.0,
-      "halo_dark": 0.03,
-      "halo_light": -0.225,
-      "alpha_mae": 0.0977
+      "edge_mae": 2.405,
+      "edge_p99": 18.63,
+      "halo_dark": 0.019,
+      "halo_light": -0.182,
+      "alpha_mae": 0.0901
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

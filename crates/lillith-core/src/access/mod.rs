@@ -26,6 +26,7 @@ pub mod organize;
 pub mod plan;
 pub mod programs;
 pub mod skill_import;
+pub mod winjob;
 pub mod winprograms;
 pub mod winshell;
 

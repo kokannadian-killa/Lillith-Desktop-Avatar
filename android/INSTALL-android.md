@@ -85,5 +85,8 @@ and tests on Linux.
 - The overlay window is a rectangle around her. Touches on transparent pixels inside it are ignored, but
   Android doesn't pass them through to the app underneath.
 - No window perching (Android has no window list for other apps); she lands on the bottom of the screen.
-- No sound or voice yet. The desktop sensors (CPU, Bluetooth, notifications…) aren't wired on Android.
+- No sound or voice yet. Plan for her voice (Ko's clone, in the APK, still no `INTERNET`): see the
+  `lillith-voice` kit's `android/INSTALL-android.md` and `android/ANDROID_ASSETS.md` (asset list, sizes,
+  SHA-256, ONNX Runtime ABIs, APK size ≈ 530–545 MB for the recommended quality flavour; the int8 small flavour is experimental). Android `TextToSpeech` is the
+  fallback. The desktop sensors (CPU, Bluetooth, notifications…) aren't wired on Android.
 - Chat replies arrive all at once (no token streaming yet) and appear in her bubble when she's on screen.

@@ -11,13 +11,28 @@ V2 = paths.V2
 anims = []
 # v1 allure / idle_variant flags (the importer turns them into tags; the app's pose cycle picks these clips by name)
 V1 = {a['name']: a for a in json.load(open(os.path.join(paths.V1, 'manifest.json')))['animations']}
+# v1 names that are near-duplicates of another v2 clip: same sheet, own name (docs/VIDEO_PIPELINE.md)
 # batch 13: alternative takes of a base clip -> tag variant_of:<base>. The engine (lillith-anim Animator)
 # only cycles variant_of:<idle base> today; walk/sit variants are tagged for a future picker.
 VARIANT_OF = {'walk_sassy_right': 'walk_right', 'walk_skip_right': 'walk_right', 'walk_saunter_right': 'walk_right',
               'walk_sassy_left': 'walk_left', 'walk_skip_left': 'walk_left', 'walk_saunter_left': 'walk_left',
               'sit_bored_chin': 'sit_swing', 'sit_cross_legged_bob': 'sit_swing', 'sit_heel_kick': 'sit_swing', 'sit_stretch_yawn': 'sit_swing',
               'idle_bored_sigh': 'idle', 'idle_nail_check': 'idle', 'idle_tail_fidget': 'idle', 'idle_yawn_stretch': 'idle'}
-# v1 names that are near-duplicates of another v2 clip: same sheet, own name (docs/VIDEO_PIPELINE.md)
+# batch 15/16: allure poses (pin-up + dom persona). DOM clips also get tag `dom` (dominant/thirsty persona
+# banter hooks). REJECTED folders are skipped when building the manifest.
+PINUP = {'body_roll_slow', 'kneel_hands_on_thighs',
+         'wall_lean_invisible', 'blow_kiss_hip_pop', 'hair_lift_stretch'}
+DOM = {'dom_beckon_finger', 'dom_point_down', 'dom_arms_crossed_demand', 'smug_smirk', 'hungry_lip_lick',
+       'predator_lean_in', 'stalk_prowl_right', 'stalk_prowl_left', 'tail_wrap_pull', 'kiss_then_come_here',
+       'soul_contract_sign', 'kneel_pout_beg', 'hug_screen_possessive',
+       'seduce_beckon_finger', 'seduce_lip_bite_glance', 'seduce_lean_to_screen_whisper',
+       'seduce_blow_kiss_screen', 'seduce_tap_glass'}
+VARIANT_OF.update({'stalk_prowl_right': 'walk_right', 'stalk_prowl_left': 'walk_left'})
+# idle rotation picks (lillithTaskCompletionBot / parent, 2026-10-23): short gesture loops played once per pick (variant_play_once)
+VARIANT_OF.update({c: 'idle' for c in ('smug_smirk', 'hungry_lip_lick', 'tail_wrap_pull', 'hair_lift_stretch', 'body_roll_slow')})
+# arch_back_over_shoulder / bend_forward_wink / slow_turn_spin_tease (+ _long) failed batch 15 review but stay
+# registered unchanged (lead, 2026-10-23) until a keep/remove decision; list folder names here to exclude them.
+REJECTED: set = set()
 ALIASES = {'finger_wag_tease': 'lean_tease', 'hands_behind_head_pose': 'idle_flirt_stretch', 'bounce_giggle': 'idle_flirt_shy_giggle'}
 def entry(name, folder, j, extra_tags=()):
     e = {k: j[k] for k in ('frame_count', 'frame_width', 'frame_height', 'fps', 'loop', 'baseline_y', 'anchor', 'scale',
@@ -31,7 +46,7 @@ def entry(name, folder, j, extra_tags=()):
     return e
 for d in sorted(glob.glob(f'{V2}/*/')):
     f = os.path.basename(d.rstrip('/'))
-    if f.startswith('_'): continue
+    if f.startswith('_') or f in REJECTED or not os.path.exists(f'{d}{f}.json'): continue
     j = json.load(open(f'{d}{f}.json'))
     if f in ('idle_a', 'idle_b'):
         anims.append(entry(f, f, j, ['variant_of:idle']))
@@ -40,6 +55,11 @@ for d in sorted(glob.glob(f'{V2}/*/')):
         continue
     e = entry(f, f, j, [f'variant_of:{VARIANT_OF[f]}'] if f in VARIANT_OF else [])
     if VARIANT_OF.get(f) == 'idle': e['idle_variant'] = True
+    if f.startswith('stalk_prowl_'):  # locomotion: dom tag only, not an allure pose
+        e['tags'] = sorted(set(e['tags']) | {'dom'})
+    elif f in PINUP or f in DOM:
+        e['allure'] = True
+        e['tags'] = sorted(set(e['tags']) | {'allure'} | ({'dom'} if f in DOM else set()))
     if f.startswith('blend_'):
         sf = j.get('source_frames', {})
         fr, to = j.get('from_clip', 'wake'), j.get('to_clip', 'sleep')

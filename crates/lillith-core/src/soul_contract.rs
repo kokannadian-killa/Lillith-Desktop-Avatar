@@ -780,7 +780,8 @@ impl SoulContract {
     ///   [`ContractError::NeedsSignature`]; still pending).
     ///
     /// Every item is audited `APPROVED`/`DECLINED` and then `RESULT-OK` /
-    /// `RESULT-ERR`; `plans.log` gets the whole story.
+    /// `RESULT-ERR` / `RESULT-STOPPED` (the safeword killed it); `plans.log`
+    /// gets the whole story.
     ///
     /// [`ChangePlan::deletion_manifest`]: crate::access::plan::ChangePlan::deletion_manifest
     pub fn approve_plan(
@@ -839,9 +840,13 @@ impl SoulContract {
         let ts = format_utc((self.clock)());
         for it in &now.items {
             let line = match results.iter().find(|(n, _)| *n == it.n) {
-                Some((_, Ok(o))) => {
-                    self.audit_line("RESULT-OK", it.req.op(), &it.line);
-                    format!("{}. done: {}", it.n, o.trim_end())
+                Some((_, r @ Ok(o))) => {
+                    self.audit_line(result_label(r), it.req.op(), &it.line);
+                    if crate::access::commands::was_stopped(o) {
+                        format!("{}. STOPPED by the safeword: {}", it.n, o.trim_end())
+                    } else {
+                        format!("{}. done: {}", it.n, o.trim_end())
+                    }
                 }
                 Some((_, Err(e))) => {
                     self.audit_line("RESULT-ERR", it.req.op(), &format!("{} ({e})", it.line));
@@ -1181,6 +1186,15 @@ pub(crate) fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
     (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// The audit label for one executed plan item's result.
+pub(crate) fn result_label(r: &Result<String, String>) -> &'static str {
+    match r {
+        Ok(o) if crate::access::commands::was_stopped(o) => "RESULT-STOPPED",
+        Ok(_) => "RESULT-OK",
+        Err(_) => "RESULT-ERR",
+    }
 }
 
 #[cfg(test)]
@@ -1987,5 +2001,15 @@ mod tests {
         assert!(log.contains("APPROVED\ttouch"), "{log}");
         assert!(log.contains("DECLINED\ttouch"), "{log}");
         assert!(log.contains("DECLINED\t[launch]"), "{log}");
+    }
+
+    #[test]
+    fn safeword_stopped_results_audit_as_stopped_not_ok() {
+        assert_eq!(
+            result_label(&Ok("partial\n[stopped by the safeword]".into())),
+            "RESULT-STOPPED"
+        );
+        assert_eq!(result_label(&Ok("hi\n[exit 0]".into())), "RESULT-OK");
+        assert_eq!(result_label(&Err("boom".into())), "RESULT-ERR");
     }
 }

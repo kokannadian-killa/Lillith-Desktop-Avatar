@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_bluetooth_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -154,31 +154,31 @@
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
-      25,
+      22,
       269,
-      30,
+      29,
+      392
+    ],
+    [
+      20,
+      271,
+      23,
+      392
+    ],
+    [
+      16,
+      277,
+      16,
       392
     ],
     [
       21,
-      271,
-      24,
-      392
-    ],
-    [
-      17,
-      277,
-      17,
-      392
-    ],
-    [
-      24,
       286,
       22,
       392
     ],
     [
-      19,
+      18,
       289,
       24,
       392
@@ -186,17 +186,17 @@
     [
       14,
       289,
-      25,
+      24,
       392
     ],
     [
-      22,
-      287,
+      19,
+      288,
       28,
       392
     ],
     [
-      18,
+      17,
       281,
       23,
       392
@@ -208,7 +208,7 @@
       392
     ],
     [
-      24,
+      23,
       270,
       26,
       392
@@ -223,14 +223,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 10.0,
-    "bytes": 171534,
+    "fps": 8.0,
+    "bytes": 191415,
     "quality": {
-      "edge_mae": 2.32,
-      "edge_p99": 18.59,
-      "halo_dark": 0.06,
-      "halo_light": -0.156,
-      "alpha_mae": 0.102
+      "edge_mae": 2.245,
+      "edge_p99": 18.04,
+      "halo_dark": 0.045,
+      "halo_light": -0.133,
+      "alpha_mae": 0.0921
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

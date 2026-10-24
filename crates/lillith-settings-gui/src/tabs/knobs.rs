@@ -430,7 +430,9 @@ impl KnobTab {
         if !k.help.is_empty() {
             ui.horizontal(|ui| {
                 ui.add_space(142.0);
-                chrome::hint(ui, k.help);
+                // A vertical child wraps the help inside the group's column
+                // instead of running into the next one.
+                ui.vertical(|ui| chrome::hint(ui, k.help));
             });
         }
     }

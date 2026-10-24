@@ -1,0 +1,19 @@
+{
+ "mode": "loop",
+ "take_s": 6,
+ "video_fps": 24,
+ "start": 1,
+ "stop": 143,
+ "step": 2,
+ "fps": 12,
+ "scale": 0.54,
+ "anchor_x": 200,
+ "center": "fixed",
+ "finalize": "keyframed",
+ "seated": false,
+ "peak_at_s": 3.0,
+ "peak_pose": "leaning forward toward the viewer from the hips, both hands braced on her thighs just above the knees, shoulders pressed gently together so the neckline of her top frames a deep cleavage, back arched, head tilted up toward the viewer",
+ "expression": "sultry upward gaze through her lashes, lips slightly parted into a teasing smile",
+ "motion": "She leans slowly forward toward the viewer with her hands sliding onto her thighs, shoulders squeezing gently inward; her chest sways forward and settles with a soft, natural double bounce; she holds eye contact with a slow wink and a lip bite, then slowly straightens back to the start pose, hips swaying once.",
+ "name": "lean_forward_desk"
+}

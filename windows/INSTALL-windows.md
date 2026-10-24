@@ -76,6 +76,10 @@ When chat is set up, Lillith starts llama-server herself (hidden, on
 - **Voice:** with `[voice] engine = "auto"` (the default) she speaks
   with Windows' built-in offline voices (SAPI). Use `engine = "none"` or
   `enabled = false` to keep her quiet.
+- **Her own voice (Ko's clone):** the `lillith-voice` kit can be bundled by the installer (embedded
+  Python + wheels + models, no downloads). It talks to the app over a local named pipe
+  `\\.\pipe\lillith-voice` (current user only, remote clients rejected), never TCP or `0.0.0.0`.
+  See the kit's `windows/INSTALL-windows.md`. *Documented, not yet tested on Windows.*
 
 ## Files
 
