@@ -64,8 +64,9 @@ Lillith animates and reacts without a model. To **chat** with her you need a
 GGUF model and `llama-server`, both on your machine.
 
 1. **Get the model yourself.** Ko uses **Dolphin 3.0 Llama 3.2 3B
-   Q4_K_M**. Download the `.gguf` file from the model's Hugging Face page in
-   your browser. Lillith never downloads anything. Then put it in `~/models/`:
+   Q4_K_M** (`dolphin3.0-llama3.2-3b-q4_k_m.gguf`). Download the `.gguf` file
+   from the model's Hugging Face page in your browser. Lillith never downloads
+   anything. Then put it in `~/models/`:
 
    ```fish
    mkdir -p ~/models
@@ -89,13 +90,21 @@ GGUF model and `llama-server`, both on your machine.
 
    If you'd rather use the GUI, run `./bin/lillith-settings` and open the
    **Brain** tab. That's the setup wizard, and it can also scan your disks
-   for GGUF files. After setup, Lillith starts `llama-server` herself
-   (hidden, on 127.0.0.1) and stops it when she quits.
+   for GGUF files (`~/models`, `~/AI/models`, `~/Downloads`,
+   `~/.local/share/lillith/models`, `~/.cache/llama.cpp` and the LM Studio /
+   Ollama folders). On a low-power CPU with 8–16 GB of RAM it recommends
+   `dolphin3.0-llama3.2-3b-q4_k_m.gguf` and ranks uncensored models above
+   stock ones of the same size. A Mistral 7B GGUF still works as a fallback if
+   it's the only one you have, but it's slow there. After setup, Lillith
+   starts `llama-server` herself (hidden, on 127.0.0.1) and stops it when she
+   quits.
 
-3. **Or start llama-server by hand** on 127.0.0.1:8080:
+3. **Or start llama-server by hand** on 127.0.0.1:8080, with the same flags
+   the setup writes (`-t` = your **physical** cores, 2 on an i5-7200U; `lscpu`
+   shows "Core(s) per socket", while `nproc` counts threads):
 
    ```fish
-   llama-server -m ~/models/<model>.gguf --host 127.0.0.1 --port 8080 -c 4096 --jinja
+   llama-server -m ~/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf --host 127.0.0.1 --port 8080 -c 4096 -t 2 --jinja
    ```
 
    Then test it from the terminal with `./bin/lillith chat "hi"`.
@@ -251,7 +260,8 @@ llama-server.exe -m <model>.gguf --host 127.0.0.1 --port 8080 -c 4096 -t <physic
 
 Chat needs `--jinja` (the model's own chat template). Windows doesn't expose the
 CPU name or core count to her, so there "low-power" means 4 threads or fewer,
-and `-t` is half the thread count unless you set `[llm] threads`. Lily's sampler settings
+and `-t` is half the thread count (all of them below 4 threads) unless you set
+`[llm] threads`. Lily's sampler settings
 (temperature 0.95, top_p 0.95, min_p 0.1, repeat_penalty 1.1 over the last 256
 tokens, 160 reply tokens) are sent with every chat request, so they aren't on
 the command line. If you use Ollama instead (`backend = "ollama"`), it must be
@@ -303,11 +313,12 @@ install steps, see `source/android/INSTALL-android.md`.
 
 4. **Start llama-server on 127.0.0.1:8080** with Lily's sampler settings
    from `source/crates/lillith-setup/src/modelfile.rs`: temperature 0.95, top_p 0.95, min_p 0.1,
-   repeat_penalty 1.1 over the last 256 tokens, 160 reply tokens and a 4096 context:
+   repeat_penalty 1.1 over the last 256 tokens, 160 reply tokens and a 4096 context.
+   Set `-t` to the phone's big (performance) cores; 4 is a safe start:
 
    ```sh
    llama-server -m ~/models/<model>.gguf --host 127.0.0.1 --port 8080 --jinja \
-       -c 4096 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160
+       -c 4096 -t 4 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160
    ```
 
    **System prompt:** Lily's persona is `LILY_SYSTEM_PROMPT` in
@@ -316,7 +327,7 @@ install steps, see `source/android/INSTALL-android.md`.
    the text into the system message field in the web UI's settings.
 5. **Chat:** open `http://127.0.0.1:8080` in the phone's browser (llama-server's
    built-in web UI), or chat in the terminal with
-   `llama-cli -m ~/models/<model>.gguf --jinja -c 4096 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160`.
+   `llama-cli -m ~/models/<model>.gguf --jinja -c 4096 -t 4 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160`.
    `llama-cli --help` lists its system-prompt option.
 
 Keep `--host 127.0.0.1` so nothing else on the network can reach the server.
