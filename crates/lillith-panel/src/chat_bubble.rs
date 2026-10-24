@@ -54,7 +54,8 @@ use lillith_core::soul_contract::{
 };
 use lillith_mind::capabilities::RESULT_OPEN;
 use lillith_mind::chat::{
-    CardChoice, ChatSession, Outcome, MAX_TOOL_CHAIN, RESTART_WAIT_MAX, SERVER_CARD_TIMEOUT,
+    CardChoice, ChatSession, Outcome, ServerCardSlot, MAX_TOOL_CHAIN, RESTART_WAIT_MAX,
+    SERVER_CARD_TIMEOUT,
 };
 use lillith_mind::llm::Message;
 use lillith_voice::daemon::{route_transcript, Transcript, VoiceRoute};
@@ -110,6 +111,14 @@ pub struct BubbleOptions {
 /// Event asking the app to start `[chat.server]`: emitted only after a
 /// clicked Yes on the model-server Soul Contract card (audited `CONFIRM`).
 pub const SERVER_APPROVED_EVENT: &str = "chat.server_approved";
+
+/// Event telling the app a model-server card went up; the detail is its
+/// card id. If the bubble then dies without an answer (killed), the app
+/// audits `CANCELLED` for that id unless the log already has a decision.
+pub const SERVER_CARD_EVENT: &str = "chat.server_card";
+
+/// Audit note when the bubble closes with the model-server card up.
+pub const CARD_CLOSED_NOTE: &str = "chat bubble closed before an answer";
 
 enum Req {
     Send(String),
@@ -250,6 +259,9 @@ struct Bubble {
     /// The model-server card currently up, and when it went up (it times
     /// out as a No after [`SERVER_CARD_TIMEOUT`]). Chat stays usable.
     server_card: Option<(ContractPrompt, Instant)>,
+    /// The session's card slot: closing the window cancels a waiting card
+    /// (audited `CANCELLED`) right here, without the chat worker.
+    card_slot: ServerCardSlot,
     /// The deletion contract currently up.
     deletion: Option<DeletionPrompt>,
     deletion_state: DeletionState,
@@ -363,10 +375,14 @@ pub fn new_session(opts: &BubbleOptions) -> ChatSession {
         .with_server_card(!opts.demo && opts.screenshot.is_none())
 }
 
-fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Receiver<Ui>) {
+fn spawn_worker(
+    opts: &BubbleOptions,
+    ctx: egui::Context,
+    card_slot: ServerCardSlot,
+) -> (Sender<Req>, Receiver<Ui>) {
     let (req_tx, req_rx) = channel::<Req>();
     let (ui_tx, ui_rx) = channel::<Ui>();
-    let mut session = new_session(opts);
+    let mut session = new_session(opts).with_server_card_slot(card_slot);
     if let Some(p) = &opts.history {
         session = session.with_history_file(p.clone());
     }
@@ -549,6 +565,9 @@ impl Worker {
     fn raise_server_card(&mut self) {
         if let Some(a) = self.session.take_server_request() {
             (self.emit)("chat.contract_proposed", Some(&a.summary()));
+            if let Some(id) = a.card_id() {
+                (self.emit)(SERVER_CARD_EVENT, Some(id));
+            }
             self.note(
                 "📜 Soul Contract: she wants to restart her local model server. Click Yes on the card, or No to stay text-only (typing or saying yes doesn't count)."
                     .into(),
@@ -1253,6 +1272,10 @@ impl eframe::App for Bubble {
         }
         self.drain();
         self.drain_mic();
+        if ctx.input(|i| i.viewport().close_requested()) {
+            // Window manager / app close with the card up: audit it now.
+            self.cancel_server_card();
+        }
         // Esc, or a click outside (focus lost) closes the bubble, unless a
         // Soul Contract is up: then Esc means No (the popup handles it) and
         // the bubble waits for an answer.
@@ -1407,6 +1430,7 @@ impl eframe::App for Bubble {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.cancel_server_card();
         if self.screenshot.is_some() {
             return;
         }
@@ -1414,7 +1438,22 @@ impl eframe::App for Bubble {
     }
 }
 
+impl Drop for Bubble {
+    fn drop(&mut self) {
+        self.cancel_server_card();
+    }
+}
+
 impl Bubble {
+    /// The bubble is closing: a model-server card still waiting is audited
+    /// `CANCELLED` (once; a killed bubble is covered by the app).
+    fn cancel_server_card(&mut self) {
+        if self.card_slot.cancel(CARD_CLOSED_NOTE) {
+            tracing::info!("chat bubble closed with the model-server card up: CANCELLED");
+        }
+        self.server_card = None;
+    }
+
     /// `--screenshot`: after the first frames settle, save one and exit.
     fn screenshot(&mut self, ctx: &egui::Context) {
         let Some(path) = self.screenshot.clone() else {
@@ -1503,7 +1542,8 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
         Box::new(move |cc| {
             look::apply(&cc.egui_ctx);
             cc.egui_ctx.set_fonts(bubble_fonts());
-            let (tx, rx) = spawn_worker(&opts, cc.egui_ctx.clone());
+            let card_slot = ServerCardSlot::default();
+            let (tx, rx) = spawn_worker(&opts, cc.egui_ctx.clone(), card_slot.clone());
             if opts.screenshot.is_none() {
                 (opts.emit)("chat.opened", None);
             }
@@ -1544,6 +1584,7 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
                 contract: opts.demo_contract.then(demo_contract),
                 contract_demo: opts.demo_contract,
                 server_card: None,
+                card_slot,
                 deletion: None,
                 deletion_state: DeletionState::default(),
                 plan: None,
@@ -1613,6 +1654,7 @@ mod tests {
             contract,
             contract_demo: demo,
             server_card: None,
+            card_slot: ServerCardSlot::default(),
             deletion: None,
             deletion_state: DeletionState::default(),
             plan: None,
@@ -1647,10 +1689,10 @@ mod tests {
     }
 
     fn server_prompt() -> ContractPrompt {
-        PendingAction::StartModelServer {
-            argv: vec!["/opt/llama-server".into(), "--port".into(), "8080".into()],
-            restart: true,
-        }
+        PendingAction::start_model_server(
+            vec!["/opt/llama-server".into(), "--port".into(), "8080".into()],
+            true,
+        )
         .prompt()
     }
 
@@ -1701,6 +1743,58 @@ mod tests {
             req_rx.try_recv(),
             Ok(Req::ServerCard(CardChoice::Clicked(Answer::No)))
         ));
+    }
+
+    #[test]
+    fn closing_or_dropping_the_bubble_cancels_a_waiting_card_once() {
+        let dir = std::env::temp_dir().join(format!(
+            "lillith-bubble-card-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let card = |b: &mut Bubble| {
+            let a = PendingAction::start_model_server(vec!["/opt/llama-server".into()], true);
+            SoulContract::new(Some(log.clone())).record("PROPOSED", &a);
+            b.card_slot.hold(a.clone(), Some(log.clone()));
+            b.server_card = Some((a.prompt(), Instant::now()));
+            a.card_id().unwrap().to_string()
+        };
+        let cancelled = |id: &str| {
+            std::fs::read_to_string(&log)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| l.contains("\tCANCELLED\t") && l.contains(&format!("card={id}")))
+                .count()
+        };
+        // Window closed (eframe on_exit), then dropped: one CANCELLED.
+        let (mut b, _rx) = test_bubble(None, false);
+        let first = card(&mut b);
+        eframe::App::on_exit(&mut b, None);
+        assert!(b.server_card.is_none() && !b.card_slot.pending());
+        drop(b);
+        assert_eq!(cancelled(&first), 1);
+        assert!(std::fs::read_to_string(&log)
+            .unwrap()
+            .contains(CARD_CLOSED_NOTE));
+        // Dropped without on_exit (e.g. a panic unwinding): still audited.
+        let (mut b, _rx) = test_bubble(None, false);
+        let second = card(&mut b);
+        drop(b);
+        assert_eq!(cancelled(&second), 1);
+        // Nothing left open for the app or the next startup to close.
+        assert!(SoulContract::new(Some(log.clone()))
+            .open_model_server_cards()
+            .is_empty());
+        // No card: closing writes nothing.
+        let (mut b, _rx) = test_bubble(None, false);
+        let before = std::fs::read_to_string(&log).unwrap();
+        eframe::App::on_exit(&mut b, None);
+        drop(b);
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), before);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

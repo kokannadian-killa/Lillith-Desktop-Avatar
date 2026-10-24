@@ -129,10 +129,53 @@ pub enum PendingAction {
     /// `argv` is shown with any `--api-key` value masked. Confirming only
     /// records the approval: the app then spawns the server itself (it
     /// owns and stops it), so nothing is started by the contract.
-    StartModelServer { argv: Vec<String>, restart: bool },
+    /// `card` correlates every audit line of one card (`card=<id>`, see
+    /// [`PendingAction::start_model_server`]).
+    StartModelServer {
+        argv: Vec<String>,
+        restart: bool,
+        card: String,
+    },
+}
+
+/// The `kind` column of model-server card lines in the audit log.
+pub const MODEL_SERVER_KIND: &str = "start_model_server";
+
+/// A model-server card the audit log shows as `PROPOSED` with no decision.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenCard {
+    /// `card=<id>`; `None` for a line written before cards had ids.
+    pub card: Option<String>,
+    /// Timestamp of the `PROPOSED` line.
+    pub ts: String,
+    /// Its path column (the llama-server binary).
+    pub path: String,
 }
 
 impl PendingAction {
+    /// A model-server card with a fresh, process-unique id.
+    pub fn start_model_server(argv: Vec<String>, restart: bool) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+        PendingAction::StartModelServer {
+            argv,
+            restart,
+            card: format!("{nanos:x}-{:x}-{seq}", std::process::id()),
+        }
+    }
+
+    /// The card id of a model-server card.
+    pub fn card_id(&self) -> Option<&str> {
+        match self {
+            PendingAction::StartModelServer { card, .. } => Some(card),
+            _ => None,
+        }
+    }
     /// Short machine tag used in the audit log.
     pub fn kind(&self) -> &'static str {
         match self {
@@ -986,6 +1029,100 @@ impl SoulContract {
         self.log_command(decision, action, &Ok((None, None)));
     }
 
+    /// [`record`](Self::record) with a free-text note column.
+    pub fn record_note(&self, decision: &str, action: &PendingAction, note: &str) {
+        self.audit_with(decision, action, Some(note));
+        self.log_command(decision, action, &Ok((None, None)));
+    }
+
+    /// Model-server cards the audit log shows as `PROPOSED` without a
+    /// decision (any later `start_model_server` line with the same
+    /// `card=<id>`). Lines without an id (older logs) pair up in order.
+    pub fn open_model_server_cards(&self) -> Vec<OpenCard> {
+        let Some(log) = &self.audit_log else {
+            return Vec::new();
+        };
+        let Ok(text) = std::fs::read_to_string(log) else {
+            return Vec::new();
+        };
+        let mut open: Vec<OpenCard> = Vec::new();
+        for line in text.lines() {
+            let cols: Vec<&str> = line.split('\t').collect();
+            if cols.len() < 4 || cols[2] != MODEL_SERVER_KIND {
+                continue;
+            }
+            let field = |k: &str| {
+                cols[4..]
+                    .iter()
+                    .find_map(|c| c.strip_prefix(k))
+                    .map(str::to_string)
+            };
+            let card = field("card=");
+            if cols[1] == "PROPOSED" {
+                open.push(OpenCard {
+                    card,
+                    ts: cols[0].to_string(),
+                    path: cols[3].to_string(),
+                });
+                continue;
+            }
+            let at = match (&card, field("proposed=")) {
+                (Some(id), _) => open.iter().rposition(|o| o.card.as_ref() == Some(id)),
+                (None, Some(ts)) => open.iter().rposition(|o| o.card.is_none() && o.ts == ts),
+                (None, None) => open.iter().rposition(|o| o.card.is_none()),
+            };
+            if let Some(i) = at {
+                open.remove(i);
+            }
+        }
+        open
+    }
+
+    /// Appends `CANCELLED` (with `note`) for card `id` if the audit log
+    /// still shows it open; `false` (nothing written) once it was decided.
+    /// Existing lines are never rewritten.
+    pub fn cancel_open_model_server_card(&self, id: &str, note: &str) -> bool {
+        let Some(card) = self
+            .open_model_server_cards()
+            .into_iter()
+            .find(|o| o.card.as_deref() == Some(id))
+        else {
+            return false;
+        };
+        self.cancel_open(&card, note);
+        true
+    }
+
+    /// Closes every open model-server card with `CANCELLED` (startup: the
+    /// process that showed it is gone). Returns how many were closed.
+    pub fn close_orphaned_model_server_cards(&self, note: &str) -> usize {
+        let open = self.open_model_server_cards();
+        for card in &open {
+            self.cancel_open(card, note);
+        }
+        open.len()
+    }
+
+    fn cancel_open(&self, card: &OpenCard, note: &str) {
+        let Some(log) = &self.audit_log else { return };
+        let ts = format_utc((self.clock)());
+        let id = match &card.card {
+            Some(id) => format!("card={id}"),
+            None => format!("proposed={}", card.ts),
+        };
+        let note = note.replace(['\n', '\t'], " ");
+        let line = format!(
+            "{ts}\tCANCELLED\t{MODEL_SERVER_KIND}\t{}\t{id}\t{note}\n",
+            card.path
+        );
+        if let Err(e) = append(log, &line) {
+            tracing::warn!(
+                "soul contract: could not write audit log {}: {e}",
+                log.display()
+            );
+        }
+    }
+
     /// Answers the popup: [`Answer::Yes`] is [`confirm`](Self::confirm),
     /// [`Answer::No`] is [`deny`](Self::deny). There is no third path.
     pub fn answer(&mut self, id: RequestId, answer: Answer) -> Result<Verdict, ContractError> {
@@ -997,14 +1134,27 @@ impl SoulContract {
 
     /// Appends `<rfc3339>\t<decision>\t<kind>\t<path>` to the audit log.
     /// A logging failure is reported but never blocks the decision.
+    /// Model-server cards add `\tcard=<id>` (and `\t<note>` when given).
     fn audit(&self, decision: &str, action: &PendingAction) {
+        self.audit_with(decision, action, None)
+    }
+
+    fn audit_with(&self, decision: &str, action: &PendingAction, note: Option<&str>) {
         let Some(log) = &self.audit_log else { return };
         let ts = format_utc((self.clock)());
         let path = action
             .target_path()
             .map(|p| p.display().to_string())
             .unwrap_or_default();
-        let line = format!("{ts}\t{decision}\t{}\t{path}\n", action.kind());
+        let mut extra = String::new();
+        if let Some(id) = action.card_id() {
+            extra.push_str(&format!("\tcard={id}"));
+        }
+        if let Some(n) = note {
+            extra.push('\t');
+            extra.push_str(&n.replace(['\n', '\t'], " "));
+        }
+        let line = format!("{ts}\t{decision}\t{}\t{path}{extra}\n", action.kind());
         if let Err(e) = append(log, &line) {
             tracing::warn!(
                 "soul contract: could not write audit log {}: {e}",
@@ -1270,10 +1420,11 @@ mod tests {
         let dir = tmpdir("model-server");
         let log = dir.join("audit.log");
         let mut sc = SoulContract::new(Some(log.clone())).with_clock(fixed(1_700_000_000));
-        let action = PendingAction::StartModelServer {
-            argv: vec!["/opt/llama-server".into(), "--port".into(), "8080".into()],
-            restart: true,
-        };
+        let action = PendingAction::start_model_server(
+            vec!["/opt/llama-server".into(), "--port".into(), "8080".into()],
+            true,
+        );
+        let card = action.card_id().unwrap().to_string();
         assert!(action.needs_confirmation());
         let p = action.prompt();
         assert_eq!(p.kind, "start_model_server");
@@ -1298,7 +1449,9 @@ mod tests {
         let audit = std::fs::read_to_string(&log).unwrap();
         for d in ["PROPOSED", "CONFIRM", "DENY", "TIMEOUT"] {
             assert!(
-                audit.contains(&format!("\t{d}\tstart_model_server\t/opt/llama-server")),
+                audit.contains(&format!(
+                    "\t{d}\tstart_model_server\t/opt/llama-server\tcard={card}\n"
+                )),
                 "{d}: {audit}"
             );
         }
@@ -1307,6 +1460,73 @@ mod tests {
             cmds.contains("[model-server] /opt/llama-server --port 8080"),
             "{cmds}"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn orphaned_model_server_cards_are_closed_by_id_without_rewriting() {
+        let dir = tmpdir("model-server-orphans");
+        let log = dir.join("audit.log");
+        std::fs::create_dir_all(&dir).unwrap();
+        let sc = SoulContract::new(Some(log.clone())).with_clock(fixed(1_700_000_000));
+        let argv = || vec!["/opt/llama-server".to_string()];
+        let answered = PendingAction::start_model_server(argv(), false);
+        let orphan = PendingAction::start_model_server(argv(), true);
+        let killed = PendingAction::start_model_server(argv(), true);
+        // An older id-less pair and an id-less orphan, then cards with ids.
+        std::fs::write(
+            &log,
+            "2023-01-01T00:00:00Z\tPROPOSED\tstart_model_server\t/old\n\
+             2023-01-01T00:00:01Z\tDENY\tstart_model_server\t/old\n\
+             2023-01-02T00:00:00Z\tPROPOSED\tstart_model_server\t/old\n\
+             2023-01-02T00:00:01Z\tCONFIRM\twrite_file\t/x\n",
+        )
+        .unwrap();
+        sc.record("PROPOSED", &answered);
+        sc.record("PROPOSED", &orphan);
+        sc.record("PROPOSED", &killed);
+        sc.record("TIMEOUT", &answered);
+        let open = sc.open_model_server_cards();
+        assert_eq!(open.len(), 3, "{open:?}");
+        assert_eq!(open[0].card, None);
+        assert_eq!(open[0].ts, "2023-01-02T00:00:00Z");
+
+        // The overlay noticed the killed bubble: only that card closes, once.
+        let killed_id = killed.card_id().unwrap();
+        assert!(sc.cancel_open_model_server_card(killed_id, "bubble gone"));
+        assert!(!sc.cancel_open_model_server_card(killed_id, "bubble gone"));
+        assert!(!sc.cancel_open_model_server_card(answered.card_id().unwrap(), "x"));
+
+        let before = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(
+            sc.close_orphaned_model_server_cards("orphaned PROPOSED closed at startup"),
+            2
+        );
+        let after = std::fs::read_to_string(&log).unwrap();
+        assert!(
+            after.starts_with(&before),
+            "existing lines are never rewritten"
+        );
+        let added: Vec<&str> = after[before.len()..].lines().collect();
+        assert_eq!(
+            added,
+            [
+                "2023-11-14T22:13:20Z\tCANCELLED\tstart_model_server\t/old\t\
+                 proposed=2023-01-02T00:00:00Z\torphaned PROPOSED closed at startup"
+                    .to_string(),
+                format!(
+                    "2023-11-14T22:13:20Z\tCANCELLED\tstart_model_server\t/opt/llama-server\t\
+                     card={}\torphaned PROPOSED closed at startup",
+                    orphan.card_id().unwrap()
+                ),
+            ]
+        );
+        assert!(after.contains(&format!(
+            "\tCANCELLED\tstart_model_server\t/opt/llama-server\tcard={killed_id}\tbubble gone\n"
+        )));
+        // Idempotent: a second startup finds nothing.
+        assert!(sc.open_model_server_cards().is_empty());
+        assert_eq!(sc.close_orphaned_model_server_cards("again"), 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -13,6 +13,7 @@ use lillith_core::access::plan::PlanRequest;
 use lillith_core::config::{ChatConfig, MemoryConfig, MindConfig};
 use lillith_core::soul_contract::{Answer, PendingAction, SoulContract};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// An edit applied to both the in-memory and on-disk chat history.
@@ -138,14 +139,77 @@ struct ServerCard {
     /// A card surface exists (the chat bubble). Without one (CLI, headless)
     /// every request is audited `NO_UI` and recovery stays text-only.
     ui: bool,
-    /// The filed request, waiting for a click.
-    action: Option<PendingAction>,
+    /// The filed request, waiting for a click (shared with the UI thread).
+    slot: ServerCardSlot,
     /// The UI has taken it (shown).
     raised: bool,
     /// Yes was clicked and audited; consumed by the start.
     approved: bool,
     /// No new card before this.
     cooldown_until: Option<Instant>,
+}
+
+/// The pending model-server card, shared between the session and the UI
+/// thread: whoever takes it writes the decision, so a window that closes
+/// with the card up can audit `CANCELLED` itself ([`ServerCardSlot::cancel`])
+/// without waiting for the chat worker, and nothing is audited twice.
+#[derive(Debug, Clone, Default)]
+pub struct ServerCardSlot(Arc<Mutex<Option<FiledCard>>>);
+
+/// A filed card and the audit log it is recorded in.
+type FiledCard = (PendingAction, Option<PathBuf>);
+
+impl ServerCardSlot {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<FiledCard>> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Holds `action` as the waiting card, audited to `audit_log` when it
+    /// is answered or cancelled. Records nothing itself (the session audits
+    /// `PROPOSED` when it files a card) and can't approve anything.
+    pub fn hold(&self, action: PendingAction, audit_log: Option<PathBuf>) {
+        *self.lock() = Some((action, audit_log));
+    }
+
+    fn take(&self) -> Option<FiledCard> {
+        self.lock().take()
+    }
+
+    fn peek(&self) -> Option<PendingAction> {
+        self.lock().as_ref().map(|(a, _)| a.clone())
+    }
+
+    /// A card is waiting for an answer.
+    pub fn pending(&self) -> bool {
+        self.lock().is_some()
+    }
+
+    /// The waiting card's id (`card=<id>` in the audit log).
+    pub fn card_id(&self) -> Option<String> {
+        self.lock()
+            .as_ref()
+            .and_then(|(a, _)| a.card_id().map(str::to_string))
+    }
+
+    /// Drops the waiting card and audits `CANCELLED` with `note` (window
+    /// closed, session dropped). `false` when nothing was waiting.
+    pub fn cancel(&self, note: &str) -> bool {
+        let Some((action, log)) = self.take() else {
+            return false;
+        };
+        SoulContract::new(log).record_note("CANCELLED", &action, note);
+        true
+    }
+}
+
+impl Drop for ChatSession {
+    /// A card still waiting when the session goes away is audited
+    /// `CANCELLED` (never left as a bare `PROPOSED`).
+    fn drop(&mut self) {
+        self.server_card
+            .slot
+            .cancel("chat session closed before an answer");
+    }
 }
 
 impl ChatSession {
@@ -230,6 +294,16 @@ impl ChatSession {
     /// Whether a Soul Contract card can be shown for the model-server
     /// (re)start (the chat bubble: `true`; CLI / headless: `false`, the
     /// default, so a request is audited `NO_UI` and stays text-only).
+    pub fn with_server_card_slot(mut self, slot: ServerCardSlot) -> Self {
+        self.server_card.slot = slot;
+        self
+    }
+
+    /// The shared card slot (see [`ServerCardSlot`]).
+    pub fn server_card_slot(&self) -> ServerCardSlot {
+        self.server_card.slot.clone()
+    }
+
     pub fn with_server_card(mut self, ui: bool) -> Self {
         self.server_card.ui = ui;
         self
@@ -775,11 +849,13 @@ impl ChatSession {
     /// the default `audit.log` in the data dir (the card is audited even
     /// with `[mind]` off).
     fn server_contract(&self) -> SoulContract {
-        SoulContract::new(
-            self.audit_log
-                .clone()
-                .or_else(|| lillith_core::config::data_dir().map(|d| d.join("audit.log"))),
-        )
+        SoulContract::new(self.server_audit_log())
+    }
+
+    fn server_audit_log(&self) -> Option<PathBuf> {
+        self.audit_log
+            .clone()
+            .or_else(|| lillith_core::config::data_dir().map(|d| d.join("audit.log")))
     }
 
     /// Files the "Restart local model server?" card: at most one at a time,
@@ -788,7 +864,7 @@ impl ChatSession {
     fn file_server_card(&mut self) {
         let Some(cfg) = &self.restart else { return };
         let card = &self.server_card;
-        if card.action.is_some() || card.approved {
+        if card.slot.pending() || card.approved {
             tracing::debug!("chat: model-server card already pending");
             return;
         }
@@ -799,10 +875,7 @@ impl ChatSession {
         let Some(argv) = crate::server::display_argv(cfg) else {
             return;
         };
-        let action = PendingAction::StartModelServer {
-            argv,
-            restart: self.server_seen,
-        };
+        let action = PendingAction::start_model_server(argv, self.server_seen);
         let sc = self.server_contract();
         sc.record("PROPOSED", &action);
         if !self.server_card.ui {
@@ -813,7 +886,7 @@ impl ChatSession {
             self.server_card.cooldown_until = Some(Instant::now() + SERVER_CARD_COOLDOWN);
             return;
         }
-        self.server_card.action = Some(action);
+        self.server_card.slot.hold(action, self.server_audit_log());
         self.server_card.raised = false;
     }
 
@@ -824,14 +897,14 @@ impl ChatSession {
         if card.raised {
             return None;
         }
-        let a = card.action.clone()?;
+        let a = card.slot.peek()?;
         card.raised = true;
         Some(a)
     }
 
     /// A model-server card is waiting for a click.
     pub fn server_card_pending(&self) -> bool {
-        self.server_card.action.is_some()
+        self.server_card.slot.pending()
     }
 
     /// Closes the model-server card and audits the decision: Yes →
@@ -844,11 +917,11 @@ impl ChatSession {
     /// [`start_approved_server`]: Self::start_approved_server
     /// [`wait_for_approved_server`]: Self::wait_for_approved_server
     pub fn answer_server_card(&mut self, choice: CardChoice) -> bool {
-        let Some(action) = self.server_card.action.take() else {
+        let Some((action, log)) = self.server_card.slot.take() else {
             return false;
         };
         self.server_card.raised = false;
-        let mut sc = self.server_contract();
+        let mut sc = SoulContract::new(log);
         let approved = match choice {
             CardChoice::Clicked(Answer::Yes) => {
                 let id = sc.request(action);
@@ -1887,6 +1960,53 @@ mod tests {
         s.send("red", |_| {}).await;
         assert!(!s.server_card_pending());
         assert_eq!(f.count("CANCELLED"), 1, "{}", f.audit());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_closed_window_or_dropped_session_cancels_the_card_once() {
+        // The UI thread closes the window with the card up.
+        let f = FakeLlama::new("closed");
+        let mut s = f.session(true);
+        s.send("hi", |_| {}).await;
+        let card = s.take_server_request().expect("card raised");
+        let id = card.card_id().unwrap().to_string();
+        let slot = s.server_card_slot();
+        assert_eq!(slot.card_id().as_deref(), Some(id.as_str()));
+        assert!(slot.cancel("chat bubble closed before an answer"));
+        assert!(!slot.cancel("again"), "only once");
+        assert!(!s.server_card_pending());
+        assert!(!s.answer_server_card(CardChoice::Clicked(Answer::Yes)));
+        drop(s);
+        let audit = f.audit();
+        assert_eq!(f.count("CANCELLED"), 1, "{audit}");
+        assert!(
+            audit.contains(&format!(
+                "\tCANCELLED\tstart_model_server\t{}\tcard={id}\tchat bubble closed before an answer\n",
+                f.cfg.server.binary
+            )),
+            "{audit}"
+        );
+        assert_eq!(
+            audit.matches(&format!("card={id}")).count(),
+            2,
+            "PROPOSED + CANCELLED share the id: {audit}"
+        );
+
+        // The session itself goes away with the card up.
+        let f = FakeLlama::new("dropped");
+        let mut s = f.session(true);
+        s.send("hi", |_| {}).await;
+        assert!(s.server_card_pending());
+        drop(s);
+        assert_eq!(
+            (f.count("PROPOSED"), f.count("CANCELLED")),
+            (1, 1),
+            "{}",
+            f.audit()
+        );
+        let c = SoulContract::new(Some(f.audit.clone()));
+        assert!(c.open_model_server_cards().is_empty());
     }
 
     #[cfg(unix)]
