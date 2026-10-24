@@ -30,6 +30,7 @@ use lillith_overlay::{Backend, OverlayOptions};
 use std::path::PathBuf;
 
 mod chat;
+mod contract_consent;
 mod memory_wiring;
 mod preview;
 mod server_consent;
@@ -256,6 +257,27 @@ enum Cmd {
         /// The command line to show.
         #[arg(last = true)]
         argv: Vec<String>,
+    },
+    /// The stand-alone Soul Contract card for a tool action proposed in
+    /// `lillith chat` (only a mouse click on Yes approves; prints yes / no /
+    /// timeout / cancelled). Shows and decides only; never runs anything.
+    #[command(hide = true)]
+    ContractCard {
+        /// The audit kind.
+        #[arg(long)]
+        kind: String,
+        /// The card heading.
+        #[arg(long)]
+        title: String,
+        /// One-line description.
+        #[arg(long)]
+        summary: String,
+        /// The path it touches.
+        #[arg(long)]
+        target: Option<String>,
+        /// What would be written / run.
+        #[arg(long, allow_hyphen_values = true)]
+        detail: Option<String>,
     },
 }
 
@@ -517,6 +539,21 @@ async fn main() -> Result<()> {
         }
         Some(Cmd::ServerCard { restart, ref argv }) => {
             server_consent::card_main(argv.clone(), restart)?;
+        }
+        Some(Cmd::ContractCard {
+            ref kind,
+            ref title,
+            ref summary,
+            ref target,
+            ref detail,
+        }) => {
+            contract_consent::card_main(
+                kind.clone(),
+                title.clone(),
+                summary.clone(),
+                target.clone(),
+                detail.clone(),
+            )?;
         }
         Some(Cmd::Setup {
             ref gguf,

@@ -1,5 +1,7 @@
-//! A stand-alone model-server Soul Contract card (`lillith server-card`),
-//! for `lillith chat --spawn-server` when a desktop is available: the same
+//! A stand-alone Soul Contract card in its own small window: the
+//! model-server card (`lillith server-card`, for `lillith chat
+//! --spawn-server`) and a console tool action's card (`lillith
+//! contract-card`, for `lillith chat`), when a desktop is available: the same
 //! popup as the chat bubble's, in its own small window. Only a click on Yes
 //! answers Yes; Esc (or the card's No) is No; closing the window cancels;
 //! no answer within the timeout is a timeout. The caller audits the
@@ -8,7 +10,9 @@
 use eframe::egui;
 use lillith_core::soul_contract::{Answer, ContractPrompt};
 use lillith_mind::chat::CardChoice;
-use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView, Initiator};
+/// Who the card says asked ("She wants to …" / "You asked to …").
+pub use lillith_theme::egui_contract::Initiator;
+use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -35,6 +39,7 @@ pub fn parse_choice_word(w: &str) -> Option<CardChoice> {
 
 struct Card {
     prompt: ContractPrompt,
+    initiator: Initiator,
     opened: Instant,
     timeout: Duration,
     out: Arc<Mutex<Option<CardChoice>>>,
@@ -69,8 +74,7 @@ impl eframe::App for Card {
             target: p.target.as_deref(),
             detail: p.detail.as_deref(),
             busy: false,
-            // `--spawn-server` is Ko's own request.
-            initiator: Initiator::You,
+            initiator: self.initiator,
             // The whole argv, one arg per line, scrolling, never cut.
             scroll_detail: p.scrolls(),
         };
@@ -89,9 +93,20 @@ impl eframe::App for Card {
     }
 }
 
-/// Shows the card until it is answered, closed or times out. `Err` when
-/// no window could be opened (no display): the caller falls back.
+/// Shows the model-server card until it is answered, closed or times out
+/// (`--spawn-server` is Ko's own request: "You asked to …"). `Err` when no
+/// window could be opened (no display): the caller falls back.
 pub fn run_server_card(prompt: ContractPrompt, timeout: Duration) -> eframe::Result<CardChoice> {
+    run_contract_card(prompt, timeout, Initiator::You)
+}
+
+/// Shows `prompt` on the card until it is answered (only a mouse click on
+/// Yes is Yes), closed or times out. `Err` when no window could be opened.
+pub fn run_contract_card(
+    prompt: ContractPrompt,
+    timeout: Duration,
+    initiator: Initiator,
+) -> eframe::Result<CardChoice> {
     let out = Arc::new(Mutex::new(None));
     let viewport = egui::ViewportBuilder::default()
         .with_title("Lillith — Soul Contract")
@@ -111,6 +126,7 @@ pub fn run_server_card(prompt: ContractPrompt, timeout: Duration) -> eframe::Res
             cc.egui_ctx.set_fonts(crate::chat_bubble::bubble_fonts());
             Ok(Box::new(Card {
                 prompt,
+                initiator,
                 opened: Instant::now(),
                 timeout,
                 out: o,

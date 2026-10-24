@@ -647,13 +647,29 @@ pub async fn cli_chat(
 }
 
 /// The console Soul Contract: if her last reply proposed a mutation (skill,
-/// file write, organize batch, command…), ask Yes/No on stdin. Only an
-/// explicit yes (`y`, `yes`, or `/contract yes`; `/skill yes` is an alias)
-/// runs it (audited); anything else discards it (also audited). A deletion
-/// prints the full list and needs the typed phrase instead (see
+/// file write, organize batch, command…), it waits for a mouse click on Yes
+/// on the Soul Contract card (see [`offer_on_card`]); a typed yes never
+/// counts and stdin is not read for it. Without a display nothing runs
+/// (`NO_UI`) and the console says how to do it by hand. A plan keeps its
+/// console review and a deletion its typed phrase (see
 /// [`sign_on_console`]). Returns the message to feed back to her (the tool
 /// result or Ko's answer), if any.
 fn offer_pending(session: &mut ChatSession, stdin: &mut dyn BufRead) -> Result<Option<String>> {
+    offer_pending_with(
+        session,
+        stdin,
+        crate::contract_consent::display_available(),
+        crate::contract_consent::show_card,
+    )
+}
+
+/// [`offer_pending`] with the display check and the card injectable (tests).
+fn offer_pending_with(
+    session: &mut ChatSession,
+    stdin: &mut dyn BufRead,
+    display: bool,
+    card: impl FnOnce(&PendingAction) -> Option<lillith_mind::chat::CardChoice>,
+) -> Result<Option<String>> {
     let Some(action) = session.take_pending() else {
         return Ok(session.take_tool_feedback());
     };
@@ -674,45 +690,40 @@ fn offer_pending(session: &mut ChatSession, stdin: &mut dyn BufRead) -> Result<O
             res.as_deref().map_err(|e| e.as_str()),
         )));
     }
+    Ok(Some(offer_on_card(&mut contract, action, display, card)))
+}
+
+/// Everything but plans and deletions: the mouse-only Soul Contract card
+/// (`lillith contract-card`), never a typed answer; nothing is read from
+/// stdin. No card: `NO_UI`, nothing runs, and the console says how to do it
+/// by hand. Returns the feedback for her.
+fn offer_on_card(
+    contract: &mut SoulContract,
+    action: PendingAction,
+    display: bool,
+    card: impl FnOnce(&PendingAction) -> Option<lillith_mind::chat::CardChoice>,
+) -> String {
     let prompt = action.prompt();
     if let Some(d) = &prompt.detail {
         println!("{d}");
     }
-    print!(
-        "[soul contract] She wants to {}. Allow? [y/N] ",
+    println!(
+        "[soul contract] She wants to {}. Answer on the Soul Contract card (a click on Yes; a typed yes never counts).",
         action.summary()
     );
-    let _ = std::io::stdout().flush();
-    let mut answer = String::new();
-    stdin.read_line(&mut answer)?;
-    let id = contract.request(action.clone());
-    let res = if is_yes(&answer) {
-        match contract.confirm(id) {
-            Ok(done) => {
-                let mut out = String::new();
-                if let Some(p) = &done.path {
-                    out.push_str(&format!("done: {}\n", p.display()));
-                }
-                if let Some(o) = &done.output {
-                    out.push_str(o);
-                }
-                println!("[soul contract] {out}");
-                Ok(out)
-            }
-            Err(e) => {
-                println!("[soul contract] failed: {e}");
-                Err(format!("it failed: {e}"))
+    let kept = action.clone();
+    let (decision, res) = crate::contract_consent::offer(contract, action, display, card);
+    match (&res, decision.refusal()) {
+        (Ok(out), _) => println!("[soul contract] {out}"),
+        (Err(e), None) => println!("[soul contract] failed: {e}"),
+        (Err(_), Some(why)) => {
+            println!("[soul contract] {why}; discarded, nothing changed.");
+            if let crate::contract_consent::Decision::NoUi { .. } = decision {
+                println!("{}", crate::contract_consent::manual_hint(&kept));
             }
         }
-    } else {
-        contract.deny(id)?;
-        println!("[soul contract] discarded; nothing changed.");
-        Err("Ko said no".to_string())
-    };
-    Ok(Some(ChatSession::answer_feedback(
-        &action,
-        res.as_deref().map_err(|e| e.as_str()),
-    )))
+    }
+    ChatSession::answer_feedback(&kept, res.as_deref().map_err(|e| e.as_str()))
 }
 
 /// The console plan review: print every numbered item in full, then Ko
@@ -974,17 +985,6 @@ impl BufRead for ConsoleLines {
     fn consume(&mut self, n: usize) {
         self.pos = (self.pos + n).min(self.buf.len());
     }
-}
-
-/// An explicit yes at the console prompt.
-fn is_yes(answer: &str) -> bool {
-    let a = answer.trim().to_ascii_lowercase();
-    let a = a
-        .strip_prefix("/contract")
-        .or_else(|| a.strip_prefix("/skill"))
-        .unwrap_or(&a)
-        .trim();
-    matches!(a, "y" | "yes")
 }
 
 async fn ask(session: &mut ChatSession, text: String) -> Outcome {
@@ -1300,14 +1300,71 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(5));
     }
 
+    /// A reader that fails the test if anything reads it.
+    struct NoRead;
+
+    impl std::io::Read for NoRead {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            panic!("the console approval read stdin");
+        }
+    }
+
+    impl BufRead for NoRead {
+        fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+            panic!("the console approval read stdin");
+        }
+        fn consume(&mut self, _: usize) {}
+    }
+
     #[test]
-    fn console_yes_is_explicit() {
-        for y in ["y", "YES\n", " /contract yes ", "/skill y"] {
-            assert!(is_yes(y), "{y:?}");
+    fn typed_y_on_stdin_never_approves_a_tool_action() {
+        let dir = std::env::temp_dir().join(format!("lillith-console-y-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("out.txt");
+        let action = || PendingAction::WriteFile {
+            path: target.clone(),
+            body: "hello".into(),
+        };
+        let cfg = ChatConfig::default();
+        // `y`, `yes` and `Y` waiting on stdin, with and without a display
+        // (the card can't open in a test either way).
+        for display in [false, true] {
+            for typed in ["y\n", "yes\n", "Y\n", "/contract yes\n"] {
+                let mut session = ChatSession::new(&cfg, true);
+                session.set_pending_tool(Some(action()));
+                let mut stdin = std::io::Cursor::new(typed.as_bytes().to_vec());
+                let mut contract = session.soul_contract();
+                let a = session.take_pending().expect("pending");
+                let fb = offer_on_card(&mut contract, a, display, |_| None);
+                assert!(
+                    !target.exists(),
+                    "typed {typed:?} (display {display}) ran it"
+                );
+                assert!(!fb.is_empty());
+                // Nothing was read: the typed yes is still there, unused.
+                let mut left = String::new();
+                stdin.read_line(&mut left).unwrap();
+                assert_eq!(left, typed);
+            }
         }
-        for n in ["", "n", "no", "/contract no", "yep", "/contract", "sure"] {
-            assert!(!is_yes(n), "{n:?}");
+        // offer_pending never touches stdin for a tool action either.
+        let mut session = ChatSession::new(&cfg, true);
+        for display in [false, true] {
+            session.set_pending_tool(Some(action()));
+            let fb = offer_pending_with(&mut session, &mut NoRead, display, |_| None).unwrap();
+            assert!(fb.is_some() && !target.exists());
         }
+        // The same action does run after a clicked Yes (so "nothing ran"
+        // above means refused, not broken).
+        let mut contract = SoulContract::new(None);
+        offer_on_card(&mut contract, action(), true, |_| {
+            Some(lillith_mind::chat::CardChoice::Clicked(
+                lillith_core::soul_contract::Answer::Yes,
+            ))
+        });
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "hello");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

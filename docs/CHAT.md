@@ -136,6 +136,18 @@ lillith chat --spawn-server "Hi"            # ask to start [chat.server] first (
 lillith chat --endpoint http://127.0.0.1:9000 --no-history "Hi"
 ```
 
+When she proposes a tool action in `lillith chat` (writing a file or skill,
+running a command, opening a program, …), it waits for the Soul Contract
+card in its own window (`lillith contract-card`), and only a mouse click on
+its **Yes** runs it (`CONFIRM`; No / Esc is `DENY`, no answer within 120 s
+`TIMEOUT`, a closed window `CANCELLED`). A typed `y`, `yes` or
+`/contract yes` on the console never approves; nothing is read from stdin
+for it. With no desktop (SSH, a bare console), or if the card window can't
+open, it is `NO_UI`: nothing runs, and the console prints how to do it by
+hand (the command to run, or the file to save). Change plans and deletions
+keep their own console review. One-shot `lillith chat "…"` never runs a
+proposed action.
+
 Live test of the client code against a real server:
 
 ```sh
