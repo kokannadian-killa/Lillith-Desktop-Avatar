@@ -33,9 +33,11 @@
 //! ([`crate::online::gate`]: `[learn] online`, `[learn] enabled`,
 //! `[memory] enabled`) is open, and the idle learner has no path here.
 //!
-//! **Kinds.** [`WorkerKind::Research`] is implemented. [`WorkerKind::Build`]
-//! (Ko: helpers should later build applications) is defined with its own
-//! budgets ([`build::BuildJob`]) but cannot run in this slice.
+//! **Kinds.** [`WorkerKind::Research`] runs under the supervisor.
+//! [`WorkerKind::Build`] (Ko: helpers build applications) never does: it has
+//! its own budgets and its own pipeline, the §6 practice sandbox
+//! ([`build::Practice`]), with one Soul Contract card per compile and per
+//! run, behind the same online gate plus `[learn] practice`.
 
 pub mod breaker;
 pub mod build;
@@ -46,6 +48,7 @@ pub mod process;
 pub mod protocol;
 pub mod quarantine;
 pub mod scratch;
+pub mod static_check;
 pub mod supervisor;
 pub mod validate;
 
@@ -53,9 +56,13 @@ pub mod validate;
 mod tests;
 
 pub use breaker::{Breakers, ErrorMemory};
-pub use build::{BuildBudgets, BuildError, BuildJob, NetworkPolicy};
+pub use build::{
+    BuildBudgets, BuildError, BuildJob, BuildStep, CardApproval, NetworkPolicy, Practice,
+    PracticeOff, SandboxAnswer, SandboxCardRequest, SandboxConsent,
+};
 pub use external::{Backend, ExternalBudget, ExternalRequest};
 pub use joblog::{JobEntry, JobLog, JobStatus};
+pub use static_check::Lang;
 pub use supervisor::{JobReport, Refused, Session, Supervisor, Task};
 pub use validate::Candidate;
 
@@ -69,8 +76,8 @@ use std::time::Duration;
 pub enum WorkerKind {
     /// Read-only research over Tor (dream learning, online research).
     Research,
-    /// Build / run a small application in the practice sandbox (docs §6).
-    /// Defined only: see [`build::BuildJob`]; never executed in this slice.
+    /// Build / run a small application in the practice sandbox (docs §6):
+    /// [`build::Practice`], never the research supervisor.
     Build,
 }
 
@@ -82,7 +89,8 @@ impl WorkerKind {
         }
     }
 
-    /// Whether the supervisor can run this kind today.
+    /// Whether the research supervisor runs this kind (build jobs go
+    /// through [`build::Practice`] instead).
     pub fn implemented(self) -> bool {
         matches!(self, WorkerKind::Research)
     }
@@ -271,6 +279,19 @@ pub fn workers_spawned() -> usize {
 
 pub(crate) fn count_spawn() {
     WORKERS_SPAWNED.fetch_add(1, Ordering::SeqCst);
+}
+
+static SANDBOX_LAUNCHES: AtomicUsize = AtomicUsize::new(0);
+
+/// How many practice-sandbox steps (compile or run) this process has
+/// launched (tests use it: no card → no launch; the idle path launches
+/// none).
+pub fn sandbox_launches() -> usize {
+    SANDBOX_LAUNCHES.load(Ordering::SeqCst)
+}
+
+pub(crate) fn count_sandbox_launch() {
+    SANDBOX_LAUNCHES.fetch_add(1, Ordering::SeqCst);
 }
 
 /// 64 random bits: `/dev/urandom` where there is one, else a time/pid/seq

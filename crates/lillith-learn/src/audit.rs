@@ -48,13 +48,48 @@ pub fn line(t: f64, op: &str, topic: &str, note_id: &str) -> String {
 /// one column (tabs and newlines flattened), cut to 2048 chars so a long URL
 /// list can't swamp the log.
 pub fn online_line(t: f64, state: &str, card: &str, fields: &[String]) -> String {
-    let mut l = format!(
-        "{}\t{}\t{}\tcard={}",
-        utc(t),
-        col(state),
+    card_line(
+        t,
+        state,
         lillith_core::soul_contract::ONLINE_RESEARCH_KIND,
-        col(card)
-    );
+        card,
+        fields,
+    )
+}
+
+/// A practice-sandbox card line (§6):
+/// `<ts>\t<STATE>\tsandbox_run\tcard=<id>\t<field>\t…` (same columns and
+/// caps as [`online_line`]; the fields carry `job=`, `step=`, `hash=` and
+/// `argv=`).
+pub fn sandbox_line(t: f64, state: &str, card: &str, fields: &[String]) -> String {
+    card_line(
+        t,
+        state,
+        lillith_core::soul_contract::SANDBOX_RUN_KIND,
+        card,
+        fields,
+    )
+}
+
+/// Appends a practice-sandbox card line to `log` (0600 when created).
+/// Fail-closed like [`record_online`]: no `PROPOSED` line, no card.
+pub fn record_sandbox(
+    log: Option<&Path>,
+    state: &str,
+    card: &str,
+    fields: &[String],
+) -> std::io::Result<()> {
+    let Some(log) = log else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no audit log path",
+        ));
+    };
+    write_line(log, &sandbox_line(crate::now_s(), state, card, fields))
+}
+
+fn card_line(t: f64, state: &str, kind: &str, card: &str, fields: &[String]) -> String {
+    let mut l = format!("{}\t{}\t{}\tcard={}", utc(t), col(state), kind, col(card));
     for f in fields {
         l.push('\t');
         l.extend(lillith_core::launch_audit::one_column(f).chars().take(2048));

@@ -1,6 +1,7 @@
-//! The idle learner never starts an online trip, even with
-//! `[learn] online = true` (its own test binary so the process-wide trip
-//! counter is not shared with the trip tests).
+//! The idle learner never starts an online trip, a helper worker or a
+//! practice-sandbox build, even with `[learn] online = true` and the
+//! default `[learn] practice = true` (its own test binary so the
+//! process-wide counters are not shared with the trip tests).
 
 use lillith_core::config::Config;
 use lillith_learn::readers::DocRoots;
@@ -46,6 +47,16 @@ fn idle_path_starts_no_online_trip() {
     let log = std::fs::read_to_string(d.join("audit.log")).unwrap_or_default();
     assert!(!log.contains("online_research"), "{log}");
     assert!(!log.contains("\tWORKER\t"), "{log}");
+    assert_eq!(
+        lillith_learn::workers::sandbox_launches(),
+        0,
+        "the idle path must never launch a practice sandbox"
+    );
+    assert!(!log.contains("sandbox_run"), "{log}");
+    assert!(
+        !d.join("sandbox").exists() && !d.join("skills").exists(),
+        "no sandbox dir, no skill"
+    );
     let _ = std::fs::remove_dir_all(&d);
 
     // And no idle-path module even knows the trip engine exists.
@@ -64,6 +75,12 @@ fn idle_path_starts_no_online_trip() {
             "workers::",
             "Supervisor",
             "WorkerProc",
+            "BuildJob",
+            "Practice",
+            "SandboxRun",
+            "run_sandboxed",
+            "bwrap",
+            "build::",
         ] {
             assert!(!src.contains(bad), "{name} mentions {bad}");
         }

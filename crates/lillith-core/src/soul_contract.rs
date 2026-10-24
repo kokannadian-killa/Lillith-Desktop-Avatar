@@ -151,10 +151,25 @@ pub enum PendingAction {
         max_bytes: u64,
         card: String,
     },
+    /// One compile or one run in the practice sandbox (docs/SELF_LEARNING.md
+    /// §6, D2 = A): `argv` is the whole sandboxed command line (bwrap,
+    /// prlimit, timeout and the compile-or-run argv), `job` the build job.
+    /// Only a mouse click on the card's Yes approves, once, for this one
+    /// step; confirming only records the approval and the build pipeline
+    /// (`lillith_learn::workers::build`) runs it, so nothing is executed by
+    /// the contract. `card` correlates the step's audit lines.
+    SandboxRun {
+        argv: Vec<String>,
+        job: String,
+        card: String,
+    },
 }
 
 /// The `kind` column of an online research trip in the audit log.
 pub const ONLINE_RESEARCH_KIND: &str = "online_research";
+
+/// The `kind` column of a practice-sandbox card in the audit log.
+pub const SANDBOX_RUN_KIND: &str = "sandbox_run";
 
 /// The `kind` column of model-server card lines in the audit log.
 pub const MODEL_SERVER_KIND: &str = "start_model_server";
@@ -229,7 +244,8 @@ impl PendingAction {
     pub fn card_id(&self) -> Option<&str> {
         match self {
             PendingAction::StartModelServer { card, .. }
-            | PendingAction::OnlineResearch { card, .. } => Some(card),
+            | PendingAction::OnlineResearch { card, .. }
+            | PendingAction::SandboxRun { card, .. } => Some(card),
             _ => None,
         }
     }
@@ -252,6 +268,7 @@ impl PendingAction {
             PendingAction::StartModelServer { .. } => MODEL_SERVER_KIND,
             PendingAction::Plan { .. } => "plan",
             PendingAction::OnlineResearch { .. } => ONLINE_RESEARCH_KIND,
+            PendingAction::SandboxRun { .. } => SANDBOX_RUN_KIND,
         }
     }
 
@@ -272,6 +289,7 @@ impl PendingAction {
             | PendingAction::Organize { .. }
             | PendingAction::Plan { .. }
             | PendingAction::OnlineResearch { .. }
+            | PendingAction::SandboxRun { .. }
             | PendingAction::Launch { .. } => None,
             // The binary, so the audit line names what would run.
             PendingAction::StartModelServer { argv, .. } => argv.first().map(Path::new),
@@ -294,7 +312,8 @@ impl PendingAction {
             | PendingAction::RunCommand { .. }
             | PendingAction::Launch { .. }
             | PendingAction::StartModelServer { .. }
-            | PendingAction::OnlineResearch { .. } => true,
+            | PendingAction::OnlineResearch { .. }
+            | PendingAction::SandboxRun { .. } => true,
             PendingAction::ListDir { .. }
             | PendingAction::ReadFile { .. }
             | PendingAction::SearchFiles { .. } => false,
@@ -361,6 +380,11 @@ impl PendingAction {
                 if *max_pages == 1 { "" } else { "s" },
                 human_bytes(*max_bytes)
             ),
+            PendingAction::SandboxRun { argv, job, .. } => format!(
+                "Run in the practice sandbox (no network) for job {}: {}",
+                one_line_cap(job, 60),
+                one_line_cap(&argv.join(" "), 160)
+            ),
         }
     }
 
@@ -383,6 +407,7 @@ impl PendingAction {
             PendingAction::StartModelServer { .. } => "LOCAL MODEL SERVER",
             PendingAction::Plan { .. } => "REVIEW THE PLAN",
             PendingAction::OnlineResearch { .. } => "GO ONLINE (TOR)",
+            PendingAction::SandboxRun { .. } => "RUN IN SANDBOX",
         }
     }
 
@@ -430,6 +455,14 @@ impl PendingAction {
                 ..
             } => Some(online_research_detail(
                 trip_id, purpose, urls, *max_pages, *max_bytes,
+            )),
+            PendingAction::SandboxRun { argv, job, .. } => Some(format!(
+                "job: {}\n\n{}\n\nNo network, writes only in its own sandbox folder, \
+                 memory / CPU / process / file-size limits and a timeout. This card \
+                 approves this one step only. Only a click on Yes runs it; typing or \
+                 saying yes doesn't.",
+                one_line_cap(job, 60),
+                argv_lines(argv)
             )),
             _ => None,
         };
@@ -500,6 +533,11 @@ impl PendingAction {
             PendingAction::OnlineResearch { .. } => Ok((
                 None,
                 Some("approved: the trip engine fetches through Tor".into()),
+            )),
+            // The approval itself: the build pipeline runs the one step.
+            PendingAction::SandboxRun { .. } => Ok((
+                None,
+                Some("approved: the build pipeline runs this one sandboxed step".into()),
             )),
             // The approval itself: the app spawns (and owns) the server.
             PendingAction::StartModelServer { .. } => Ok((
@@ -1830,6 +1868,40 @@ pub(crate) fn result_label(r: &Result<String, String>) -> &'static str {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn sandbox_run_needs_a_card_and_executes_nothing() {
+        let argv: Vec<String> = [
+            "/usr/bin/bwrap",
+            "--unshare-all",
+            "--",
+            "python3",
+            "main.py",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let a = PendingAction::SandboxRun {
+            argv: argv.clone(),
+            job: "w-abc".into(),
+            card: "sbx-1".into(),
+        };
+        assert_eq!(a.kind(), SANDBOX_RUN_KIND);
+        assert_eq!(a.card_id(), Some("sbx-1"));
+        assert!(a.needs_confirmation());
+        assert_eq!(a.target_path(), None);
+        assert_eq!(a.title(), "RUN IN SANDBOX");
+        let p = a.prompt();
+        let d = p.detail.unwrap_or_default();
+        assert!(d.contains("--unshare-all") && d.contains("w-abc"), "{d}");
+        assert!(d.contains("typing or saying yes doesn't"), "{d}");
+        // run_now refuses a card action; nothing runs without a Yes.
+        let mut c = SoulContract::new(None);
+        assert!(matches!(
+            c.run_now(a),
+            Err(ContractError::NeedsConfirmation(_))
+        ));
+    }
 
     fn tmpdir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!(

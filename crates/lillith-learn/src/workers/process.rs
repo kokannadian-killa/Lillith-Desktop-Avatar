@@ -603,3 +603,166 @@ mod tests {
         );
     }
 }
+
+/// How one sandboxed step ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SandboxEnd {
+    /// It exited (or was killed by a signal from inside: `timeout`, a
+    /// limit). `code` is the exit code, `signal` the killing signal.
+    Exited {
+        code: Option<i32>,
+        signal: Option<i32>,
+        stdout: String,
+        stderr: String,
+        /// Output past the cap was dropped.
+        truncated: bool,
+    },
+    /// A stop reason fired: the whole process group was killed and the
+    /// output discarded.
+    Stopped(super::StopReason),
+    /// It outlived the parent's own hard wall (the in-sandbox `timeout`
+    /// should have fired first): killed, output discarded.
+    WallKilled,
+}
+
+/// Runs one fully built sandbox argv (`bwrap … -- prlimit … timeout …`):
+/// its own process group, `PR_SET_PDEATHSIG`, `PR_SET_NO_NEW_PRIVS`, nice 19
+/// and the idle I/O class (inherited by everything inside), stdin closed,
+/// stdout / stderr kept up to `out_cap` bytes each. `stop` is polled every
+/// 20 ms: a reason kills the whole group (SIGKILL) and discards the output;
+/// so does running past `hard_wall`. Only [`super::build`] calls this, and
+/// only with an argv that starts with `bwrap`.
+pub(crate) fn run_sandboxed(
+    argv: &[String],
+    cwd: &Path,
+    out_cap: usize,
+    hard_wall: Duration,
+    stop: &dyn Fn() -> Option<super::StopReason>,
+) -> std::io::Result<SandboxEnd> {
+    let Some((prog, args)) = argv.split_first() else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "empty argv",
+        ));
+    };
+    if Path::new(prog).file_name().is_none_or(|n| n != "bwrap") {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "only a bwrap argv runs here (never a weaker sandbox)",
+        ));
+    }
+    let mut c = Command::new(prog);
+    c.args(args)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("LANG", "C")
+        .env("TZ", "UTC")
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    harden(&mut c);
+    let mut child = c.spawn()?;
+    super::count_sandbox_launch();
+    let start = std::time::Instant::now();
+    let (tx, rx) = std::sync::mpsc::channel::<(bool, Vec<u8>, bool)>();
+    if let Some(o) = child.stdout.take() {
+        let tx = tx.clone();
+        let _ = std::thread::Builder::new()
+            .name("lillith-sandbox-out".into())
+            .spawn(move || {
+                let (b, t) = read_capped(o, out_cap);
+                let _ = tx.send((true, b, t));
+            });
+    }
+    if let Some(e) = child.stderr.take() {
+        let tx = tx.clone();
+        let _ = std::thread::Builder::new()
+            .name("lillith-sandbox-err".into())
+            .spawn(move || {
+                let (b, t) = read_capped(e, out_cap);
+                let _ = tx.send((false, b, t));
+            });
+    }
+    drop(tx);
+    let kill = |child: &mut Child| {
+        #[cfg(unix)]
+        // SAFETY: plain syscall; the child leads its own group (pgid = pid).
+        unsafe {
+            libc::killpg(child.id() as libc::pid_t, libc::SIGKILL);
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+    let status = loop {
+        if let Some(r) = stop() {
+            kill(&mut child);
+            return Ok(SandboxEnd::Stopped(r));
+        }
+        if start.elapsed() >= hard_wall {
+            kill(&mut child);
+            return Ok(SandboxEnd::WallKilled);
+        }
+        match child.try_wait() {
+            Ok(Some(s)) => break s,
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Err(e) => {
+                kill(&mut child);
+                return Err(e);
+            }
+        }
+    };
+    // Anything left in the group (there should be nothing: the pid
+    // namespace died with bwrap) goes too.
+    #[cfg(unix)]
+    // SAFETY: as above; a gone group only fails with ESRCH.
+    unsafe {
+        libc::killpg(child.id() as libc::pid_t, libc::SIGKILL);
+    }
+    let (mut out, mut err, mut truncated) = (Vec::new(), Vec::new(), false);
+    for _ in 0..2 {
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok((true, b, t)) => {
+                out = b;
+                truncated |= t;
+            }
+            Ok((false, b, t)) => {
+                err = b;
+                truncated |= t;
+            }
+            Err(_) => break,
+        }
+    }
+    #[cfg(unix)]
+    let signal = std::os::unix::process::ExitStatusExt::signal(&status);
+    #[cfg(not(unix))]
+    let signal = None;
+    Ok(SandboxEnd::Exited {
+        code: status.code(),
+        signal,
+        stdout: String::from_utf8_lossy(&out).into_owned(),
+        stderr: String::from_utf8_lossy(&err).into_owned(),
+        truncated,
+    })
+}
+
+/// Reads `r` to its end, keeping the first `cap` bytes (the rest is read
+/// and dropped so the child never blocks on a full pipe).
+fn read_capped(mut r: impl std::io::Read, cap: usize) -> (Vec<u8>, bool) {
+    let mut kept = Vec::new();
+    let mut buf = [0u8; 8192];
+    let mut truncated = false;
+    loop {
+        match r.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                let room = cap.saturating_sub(kept.len());
+                if n > room {
+                    truncated = true;
+                }
+                kept.extend_from_slice(&buf[..n.min(room)]);
+            }
+        }
+    }
+    (kept, truncated)
+}

@@ -1105,6 +1105,7 @@ fn workers_have_no_install_download_or_memory_write_path() {
         ("build", include_str!("build.rs")),
         ("breaker", include_str!("breaker.rs")),
         ("scratch", include_str!("scratch.rs")),
+        ("static_check", include_str!("static_check.rs")),
     ] {
         // The code, not its own unit tests (which name these on purpose).
         let src = src.split("#[cfg(test)]\nmod tests").next().unwrap_or(src);
