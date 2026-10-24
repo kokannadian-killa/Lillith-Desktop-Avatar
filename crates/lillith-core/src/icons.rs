@@ -187,7 +187,18 @@ pub fn apply(root: &Path, id: &str) -> Result<Applied, String> {
     let info = find(id).ok_or_else(|| format!("unknown icon {id:?}"))?;
     #[cfg(windows)]
     {
-        apply_windows(root, &info.id)
+        // Rewriting the Windows shortcuts runs PowerShell: that needs Ko's
+        // Yes on a Soul Contract card first (Settings → Icon shows it, then
+        // calls [`apply_windows_shortcuts`]). Nothing runs here.
+        let ico = ico_path(root, &info.id);
+        if !ico.is_file() {
+            return Err(format!("missing {}", ico.display()));
+        }
+        Ok(Applied {
+            id: info.id.clone(),
+            changed: Vec::new(),
+            notes: vec![WINDOWS_NEEDS_CARD.to_string()],
+        })
     }
     #[cfg(all(unix, not(target_os = "android")))]
     {
@@ -210,11 +221,10 @@ pub fn desktop_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("XDG_DESKTOP_DIR").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(d));
     }
-    if let Ok(o) = std::process::Command::new("xdg-user-dir")
-        .arg("DESKTOP")
-        .stderr(std::process::Stdio::null())
-        .output()
-    {
+    let mut c = std::process::Command::new("xdg-user-dir");
+    c.arg("DESKTOP").stderr(std::process::Stdio::null());
+    crate::launch_audit::record_command_once("icon_desktop_dir", &c);
+    if let Ok(o) = c.output() {
         let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
         if o.status.success() && s.starts_with('/') {
             return Some(PathBuf::from(s));
@@ -291,13 +301,13 @@ fn refresh_linux(data: &Path, a: &mut Applied) {
         if find_program(prog).is_none() {
             return;
         }
-        let ok = std::process::Command::new(prog)
-            .args(args)
+        let mut c = std::process::Command::new(prog);
+        c.args(args)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success());
+            .stderr(std::process::Stdio::null());
+        crate::launch_audit::record_command("icon_refresh", &c);
+        let ok = c.status().is_ok_and(|s| s.success());
         a.notes
             .push(format!("{prog}: {}", if ok { "ok" } else { "failed" }));
     };
@@ -351,39 +361,146 @@ Add-Type -Namespace Lillith -Name Shell -MemberDefinition '[System.Runtime.Inter
 Write-Output $n
 "#;
 
-#[cfg(windows)]
-fn apply_windows(root: &Path, id: &str) -> Result<Applied, String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+/// What [`apply`] notes on Windows instead of running PowerShell.
+pub const WINDOWS_NEEDS_CARD: &str =
+    "the Windows shortcuts change only after your Yes on the Soul Contract card (Settings → Icon)";
+
+/// Base64 (standard alphabet, padded).
+pub fn base64(bytes: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for ch in bytes.chunks(3) {
+        let b = [ch[0], *ch.get(1).unwrap_or(&0), *ch.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..4 {
+            if i <= ch.len() {
+                out.push(T[((n >> (18 - 6 * i)) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// PowerShell's `-EncodedCommand` form of `script` (base64 of UTF-16LE).
+/// Execution policy only governs script *files*; an encoded command is
+/// not one, so no `-ExecutionPolicy Bypass` is needed.
+pub fn powershell_encoded(script: &str) -> String {
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    base64(&bytes)
+}
+
+/// The exact command the Windows shortcut rewrite runs (its icon path
+/// goes in `$env:LILLITH_ICON`).
+pub fn windows_shortcut_argv() -> Vec<String> {
+    [
+        "powershell.exe",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .chain(std::iter::once(powershell_encoded(WINDOWS_SHORTCUT_PS)))
+    .collect()
+}
+
+/// The Soul Contract card's detail for the shortcut rewrite: the command
+/// one argument per line, the environment it gets and the decoded script.
+pub fn windows_shortcut_detail(ico: &Path) -> String {
+    let argv = windows_shortcut_argv();
+    let mut s = format!("$ {}", argv[0]);
+    for a in &argv[1..argv.len() - 1] {
+        s.push_str(&format!("\n    {a}"));
+    }
+    s.push_str("\n    <the script below, UTF-16LE base64>");
+    s.push_str(&format!("\nenv LILLITH_ICON={}\n\nScript:", ico.display()));
+    for l in WINDOWS_SHORTCUT_PS.trim().lines() {
+        s.push_str("\n  ");
+        s.push_str(l);
+    }
+    s
+}
+
+/// Rewrites the Windows shortcuts' icon (see [`WINDOWS_SHORTCUT_PS`]).
+/// Call only after Ko's Yes on the card; writes the launch's audit line
+/// with that card's id. Not Windows: an error, nothing runs.
+pub fn apply_windows_shortcuts(root: &Path, id: &str, card: &str) -> Result<Applied, String> {
     let ico = ico_path(root, id);
     if !ico.is_file() {
         return Err(format!("missing {}", ico.display()));
     }
-    let out = std::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            WINDOWS_SHORTCUT_PS,
-        ])
-        .env("LILLITH_ICON", &ico)
-        .stdin(std::process::Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|e| format!("powershell: {e}"))?;
-    let n = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    Ok(Applied {
-        id: id.to_string(),
-        changed: vec![ico.clone()],
-        notes: vec![format!("{n} shortcut(s) now use {}", ico.display())],
-    })
+    let argv = windows_shortcut_argv();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        if let Some(log) = crate::config::audit_log_path() {
+            crate::launch_audit::record_to(
+                &log,
+                crate::launch_audit::LAUNCH_TAG,
+                ICON_CARD_KIND,
+                &argv,
+                Some(card),
+            );
+        }
+        let out = std::process::Command::new(&argv[0])
+            .args(&argv[1..])
+            .env("LILLITH_ICON", &ico)
+            .stdin(std::process::Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("powershell: {e}"))?;
+        let n = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        Ok(Applied {
+            id: id.to_string(),
+            changed: vec![ico.clone()],
+            notes: vec![format!("{n} shortcut(s) now use {}", ico.display())],
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (argv, card);
+        Err("Windows shortcuts exist only on Windows".into())
+    }
 }
+
+/// The `kind` column of the shortcut card's audit lines.
+pub const ICON_CARD_KIND: &str = "icon_shortcuts";
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shortcut_command_is_encoded_without_an_execution_policy_bypass() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        // PowerShell docs example: 'dir "c:\program files" ' encodes to this.
+        assert_eq!(
+            powershell_encoded("dir \"c:\\program files\" "),
+            "ZABpAHIAIAAiAGMAOgBcAHAAcgBvAGcAcgBhAG0AIABmAGkAbABlAHMAIgAgAA=="
+        );
+        let argv = windows_shortcut_argv();
+        assert!(!argv
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case("-ExecutionPolicy")));
+        assert!(!argv.iter().any(|a| a.eq_ignore_ascii_case("Bypass")));
+        assert_eq!(argv[3], "-EncodedCommand");
+        assert_eq!(argv.len(), 5);
+        let d = windows_shortcut_detail(Path::new("C:/x/i.ico"));
+        assert!(d.starts_with(
+            "$ powershell.exe\n    -NoProfile\n    -NonInteractive\n    -EncodedCommand\n"
+        ));
+        assert!(d.contains("env LILLITH_ICON=C:/x/i.ico"));
+        assert!(d.contains("$s.IconLocation = $env:LILLITH_ICON"));
+        #[cfg(not(windows))]
+        assert!(apply_windows_shortcuts(&repo_icons(), DEFAULT_ICON, "c").is_err());
+    }
 
     fn repo_icons() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../branding/icons")
