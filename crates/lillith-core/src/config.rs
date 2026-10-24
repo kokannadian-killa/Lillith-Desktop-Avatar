@@ -771,6 +771,24 @@ pub struct MemoryConfig {
     pub max_events: usize,
     /// Hard cap on remembered errors/fixes (least recently seen pruned).
     pub max_errors: usize,
+    /// Desktop events (focused app, app crash, `*.error`) the habit bridge
+    /// stores per minute at most; the rest are dropped. Only the app name
+    /// and the event kind are kept (never window titles).
+    pub events_per_minute: u32,
+    /// Proactive suggestions: every `proactive_interval_min` she checks her
+    /// habit predictions and, when one is confident enough, says a short
+    /// line ("you usually open firefox about now"). Never while the
+    /// safeword is in effect, while you chat, or more than
+    /// `proactive_max_per_hour` times an hour.
+    pub proactive: bool,
+    /// Minimum prediction confidence (0..1) for a proactive line.
+    pub proactive_min_confidence: f32,
+    /// Minutes between prediction checks.
+    pub proactive_interval_min: f32,
+    /// Minutes before the same suggestion may be repeated.
+    pub proactive_cooldown_min: f32,
+    /// Proactive lines per hour at most.
+    pub proactive_max_per_hour: u32,
 }
 
 impl Default for MemoryConfig {
@@ -786,6 +804,12 @@ impl Default for MemoryConfig {
             max_nodes: 5000,
             max_events: 5000,
             max_errors: 1000,
+            events_per_minute: 20,
+            proactive: true,
+            proactive_min_confidence: 0.5,
+            proactive_interval_min: 12.0,
+            proactive_cooldown_min: 180.0,
+            proactive_max_per_hour: 2,
         }
     }
 }
@@ -1138,6 +1162,11 @@ mod tests {
         );
         assert!(!MemoryConfig::disabled().enabled);
         assert_eq!(d.memory.max_errors, 1000);
+        assert_eq!(d.memory.events_per_minute, 20);
+        assert!(d.memory.proactive);
+        assert_eq!(d.memory.proactive_min_confidence, 0.5);
+        assert_eq!(d.memory.proactive_interval_min, 12.0);
+        assert_eq!(d.memory.proactive_max_per_hour, 2);
     }
 
     #[test]

@@ -18,6 +18,8 @@ pub mod errors;
 pub mod extract;
 pub mod forget;
 pub mod habits;
+pub mod bridge;
+pub mod recovery;
 pub mod safeword;
 pub mod schema;
 
@@ -27,7 +29,9 @@ pub use brain::{Brain, Ctx, ForgetReport, Memory, Observed, Stats};
 pub use errors::{ErrorRecord, FixOutcome, KnownFix};
 pub use extract::{Extractor, Fact, Polarity, RuleExtractor};
 pub use forget::{content_words, mentions_any, parse_forget, ForgetCmd};
+pub use bridge::{EventFilter, MemoryBridge, Proactive};
 pub use habits::Prediction;
+pub use recovery::SafeFix;
 pub use lillith_core::config::MemoryConfig;
 pub use safeword::{is_safeword, mentions_safeword};
 
