@@ -79,6 +79,11 @@ const ALLURE: &[&str] = &[
     "tail_heart_wink",
     "trace_heart_on_glass",
     "dom_chin_tilt_summon",
+    // Bold allure set (batch 19): lean/smoulder, glass play, dom order, canonical outfit.
+    "lean_doorframe_smolder",
+    "kiss_mark_on_glass",
+    "dom_snap_kneel_order",
+    "finger_walk_on_glass",
 ];
 const FUN: &[&str] = &[
     "dance",
@@ -197,6 +202,8 @@ mod tests {
         assert_eq!(category_of("hip_sway_slow"), 0);
         assert_eq!(category_of("dom_chin_tilt_summon"), 0);
         assert_eq!(category_of("leg_cross_slow_sit"), 0);
+        assert_eq!(category_of("dom_snap_kneel_order"), 0);
+        assert_eq!(category_of("kiss_mark_on_glass"), 0);
         assert_eq!(category_of("body_roll_slow_long"), 0);
         assert_eq!(category_of("arch_back_over_shoulder_long"), 0);
         assert_eq!(category_of("bend_forward_wink_long"), 0);

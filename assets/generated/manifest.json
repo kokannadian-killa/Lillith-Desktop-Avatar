@@ -6093,6 +6093,126 @@
     240
    ],
    "feet_lowest_y": 392
+  },
+  {
+   "name": "lean_doorframe_smolder",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "lean_doorframe_smolder/",
+   "sheet": "lean_doorframe_smolder/lean_doorframe_smolder_sheet.png",
+   "manifest": "lean_doorframe_smolder/lean_doorframe_smolder.json",
+   "preview": "lean_doorframe_smolder/lean_doorframe_smolder_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "idle_variant",
+    "variant_of:idle"
+   ],
+   "allure": true,
+   "video": "lean_doorframe_smolder/lean_doorframe_smolder.mp4",
+   "idle_variant": true
+  },
+  {
+   "name": "kiss_mark_on_glass",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "kiss_mark_on_glass/",
+   "sheet": "kiss_mark_on_glass/kiss_mark_on_glass_sheet.png",
+   "manifest": "kiss_mark_on_glass/kiss_mark_on_glass.json",
+   "preview": "kiss_mark_on_glass/kiss_mark_on_glass_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "kiss_mark_on_glass/kiss_mark_on_glass.mp4"
+  },
+  {
+   "name": "dom_snap_kneel_order",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "dom_snap_kneel_order/",
+   "sheet": "dom_snap_kneel_order/dom_snap_kneel_order_sheet.png",
+   "manifest": "dom_snap_kneel_order/dom_snap_kneel_order.json",
+   "preview": "dom_snap_kneel_order/dom_snap_kneel_order_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "dom"
+   ],
+   "allure": true,
+   "video": "dom_snap_kneel_order/dom_snap_kneel_order.mp4"
+  },
+  {
+   "name": "finger_walk_on_glass",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "finger_walk_on_glass/",
+   "sheet": "finger_walk_on_glass/finger_walk_on_glass_sheet.png",
+   "manifest": "finger_walk_on_glass/finger_walk_on_glass.json",
+   "preview": "finger_walk_on_glass/finger_walk_on_glass_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "finger_walk_on_glass/finger_walk_on_glass.mp4"
   }
  ]
 }

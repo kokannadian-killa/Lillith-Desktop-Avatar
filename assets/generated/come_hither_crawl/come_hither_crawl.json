@@ -724,7 +724,7 @@
       392
     ],
     [
-      121,
+      123,
       296,
       169,
       392
@@ -853,7 +853,7 @@
       91,
       327,
       164,
-      392
+      389
     ],
     [
       87,
@@ -1088,21 +1088,21 @@
     "height": 400,
     "frame_count": 72,
     "fps": 12.0,
-    "bytes": 841943,
+    "bytes": 825125,
     "quality": {
-      "edge_mae": 2.118,
-      "edge_p99": 18.56,
-      "halo_dark": 0.023,
-      "halo_light": -0.088,
-      "alpha_mae": 0.0518
+      "edge_mae": 2.123,
+      "edge_p99": 18.0,
+      "halo_dark": 0.022,
+      "halo_light": -0.093,
+      "alpha_mae": 0.0493
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 2,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "ec9978c4fe043670fc13139f25d96e650d5523197916f0863edb740648fa7b35",
+    "sheet_sha256": "073b1a2268a0ce77c283cb5d7564232db51dde66100e9403055aff32233867ec",
     "source_sha256": "87fedae639f083b95596b38dcb4c9d642ae1cb6959333794b7e75def4da35884",
-    "post_fix": "b7fix: floor shadow/smear removed below contact line + finger-gap backdrop cleared + baseline re-snap (frames 10,12,13,26,32-34) + gate despill f32,33,46-49 + fringe_pass f13,f32 | b9fix: removed f27 purple floor speck and faint floor haze/dot f19-21 (islands <=20px, alpha<64 >2px from body, y>=335); faint dust f48,f55 | shinfix: removed opaque mid-grey floor-shadow slivers under shin/boot toe f11,17,21,27,30,38,40,45 (floor zone y>=318, low-sat grey outside closed leg/boot silhouette, blob seeds only, skin/boot/pink protected; dark detached nubs <=40px) | smearfix: removed purple/mauve floor-shadow smears beside boot f23,f32,f45 (only pixels whose registered source v3_b frame is backdrop/floor shadow, >=2px from any outfit/boot/tail pixel, hot pink protected)"
+    "post_fix": "b7fix: floor shadow/smear removed below contact line + finger-gap backdrop cleared + baseline re-snap (frames 10,12,13,26,32-34) + gate despill f32,33,46-49 + fringe_pass f13,f32 | b9fix: removed f27 purple floor speck and faint floor haze/dot f19-21 (islands <=20px, alpha<64 >2px from body, y>=335); faint dust f48,f55 | shinfix: removed opaque mid-grey floor-shadow slivers under shin/boot toe f11,17,21,27,30,38,40,45 (floor zone y>=318, low-sat grey outside closed leg/boot silhouette, blob seeds only, skin/boot/pink protected; dark detached nubs <=40px) | smearfix: removed purple/mauve floor-shadow smears beside boot f23,f32,f45 (only pixels whose registered source v3_b frame is backdrop/floor shadow, >=2px from any outfit/boot/tail pixel, hot pink protected) | x | f30ledge: removed grey floor-shadow ledge under boot toe f30 (source-aligned: source shows lavender floor shadow; 3px margin around source boot/sole, pink protected; sole outline matches f29/f31) | sweepfix: made enclosed white backdrop pockets transparent f51 (between leg and knee lattice, 59px) and f52 (thigh gap incl. 1px tail to y350, 77px), source-verified, lattice/legs protected; removed fingertip floor shadow >=3px outside source outline f19(3),f20(4),f21(8),f25(10); f47 had none >=3px"
   }
 }

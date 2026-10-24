@@ -1,4 +1,4 @@
-# Release #3 notes (draft, `ci/batch10`)
+# Release #3 notes (draft, `ci/batch11`)
 
 Draft notes for the next test build. They cover what changed since release #2
 (`test-build-d88ed30`). There's no release zip for this build yet, so the
@@ -116,14 +116,20 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   `hip_sway_slow`. The last pale specks in the hair/neck gaps on
   `kneel_sit_back_beckon` and the purple floor speck and faint floor haze on
   `come_hither_crawl` are now removed too, along with the grey floor-shadow
-  slivers under her shin and boot and the purple smears beside her boot on
-  `come_hither_crawl`. Their names, timing and placement
+  slivers under her shin and boot, the purple smears beside her boot and the
+  lavender floor-shadow residue near the floor (plus a small shadow ledge
+  under her toe) on `come_hither_crawl`, whose leg and thigh gaps are now
+  see-through too. Their names, timing and placement
   are unchanged.
 - **Five more poses:** `leg_cross_slow_sit`, `hair_twirl_lip_bite`,
   `tail_heart_wink`, `trace_heart_on_glass` and `dom_chin_tilt_summon`, in
   the same outfit, wired into her idle, tease and banter moves. White
   backdrop pockets in the hair and neck gaps and stray specks are cleaned
   out of all five.
+- **Four more poses:** `lean_doorframe_smolder`, `kiss_mark_on_glass`,
+  `dom_snap_kneel_order` and `finger_walk_on_glass`, in the same outfit,
+  wired into her idle, tease and banter moves (the tease lists in
+  `assets/config.example.toml` include them).
 - **Art fixes:**
   - `dom_arms_crossed_demand` no longer jumps about 60 px for one frame, so
     no more double body flash during the crossfade. Only that frame was
@@ -157,7 +163,7 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
 - **Windows build:** clippy fixes in the elevated admin helper, so Windows
   is still build-from-source.
 
-All 180 earlier clips are kept and 10 are new (190 in total); nothing was
+All 180 earlier clips are kept and 14 are new (194 in total); nothing was
 removed. The local AI runs on 127.0.0.1 only, with no downloads and no
 telemetry.
 
