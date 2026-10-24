@@ -77,11 +77,12 @@ def listener():
     L.speaker, L.emit, L.always, L._mode, L._ptt, L._once = None, (lambda ev: None), False, None, [], None
     L._lock = threading.Lock()
     L._press_lock, L._press, L._press_seq = threading.Lock(), None, 0
+    L._drops, L._once_dropped, L._stt_inflight = 0, False, 0
     L.device = None
     L.mic = stt.Mic(L._on_audio, None)
     L.gate = M.MicGate(mic_argv=stt.mic_argv)
     L.vad = type("V", (), {"reset": lambda self: None})()
-    L.transcribe = lambda audio: {"ok": True, "text": "", "samples": len(audio)}   # no models
+    L.transcribe = lambda audio, gen=None: {"ok": True, "text": "", "samples": len(audio)}   # no models
     return L
 
 

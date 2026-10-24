@@ -26,6 +26,8 @@ One JSON object per line, one JSON reply per line. "cmd" and "op" are synonyms.
   {"cmd":"file","text":"...","out":"/abs/path.wav"}
   {"cmd":"stop"}            (works from a second connection while a say is waiting)
   {"cmd":"listen","action":"start"|"stop"}   push-to-talk -> {"ok":true,"text":"...","safeword":false,...}
+                            ("stop" with "drop":true: the audio is dropped, nothing transcribed or broadcast)
+      start with "hold":true: this connection owns the press; closing it releases (card closed, mic off)
   {"cmd":"listen"}          one utterance, ends on silence (VAD)
   {"cmd":"listen_mode","on":true|false}      always-listening; transcripts arrive as events
   Mic gate: starting the mic needs Ko's mouse-click Yes on a Soul Contract card, on EVERY push-to-talk
@@ -40,6 +42,8 @@ Reply: {"ok":true, ...} or {"ok":false,"error":"..."}"""
 
 class Core:
     """Transport-independent request handling (shared by the unix socket and the Windows pipe)."""
+
+    takes_owner = True   # dispatch(r, owner=transport.Owner): work is tied to the client's connection
 
     def __init__(self, speaker, hub, stt_threads=2):
         self.speaker, self.hub = speaker, hub
@@ -60,7 +64,7 @@ class Core:
                                           gate=self.gate)
             return self._listener
 
-    def dispatch(self, r):
+    def dispatch(self, r, owner=None):
         cmd = r.get("cmd") or r.get("op") or "say"
         sp = self.speaker
         if cmd == "ping":
@@ -76,7 +80,9 @@ class Core:
                 # A mic card still waiting for its Yes is closed (CANCELLED) and every unused mic token is
                 # dropped (REVOKED): the mic never opens on a permission given before the safeword.
                 if self._listener is not None:
-                    self._listener.cancel_pending("safeword")
+                    # An open push-to-talk / one-shot capture ends too and its audio is dropped: nothing
+                    # said before the safeword is transcribed or broadcast.
+                    self._listener.cancel_pending("safeword", drop_capture=True)
                 else:
                     self.gate.cancel()
                     self.gate.revoke("safeword")
@@ -88,7 +94,7 @@ class Core:
             threading.Timer(0.2, os.kill, (os.getpid(), signal.SIGTERM)).start()
             return {"ok": True}
         if cmd in ("listen", "stt", "listen_mode"):
-            return self._stt(cmd, r)
+            return self._stt(cmd, r, owner)
         if cmd == "mic_card":
             return self.gate.card(r.get("kind", "listen"))
         if cmd == "mic_revoke":
@@ -109,7 +115,7 @@ class Core:
             return {"ok": False, "error": job.error, "utt": job.utt}
         return {"ok": True, "utt": job.utt, **job.stats}
 
-    def _stt(self, cmd, r):
+    def _stt(self, cmd, r, owner=None):
         L = self.listener
         if cmd == "stt":
             wav = r.get("wav")
@@ -121,10 +127,10 @@ class Core:
             return L.set_always(bool(r.get("on", True)), token=r.get("token"))
         act = r.get("action")
         if act == "start":
-            return L.ptt_start(token=r.get("token"))
+            return L.ptt_start(token=r.get("token"), owner=owner, hold=bool(r.get("hold")))
         if act == "stop":
-            return L.ptt_stop()
-        return L.listen_once(float(r.get("timeout", 15)), token=r.get("token"))
+            return L.ptt_stop(drop=bool(r.get("drop")))
+        return L.listen_once(float(r.get("timeout", 15)), token=r.get("token"), owner=owner)
 
 
 # Transports (unix socket / Windows named pipe, stdlib only) live in transport.py.
