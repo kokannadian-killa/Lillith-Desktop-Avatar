@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Installs Lillith's animation set: manifest.toml plus only the atlas pages
-it references (`page = ...`), about 194 MB of the 389 MB in assets/generated.
-The source is only read, never changed.
+(`page = ...`) and pose videos (`video = ...`) it references, not the loose
+frames. The source is only read, never changed. A video that's missing or
+still a Git LFS pointer is skipped (she plays that pose from its PNG page).
 
 Usage:
     python3 linux/stage-assets.py --check SRC         # usable? (exit 0 / 3 = Git LFS pointers / 1)
@@ -27,16 +28,24 @@ LFS_MAGIC = b"version https://git-lfs"
 LFS_EXIT = 3
 
 
-def pages(node):
+def refs(node, key):
     if isinstance(node, dict):
         for k, v in node.items():
-            if k == "page" and isinstance(v, str) and v:
+            if k == key and isinstance(v, str) and v:
                 yield v
             else:
-                yield from pages(v)
+                yield from refs(v, key)
     elif isinstance(node, list):
         for v in node:
-            yield from pages(v)
+            yield from refs(v, key)
+
+
+def pages(node):
+    return refs(node, "page")
+
+
+def safe(p: str) -> bool:
+    return not (Path(p).is_absolute() or ".." in Path(p).parts)
 
 
 class Source:
@@ -113,7 +122,12 @@ def check(src: Source) -> tuple[int, list[str]]:
     if notpng:
         print(f"error: not a PNG: {notpng[0]}", file=sys.stderr)
         return 1, []
-    return 0, wanted
+    vids = sorted(set(v for v in refs(manifest, "video") if safe(v)) - set(wanted))
+    usable = [v for v in vids if src.exists(v) and not src.head(v).startswith(LFS_MAGIC)]
+    if len(usable) < len(vids):
+        print(f"  note: {len(vids) - len(usable)} of {len(vids)} pose videos missing or Git LFS "
+              f"pointers; those poses play from their PNG pages", file=sys.stderr)
+    return 0, wanted + usable
 
 
 def up_to_date(src: Source, wanted: list[str], dest: Path) -> bool:
@@ -127,7 +141,7 @@ def main(argv: list[str]) -> int:
     if len(argv) == 2 and argv[0] == "--check":
         rc, wanted = check(Source(Path(argv[1])))
         if rc == 0:
-            print(f"ok: manifest + {len(wanted)} pages")
+            print(f"ok: manifest + {len(wanted)} pages and videos")
         return rc
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
@@ -157,7 +171,7 @@ def main(argv: list[str]) -> int:
             old.rename(dest)
         raise
     shutil.rmtree(old, ignore_errors=True)
-    print(f"installed manifest + {len(wanted)} pages ({total / 1e6:.0f} MB) -> {dest}")
+    print(f"installed manifest + {len(wanted)} pages and videos ({total / 1e6:.0f} MB) -> {dest}")
     return 0
 
 

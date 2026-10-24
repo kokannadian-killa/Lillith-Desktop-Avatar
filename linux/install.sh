@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Lillith for Arch / Garuda / Manjaro (pacman), per-user install.
 #
+#     bash install.sh                 the top-level wrapper (any folder, any shell)
 #     ./linux/install.sh              from the repo root (works from fish too)
 #     ./linux/install.sh --uninstall  remove it again (asks before deleting settings)
 #
@@ -13,8 +14,9 @@
 #   excludes her from KDE force blur (Better Blur DX), see kwin-blur-exclude.sh
 #   ~/.config/lillith/config.toml              via `lillith setup` (local model)
 #
-# LOCAL ONLY: the only network use is pacman installing distro packages (and
-# Cargo fetching crates for the build). It never downloads a model, never
+# LOCAL ONLY: the only network use is pacman installing distro packages,
+# Cargo fetching crates for the build and, for a GitHub "Download ZIP" whose
+# art is still LFS placeholders, fetching that art from this repo (asked first). It never downloads a model, never
 # installs from the AUR, and Lillith only talks to llama-server on 127.0.0.1.
 #
 # Run with --help for all options. Safe to re-run (upgrades in place).
@@ -284,6 +286,25 @@ if have python3; then
         python3 "$HERE/stage-assets.py" --check "$ASSET_SRC" >/dev/null || ASSET_STATE=lfs
       fi
     fi
+    # A GitHub "Download ZIP" (main.zip): no git, so fetch the real files
+    # straight from the repo's Git LFS storage (needs your GitHub login).
+    if [[ $ASSET_STATE == lfs && -z $ASSETS ]]; then
+      if ask "Her art isn't in this zip yet (only placeholders). Download it from your GitHub repo now (about 530 MB)?" y; then
+        set +e; python3 "$HERE/fetch-art.py"; frc=$?; set -e
+        if [[ $frc == 4 && -t 0 ]]; then
+          if ! have gh && have pacman && [[ $SKIP_DEPS == 0 ]]; then
+            ask "Install the GitHub login tool (github-cli) with pacman?" y && sudo pacman -S --needed github-cli
+          fi
+          if have gh && ask "Log in to GitHub now (opens your browser)?" y; then
+            gh auth login --hostname github.com --git-protocol https --web || true
+            set +e; python3 "$HERE/fetch-art.py"; frc=$?; set -e
+          fi
+        fi
+        if [[ $frc == 0 ]] && python3 "$HERE/stage-assets.py" --check "$ASSET_SRC" >/dev/null 2>&1; then
+          ASSET_STATE=ok; ok "her art is downloaded and checked"
+        fi
+      fi
+    fi
     if [[ $ASSET_STATE == lfs ]] && python3 "$HERE/stage-assets.py" --check "$ASSET_DIR" >/dev/null 2>&1; then
       warn "keeping the animation set that's already installed in $ASSET_DIR"
       ASSET_STATE=keep
@@ -293,7 +314,11 @@ if have python3; then
 
   ${R}Her animation frames aren't in this download.${N} GitHub's "Download ZIP"
   (main.zip) has only small Git LFS placeholders instead of the PNG art.
-  Any one of these fixes it, then re-run ./linux/install.sh:
+  Any one of these fixes it, then run the installer again (bash install.sh):
+
+    0) Log in to GitHub so the installer can download the art itself:
+         sudo pacman -S --needed github-cli
+         gh auth login --web
 
     a) Point the installer at a copy that has the art, e.g. the portable zip
        from the GitHub release (Lillith-0.0.1-windows-x64.zip, same art):
@@ -314,7 +339,10 @@ fi
 
 # ── 2. packages ─────────────────────────────────────────────────────
 step "2/8  System packages"
-PKGS=(base-devel git pkgconf libxkbcommon wayland dbus libpulse systemd-libs alsa-lib python)
+# ffmpeg plays her MP4 poses; the X11/GL libraries are for the Settings
+# window and the X11 fallback (a normal Plasma desktop already has them).
+PKGS=(base-devel git pkgconf libxkbcommon wayland dbus libpulse systemd-libs alsa-lib python ffmpeg
+      libx11 libxcb libxcursor libxi libxrender libglvnd mesa)
 if [[ $SKIP_DEPS == 1 ]]; then
   warn "skipped (--skip-deps); needed on Arch: ${PKGS[*]} + rust"
 else
@@ -618,7 +646,7 @@ step "8/8  Checking the install"
 "$LILLITH" --help >/dev/null || die "$LILLITH --help failed"
 ok "lillith --help runs"
 if [[ $ASSET_STATE != lfs ]]; then
-  n="$(cd "$DATA_DIR" && "$LILLITH" preview --list 2>/dev/null | tail -n +2 | wc -l)"
+  n="$(cd "$DATA_DIR" && "$LILLITH" preview --list 2>/dev/null | tail -n +2 | wc -l)" || n=0
   if [[ $n -gt 0 ]]; then ok "her animation set loads ($n clips)"; else warn "lillith preview --list found no clips"; fi
 fi
 case ":$PATH:" in
@@ -648,5 +676,5 @@ cat <<DONE
   Model:      lillith setup --gguf FILE.gguf --llama-server /usr/bin/llama-server
   Skills:     drop a 'skills' folder on your desktop; she copies it in at start
               (or: lillith import-skills). Undo her tidying: lillith undo-organize
-  Uninstall:  ./linux/uninstall.sh   (keeps GGUF models; asks about settings)
+  Uninstall:  bash install.sh --uninstall   (keeps GGUF models; asks about settings)
 DONE
