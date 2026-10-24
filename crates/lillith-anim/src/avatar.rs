@@ -173,8 +173,10 @@ pub fn load_any(path: &Path) -> Result<RgbaImage, AvatarError> {
         ),
     ];
     for (bin, args) in tries {
-        let ok = std::process::Command::new(bin)
-            .args(&args)
+        let mut c = std::process::Command::new(bin);
+        c.args(&args);
+        lillith_core::launch_audit::record_command("avatar_webp", &c);
+        let ok = c
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())

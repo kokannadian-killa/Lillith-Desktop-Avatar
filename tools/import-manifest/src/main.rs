@@ -701,23 +701,23 @@ fn ffprobe(ffmpeg: &Path, video: &Path) -> Result<Probe> {
         .map(|d| d.join("ffprobe"))
         .filter(|p| p.is_file())
         .unwrap_or_else(|| PathBuf::from("ffprobe"));
-    let out = std::process::Command::new(probe)
-        .args([
-            "-v",
-            "error",
-            "-protocol_whitelist",
-            "file",
-            "-select_streams",
-            "v:0",
-            "-count_packets",
-            "-show_entries",
-            "stream=codec_name,pix_fmt,width,height,nb_read_packets",
-            "-of",
-            "json",
-        ])
-        .arg(video)
-        .output()
-        .context("running ffprobe")?;
+    let mut c = std::process::Command::new(probe);
+    c.args([
+        "-v",
+        "error",
+        "-protocol_whitelist",
+        "file",
+        "-select_streams",
+        "v:0",
+        "-count_packets",
+        "-show_entries",
+        "stream=codec_name,pix_fmt,width,height,nb_read_packets",
+        "-of",
+        "json",
+    ])
+    .arg(video);
+    lillith_core::launch_audit::record_command_once("import_ffprobe", &c);
+    let out = c.output().context("running ffprobe")?;
     ensure!(
         out.status.success(),
         "ffprobe {video:?}: {}",

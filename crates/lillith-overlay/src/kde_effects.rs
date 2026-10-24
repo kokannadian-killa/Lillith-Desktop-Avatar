@@ -376,9 +376,10 @@ pub enum FixOutcome {
 pub fn fix_kwin(dry_run: bool) -> std::io::Result<Vec<FixOutcome>> {
     use std::process::Command;
     let read = |group: &str, key: &str| -> std::io::Result<String> {
-        let out = Command::new("kreadconfig6")
-            .args(["--file", "kwinrc", "--group", group, "--key", key])
-            .output()?;
+        let mut c = Command::new("kreadconfig6");
+        c.args(["--file", "kwinrc", "--group", group, "--key", key]);
+        lillith_core::launch_audit::record_command("fix_kwin", &c);
+        let out = c.output()?;
         Ok(String::from_utf8_lossy(&out.stdout)
             .trim_end_matches('\n')
             .to_string())
@@ -399,17 +400,18 @@ pub fn fix_kwin(dry_run: bool) -> std::io::Result<Vec<FixOutcome>> {
         match exclude_her(&classes, blacklist) {
             Some(new) => {
                 if !dry_run {
-                    let st = Command::new("kwriteconfig6")
-                        .args([
-                            "--file",
-                            "kwinrc",
-                            "--group",
-                            group,
-                            "--key",
-                            "WindowClasses",
-                        ])
-                        .arg(&new)
-                        .status()?;
+                    let mut c = Command::new("kwriteconfig6");
+                    c.args([
+                        "--file",
+                        "kwinrc",
+                        "--group",
+                        group,
+                        "--key",
+                        "WindowClasses",
+                    ])
+                    .arg(&new);
+                    lillith_core::launch_audit::record_command("fix_kwin", &c);
+                    let st = c.status()?;
                     if !st.success() {
                         return Err(std::io::Error::other(format!("kwriteconfig6 failed: {st}")));
                     }
@@ -430,20 +432,21 @@ pub fn fix_kwin(dry_run: bool) -> std::io::Result<Vec<FixOutcome>> {
         }
     }
     if changed {
-        let ok = Command::new("qdbus6")
-            .args(["org.kde.KWin", "/KWin", "reconfigure"])
-            .status()
-            .is_ok_and(|s| s.success());
+        let mut c = Command::new("qdbus6");
+        c.args(["org.kde.KWin", "/KWin", "reconfigure"]);
+        lillith_core::launch_audit::record_command("fix_kwin", &c);
+        let ok = c.status().is_ok_and(|s| s.success());
         if !ok {
-            let _ = Command::new("dbus-send")
-                .args([
-                    "--session",
-                    "--type=method_call",
-                    "--dest=org.kde.KWin",
-                    "/KWin",
-                    "org.kde.KWin.reconfigure",
-                ])
-                .status();
+            let mut c = Command::new("dbus-send");
+            c.args([
+                "--session",
+                "--type=method_call",
+                "--dest=org.kde.KWin",
+                "/KWin",
+                "org.kde.KWin.reconfigure",
+            ]);
+            lillith_core::launch_audit::record_command("fix_kwin", &c);
+            let _ = c.status();
         }
     }
     Ok(outcomes)
