@@ -120,7 +120,9 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   are unchanged.
 - **Five more poses:** `leg_cross_slow_sit`, `hair_twirl_lip_bite`,
   `tail_heart_wink`, `trace_heart_on_glass` and `dom_chin_tilt_summon`, in
-  the same outfit, wired into her idle, tease and banter moves.
+  the same outfit, wired into her idle, tease and banter moves. White
+  backdrop pockets in the hair and neck gaps and stray specks are cleaned
+  out of all five.
 - **Art fixes:**
   - `dom_arms_crossed_demand` no longer jumps about 60 px for one frame, so
     no more double body flash during the crossfade. Only that frame was
