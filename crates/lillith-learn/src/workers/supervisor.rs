@@ -5,6 +5,7 @@
 //! and writes the D8 job log and the `WORKER` audit lines.
 
 use super::breaker::{domain_key, source_key, Breakers, ErrorMemory, ErrorSink};
+use super::dream::{DreamRefused, SessionApproval};
 use super::external::Backend;
 use super::joblog::{new_job_id, JobEntry, JobLog, JobStatus};
 use super::policy::{FetchPolicy, Pacer};
@@ -18,7 +19,7 @@ use crate::online::{self, FetchError, Fetcher, IdentityDenylist, Url};
 use lillith_core::config::Config;
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -71,39 +72,93 @@ impl Task {
 /// A dream / research session: every worker of it stops the moment it
 /// does. Clones share the stop flag (the tray's End early, the battery /
 /// thermal watcher and the shutdown path each hold one).
+///
+/// A session exists only from a clicked dream-session card
+/// ([`Session::from_card`] consumes the [`SessionApproval`] that
+/// [`super::dream::propose_session`] returns after a mouse click on Yes);
+/// there is no other public constructor. Its id, deadline and the
+/// "also use my TaskCompletion bots" tick all come from that card.
+///
+/// Every stop works on its own ([`StopReason`]): [`Session::observe_chat`]
+/// (the safeword "red" / "OOC: stop"), [`Session::end_early`],
+/// [`Session::stop`], the process-wide kill switch (polled here, reported as
+/// [`StopReason::KillSwitch`]) and the deadline.
 #[derive(Clone)]
 pub struct Session {
     id: String,
+    card: String,
+    external: bool,
     deadline: Instant,
     stop: Arc<AtomicU8>,
-    safeword: Arc<dyn Fn() -> bool + Send + Sync>,
+    kill_switch: Arc<dyn Fn() -> bool + Send + Sync>,
+    audit_log: Option<PathBuf>,
+    ended: Arc<AtomicBool>,
 }
 
 impl std::fmt::Debug for Session {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Session")
             .field("id", &self.id)
+            .field("card", &self.card)
             .field("stop", &self.stop_reason())
             .finish()
     }
 }
 
 impl Session {
-    /// A session of `length` from now. The process-wide safeword (kill
-    /// switch) stops it.
-    pub fn new(id: &str, length: Duration) -> Self {
+    /// Starts the session one clicked card approved. Writes
+    /// `DREAM\tstart\t…\tcard=<id>` first, fail-closed: no line, no
+    /// session. A kill switch that fired since the card was shown stops it
+    /// at once.
+    pub fn from_card(approval: SessionApproval) -> Result<Self, DreamRefused> {
+        let (card, id, minutes, deadline, external, audit_log, epoch) = approval.into_parts();
+        crate::audit::record_dream(
+            audit_log.as_deref(),
+            "start",
+            &format!("session={id} minutes={minutes} external={external}"),
+            &card,
+        )
+        .map_err(|e| DreamRefused::Audit(e.to_string()))?;
+        Ok(Self {
+            id,
+            card,
+            external,
+            deadline,
+            stop: Arc::new(AtomicU8::new(0)),
+            kill_switch: Arc::new(move || lillith_core::access::kill_switch::stopped_since(epoch)),
+            audit_log,
+            ended: Arc::new(AtomicBool::new(false)),
+        })
+    }
+
+    /// Tests only: a session without a card (unit tests of the
+    /// supervisor itself; the card path has its own tests).
+    #[cfg(test)]
+    pub(crate) fn new(id: &str, length: Duration) -> Self {
         let epoch = lillith_core::access::kill_switch::epoch();
         Self {
             id: id.to_string(),
+            card: format!("test-{id}"),
+            external: false,
             deadline: Instant::now() + length,
             stop: Arc::new(AtomicU8::new(0)),
-            safeword: Arc::new(move || lillith_core::access::kill_switch::stopped_since(epoch)),
+            kill_switch: Arc::new(move || lillith_core::access::kill_switch::stopped_since(epoch)),
+            audit_log: None,
+            ended: Arc::new(AtomicBool::new(false)),
         }
     }
 
+    /// Tests only: replaces the process-wide kill switch probe (other
+    /// tests in the same binary fire the real one).
     #[cfg(test)]
-    pub(crate) fn with_safeword_probe(mut self, p: Arc<dyn Fn() -> bool + Send + Sync>) -> Self {
-        self.safeword = p;
+    pub(crate) fn with_kill_switch_probe(mut self, p: Arc<dyn Fn() -> bool + Send + Sync>) -> Self {
+        self.kill_switch = p;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_external_tick(mut self, t: bool) -> Self {
+        self.external = t;
         self
     }
 
@@ -111,11 +166,35 @@ impl Session {
         &self.id
     }
 
+    /// The dream-session card this session runs under.
+    pub fn card(&self) -> &str {
+        &self.card
+    }
+
+    /// Whether Ko ticked "also use my TaskCompletion bots" on this
+    /// session's card and nothing has stopped the session since (the
+    /// safeword or any other stop disables external for the rest of it).
+    pub fn external_allowed(&self) -> bool {
+        self.external && self.stop_reason().is_none()
+    }
+
     /// Stops every worker of the session (the first reason wins).
     pub fn request_stop(&self, r: StopReason) {
         let _ = self
             .stop
             .compare_exchange(0, r.code(), Ordering::SeqCst, Ordering::SeqCst);
+    }
+
+    /// End early (tray / right-click menu). Works on its own: no safeword
+    /// or kill switch involved.
+    pub fn end_early(&self) {
+        self.request_stop(StopReason::EndEarly);
+    }
+
+    /// A plain stop (panel, CLI, the dream subsystem shutting down). Works
+    /// on its own: no safeword or kill switch involved.
+    pub fn stop(&self) {
+        self.request_stop(StopReason::Stop);
     }
 
     /// Shows the session one chat line: the safeword ("red", "OOC: stop")
@@ -132,19 +211,27 @@ impl Session {
         if let Some(r) = StopReason::from_code(self.stop.load(Ordering::SeqCst)) {
             return Some(r);
         }
-        if (self.safeword)() {
-            self.request_stop(StopReason::Safeword);
-            return Some(StopReason::Safeword);
-        }
-        if Instant::now() >= self.deadline {
+        if (self.kill_switch)() {
+            self.request_stop(StopReason::KillSwitch);
+        } else if Instant::now() >= self.deadline {
             self.request_stop(StopReason::SessionDeadline);
-            return Some(StopReason::SessionDeadline);
         }
-        None
+        StopReason::from_code(self.stop.load(Ordering::SeqCst))
     }
 
     pub fn remaining(&self) -> Duration {
         self.deadline.saturating_duration_since(Instant::now())
+    }
+
+    /// Ends the session: stops it (if nothing has) and writes
+    /// `DREAM\tend\t<reason>\tcard=<id>` once.
+    pub fn finish(&self) -> std::io::Result<()> {
+        self.stop();
+        if self.ended.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        let why = self.stop_reason().map_or("stop", StopReason::word);
+        crate::audit::record_dream(self.audit_log.as_deref(), "end", why, &self.card)
     }
 }
 
@@ -276,6 +363,11 @@ impl<'f> Supervisor<'f> {
             ));
         }
         let limits = WorkerLimits::from_config(&cfg.learn.workers);
+        // Scratch left by a parent that died (SIGKILL, crash) goes now.
+        let swept = super::scratch::sweep_stale();
+        if swept > 0 {
+            tracing::info!("helper workers: removed {swept} stale scratch dir(s)");
+        }
         Ok(Self {
             fetcher,
             command,
@@ -302,7 +394,21 @@ impl<'f> Supervisor<'f> {
         })
     }
 
-    pub fn with_limits(mut self, l: WorkerLimits) -> Self {
+    /// Tightens the limits (never loosens them): shorter heartbeats, fewer
+    /// missed beats and restarts, a longer backoff, fewer failures before
+    /// a breaker opens and a longer open time.
+    pub fn with_limits(self, l: WorkerLimits) -> Self {
+        let tight = self.limits.tightened(&l);
+        self.set_limits(tight)
+    }
+
+    /// Tests only: any limits (fast backoff in unit tests).
+    #[cfg(test)]
+    pub(crate) fn with_limits_unchecked(self, l: WorkerLimits) -> Self {
+        self.set_limits(l)
+    }
+
+    fn set_limits(mut self, l: WorkerLimits) -> Self {
         self.breakers = Breakers::new(l.breaker_failures, l.breaker_open);
         self.limits = l;
         self
@@ -330,7 +436,10 @@ impl<'f> Supervisor<'f> {
         self
     }
 
-    pub fn with_audit_log(mut self, log: Option<PathBuf>) -> Self {
+    /// Tests only: production always writes `lillith_core::config::
+    /// audit_log_path()`, and every `WORKER` line is fail-closed.
+    #[cfg(test)]
+    pub(crate) fn with_audit_log(mut self, log: Option<PathBuf>) -> Self {
         self.audit_log = log;
         self
     }
@@ -427,19 +536,37 @@ impl<'f> Supervisor<'f> {
         }
     }
 
-    fn audit(&self, op: &str, reason: &str, job: &str) {
-        if let Err(e) = crate::audit::record_worker(self.audit_log.as_deref(), op, reason, job) {
-            tracing::warn!("worker audit ({op}): {e}");
+    /// Writes one `WORKER` line carrying the session's card. Fail-closed:
+    /// a failed write stops the whole session ([`StopReason::AuditFailed`])
+    /// and returns `false`, so no unaudited work goes on.
+    fn audit(&self, session: &Session, op: &str, reason: &str, job: &str) -> bool {
+        match crate::audit::record_worker(
+            self.audit_log.as_deref(),
+            op,
+            reason,
+            job,
+            Some(session.card()),
+        ) {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::warn!("worker audit ({op}): {e}; stopping the session");
+                session.request_stop(StopReason::AuditFailed);
+                false
+            }
         }
     }
 
-    fn record_error(&mut self, key: &str, kind: &str, text: &str) {
-        self.errors.record(key, kind, text);
+    /// Records a fetch / worker error. The server's text is sanitised
+    /// first ([`clean_error`]) before the error memory, the sink or the
+    /// worker see it.
+    fn record_error(&mut self, session: &Session, key: &str, kind: &str, text: &str) {
+        let text = clean_error(text, &self.deny);
+        self.errors.record(key, kind, &text);
         if let Some(s) = self.sink {
-            s.record_error(text, &format!("helper worker {key}"));
+            s.record_error(&text, &format!("helper worker {key}"));
         }
         if self.breakers.failure(key, Instant::now()) {
-            self.audit("breaker_open", key, "-");
+            self.audit(session, "breaker_open", key, "-");
         }
     }
 
@@ -457,7 +584,12 @@ impl<'f> Supervisor<'f> {
                 rep.restarts,
                 rep.quarantine_path.as_ref(),
             );
-            me.audit("end", &format!("{} {why}", status.word()), &rep.job);
+            me.audit(
+                session,
+                "end",
+                &format!("{} {why}", status.word()),
+                &rep.job,
+            );
             rep
         };
 
@@ -553,6 +685,16 @@ impl<'f> Supervisor<'f> {
                 format!("online research stays off: {why}; offline-only learning continues (Tor is never installed for you)"),
             );
         }
+        // Fail-closed: no `WORKER start` line under the session's card, no
+        // worker (written before the first spawn).
+        if !self.audit(session, "start", task.kind.word(), id) {
+            return finish(
+                self,
+                rep,
+                JobStatus::Refused,
+                "the audit log can't be written; nothing was started".into(),
+            );
+        }
         // Fail-closed: no job log line, no worker.
         if !self.log(id, &tj, session, JobStatus::Queued, 0, None) {
             return finish(
@@ -577,7 +719,12 @@ impl<'f> Supervisor<'f> {
                 }
                 rep.restarts += 1;
             }
-            self.log(id, &tj, session, JobStatus::Running, attempt, None);
+            if !self.log(id, &tj, session, JobStatus::Running, attempt, None) {
+                // Fail-closed: the D8 log is how a crash is recovered.
+                session.request_stop(StopReason::AuditFailed);
+                last = End::Stopped(StopReason::AuditFailed);
+                break;
+            }
             let mut st = Attempt::default();
             let end = self.attempt(id, task, &urls, &hosts, session, &mut rep, &mut st);
             rep.fetched.extend(st.fetched.iter().cloned());
@@ -587,22 +734,24 @@ impl<'f> Supervisor<'f> {
             match &end {
                 End::Ttl(what) => {
                     let r = format!("ttl:{what}");
-                    self.audit("kill", &r, id);
+                    self.audit(session, "kill", &r, id);
                     rep.kill = Some(r);
                 }
                 End::Anomaly(why) => {
-                    self.audit("kill", why, id);
+                    self.audit(session, "kill", why, id);
                     rep.kill = Some(why.clone());
                 }
                 End::Heartbeat => {
-                    self.audit("kill", "heartbeat", id);
+                    self.audit(session, "kill", "heartbeat", id);
                     rep.kill = Some("heartbeat".into());
                 }
                 End::Stopped(r) => {
-                    self.audit("kill", &format!("stop:{}", r.word()), id);
+                    self.audit(session, "kill", &format!("stop:{}", r.word()), id);
                     rep.kill = Some(format!("stop:{}", r.word()));
                 }
-                End::Crashed(why) => self.audit("crash", why, id),
+                End::Crashed(why) => {
+                    self.audit(session, "crash", why, id);
+                }
                 End::Done(_) => {}
             }
             let retry = matches!(end, End::Heartbeat | End::Crashed(_));
@@ -611,7 +760,7 @@ impl<'f> Supervisor<'f> {
                     End::Crashed(w) => w.clone(),
                     _ => "missed heartbeats".into(),
                 };
-                self.record_error(&source_key(Backend::Local.word()), "worker", &why);
+                self.record_error(session, &source_key(Backend::Local.word()), "worker", &why);
             } else {
                 self.breakers.success(&source_key(Backend::Local.word()));
             }
@@ -728,12 +877,16 @@ impl<'f> Supervisor<'f> {
             allow_http: self.allow_http,
             canary: canary.clone(),
         };
+        // The spawn line goes first, fail-closed: no line, no process.
+        if !self.audit(session, "spawn", task.kind.word(), id) {
+            scratch.wipe();
+            return End::Stopped(StopReason::AuditFailed);
+        }
         let mut p = match WorkerProc::spawn(&self.command, scratch.path(), self.bwrap.as_deref()) {
             Ok(p) => p,
             Err(e) => return End::Crashed(format!("spawn: {e}")),
         };
         rep.pids.push(p.id());
-        self.audit("spawn", task.kind.word(), id);
         let b = &self.budgets;
         p.send(&json!({
             "t": "task",
@@ -861,10 +1014,9 @@ impl<'f> Supervisor<'f> {
                                 FetchError::Http(_) => "http",
                                 FetchError::Stopped => "stopped",
                             };
-                            self.record_error(&key, kind, &e.to_string());
-                            p.send(
-                                &json!({"t": "error", "url": u.to_string(), "why": e.to_string()}),
-                            );
+                            let why = clean_error(&e.to_string(), &self.deny);
+                            self.record_error(session, &key, kind, &why);
+                            p.send(&json!({"t": "error", "url": u.to_string(), "why": why}));
                             continue;
                         }
                         Some(Ok(page)) => page,
@@ -876,7 +1028,9 @@ impl<'f> Supervisor<'f> {
                     if (300..400).contains(&page.status) {
                         let next = page.location.as_deref().map(|l| u.join(l));
                         let msg = match next {
-                            Some(Ok(n)) => match policy.check(&n.to_string()) {
+                            // `check_redirect`: an https → http downgrade is
+                            // refused even with `allow_http` on.
+                            Some(Ok(n)) => match policy.check_redirect(&u, &n.to_string()) {
                                 Ok(n) => {
                                     json!({"t": "redirect", "url": u.to_string(), "to": n.to_string()})
                                 }
@@ -916,6 +1070,32 @@ impl<'f> Supervisor<'f> {
         p.kill();
         scratch.wipe();
         end
+    }
+}
+
+/// Longest error text kept from a server or the network stack.
+pub const MAX_ERROR_TEXT: usize = 200;
+
+/// A server's / the network stack's error text made safe to log, store and
+/// hand to a worker: secret-looking lines dropped, the first line only,
+/// control characters replaced, withheld whole if it names anything on
+/// `deny` (an identifier or a local path), cut to
+/// [`MAX_ERROR_TEXT`] bytes.
+pub fn clean_error(text: &str, deny: &IdentityDenylist) -> String {
+    let text = crate::paths::drop_secret_lines(text);
+    let line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let out: String = line
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    if deny.hit(&out).is_some() {
+        return "[error text withheld: it named an identifier or a local path]".into();
+    }
+    let out = cut(out.trim(), MAX_ERROR_TEXT);
+    if out.is_empty() {
+        "error".into()
+    } else {
+        out
     }
 }
 

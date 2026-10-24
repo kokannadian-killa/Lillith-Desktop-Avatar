@@ -32,6 +32,7 @@ pub mod paths;
 pub mod readers;
 pub mod runner;
 pub mod scheduler;
+pub mod sha256;
 pub mod store;
 pub mod summarize;
 pub mod workers;

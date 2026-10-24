@@ -1,6 +1,6 @@
 //! The idle learner never starts an online trip, a helper worker or a
-//! practice-sandbox build, even with `[learn] online = true` and the
-//! default `[learn] practice = true` (its own test binary so the
+//! practice-sandbox build, even with `[learn] online = true` and
+//! `[learn] practice = true` (opt-in; default off) (its own test binary so the
 //! process-wide counters are not shared with the trip tests).
 
 use lillith_core::config::Config;
@@ -20,6 +20,7 @@ fn idle_path_starts_no_online_trip() {
     .unwrap();
     let mut cfg = Config::default();
     cfg.learn.online = true;
+    cfg.learn.practice = true;
     assert_eq!(online::gate(&cfg), Ok(()), "online is fully allowed here");
     let brain = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
     let mut l = Learner::new(&cfg, brain)

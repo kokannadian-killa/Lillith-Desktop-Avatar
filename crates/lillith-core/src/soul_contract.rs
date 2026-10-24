@@ -163,6 +163,23 @@ pub enum PendingAction {
         job: String,
         card: String,
     },
+    /// Start one dream / helper-worker research session
+    /// (docs/SELF_LEARNING.md §11 item 1, §12): `minutes` (30–480), its end
+    /// time `deadline` (UTC) and `budgets` as shown on the card. One mouse
+    /// click on Yes is the session-scoped consent for that session's
+    /// research GETs only (never another session, the idle learner, sandbox
+    /// runs or installs). `external_offered` adds the separate, unticked
+    /// "also use my TaskCompletion bots" option (§11.1). Confirming only
+    /// records the approval; the worker supervisor
+    /// (`lillith_learn::workers`) runs the session.
+    DreamSession {
+        id: String,
+        minutes: u64,
+        deadline: String,
+        budgets: String,
+        card: String,
+        external_offered: bool,
+    },
 }
 
 /// The `kind` column of an online research trip in the audit log.
@@ -170,6 +187,9 @@ pub const ONLINE_RESEARCH_KIND: &str = "online_research";
 
 /// The `kind` column of a practice-sandbox card in the audit log.
 pub const SANDBOX_RUN_KIND: &str = "sandbox_run";
+
+/// The `kind` column of a dream-session card in the audit log.
+pub const DREAM_SESSION_KIND: &str = "dream_session";
 
 /// The `kind` column of model-server card lines in the audit log.
 pub const MODEL_SERVER_KIND: &str = "start_model_server";
@@ -245,7 +265,8 @@ impl PendingAction {
         match self {
             PendingAction::StartModelServer { card, .. }
             | PendingAction::OnlineResearch { card, .. }
-            | PendingAction::SandboxRun { card, .. } => Some(card),
+            | PendingAction::SandboxRun { card, .. }
+            | PendingAction::DreamSession { card, .. } => Some(card),
             _ => None,
         }
     }
@@ -269,6 +290,7 @@ impl PendingAction {
             PendingAction::Plan { .. } => "plan",
             PendingAction::OnlineResearch { .. } => ONLINE_RESEARCH_KIND,
             PendingAction::SandboxRun { .. } => SANDBOX_RUN_KIND,
+            PendingAction::DreamSession { .. } => DREAM_SESSION_KIND,
         }
     }
 
@@ -290,6 +312,7 @@ impl PendingAction {
             | PendingAction::Plan { .. }
             | PendingAction::OnlineResearch { .. }
             | PendingAction::SandboxRun { .. }
+            | PendingAction::DreamSession { .. }
             | PendingAction::Launch { .. } => None,
             // The binary, so the audit line names what would run.
             PendingAction::StartModelServer { argv, .. } => argv.first().map(Path::new),
@@ -313,7 +336,8 @@ impl PendingAction {
             | PendingAction::Launch { .. }
             | PendingAction::StartModelServer { .. }
             | PendingAction::OnlineResearch { .. }
-            | PendingAction::SandboxRun { .. } => true,
+            | PendingAction::SandboxRun { .. }
+            | PendingAction::DreamSession { .. } => true,
             PendingAction::ListDir { .. }
             | PendingAction::ReadFile { .. }
             | PendingAction::SearchFiles { .. } => false,
@@ -385,6 +409,13 @@ impl PendingAction {
                 one_line_cap(job, 60),
                 one_line_cap(&argv.join(" "), 160)
             ),
+            PendingAction::DreamSession {
+                minutes, deadline, ..
+            } => format!(
+                "Dream / research session for {} min (Tor only, read-only), ends {}",
+                minutes,
+                one_line_cap(deadline, 40)
+            ),
         }
     }
 
@@ -408,6 +439,7 @@ impl PendingAction {
             PendingAction::Plan { .. } => "REVIEW THE PLAN",
             PendingAction::OnlineResearch { .. } => "GO ONLINE (TOR)",
             PendingAction::SandboxRun { .. } => "RUN IN SANDBOX",
+            PendingAction::DreamSession { .. } => "START DREAM SESSION",
         }
     }
 
@@ -463,6 +495,32 @@ impl PendingAction {
                  saying yes doesn't.",
                 one_line_cap(job, 60),
                 argv_lines(argv)
+            )),
+            PendingAction::DreamSession {
+                id,
+                minutes,
+                deadline,
+                budgets,
+                external_offered,
+                ..
+            } => Some(format!(
+                "session: {}\nduration: {} min\nends: {}\nbudgets: {}\n\n\
+                 Read-only GETs over Tor only, one at a time; no logins, cookies, \
+                 uploads, installs or program runs. Helper workers have no network \
+                 of their own. End early, the safeword (red / OOC: stop), the kill \
+                 switch and the deadline each stop it at once and discard in-flight \
+                 work. This click covers this session's research only.{}\n\n\
+                 Only a click on Yes starts it; typing or saying yes doesn't.",
+                one_line_cap(id, 60),
+                minutes,
+                one_line_cap(deadline, 40),
+                one_line_cap(budgets, 200),
+                if *external_offered {
+                    "\n\n[ ] Also use my TaskCompletion bots (leaves this laptop, \
+                     not anonymous). Unticked unless you tick it."
+                } else {
+                    ""
+                }
             )),
             _ => None,
         };
@@ -538,6 +596,11 @@ impl PendingAction {
             PendingAction::SandboxRun { .. } => Ok((
                 None,
                 Some("approved: the build pipeline runs this one sandboxed step".into()),
+            )),
+            // The approval itself: the worker supervisor runs the session.
+            PendingAction::DreamSession { .. } => Ok((
+                None,
+                Some("approved: the helper-worker supervisor runs this session".into()),
             )),
             // The approval itself: the app spawns (and owns) the server.
             PendingAction::StartModelServer { .. } => Ok((
@@ -1896,6 +1959,38 @@ mod tests {
         assert!(d.contains("--unshare-all") && d.contains("w-abc"), "{d}");
         assert!(d.contains("typing or saying yes doesn't"), "{d}");
         // run_now refuses a card action; nothing runs without a Yes.
+        let mut c = SoulContract::new(None);
+        assert!(matches!(
+            c.run_now(a),
+            Err(ContractError::NeedsConfirmation(_))
+        ));
+    }
+
+    #[test]
+    fn dream_session_needs_a_card_and_executes_nothing() {
+        let a = PendingAction::DreamSession {
+            id: "s-1".into(),
+            minutes: 30,
+            deadline: "2026-10-24T20:00:00Z".into(),
+            budgets: "5 pages per trip".into(),
+            card: "dream-1".into(),
+            external_offered: true,
+        };
+        assert_eq!(a.kind(), DREAM_SESSION_KIND);
+        assert_eq!(a.card_id(), Some("dream-1"));
+        assert!(a.needs_confirmation());
+        assert_eq!(a.target_path(), None);
+        assert_eq!(a.title(), "START DREAM SESSION");
+        let d = a.prompt().detail.unwrap_or_default();
+        assert!(
+            d.contains("30 min") && d.contains("2026-10-24T20:00:00Z"),
+            "{d}"
+        );
+        assert!(
+            d.contains("TaskCompletion") && d.contains("Unticked"),
+            "{d}"
+        );
+        assert!(d.contains("typing or saying yes doesn't"), "{d}");
         let mut c = SoulContract::new(None);
         assert!(matches!(
             c.run_now(a),

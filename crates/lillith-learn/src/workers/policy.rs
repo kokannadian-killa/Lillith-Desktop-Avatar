@@ -102,6 +102,24 @@ impl FetchPolicy {
     }
 }
 
+impl FetchPolicy {
+    /// Checks a redirect hop from `from` to `raw`: everything [`check`]
+    /// does, and an `https://` → `http://` downgrade is always refused,
+    /// even with `allow_http` on (a Tor exit node could read or change the
+    /// rest of the chain; §5.2).
+    ///
+    /// [`check`]: FetchPolicy::check
+    pub fn check_redirect(&self, from: &Url, raw: &str) -> Result<Url, Violation> {
+        let to = self.check(raw)?;
+        if from.is_https() && !to.is_https() {
+            return Err(Violation(format!(
+                "https to http downgrade refused: {from} -> {to}"
+            )));
+        }
+        Ok(to)
+    }
+}
+
 /// One fetch at a time across every worker of this process, with a minimum
 /// interval and random jitter on top (§11.4, §12 timing).
 static LAST_FETCH: Mutex<Option<Instant>> = Mutex::new(None);
@@ -174,6 +192,42 @@ mod tests {
             allow_http: false,
             canary: "cnry-7f3a9".into(),
         }
+    }
+
+    #[test]
+    fn https_to_http_redirect_is_refused_even_with_allow_http() {
+        for allow_http in [false, true] {
+            let p = FetchPolicy {
+                allow_http,
+                ..policy()
+            };
+            let from = Url::parse("https://docs.example.org/a").unwrap();
+            let v = p
+                .check_redirect(&from, "http://docs.example.org/b")
+                .unwrap_err();
+            // Off: plain http is refused anyway; on: the downgrade rule.
+            let want = if allow_http {
+                "downgrade"
+            } else {
+                "plain http"
+            };
+            assert!(v.0.contains(want), "allow_http={allow_http}: {v:?}");
+            assert!(p
+                .check_redirect(&from, "https://docs.example.org/b")
+                .is_ok());
+        }
+        // http -> http stays allowed only with allow_http on.
+        let on = FetchPolicy {
+            allow_http: true,
+            ..policy()
+        };
+        let plain = Url::parse("http://docs.example.org/a").unwrap();
+        assert!(on
+            .check_redirect(&plain, "http://docs.example.org/b")
+            .is_ok());
+        assert!(policy()
+            .check_redirect(&plain, "http://docs.example.org/b")
+            .is_err());
     }
 
     #[test]

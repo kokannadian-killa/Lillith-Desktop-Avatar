@@ -7,6 +7,7 @@ use super::joblog::{JobEntry, JobStatus};
 use super::policy::Pacer;
 use super::process::WorkerCommand;
 use super::quarantine::Quarantine;
+use super::supervisor::{clean_error, MAX_ERROR_TEXT};
 use super::*;
 use crate::online::{FetchError, FetchedPage, Fetcher, Off, Url};
 use lillith_core::config::Config;
@@ -25,6 +26,8 @@ struct Fake {
     delay: Duration,
     fail_hosts: Vec<String>,
     big: bool,
+    /// Answer every fetch with a 302 to this `Location`.
+    redirect_to: Option<String>,
     calls: Mutex<Vec<(String, String)>>,
     in_flight: AtomicUsize,
     max_in_flight: AtomicUsize,
@@ -86,8 +89,8 @@ impl Fetcher for Fake {
         body.truncate(max_bytes as usize);
         Ok(FetchedPage {
             url: url.clone(),
-            status: 200,
-            location: None,
+            status: if self.redirect_to.is_some() { 302 } else { 200 },
+            location: self.redirect_to.clone(),
             content_type: "text/html; charset=utf-8".into(),
             body,
             truncated,
@@ -149,11 +152,15 @@ fn limits() -> WorkerLimits {
 }
 
 fn sup<'f>(f: &'f Fake, env: &Env, script: &str) -> Supervisor<'f> {
+    sup_with(&on(), f, env, script)
+}
+
+fn sup_with<'f>(cfg: &Config, f: &'f Fake, env: &Env, script: &str) -> Supervisor<'f> {
     let cmd =
         WorkerCommand::unsandboxed("/bin/sh", vec!["-c".into(), format!("{PRELUDE}{script}")]);
-    Supervisor::new(&on(), f, &["Ko Kannadian".to_string()], cmd)
+    Supervisor::new(cfg, f, &["Ko Kannadian".to_string()], cmd)
         .unwrap_or_else(|e| panic!("{e:?}"))
-        .with_limits(limits())
+        .with_limits_unchecked(limits())
         .with_job_log(Some(env.dir.join("bots")))
         .with_quarantine_dir(Some(env.dir.join("quarantine")))
         .with_audit_log(Some(env.dir.join("audit.log")))
@@ -164,7 +171,7 @@ fn sup<'f>(f: &'f Fake, env: &Env, script: &str) -> Supervisor<'f> {
 }
 
 fn session(len: Duration) -> Session {
-    Session::new("s-test", len).with_safeword_probe(Arc::new(|| false))
+    Session::new("s-test", len).with_kill_switch_probe(Arc::new(|| false))
 }
 
 fn long() -> Session {
@@ -213,8 +220,9 @@ fn read_only(p: &Path) -> bool {
 }
 
 fn kill_line(env: &Env, reason: &str, job: &str) -> bool {
+    let job = format!("job={job}");
     env.audit().lines().any(|l| {
-        l.contains(&format!("\tWORKER\tkill\t{reason}")) && l.ends_with(&format!("\tjob={job}"))
+        l.contains(&format!("\tWORKER\tkill\t{reason}")) && l.split('\t').any(|f| f == job)
     })
 }
 
@@ -291,12 +299,15 @@ fn limits_backoff_and_budgets_come_from_the_exact_config_keys() {
     assert_eq!(Budgets::for_kind(WorkerKind::Research, &c.learn), Some(b));
     assert_eq!(Budgets::for_kind(WorkerKind::Build, &c.learn), None);
 
-    let line = audit_line(0.0, "kill", "canary\tx\ny", "w-1");
+    let line = audit_line(0.0, "kill", "canary\tx\ny", "w-1", None);
     assert!(
         line.ends_with("\tWORKER\tkill\tcanary x y\tjob=w-1\n"),
         "{line:?}"
     );
     assert_eq!(line.matches('\t').count(), 4);
+    // Under a session every line carries its card.
+    let line = audit_line(0.0, "spawn", "ok", "w-1", Some("dream-ab\tc"));
+    assert!(line.ends_with("\tjob=w-1\tcard=dream-ab c\n"), "{line:?}");
 }
 
 #[test]
@@ -546,7 +557,7 @@ fn ttl_token_budget() {
 fn missed_heartbeats_kill_then_restart_with_backoff_until_max_restarts() {
     let f = Fake::default();
     let env = Env::new("hb");
-    let mut s = sup(&f, &env, "sleep 30").with_limits(WorkerLimits {
+    let mut s = sup(&f, &env, "sleep 30").with_limits_unchecked(WorkerLimits {
         heartbeat: Duration::from_millis(100),
         missed_heartbeats_kill: 3,
         max_restarts: 2,
@@ -577,7 +588,8 @@ fn missed_heartbeats_kill_then_restart_with_backoff_until_max_restarts() {
         .audit()
         .lines()
         .filter(|l| {
-            l.contains("\tWORKER\tkill\theartbeat\t") && l.ends_with(&format!("job={}", r.job))
+            l.contains("\tWORKER\tkill\theartbeat\t")
+                && l.split('\t').any(|f| f == format!("job={}", r.job))
         })
         .count();
     assert_eq!(kills, 3);
@@ -598,7 +610,7 @@ fn missed_heartbeats_kill_then_restart_with_backoff_until_max_restarts() {
 fn heartbeats_keep_a_slow_worker_alive() {
     let f = Fake::default();
     let env = Env::new("hb-ok");
-    let mut s = sup(&f, &env, &format!("{}beat", get_fact())).with_limits(WorkerLimits {
+    let mut s = sup(&f, &env, &format!("{}beat", get_fact())).with_limits_unchecked(WorkerLimits {
         heartbeat: Duration::from_millis(100),
         ..limits()
     });
@@ -623,7 +635,7 @@ fn a_crashed_worker_is_restarted_fresh_after_backoff() {
         m = mark.display(),
         gf = get_fact()
     );
-    let mut s = sup(&f, &env, &script).with_limits(WorkerLimits {
+    let mut s = sup(&f, &env, &script).with_limits_unchecked(WorkerLimits {
         max_restarts: 3,
         ..limits()
     });
@@ -692,11 +704,12 @@ fn per_domain_breaker_opens_after_breaker_failures_for_30_minutes() {
 fn killed(name: &str, script: &str, reason: &str) -> (JobReport, Env) {
     let f = Fake::default();
     let env = Env::new(name);
-    let mut s =
-        sup(&f, &env, &format!("{}{script}\nsleep 30", get_fact())).with_limits(WorkerLimits {
+    let mut s = sup(&f, &env, &format!("{}{script}\nsleep 30", get_fact())).with_limits_unchecked(
+        WorkerLimits {
             max_restarts: 3,
             ..limits()
-        });
+        },
+    );
     let r = s.run(&task(&[A]), &long());
     assert_eq!(r.status, JobStatus::Killed, "{name}: {r:?}");
     let k = r.kill.clone().unwrap();
@@ -856,26 +869,38 @@ fn stopped(name: &str, reason: StopReason) {
     } else {
         long()
     };
+    let begun = Instant::now();
+    let asked: Mutex<Option<Instant>> = Mutex::new(None);
     let mut s = sup(&f, &env, &format!("{}beat", get_fact()));
     let r = std::thread::scope(|sc| {
         let sess = s_.clone();
         let calls = &f;
+        let asked = &asked;
         if reason != StopReason::SessionDeadline {
             sc.spawn(move || {
                 while calls.calls().is_empty() {
                     std::thread::sleep(Duration::from_millis(10));
                 }
                 std::thread::sleep(Duration::from_millis(200));
+                *asked.lock().unwrap() = Some(Instant::now());
                 sess.request_stop(reason);
             });
         }
         s.run(&task(&[A]), &s_)
     });
+    // N3: from the stop (or the deadline) to the job's end, under 3 s.
+    let from = asked
+        .lock()
+        .unwrap()
+        .unwrap_or(begun + Duration::from_millis(700));
+    let took = Instant::now().saturating_duration_since(from);
+    assert!(took < Duration::from_secs(3), "{}: {took:?}", reason.word());
     assert_eq!(
         (r.status, r.stop),
         (JobStatus::Cancelled, Some(reason)),
         "{r:?}"
     );
+    assert_stopped_fast(&r, reason);
     assert!(
         r.accepted.is_empty() && r.quarantined.is_empty() && r.quarantine_path.is_none(),
         "in-flight work discarded"
@@ -889,6 +914,34 @@ fn stopped(name: &str, reason: StopReason) {
     assert_eq!(statuses(&env, &r.job).last(), Some(&JobStatus::Cancelled));
     all_dead(&r);
     wiped(&r);
+}
+
+/// Every pid of the stopped job is gone within 3 s of the report (the run
+/// returning is itself bounded by the stop: see `stop_with`).
+fn assert_stopped_fast(r: &JobReport, reason: StopReason) {
+    let t = Instant::now();
+    all_dead(r);
+    assert!(
+        t.elapsed() < Duration::from_secs(3),
+        "{}: still alive after {:?}",
+        reason.word(),
+        t.elapsed()
+    );
+}
+
+#[test]
+fn stop_kill_switch_kills_and_discards() {
+    stopped("st-ks", StopReason::KillSwitch);
+}
+
+#[test]
+fn stop_plain_stop_kills_and_discards() {
+    stopped("st-stop", StopReason::Stop);
+}
+
+#[test]
+fn stop_audit_failed_kills_and_discards() {
+    stopped("st-audit", StopReason::AuditFailed);
 }
 
 #[test]
@@ -932,7 +985,10 @@ fn stop_reasons_are_all_there_and_first_one_wins() {
             "session_deadline",
             "parent_exit",
             "low_battery",
-            "thermal"
+            "thermal",
+            "kill_switch",
+            "stop",
+            "audit_failed"
         ]
     );
     let s = long();
@@ -996,7 +1052,7 @@ fn process_wide_kill_switch_stops_the_session() {
     let fired = Arc::new(AtomicBool::new(false));
     let probe = fired.clone();
     let sess = Session::new("s-ks", Duration::from_secs(600))
-        .with_safeword_probe(Arc::new(move || probe.load(Ordering::SeqCst)));
+        .with_kill_switch_probe(Arc::new(move || probe.load(Ordering::SeqCst)));
     let mut s = sup(&f, &env, &format!("{}beat", get_fact()));
     let r = std::thread::scope(|sc| {
         let ff = &f;
@@ -1010,9 +1066,10 @@ fn process_wide_kill_switch_stops_the_session() {
         });
         s.run(&task(&[A]), &sess)
     });
+    // N4: reported as the kill switch, not as the safeword.
     assert_eq!(
         (r.status, r.stop),
-        (JobStatus::Cancelled, Some(StopReason::Safeword))
+        (JobStatus::Cancelled, Some(StopReason::KillSwitch))
     );
     assert!(r.accepted.is_empty());
     all_dead(&r);
@@ -1130,4 +1187,227 @@ fn workers_have_no_install_download_or_memory_write_path() {
             assert!(!src.contains("Command::new"), "{name} runs programs");
         }
     }
+}
+
+// ---- review fixes: each stop on its own, fail-closed audit, redirects,
+// ---- error text, limits ----
+
+/// Runs one job and stops it with `how` once the first fetch started;
+/// returns the report and how long the stop took.
+fn stop_with(name: &str, how: &(dyn Fn(&Session) + Sync)) -> (JobReport, Duration) {
+    let f = Fake {
+        delay: Duration::from_secs(20),
+        ..Fake::default()
+    };
+    let env = Env::new(name);
+    let mut s = sup(&f, &env, &format!("{}beat", get_fact()));
+    let sess = long();
+    let t = std::sync::Mutex::new(None);
+    let r = std::thread::scope(|sc| {
+        let s2 = sess.clone();
+        let ff = &f;
+        let t = &t;
+        sc.spawn(move || {
+            while ff.calls().is_empty() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            *t.lock().unwrap() = Some(Instant::now());
+            how(&s2);
+        });
+        s.run(&task(&[A]), &sess)
+    });
+    let took = t.lock().unwrap().unwrap().elapsed();
+    all_dead(&r);
+    wiped(&r);
+    assert!(r.accepted.is_empty() && r.fetched.is_empty());
+    (r, took)
+}
+
+#[test]
+fn end_early_works_on_its_own_without_safeword_or_kill_switch() {
+    let (r, took) = stop_with("ind-end", &|s| s.end_early());
+    assert_eq!(r.stop, Some(StopReason::EndEarly));
+    assert!(took < Duration::from_secs(3), "{took:?}");
+}
+
+#[test]
+fn generic_stop_works_on_its_own_without_safeword_or_kill_switch() {
+    let (r, took) = stop_with("ind-stop", &|s| s.stop());
+    assert_eq!(r.stop, Some(StopReason::Stop));
+    assert!(took < Duration::from_secs(3), "{took:?}");
+}
+
+#[test]
+fn kill_switch_works_on_its_own_without_any_chat_line() {
+    let f = Fake {
+        delay: Duration::from_secs(20),
+        ..Fake::default()
+    };
+    let env = Env::new("ind-ks");
+    let fired = Arc::new(AtomicBool::new(false));
+    let probe = fired.clone();
+    let sess = Session::new("s-ind-ks", Duration::from_secs(600))
+        .with_kill_switch_probe(Arc::new(move || probe.load(Ordering::SeqCst)));
+    let mut s = sup(&f, &env, &format!("{}beat", get_fact()));
+    let t = Mutex::new(None);
+    let r = std::thread::scope(|sc| {
+        let ff = &f;
+        let fired = &fired;
+        let t = &t;
+        sc.spawn(move || {
+            while ff.calls().is_empty() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            *t.lock().unwrap() = Some(Instant::now());
+            fired.store(true, Ordering::SeqCst);
+        });
+        s.run(&task(&[A]), &sess)
+    });
+    assert_eq!(r.stop, Some(StopReason::KillSwitch));
+    let took = t.lock().unwrap().unwrap().elapsed();
+    assert!(took < Duration::from_secs(3), "{took:?}");
+    all_dead(&r);
+    wiped(&r);
+}
+
+#[test]
+fn safeword_still_works_alongside_the_independent_stops() {
+    for word in ["red", "OOC: stop"] {
+        let (r, took) = stop_with("ind-sw", &|s| {
+            assert!(s.observe_chat(word));
+        });
+        assert_eq!(r.stop, Some(StopReason::Safeword), "{word}");
+        assert!(took < Duration::from_secs(3), "{word}: {took:?}");
+    }
+    assert!(lillith_core::access::kill_switch::is_safeword("red"));
+    assert!(!long().observe_chat("reduce the heat"));
+}
+
+#[test]
+fn worker_lines_carry_the_session_card() {
+    let f = Fake::default();
+    let env = Env::new("card");
+    let mut s = sup(&f, &env, &format!("{}fin", get_fact()));
+    let sess = long();
+    let r = s.run(&task(&[A]), &sess);
+    let card = format!("card={}", sess.card());
+    let lines: Vec<String> = env
+        .audit()
+        .lines()
+        .filter(|l| l.contains("\tWORKER\t"))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        lines.iter().any(|l| l.contains("\tWORKER\tstart\t")),
+        "{lines:?}"
+    );
+    assert!(
+        lines.iter().any(|l| l.contains("\tWORKER\tspawn\t")),
+        "{lines:?}"
+    );
+    for l in &lines {
+        assert!(l.ends_with(&card), "{l}");
+    }
+    all_dead(&r);
+}
+
+#[test]
+fn unwritable_worker_audit_refuses_before_any_spawn() {
+    let f = Fake::default();
+    let env = Env::new("s2");
+    // A directory where the log file should be: every append fails.
+    let bad = env.dir.join("audit-is-a-dir");
+    std::fs::create_dir_all(&bad).unwrap();
+    let mut s = sup(&f, &env, &format!("{}fin", get_fact())).with_audit_log(Some(bad));
+    let sess = long();
+    let r = s.run(&task(&[A]), &sess);
+    assert!(r.pids.is_empty(), "nothing spawned: {r:?}");
+    assert!(f.calls().is_empty());
+    assert_ne!(r.status, JobStatus::Done, "{r:?}");
+    assert_eq!(sess.stop_reason(), Some(StopReason::AuditFailed));
+}
+
+#[test]
+fn https_to_http_redirect_is_refused_by_the_supervisor_even_with_allow_http() {
+    let mut cfg = on();
+    cfg.learn.allow_http = true;
+    let f = Fake {
+        redirect_to: Some("http://docs.example.org/plain".into()),
+        ..Fake::default()
+    };
+    let env = Env::new("s1");
+    let out = env.dir.join("reply");
+    let script = format!(
+        "get \"{A}\"\nprintf '%s' \"$reply\" > '{}'\nfin",
+        out.display()
+    );
+    let mut s = sup_with(&cfg, &f, &env, &script);
+    let r = s.run(&task(&[A]), &long());
+    let reply = std::fs::read_to_string(&out).unwrap_or_default();
+    assert!(reply.contains("\"error\""), "{reply}");
+    assert!(reply.contains("redirect refused"), "{reply}");
+    assert!(!reply.contains("\"redirect\""), "{reply}");
+    assert_eq!(f.calls().len(), 1, "the http URL is never fetched");
+    all_dead(&r);
+}
+
+#[test]
+fn server_error_text_is_sanitised() {
+    let deny = crate::online::IdentityDenylist::empty().with_names(["Ko Kannadian"]);
+    let long_line = "x".repeat(1000);
+    assert_eq!(
+        clean_error(&long_line, &deny).len(),
+        MAX_ERROR_TEXT,
+        "capped"
+    );
+    let c = clean_error("bad\x1b[31m gateway\x07\nsecond line", &deny);
+    assert!(!c.chars().any(char::is_control), "{c:?}");
+    assert!(c.starts_with("bad") && !c.contains("second"), "{c:?}");
+    let c = clean_error("not found for Ko Kannadian", &deny);
+    assert!(!c.contains("Kannadian") && c.contains("withheld"), "{c:?}");
+    assert_eq!(clean_error("\n\n", &deny), "error");
+}
+
+#[test]
+fn with_limits_only_tightens() {
+    let f = Fake::default();
+    let env = Env::new("n5");
+    let base = WorkerLimits::from_config(&on().learn.workers);
+    let loose = WorkerLimits {
+        heartbeat: base.heartbeat * 10,
+        missed_heartbeats_kill: base.missed_heartbeats_kill + 10,
+        max_restarts: base.max_restarts + 10,
+        backoff_base: Duration::ZERO,
+        breaker_failures: base.breaker_failures + 10,
+        breaker_open: Duration::ZERO,
+    };
+    assert_eq!(base.tightened(&loose), base, "nothing loosens");
+    let tight = WorkerLimits {
+        heartbeat: base.heartbeat / 2,
+        missed_heartbeats_kill: 1,
+        max_restarts: 0,
+        backoff_base: base.backoff_base * 2,
+        breaker_failures: 1,
+        breaker_open: base.breaker_open * 2,
+    };
+    assert_eq!(base.tightened(&tight), tight, "everything tightens");
+    // Through the public builder too.
+    let cmd = WorkerCommand::unsandboxed("/bin/sh", vec!["-c".into(), "true".into()]);
+    let s = Supervisor::new(&on(), &f, &[], cmd)
+        .unwrap()
+        .with_limits(loose);
+    assert_eq!(s.limits(), &base);
+    drop(env);
+}
+
+#[test]
+fn stale_scratch_is_swept_when_a_supervisor_starts() {
+    let root = super::scratch::tmpfs_root().unwrap_or_else(std::env::temp_dir);
+    // A dead pid (pid_max is far below this).
+    let dead = root.join(format!("lillith-worker-p4194999-w-dead-{}", random_token()));
+    std::fs::create_dir_all(&dead).unwrap();
+    let f = Fake::default();
+    let cmd = WorkerCommand::unsandboxed("/bin/sh", vec!["-c".into(), "true".into()]);
+    let _s = Supervisor::new(&on(), &f, &[], cmd).unwrap();
+    assert!(!dead.exists(), "swept at start");
 }

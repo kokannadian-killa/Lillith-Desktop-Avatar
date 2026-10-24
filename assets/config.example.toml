@@ -324,7 +324,7 @@
 # tor_socks = "127.0.0.1:9050"
 # allow_http = false     # online trips fetch https:// only; plain http:// can be read
 #                        # or changed by the Tor exit node. Leave off unless needed.
-# practice = true
+# practice = false       # P4 practice sandbox; opt-in, each compile / run needs a card
 # [learn.dream]
 # min_minutes = 30
 # max_minutes = 480

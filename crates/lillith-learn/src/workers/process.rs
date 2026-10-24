@@ -250,7 +250,13 @@ impl WorkerProc {
         self.stdin = None;
         #[cfg(unix)]
         {
-            // The child leads its own group (pgid = pid).
+            // The child leads its own group (pgid = pid). Under bwrap this
+            // reaches only bwrap's own group: `--new-session` puts the
+            // sandboxed worker in a new session (and so a new group) inside
+            // a new pid namespace. The worker dies anyway: bwrap runs it
+            // with `--die-with-parent` (PR_SET_PDEATHSIG on the inner
+            // process when bwrap goes) and killing bwrap, the pid
+            // namespace's init, kills everything in that namespace.
             let pgid = self.child.id() as libc::pid_t;
             // SAFETY: plain syscall; a stale pgid only fails with ESRCH.
             unsafe {
@@ -346,43 +352,18 @@ fn child_setup(parent: u32) -> std::io::Result<()> {
 }
 
 /// Installs a seccomp filter on the calling thread that makes `execve` and
-/// `execveat` fail with `EPERM` (and kills on a foreign syscall ABI). The
-/// worker binary calls this right after it starts; nothing it does later
-/// can run a program. Linux x86_64 / aarch64 only.
+/// `execveat` fail with `EPERM`, and kills the process on any other
+/// architecture's syscall (a foreign `AUDIT_ARCH`, e.g. i386 via `int 0x80`)
+/// or an x86_64 x32-ABI syscall (`nr` with bit 30 set), so neither can
+/// reach exec under another number. The worker binary calls this right
+/// after it starts; nothing it does later can run a program. Linux x86_64 /
+/// aarch64 only.
 #[cfg(all(
     target_os = "linux",
     any(target_arch = "x86_64", target_arch = "aarch64")
 ))]
 pub fn deny_exec_after_start() -> std::io::Result<()> {
-    // BPF_LD | BPF_W | BPF_ABS (BPF_LD = BPF_W = 0).
-    const LD_W_ABS: u16 = 0x20;
-    const JEQ_K: u16 = 0x15; // BPF_JMP | BPF_JEQ | BPF_K
-    const JGE_K: u16 = 0x35; // BPF_JMP | BPF_JGE | BPF_K
-    const RET_K: u16 = 0x06;
-    const RET_ALLOW: u32 = 0x7fff_0000;
-    const RET_ERRNO: u32 = 0x0005_0000;
-    const RET_KILL_PROCESS: u32 = 0x8000_0000;
-    #[cfg(target_arch = "x86_64")]
-    const ARCH: u32 = 0xC000_003E;
-    #[cfg(target_arch = "aarch64")]
-    const ARCH: u32 = 0xC000_00B7;
-    // x86_64: x32 syscalls carry bit 30; aarch64 has no such ABI.
-    #[cfg(target_arch = "x86_64")]
-    const FOREIGN: u32 = 0x4000_0000;
-    #[cfg(target_arch = "aarch64")]
-    const FOREIGN: u32 = u32::MAX;
-    let f = |code, jt, jf, k| libc::sock_filter { code, jt, jf, k };
-    let mut prog = [
-        f(LD_W_ABS, 0, 0, 4), // arch
-        f(JEQ_K, 1, 0, ARCH),
-        f(RET_K, 0, 0, RET_KILL_PROCESS),
-        f(LD_W_ABS, 0, 0, 0), // nr
-        f(JGE_K, 3, 0, FOREIGN),
-        f(JEQ_K, 2, 0, libc::SYS_execve as u32),
-        f(JEQ_K, 1, 0, libc::SYS_execveat as u32),
-        f(RET_K, 0, 0, RET_ALLOW),
-        f(RET_K, 0, 0, RET_ERRNO | libc::EPERM as u32),
-    ];
+    let mut prog = exec_filter();
     let fprog = libc::sock_fprog {
         len: prog.len() as libc::c_ushort,
         filter: prog.as_mut_ptr(),
@@ -404,6 +385,61 @@ pub fn deny_exec_after_start() -> std::io::Result<()> {
     Ok(())
 }
 
+/// `SECCOMP_RET_ALLOW`.
+#[cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+const RET_ALLOW: u32 = 0x7fff_0000;
+/// `SECCOMP_RET_ERRNO` (the errno goes in the low 16 bits).
+#[cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+const RET_ERRNO: u32 = 0x0005_0000;
+/// `SECCOMP_RET_KILL_PROCESS`.
+#[cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+const RET_KILL_PROCESS: u32 = 0x8000_0000;
+
+/// The BPF program [`deny_exec_after_start`] installs.
+#[cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+fn exec_filter() -> Vec<libc::sock_filter> {
+    // BPF_LD | BPF_W | BPF_ABS (BPF_LD = BPF_W = 0).
+    const LD_W_ABS: u16 = 0x20;
+    const JEQ_K: u16 = 0x15; // BPF_JMP | BPF_JEQ | BPF_K
+    const JGE_K: u16 = 0x35; // BPF_JMP | BPF_JGE | BPF_K
+    const RET_K: u16 = 0x06;
+    #[cfg(target_arch = "x86_64")]
+    const ARCH: u32 = 0xC000_003E;
+    #[cfg(target_arch = "aarch64")]
+    const ARCH: u32 = 0xC000_00B7;
+    // x86_64: x32 syscalls carry bit 30; aarch64 has no such ABI.
+    #[cfg(target_arch = "x86_64")]
+    const FOREIGN: u32 = 0x4000_0000;
+    #[cfg(target_arch = "aarch64")]
+    const FOREIGN: u32 = u32::MAX;
+    let f = |code, jt, jf, k| libc::sock_filter { code, jt, jf, k };
+    // Jump offsets count from the next instruction.
+    vec![
+        f(LD_W_ABS, 0, 0, 4),                           // 0: arch
+        f(JEQ_K, 1, 0, ARCH),                           // 1: ours → 3
+        f(RET_K, 0, 0, RET_KILL_PROCESS),               // 2: foreign arch → kill
+        f(LD_W_ABS, 0, 0, 0),                           // 3: nr
+        f(JGE_K, 0, 1, FOREIGN),                        // 4: x32 → 5, else 6
+        f(RET_K, 0, 0, RET_KILL_PROCESS),               // 5: x32 ABI → kill
+        f(JEQ_K, 2, 0, libc::SYS_execve as u32),        // 6: → 9
+        f(JEQ_K, 1, 0, libc::SYS_execveat as u32),      // 7: → 9
+        f(RET_K, 0, 0, RET_ALLOW),                      // 8
+        f(RET_K, 0, 0, RET_ERRNO | libc::EPERM as u32), // 9
+    ]
+}
+
 /// Elsewhere there is no seccomp: helper workers stay off.
 #[cfg(not(all(
     target_os = "linux",
@@ -420,6 +456,54 @@ pub fn deny_exec_after_start() -> std::io::Result<()> {
 mod tests {
     use super::*;
     use std::time::Instant;
+
+    /// A tiny classic-BPF interpreter for the instructions the filter uses.
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    fn run_bpf(prog: &[libc::sock_filter], arch: u32, nr: u32) -> u32 {
+        let (mut acc, mut pc) = (0u32, 0usize);
+        loop {
+            let i = prog[pc];
+            let jump = |taken: bool| 1 + usize::from(if taken { i.jt } else { i.jf });
+            match i.code {
+                0x20 => {
+                    acc = match i.k {
+                        0 => nr,
+                        4 => arch,
+                        k => panic!("load of offset {k}"),
+                    };
+                    pc += 1;
+                }
+                0x15 => pc += jump(acc == i.k),
+                0x35 => pc += jump(acc >= i.k),
+                0x06 => return i.k,
+                c => panic!("opcode {c:#x}"),
+            }
+        }
+    }
+
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    #[test]
+    fn seccomp_filter_denies_exec_and_kills_foreign_abis() {
+        let prog = exec_filter();
+        #[cfg(target_arch = "x86_64")]
+        let arch = 0xC000_003E;
+        #[cfg(target_arch = "aarch64")]
+        let arch = 0xC000_00B7;
+        let eperm = RET_ERRNO | libc::EPERM as u32;
+        assert_eq!(run_bpf(&prog, arch, libc::SYS_execve as u32), eperm);
+        assert_eq!(run_bpf(&prog, arch, libc::SYS_execveat as u32), eperm);
+        assert_eq!(run_bpf(&prog, arch, libc::SYS_read as u32), RET_ALLOW);
+        assert_eq!(run_bpf(&prog, arch, libc::SYS_write as u32), RET_ALLOW);
+        // i386 (AUDIT_ARCH_I386) syscalls: killed, whatever the number.
+        assert_eq!(run_bpf(&prog, 0x4000_0003, 11), RET_KILL_PROCESS);
+        assert_eq!(run_bpf(&prog, 0x4000_0003, 3), RET_KILL_PROCESS);
+        #[cfg(target_arch = "x86_64")]
+        {
+            // x32 execve (520 | __X32_SYSCALL_BIT) and any other x32 call.
+            assert_eq!(run_bpf(&prog, arch, 0x4000_0208), RET_KILL_PROCESS);
+            assert_eq!(run_bpf(&prog, arch, 0x4000_0000), RET_KILL_PROCESS);
+        }
+    }
 
     fn sh(script: &str) -> WorkerCommand {
         WorkerCommand::unsandboxed("/bin/sh", vec!["-c".into(), script.into()])
@@ -623,6 +707,9 @@ pub enum SandboxEnd {
     /// It outlived the parent's own hard wall (the in-sandbox `timeout`
     /// should have fired first): killed, output discarded.
     WallKilled,
+    /// The watchdog saw its folder over the size cap: the whole group was
+    /// killed the moment it did, output discarded.
+    OverCap,
 }
 
 /// Runs one fully built sandbox argv (`bwrap … -- prlimit … timeout …`):
@@ -631,13 +718,29 @@ pub enum SandboxEnd {
 /// stdout / stderr kept up to `out_cap` bytes each. `stop` is polled every
 /// 20 ms: a reason kills the whole group (SIGKILL) and discards the output;
 /// so does running past `hard_wall`. Only [`super::build`] calls this, and
-/// only with an argv that starts with `bwrap`.
+/// only with an argv that starts with `bwrap`. Tests only: production
+/// always goes through [`run_sandboxed_watched`] (the size watchdog).
+#[cfg(test)]
 pub(crate) fn run_sandboxed(
     argv: &[String],
     cwd: &Path,
     out_cap: usize,
     hard_wall: Duration,
     stop: &dyn Fn() -> Option<super::StopReason>,
+) -> std::io::Result<SandboxEnd> {
+    run_sandboxed_watched(argv, cwd, out_cap, hard_wall, stop, &|| false)
+}
+
+/// [`run_sandboxed`] plus a watchdog: `over_cap` is polled with `stop`
+/// (every 20 ms); `true` kills the whole group at once
+/// ([`SandboxEnd::OverCap`]).
+pub(crate) fn run_sandboxed_watched(
+    argv: &[String],
+    cwd: &Path,
+    out_cap: usize,
+    hard_wall: Duration,
+    stop: &dyn Fn() -> Option<super::StopReason>,
+    over_cap: &dyn Fn() -> bool,
 ) -> std::io::Result<SandboxEnd> {
     let Some((prog, args)) = argv.split_first() else {
         return Err(std::io::Error::new(
@@ -703,6 +806,10 @@ pub(crate) fn run_sandboxed(
             kill(&mut child);
             return Ok(SandboxEnd::WallKilled);
         }
+        if over_cap() {
+            kill(&mut child);
+            return Ok(SandboxEnd::OverCap);
+        }
         match child.try_wait() {
             Ok(Some(s)) => break s,
             Ok(None) => std::thread::sleep(Duration::from_millis(20)),
@@ -720,6 +827,11 @@ pub(crate) fn run_sandboxed(
         libc::killpg(child.id() as libc::pid_t, libc::SIGKILL);
     }
     let (mut out, mut err, mut truncated) = (Vec::new(), Vec::new(), false);
+    // The readers finish when the pipes close, which is right away once
+    // bwrap and its pid namespace are gone. The 5 s bound is only for a
+    // pipe some escaped holder still keeps open: we stop waiting (and keep
+    // what was read) instead of hanging the step; the reader thread exits
+    // on its own when that holder dies.
     for _ in 0..2 {
         match rx.recv_timeout(Duration::from_secs(5)) {
             Ok((true, b, t)) => {

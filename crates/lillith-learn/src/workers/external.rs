@@ -9,6 +9,7 @@
 //! ([`send`] always refuses), but the request shape and the validation of
 //! returned results are fixed here.
 
+use super::supervisor::Session;
 use crate::online::IdentityDenylist;
 use std::time::{Duration, SystemTime};
 
@@ -24,18 +25,14 @@ pub enum Backend {
 pub const EXTERNAL_LABEL: &str = "external (TaskCompletion bot)";
 
 impl Backend {
-    /// Local unless the config allows it, Ko ticked it for this session,
-    /// the safeword has not fired, and a bot is named.
-    pub fn choose(
-        external_bots: bool,
-        session_ticked: bool,
-        safeword_fired: bool,
-        bot_id: Option<&str>,
-    ) -> Backend {
+    /// Local unless the config allows it (`[learn.dream] external_bots`),
+    /// Ko ticked "also use my TaskCompletion bots" on **this session's
+    /// card** ([`Session::external_allowed`]; the tick comes from the card,
+    /// never from a caller), nothing (the safeword, End early, the kill
+    /// switch, any stop) has stopped the session, and a bot is named.
+    pub fn choose(external_bots: bool, session: &Session, bot_id: Option<&str>) -> Backend {
         match bot_id {
-            Some(b)
-                if external_bots && session_ticked && !safeword_fired && !b.trim().is_empty() =>
-            {
+            Some(b) if external_bots && session.external_allowed() && !b.trim().is_empty() => {
                 Backend::External {
                     bot_id: b.trim().to_string(),
                 }
@@ -273,20 +270,22 @@ mod tests {
 
     #[test]
     fn external_is_off_unless_config_and_session_tick_and_no_safeword() {
-        assert_eq!(
-            Backend::choose(false, true, false, Some("b1")),
-            Backend::Local
-        );
-        assert_eq!(
-            Backend::choose(true, false, false, Some("b1")),
-            Backend::Local
-        );
-        assert_eq!(
-            Backend::choose(true, true, true, Some("b1")),
-            Backend::Local
-        );
-        assert_eq!(Backend::choose(true, true, false, None), Backend::Local);
-        let e = Backend::choose(true, true, false, Some("b1"));
+        let s = |tick: bool| {
+            Session::new("s-x", Duration::from_secs(600))
+                .with_kill_switch_probe(std::sync::Arc::new(|| false))
+                .with_external_tick(tick)
+        };
+        assert_eq!(Backend::choose(false, &s(true), Some("b1")), Backend::Local);
+        assert_eq!(Backend::choose(true, &s(false), Some("b1")), Backend::Local);
+        assert_eq!(Backend::choose(true, &s(true), None), Backend::Local);
+        // The safeword (or any stop) disables external for the rest of it.
+        let fired = s(true);
+        assert!(fired.observe_chat("red"));
+        assert_eq!(Backend::choose(true, &fired, Some("b1")), Backend::Local);
+        let ended = s(true);
+        ended.end_early();
+        assert_eq!(Backend::choose(true, &ended, Some("b1")), Backend::Local);
+        let e = Backend::choose(true, &s(true), Some("b1"));
         assert_eq!(
             e,
             Backend::External {

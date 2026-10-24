@@ -158,6 +158,48 @@ const PYTHON_TOKENS: &[&str] = &[
     "code",
     "codecs",
     "webbrowser",
+    // Modules that reach the same through another name (review N2-1).
+    "posixpath",
+    "ntpath",
+    "genericpath",
+    "fcntl",
+    "mmap",
+    "resource",
+    "socketserver",
+    "xmlrpc",
+    "termios",
+    "tty",
+    "inspect",
+    "gc",
+];
+
+/// The only Python names starting with `_` a practice program may use: a
+/// plain `_` and these harmless dunders. Every other `_name` is refused
+/// (`_socket`, `_posixsubprocess`, `_io`, `__class__`, …: the C modules and
+/// introspection under the public ones).
+const PYTHON_UNDERSCORE_OK: &[&str] = &[
+    "_",
+    "__name__",
+    "__main__",
+    "__init__",
+    "__str__",
+    "__repr__",
+    "__eq__",
+    "__ne__",
+    "__lt__",
+    "__le__",
+    "__gt__",
+    "__ge__",
+    "__len__",
+    "__iter__",
+    "__next__",
+    "__add__",
+    "__hash__",
+    "__enter__",
+    "__exit__",
+    "__doc__",
+    "__contains__",
+    "__getitem__",
 ];
 
 /// fish: the only commands a practice script may run (all builtins or
@@ -231,6 +273,15 @@ pub fn check(lang: Lang, src: &str) -> Result<(), Rejected> {
         Lang::Python => {
             if let Some(t) = hit(PYTHON_TOKENS) {
                 return reject(&t, "a Python process, network, FFI or dynamic-code path");
+            }
+            if let Some(t) = toks
+                .iter()
+                .find(|t| t.starts_with('_') && !PYTHON_UNDERSCORE_OK.contains(&t.as_str()))
+            {
+                return reject(
+                    t,
+                    "a Python private or dunder name (C modules, introspection)",
+                );
             }
         }
         Lang::Fish => {
@@ -382,6 +433,63 @@ mod tests {
         ] {
             rejects(Lang::Fish, src);
         }
+    }
+
+    #[test]
+    fn python_underscore_modules_and_path_aliases_are_refused() {
+        for src in [
+            "import _socket
+",
+            "import _posixsubprocess
+",
+            "import _io
+_io.FileIO('/x', 'w')
+",
+            "from _thread import start_new_thread
+",
+            "x = ().__class__
+",
+            "print(type(1).__mro__)
+",
+            "def _helper():
+    pass
+",
+            "import posixpath
+",
+            "import ntpath
+",
+            "import fcntl
+",
+            "import mmap
+",
+            "import resource
+",
+            "import socketserver
+",
+            "import xmlrpc.client
+",
+            "import inspect
+",
+            "import gc
+",
+        ] {
+            rejects(Lang::Python, src);
+        }
+        // Plain `_` and the harmless dunders still pass.
+        check(
+            Lang::Python,
+            "class P:
+    def __init__(self, n):
+        self.n = n
+    def __repr__(self):
+        return 'P'
+for _ in range(2):
+    pass
+if __name__ == '__main__':
+    print(P(1))
+",
+        )
+        .unwrap();
     }
 
     #[test]

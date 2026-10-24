@@ -41,6 +41,7 @@
 
 pub mod breaker;
 pub mod build;
+pub mod dream;
 pub mod external;
 pub mod joblog;
 pub mod policy;
@@ -59,6 +60,10 @@ pub use breaker::{Breakers, ErrorMemory};
 pub use build::{
     BuildBudgets, BuildError, BuildJob, BuildStep, CardApproval, NetworkPolicy, Practice,
     PracticeOff, SandboxAnswer, SandboxCardRequest, SandboxConsent,
+};
+pub use dream::{
+    propose_session, DreamRefused, SessionAnswer, SessionApproval, SessionCardRequest,
+    SessionConsent,
 };
 pub use external::{Backend, ExternalBudget, ExternalRequest};
 pub use joblog::{JobEntry, JobLog, JobStatus};
@@ -104,9 +109,16 @@ impl WorkerKind {
 /// Why every worker of a session stops at once. All of them kill the
 /// workers and discard in-flight work. Battery / thermal detection belongs
 /// to the dream orchestration; it only reports the reason here.
+///
+/// Each stop works on its own: the safeword ("red" / "OOC: stop" seen by
+/// [`supervisor::Session::observe_chat`] or in a task topic), End early
+/// ([`supervisor::Session::end_early`]), the process-wide kill switch
+/// (`lillith_core::access::kill_switch::stop_all`, reported as
+/// [`StopReason::KillSwitch`]) and the generic stop
+/// ([`supervisor::Session::stop`]) never go through one another.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StopReason {
-    /// "red" / "OOC: stop", or the process-wide kill switch.
+    /// "red" / "OOC: stop" in chat or in a task topic.
     Safeword,
     /// End early (right-click menu / tray).
     EndEarly,
@@ -118,16 +130,27 @@ pub enum StopReason {
     LowBattery,
     /// `[learn.dream] stop_cpu_temp_c`.
     Thermal,
+    /// The process-wide kill switch fired (whatever triggered it).
+    KillSwitch,
+    /// A plain stop (the panel's Stop, the CLI, the app's own shutdown of
+    /// the dream subsystem).
+    Stop,
+    /// A `WORKER` / `DREAM` audit line could not be written: no unaudited
+    /// work goes on (fail closed).
+    AuditFailed,
 }
 
 impl StopReason {
-    pub const ALL: [StopReason; 6] = [
+    pub const ALL: [StopReason; 9] = [
         StopReason::Safeword,
         StopReason::EndEarly,
         StopReason::SessionDeadline,
         StopReason::ParentExit,
         StopReason::LowBattery,
         StopReason::Thermal,
+        StopReason::KillSwitch,
+        StopReason::Stop,
+        StopReason::AuditFailed,
     ];
 
     pub fn word(self) -> &'static str {
@@ -138,6 +161,9 @@ impl StopReason {
             StopReason::ParentExit => "parent_exit",
             StopReason::LowBattery => "low_battery",
             StopReason::Thermal => "thermal",
+            StopReason::KillSwitch => "kill_switch",
+            StopReason::Stop => "stop",
+            StopReason::AuditFailed => "audit_failed",
         }
     }
 
@@ -178,6 +204,27 @@ pub struct WorkerLimits {
 }
 
 impl WorkerLimits {
+    /// The stricter of `self` and `other`, field by field: shorter
+    /// heartbeat, fewer missed beats and restarts, a longer backoff, fewer
+    /// failures before a breaker opens, a longer open time. Callers can only
+    /// tighten.
+    pub fn tightened(&self, other: &WorkerLimits) -> WorkerLimits {
+        WorkerLimits {
+            heartbeat: self
+                .heartbeat
+                .min(other.heartbeat)
+                .max(Duration::from_millis(1)),
+            missed_heartbeats_kill: self
+                .missed_heartbeats_kill
+                .min(other.missed_heartbeats_kill)
+                .max(1),
+            max_restarts: self.max_restarts.min(other.max_restarts),
+            backoff_base: self.backoff_base.max(other.backoff_base),
+            breaker_failures: self.breaker_failures.min(other.breaker_failures).max(1),
+            breaker_open: self.breaker_open.max(other.breaker_open),
+        }
+    }
+
     pub fn from_config(w: &LearnWorkersConfig) -> Self {
         Self {
             heartbeat: Duration::from_secs(u64::from(w.heartbeat_s.max(1))),
@@ -323,16 +370,20 @@ pub fn random_token() -> String {
     format!("{:016x}{:016x}", random_u64(), random_u64())
 }
 
-/// `<ts>\tWORKER\t<op>\t<reason>\tjob=<id>` (§12).
-pub fn audit_line(t: f64, op: &str, reason: &str, job: &str) -> String {
+/// `<ts>\tWORKER\t<op>\t<reason>\tjob=<id>[\tcard=<id>]` (§12; the card is
+/// the dream-session or sandbox card the work runs under).
+pub fn audit_line(t: f64, op: &str, reason: &str, job: &str, card: Option<&str>) -> String {
     let col = |s: &str| {
         lillith_core::launch_audit::one_column(s)
             .chars()
             .take(256)
             .collect::<String>()
     };
+    let card = card
+        .map(|c| format!("\tcard={}", col(c)))
+        .unwrap_or_default();
     format!(
-        "{}\tWORKER\t{}\t{}\tjob={}\n",
+        "{}\tWORKER\t{}\t{}\tjob={}{card}\n",
         crate::audit::utc(t),
         col(op),
         col(reason),

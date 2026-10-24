@@ -384,17 +384,21 @@ approved).
 
 Purpose: generate a tiny program from a how-to note, compile it, run it,
 record success as a skill (`skills/<slug>.md` with the code, the command and
-the observed output).
+the observed output). The skill is its own `PendingAction::WriteSkill` card
+after a successful run, written only on its click through the Soul
+Contract's confirm, into `[mind] skills_dir`; with `[mind]` off nothing is
+written.
 
 Isolation (Linux; Windows: practice disabled in P4):
 
 ```
 bwrap --unshare-all --die-with-parent --new-session \
       --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 \
-      --symlink usr/bin /bin --proc /proc --dev /dev --tmpfs /tmp \
+      --symlink usr/bin /bin --proc /proc --dev /dev --size <scratch> --tmpfs /tmp \
       --bind ~/.local/share/lillith/sandbox/<job> /work --chdir /work \
       --setenv CARGO_NET_OFFLINE true --clearenv-like minimal env \
-      -- prlimit --as=512M --cpu=20 --nproc=64 --fsize=16M \
+      [--ro-bind <rustup sysroot> /opt/rust] \
+      -- prlimit --as=512M --cpu=20 --nproc=64 --fsize=16M --nofile=64 --core=0 \
          timeout -k 2 30 <compile-or-run argv>
 ```
 
@@ -403,7 +407,9 @@ bwrap --unshare-all --die-with-parent --new-session \
   Landlock is available to restrict writes; otherwise practice stays off
   (never a weaker sandbox).
 - Writes only in `sandbox/<job>/` (deleted after the run; kept on failure
-  for the panel, capped at 20 dirs / 50 MiB). Run with `nice 19`, `ionice -c3`.
+  for the panel, capped at 20 dirs / 50 MiB; only dirs marked failed are
+  pruned). A watchdog kills the group the moment `sandbox/<job>/` goes over
+  its size cap. Run with `nice 19`, `ionice -c3`.
 - Toolchain: `rustc --edition 2021 -C opt-level=0 main.rs` (single file, no
   cargo, no crates), `python3 -I -S main.py`, `fish -n` / `fish`. Nothing is
   installed by the sandbox itself. Generated code is rejected before compile
@@ -414,6 +420,9 @@ bwrap --unshare-all --die-with-parent --new-session \
 **Approval (D2 = A, Ko: "sandbox is user gate").** Every compile and every
 run files a `PendingAction::SandboxRun { argv, job, card }` Soul Contract
 card. Only a **mouse click on Yes** runs it; typed/spoken yes never counts.
+The approval is bound to the SHA-256 of the exact argv on the card (and of
+the source); anything else refuses to run. `PROPOSED`, `CONFIRM`, the start
+line and the D8 job log are fail-closed.
 Audit: `PROPOSED` / `CONFIRM` / `DENY` / `TIMEOUT` / `CANCELLED` with
 `card=<id>` and the argv. Standing approval (old option B) is **removed**.
 Batching (old option C) may remain only as a **queue of proposals** in the
@@ -773,7 +782,7 @@ online = true                     # master switch; still needs Tor + a card per 
 online_max_pages = 5
 online_max_bytes = 2097152
 tor_socks = "127.0.0.1:9050"
-practice = true                   # P4; each run still needs a card (D2 = A)
+practice = false                  # P4; opt-in (review N2-2); each run still needs a card (D2 = A)
 
 [learn.dream]                     # §11, decided by Ko; only when Ko starts it
 min_minutes = 30
