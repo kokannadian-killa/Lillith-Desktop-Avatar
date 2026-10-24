@@ -1196,7 +1196,7 @@ impl SoulContract {
     ///   [`ContractError::NeedsSignature`]; still pending).
     ///
     /// Every item is audited `APPROVED`/`DECLINED` and then `RESULT-OK` /
-    /// `RESULT-ERR` / `RESULT-STOPPED` (the safeword killed it); `plans.log`
+    /// `RESULT-ERR` / `RESULT-STOPPED` (Ctrl-C / shutdown killed it); `plans.log`
     /// gets the whole story.
     ///
     /// [`ChangePlan::deletion_manifest`]: crate::access::plan::ChangePlan::deletion_manifest
@@ -1259,7 +1259,7 @@ impl SoulContract {
                 Some((_, r @ Ok(o))) => {
                     self.audit_line(result_label(r), it.req.op(), &it.line);
                     if crate::access::commands::was_stopped(o) {
-                        format!("{}. STOPPED by the safeword: {}", it.n, o.trim_end())
+                        format!("{}. STOPPED by Ctrl-C/shutdown: {}", it.n, o.trim_end())
                     } else {
                         format!("{}. done: {}", it.n, o.trim_end())
                     }
@@ -3097,9 +3097,9 @@ mod tests {
     }
 
     #[test]
-    fn safeword_stopped_results_audit_as_stopped_not_ok() {
+    fn stopped_results_audit_as_stopped_not_ok() {
         assert_eq!(
-            result_label(&Ok("partial\n[stopped by the safeword]".into())),
+            result_label(&Ok("partial\n[stopped by Ctrl-C/shutdown]".into())),
             "RESULT-STOPPED"
         );
         assert_eq!(result_label(&Ok("hi\n[exit 0]".into())), "RESULT-OK");
