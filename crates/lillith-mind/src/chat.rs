@@ -41,6 +41,13 @@ impl Outcome {
 #[derive(Debug)]
 pub struct ChatSession {
     client: Option<LlmClient>,
+    /// `[chat]` when it may (re)spawn llama-server itself (`[chat.server]`
+    /// configured): the restart recovery step. `None`: never restarts.
+    restart: Option<ChatConfig>,
+    /// A llama-server this session restarted (stopped with the session).
+    own_server: Option<crate::server::LlamaServer>,
+    /// Pauses before each retry of an unreachable / loading server.
+    retry_backoff: Vec<Duration>,
     system_prompt: String,
     opts: ChatOptions,
     history_turns: usize,
@@ -92,6 +99,13 @@ pub const TOOL_RESULT_MAX: usize = 6000;
 /// Most messages kept on disk.
 const MAX_SAVED: usize = 200;
 
+/// Default pauses before retrying an unreachable / loading llama-server.
+pub const DEFAULT_RETRY_BACKOFF: [Duration; 2] =
+    [Duration::from_millis(400), Duration::from_millis(1200)];
+
+/// Longest wait for a restarted llama-server to load its model.
+const RESTART_WAIT_MAX: Duration = Duration::from_secs(90);
+
 impl ChatSession {
     /// Session for `cfg`. `offline` (= `--no-llm`) answers every message
     /// with [`persona::OFFLINE_LINE`] without touching the network.
@@ -118,8 +132,12 @@ impl ChatSession {
             &cfg.system_prompt,
             persona::default_llm_system_prompt().as_deref(),
         );
+        let restart = (!offline && cfg.enabled && cfg.server.should_spawn()).then(|| cfg.clone());
         Self {
             client,
+            restart,
+            own_server: None,
+            retry_backoff: DEFAULT_RETRY_BACKOFF.to_vec(),
             system_prompt,
             opts: ChatOptions {
                 temperature: cfg.temperature,
@@ -155,6 +173,13 @@ impl ChatSession {
                 Err(e) => tracing::warn!("[memory] could not open the memory db: {e}"),
             }
         }
+        self
+    }
+
+    /// Pauses before each retry when the server is unreachable or still
+    /// loading (default [`DEFAULT_RETRY_BACKOFF`]; empty = no retries).
+    pub fn with_retry_backoff(mut self, backoff: Vec<Duration>) -> Self {
+        self.retry_backoff = backoff;
         self
     }
 
@@ -508,7 +533,7 @@ impl ChatSession {
                     error: "chat disabled (--no-llm)".into(),
                 };
             }
-            Some(c) => c.chat_stream(&messages, self.opts, &mut on_token).await,
+            Some(_) => self.stream_recovering(&messages, &mut on_token).await,
         };
         match result {
             Ok(reply) if !reply.trim().is_empty() => {
@@ -593,6 +618,125 @@ impl ChatSession {
         if !notes.is_empty() {
             self.last_tool_op = first_op;
             self.last_tool_output = Some(notes.join("\n"));
+        }
+    }
+
+    /// One model call with error recovery: when the server is unreachable
+    /// or still loading and nothing was streamed yet, the failure is
+    /// remembered (stable signature) and the built-in safe fixes are tried
+    /// in the order error memory suggests: retry after a backoff, then (only
+    /// when `[chat.server]` lets her spawn it and nothing answers) restart
+    /// the local llama-server. Each outcome is recorded. Loopback only: the
+    /// same endpoint, nothing new is contacted. The first error is returned
+    /// when nothing worked, so the fallback line matches what happened.
+    async fn stream_recovering<F: FnMut(&str)>(
+        &mut self,
+        messages: &[Message],
+        on_token: &mut F,
+    ) -> Result<String, LlmError> {
+        use lillith_memory::recovery::{self, SafeFix};
+        let Some(client) = self.client.clone() else {
+            return Err(LlmError::Response("offline".into()));
+        };
+        let mut streamed = false;
+        let first = client
+            .chat_stream(messages, self.opts, &mut |t: &str| {
+                streamed = true;
+                on_token(t)
+            })
+            .await;
+        let text = match &first {
+            Err(LlmError::Status { status: 503, .. }) if !streamed => "llm: server loading",
+            Err(LlmError::Unreachable(_)) if !streamed => "llm: server unreachable",
+            _ => return first,
+        };
+        let mut candidates = Vec::new();
+        if !self.retry_backoff.is_empty() {
+            candidates.push(SafeFix::RetryBackoff);
+        }
+        if text == "llm: server unreachable" && self.restart.is_some() {
+            candidates.push(SafeFix::RestartLlamaServer);
+        }
+        if candidates.is_empty() {
+            return first;
+        }
+        let plan = recovery::begin(self.memory.as_ref(), text, "chat.llm", &candidates);
+        for fix in plan {
+            let attempt = match fix {
+                SafeFix::RetryBackoff => {
+                    let mut last = None;
+                    for pause in self.retry_backoff.clone() {
+                        tokio::time::sleep(pause).await;
+                        let r = client
+                            .chat_stream(messages, self.opts, &mut |t: &str| {
+                                streamed = true;
+                                on_token(t)
+                            })
+                            .await;
+                        let again = matches!(
+                            &r,
+                            Err(LlmError::Unreachable(_))
+                                | Err(LlmError::Status { status: 503, .. })
+                        );
+                        last = Some(r);
+                        if !again || streamed {
+                            break;
+                        }
+                    }
+                    last
+                }
+                SafeFix::RestartLlamaServer => {
+                    if self.restart_server().await {
+                        Some(
+                            client
+                                .chat_stream(messages, self.opts, &mut |t: &str| {
+                                    streamed = true;
+                                    on_token(t)
+                                })
+                                .await,
+                        )
+                    } else {
+                        None
+                    }
+                }
+                SafeFix::TextOnly => None,
+            };
+            let worked = matches!(&attempt, Some(Ok(r)) if !r.trim().is_empty());
+            recovery::finish(self.memory.as_ref(), text, fix, worked);
+            tracing::info!(fix = fix.as_str(), worked, "chat: recovery step");
+            match attempt {
+                Some(r) if worked || streamed => return r,
+                _ => {}
+            }
+        }
+        first
+    }
+
+    /// Restarts the configured local llama-server (the same spawn path as
+    /// startup) when nothing answers at the endpoint. `true` once it is ready.
+    async fn restart_server(&mut self) -> bool {
+        let Some(cfg) = self.restart.clone() else {
+            return false;
+        };
+        if crate::server::already_running(&cfg.endpoint).await {
+            return true;
+        }
+        if let Some(mut old) = self.own_server.take() {
+            old.shutdown();
+        }
+        match crate::server::LlamaServer::spawn(&cfg) {
+            Ok(mut s) => {
+                tracing::warn!(pid = ?s.pid(), "chat: llama-server was down; restarted it");
+                let wait = Duration::from_secs_f32(cfg.server.startup_timeout_s.max(1.0))
+                    .min(RESTART_WAIT_MAX);
+                let ok = s.wait_ready(&cfg.endpoint, wait).await.is_ok();
+                self.own_server = Some(s);
+                ok
+            }
+            Err(e) => {
+                tracing::warn!("chat: could not restart llama-server: {e}");
+                false
+            }
         }
     }
 
@@ -906,7 +1050,11 @@ mod tests {
     #[tokio::test]
     async fn anything_but_yes_cancels_a_pending_forget() {
         let (url, mut reqs) = fake_server(vec![sse_reply(&["Here's one."])]).await;
-        let mut s = ChatSession::new(&cfg(&url), false).with_brain(mem_brain());
+        // No retries: the late "yes" finds no server, and its error memory
+        // would add a node of its own.
+        let mut s = ChatSession::new(&cfg(&url), false)
+            .with_brain(mem_brain())
+            .with_retry_backoff(Vec::new());
         s.memory().unwrap().observe_interaction(
             "I love dark synthwave",
             "",
@@ -1071,6 +1219,65 @@ mod tests {
 
         let mut off = ChatSession::new(&ChatConfig::default(), true);
         assert_eq!(off.send("hi", |_| {}).await.text(), persona::OFFLINE_LINE);
+    }
+
+    #[tokio::test]
+    async fn loading_server_is_retried_and_the_fix_is_remembered() {
+        let body = "{\"error\":{\"code\":503,\"message\":\"Loading model\"}}";
+        let loading = format!(
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let (url, _r) = fake_server(vec![loading.clone(), sse_reply(&["Back", "~"])]).await;
+        let mut s = ChatSession::new(&cfg(&url), false)
+            .with_brain(mem_brain())
+            .with_retry_backoff(vec![Duration::from_millis(20), Duration::from_millis(20)]);
+        let mut shown = String::new();
+        let out = s.send("hi", |t| shown.push_str(t)).await;
+        assert_eq!(out, Outcome::Reply("Back~".into()));
+        assert_eq!(shown, "Back~", "only the real reply was streamed");
+        let k = s
+            .memory()
+            .unwrap()
+            .lookup_error("llm: server loading")
+            .unwrap();
+        assert_eq!(k.fix.as_deref(), Some("retry_backoff"));
+        assert_eq!((k.successes, k.failures), (1, 0));
+        // No restart offered: [chat.server] is not configured.
+        assert!(s.restart.is_none() && s.own_server.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_dead_server_records_the_failed_retry_and_falls_back() {
+        let port = {
+            let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            l.local_addr().unwrap().port()
+        };
+        let mut s = ChatSession::new(&cfg(&format!("http://127.0.0.1:{port}")), false)
+            .with_brain(mem_brain())
+            .with_retry_backoff(vec![Duration::from_millis(10)]);
+        for _ in 0..2 {
+            let out = s.send("hello?", |_| {}).await;
+            assert!(persona::SERVER_DOWN_LINES.contains(&out.text()), "{out:?}");
+        }
+        let k = s
+            .memory()
+            .unwrap()
+            .lookup_error("llm: server unreachable")
+            .unwrap();
+        assert_eq!(k.fix, None);
+        assert_eq!(k.failed_fixes, ["retry_backoff"]);
+        assert_eq!(k.recurrences, 2);
+        // Without retries nothing is tried (or recorded) at all.
+        let mut bare = ChatSession::new(&cfg(&format!("http://127.0.0.1:{port}")), false)
+            .with_brain(mem_brain())
+            .with_retry_backoff(Vec::new());
+        bare.send("hello?", |_| {}).await;
+        assert!(bare
+            .memory()
+            .unwrap()
+            .lookup_error("llm: server unreachable")
+            .is_none());
     }
 
     #[tokio::test]
