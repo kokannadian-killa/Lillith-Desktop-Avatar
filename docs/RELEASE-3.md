@@ -1,4 +1,4 @@
-# Release #3 notes (draft, `ci/batch9`)
+# Release #3 notes (draft, `ci/batch10`)
 
 Draft notes for the next test build. They cover what changed since release #2
 (`test-build-d88ed30`). There's no release zip for this build yet, so the
@@ -47,6 +47,12 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
       longer one. Plurals match only the same word (job/jobs, never
       new/news), so `job = "google engineer"` no longer deletes a "google
       chrome" event. Her chat history uses the same rule.
+    - A topic word that is a whole memory key also matches it, so "forget
+      about my new job" finds "Ko's job: barista" (and still never "new wave
+      music").
+    - She's honest about what was forgotten. If nothing in memory matched
+      but chat messages did, she says "Nothing in my memory matched …" and
+      how many chat messages she cleared, never "Gone".
     - "forget the last 30 minutes" (or an hour) deletes right away. A longer
       window (days, a week, months) asks for "yes" first.
     - "forget the last thing I said" drops only your last message and her
@@ -54,9 +60,8 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
     - Forgotten rows are deleted, the file is vacuumed, and the matching
       lines are also removed from her saved chat history. Each forget adds a
       line to `audit.log` (the same log the Soul Contract uses) next to the
-      memory file, with the kind of forget and the counts only. If you set a
-      custom `[memory] db_path`, the forget lines go to an `audit.log` next to
-      that file instead.
+      memory file, with the kind of forget and the counts only. It's the same
+      `audit.log` even if you set a custom `[memory] db_path`.
   - A corrupt chat-history file is set aside as `.corrupt`. An unreadable one
     is never overwritten.
   - The safeword is never stored, nor is any message containing the word
@@ -94,7 +99,8 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
     current art doesn't yet; it will be re-rendered to match
     (`tools/video-pipeline/blend_start_match.py` checks this).
   - Sitting down on a window is smoother: `perch_sit` has in-between frames
-    for the leg cross and uncross (96 to 102 frames).
+    for the leg cross and uncross (96 to 102 frames), timed so each cross
+    still takes a quarter of a second.
   - On a wide enough window she can also lie along the top edge
     (`perch_lounge`), shifted to fit the window top. On a narrow window she
     only sits.
@@ -107,7 +113,10 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   the no-white-fringe rules. The last matte leftovers are gone too: the grey
   floor shadow and purple smear on `come_hither_crawl`, the grey specks in
   the hair/neck gap on `kneel_sit_back_beckon`, and stray white pixels on
-  `hip_sway_slow`. Their names, timing and placement are unchanged.
+  `hip_sway_slow`. The last pale specks in the hair/neck gaps on
+  `kneel_sit_back_beckon` and the purple floor speck and faint floor haze on
+  `come_hither_crawl` are now removed too. Their names, timing and placement
+  are unchanged.
 - **Five more poses:** `leg_cross_slow_sit`, `hair_twirl_lip_bite`,
   `tail_heart_wink`, `trace_heart_on_glass` and `dom_chin_tilt_summon`, in
   the same outfit, wired into her idle, tease and banter moves.
@@ -119,6 +128,8 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
     blend, `arch_trace`, `chest_press_tease`, `cleavage_beckon`) lost their
     white edge fringe and the white patches between hair, neck and arms. Their
     positions are unchanged.
+  - The tail tip on `perch_sit` and the drag-to-perch blend no longer floats
+    loose; it's joined back to the tail.
   - `tail_tease` was regenerated with a single tail.
 - **Offline voice kit (source).** The Python source of the voice kit is now
   in the repo under `tools/lillith-voice/`. That covers the `lillith-voiced`
