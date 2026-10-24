@@ -255,8 +255,38 @@ fn parse_mode(s: &str) -> Result<MoveMode, String> {
     }
 }
 
+/// `true` for the panic `println!` raises when stdout's reader went away
+/// (`lillith rules | head`): EPIPE on Unix, ERROR_NO_DATA / ERROR_BROKEN_PIPE
+/// on Windows. Matched on the OS error code, not its (localised) text.
+fn is_stdout_broken_pipe(msg: &str) -> bool {
+    let codes: &[i32] = if cfg!(windows) { &[109, 232] } else { &[32] };
+    msg.starts_with("failed printing to stdout")
+        && codes
+            .iter()
+            .any(|c| msg.contains(&format!("(os error {c})")))
+}
+
+/// Release QA 46ed853 #9: a closed pipe ends the CLI quietly (exit 0)
+/// instead of a panic and exit 101; every other panic is reported as usual.
+fn quiet_broken_pipe() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let p = info.payload();
+        let msg = p
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| p.downcast_ref::<&str>().copied())
+            .unwrap_or("");
+        if is_stdout_broken_pipe(msg) {
+            std::process::exit(0);
+        }
+        default(info);
+    }));
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    quiet_broken_pipe();
     let log = tracing_subscriber::fmt().with_env_filter(
         tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| "lillith=info".into()),
@@ -614,6 +644,33 @@ fn icon_cmd(cli: &Cli, id: Option<&str>, list: bool, no_apply: bool, reapply: bo
     Ok(())
 }
 
+/// The config.toml that ships with her (`linux/portable/config.toml`,
+/// `config.toml` at the top of the release zip): scale 0.55, margins 80/48.
+const BUNDLED_CONFIG: &str = include_str!("../../../linux/portable/config.toml");
+
+/// The portable package's `config.toml` for the binary at `exe`
+/// (`<pkg>/bin/lillith` -> `<pkg>/config.toml`), if it exists.
+fn bundled_config_next_to(exe: &std::path::Path) -> Option<PathBuf> {
+    let exe = std::fs::canonicalize(exe).unwrap_or_else(|_| exe.to_path_buf());
+    let pkg = exe.parent()?.parent()?;
+    let p = pkg.join("config.toml");
+    p.is_file().then_some(p)
+}
+
+/// Text for a new personal config written by `lillith setup`: the
+/// package's bundled config.toml (so her size and spot don't change once
+/// the personal file takes over), else the copy built into the binary.
+fn seed_config_text(bundled: Option<&std::path::Path>) -> String {
+    let body = bundled
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .filter(|t| Config::from_toml_str(t).is_ok())
+        .unwrap_or_else(|| BUNDLED_CONFIG.to_string());
+    format!(
+        "# Your Lillith settings, first written by `lillith setup` from the bundled\n\
+         # config.toml. Restart Lillith after editing.\n{body}"
+    )
+}
+
 /// `lillith setup`: writes the local model choice into `path` (creating
 /// it from the commented template if missing). Local files only; the
 /// endpoint stays the loopback default.
@@ -628,7 +685,10 @@ fn setup(
         if let Some(d) = path.parent() {
             std::fs::create_dir_all(d).with_context(|| format!("creating {}", d.display()))?;
         }
-        std::fs::write(path, lillith_core::menu::settings_template())
+        let bundled = std::env::current_exe()
+            .ok()
+            .and_then(|exe| bundled_config_next_to(&exe));
+        std::fs::write(path, seed_config_text(bundled.as_deref()))
             .with_context(|| format!("writing {}", path.display()))?;
     }
     let mut llm = lillith_setup::config::load(path)?;
@@ -954,4 +1014,81 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     server.stop();
     drop(monitor);
     r.map_err(|e| anyhow::anyhow!("overlay: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("lillith-main-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// Release QA 46ed853 #8: the config `lillith setup` creates keeps her
+    /// bundled size and spot (scale 0.55, margins 80/48), not code defaults.
+    #[test]
+    fn setup_seeds_from_the_bundled_config() {
+        let bundled = Config::from_toml_str(BUNDLED_CONFIG).unwrap();
+        assert_eq!(bundled.overlay_scale(), 0.55);
+        assert_eq!(
+            (bundled.overlay.margin_left, bundled.overlay.margin_bottom),
+            (80, 48)
+        );
+        assert!(!BUNDLED_CONFIG.contains("INSTALL.txt"));
+
+        let d = tmp("seed");
+        let path = d.join("cfg").join("config.toml");
+        setup(&path, None, None, Some(8192)).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("scale = 0.55"), "{text}");
+        let c = Config::load(&path).unwrap();
+        assert_eq!(c.overlay_scale(), bundled.overlay_scale());
+        assert_eq!(c.overlay, bundled.overlay);
+        assert_eq!(c.mode, bundled.mode);
+        // The code defaults agree with the bundled file too.
+        let def = Config::default();
+        assert_eq!(def.overlay_scale(), 0.55);
+        assert_eq!(def.scale, 0.55);
+        assert_eq!(def.overlay, bundled.overlay);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A package's own config.toml (`<pkg>/bin/lillith` -> `<pkg>/config.toml`)
+    /// is preferred, e.g. with the spot she was dragged to; a broken one is
+    /// ignored.
+    #[test]
+    fn setup_prefers_the_package_config_next_to_the_binary() {
+        let d = tmp("pkg");
+        std::fs::create_dir_all(d.join("bin")).unwrap();
+        let exe = d.join("bin").join("lillith");
+        std::fs::write(&exe, b"").unwrap();
+        assert_eq!(bundled_config_next_to(&exe), None);
+        std::fs::write(
+            d.join("config.toml"),
+            "scale = 0.55\n[overlay]\nmargin_left = 300\nmargin_bottom = 48\n",
+        )
+        .unwrap();
+        let found = bundled_config_next_to(&exe).unwrap();
+        let c = Config::from_toml_str(&seed_config_text(Some(&found))).unwrap();
+        assert_eq!(c.overlay.margin_left, 300);
+        std::fs::write(d.join("config.toml"), "scale = [not toml").unwrap();
+        let c = Config::from_toml_str(&seed_config_text(Some(&found))).unwrap();
+        assert_eq!(c.overlay.margin_left, 80);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn only_the_stdout_pipe_panic_is_quiet() {
+        let epipe = if cfg!(windows) { 232 } else { 32 };
+        assert!(is_stdout_broken_pipe(&format!(
+            "failed printing to stdout: Broken pipe (os error {epipe})"
+        )));
+        assert!(!is_stdout_broken_pipe(
+            "failed printing to stdout: No space left on device (os error 28)"
+        ));
+        assert!(!is_stdout_broken_pipe("index out of bounds"));
+    }
 }
