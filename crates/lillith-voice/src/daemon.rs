@@ -101,6 +101,11 @@ pub enum Request {
     },
     /// Push-to-talk: open the mic (stops her speaking: barge-in).
     ListenStart,
+    /// [`Request::ListenStart`] owned by its connection (`hold:true`): the
+    /// client keeps the connection open while the press lasts, and the
+    /// daemon treats the connection closing as a release (card closed, mic
+    /// stopped, tokens dropped). See [`DaemonClient::listen_start_held`].
+    ListenStartHeld,
     /// Push-to-talk: close the mic and transcribe.
     ListenStop,
     /// Transcribe a WAV file (absolute path).
@@ -120,7 +125,7 @@ impl Request {
             Request::Ping => "ping",
             Request::Say { .. } => "say",
             Request::Stop { .. } => "stop",
-            Request::ListenStart | Request::ListenStop => "listen",
+            Request::ListenStart | Request::ListenStartHeld | Request::ListenStop => "listen",
             Request::Stt { .. } => "stt",
             Request::Subscribe { .. } => "subscribe",
         }
@@ -151,6 +156,7 @@ impl Request {
                 None => json!({}),
             },
             Request::ListenStart => json!({ "action": "start" }),
+            Request::ListenStartHeld => json!({ "action": "start", "hold": true }),
             Request::ListenStop => json!({ "action": "stop" }),
             Request::Stt { wav } => json!({ "wav": wav.to_string_lossy() }),
             Request::Subscribe { topics } => json!({ "topics": topics }),
@@ -507,10 +513,10 @@ pub fn daemon_healthy() -> bool {
 /// it returns; with [`MAX_STUCK_REQUESTS`] stuck, no thread is started.
 /// (Used for Windows pipes, which have no read timeout.)
 #[cfg_attr(not(any(windows, test)), allow(dead_code))]
-fn run_with_deadline(
+fn run_with_deadline<T: Send + 'static>(
     timeout: Duration,
-    work: impl FnOnce() -> Result<Value, DaemonError> + Send + 'static,
-) -> Result<Value, DaemonError> {
+    work: impl FnOnce() -> Result<T, DaemonError> + Send + 'static,
+) -> Result<T, DaemonError> {
     if STUCK_REQUESTS.load(Ordering::SeqCst) >= MAX_STUCK_REQUESTS {
         return Err(DaemonError::Io(std::io::Error::new(
             std::io::ErrorKind::TimedOut,
@@ -760,6 +766,29 @@ impl DaemonClient {
             .map(|_| ())
     }
 
+    /// [`DaemonClient::listen_start`], but the press belongs to the
+    /// returned connection: dropping the [`HeldPress`] (or this process
+    /// exiting, or the connection breaking while the card waits) releases
+    /// the press on the daemon: a waiting card is closed (`CANCELLED`), an
+    /// open mic stops, unused mic tokens are dropped. Waits up to
+    /// [`MIC_CARD_TIMEOUT`] for the card: call it off the UI thread. Older
+    /// daemons ignore `hold` (then only `listen stop` releases).
+    pub fn listen_start_held(&self) -> Result<HeldPress, DaemonError> {
+        let work = {
+            let me = self.clone();
+            move || -> Result<HeldPress, DaemonError> {
+                let c = me.send(&Request::ListenStartHeld, Some(MIC_CARD_TIMEOUT))?;
+                let mut r = BufReader::new(c);
+                parse_reply(&read_line(&mut r)?)?;
+                Ok(HeldPress { _conn: r })
+            }
+        };
+        #[cfg(windows)]
+        return run_with_deadline(MIC_CARD_TIMEOUT, work);
+        #[cfg(not(windows))]
+        work()
+    }
+
     /// Push-to-talk up: closes the mic and waits for the transcript.
     pub fn listen_stop(&self, timeout: Duration) -> Result<Transcript, DaemonError> {
         let v = self.request(&Request::ListenStop, Some(timeout))?;
@@ -775,6 +804,19 @@ impl DaemonClient {
             Some(timeout),
         )?;
         Ok(Transcript::from_value(&v))
+    }
+}
+
+/// The open connection that owns one push-to-talk press (from
+/// [`DaemonClient::listen_start_held`]). Dropping it closes the connection,
+/// which the daemon treats as a release.
+pub struct HeldPress {
+    _conn: BufReader<Box<dyn Conn>>,
+}
+
+impl std::fmt::Debug for HeldPress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("HeldPress")
     }
 }
 
@@ -1096,6 +1138,10 @@ mod tests {
             json!({"cmd":"listen","action":"start"})
         );
         assert_eq!(
+            Request::ListenStartHeld.to_value(),
+            json!({"cmd":"listen","action":"start","hold":true})
+        );
+        assert_eq!(
             Request::ListenStop.to_value(),
             json!({"cmd":"listen","action":"stop"})
         );
@@ -1120,6 +1166,7 @@ mod tests {
         for r in [
             Request::Ping,
             Request::ListenStart,
+            Request::ListenStartHeld,
             Request::Subscribe { topics: vec![] },
             Request::Stop { reason: None },
         ] {

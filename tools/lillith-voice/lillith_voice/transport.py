@@ -13,6 +13,8 @@ tested on its own (tests/transport_test.py) on Linux and on Windows.
 import json
 import os
 import queue
+import select
+import socket
 import socketserver
 import threading
 import time
@@ -63,31 +65,145 @@ class Hub:
                         pass
 
 
-def serve_lines(core, lines, write):
-    """One connection: JSON lines in, JSON lines out; 'subscribe' turns it into an event stream.
-    `core` needs .hub (Hub) and .dispatch(dict) -> dict; `lines` yields bytes lines; `write(obj)` sends one line."""
-    for line in lines:
-        if not line.strip():
-            continue
-        try:
-            req = json.loads(line)
-            if not isinstance(req, dict):
-                raise ValueError("request must be a JSON object")
-            if (req.get("op") or req.get("cmd")) == "subscribe":
-                topics = req.get("topics") or ["lipsync"]
-                q = core.hub.add(topics)
-                try:
-                    write({"ok": True, "subscribed": topics})
-                    while True:
-                        write(q.get())
-                except (OSError, ValueError):
+class Owner:
+    """The client connection a request came in on, so work it started can be tied to it.
+
+    `on_gone(fn, keep)` registers `fn` to run once when the client is gone: the connection closed or broke,
+    a reply could not be written, or (watched every `POLL_S` while a request is being handled, e.g. while a
+    mic card waits) the peer hung up. `keep=False` callbacks only cover the request being handled: they are
+    dropped once its reply is written. `keep=True` ones last until the connection ends.
+    `alive()` is False once the client is known to be gone."""
+
+    POLL_S = 0.1
+
+    def __init__(self, peer_alive=None):
+        self._peer_alive = peer_alive
+        self._lock = threading.Lock()
+        self._cbs = []           # [(fn, keep)]
+        self._gone = False
+        self._busy = False       # a request is being handled (the watcher runs only then)
+        self._watching = False
+
+    def alive(self):
+        if self._gone:
+            return False
+        if self._peer_alive is not None:
+            try:
+                if not self._peer_alive():
+                    self.gone()
+                    return False
+            except Exception:
+                self.gone()
+                return False
+        return True
+
+    def on_gone(self, fn, keep=False):
+        with self._lock:
+            if self._gone:
+                run = True
+            else:
+                run = False
+                self._cbs.append((fn, keep))
+                start = self._peer_alive is not None and not self._watching
+                if start:
+                    self._watching = True
+        if run:
+            fn()
+            return
+        if start:
+            threading.Thread(target=self._watch, daemon=True, name="lillith-owner-watch").start()
+
+    def _watch(self):
+        while True:
+            time.sleep(self.POLL_S)
+            with self._lock:
+                if self._gone or not self._busy or not self._cbs:
+                    self._watching = False
                     return
-                finally:
-                    core.hub.remove(q)
-            rep = core.dispatch(req)
-        except Exception as e:
-            rep = {"ok": False, "error": f"{type(e).__name__}: {e}"}
-        write(rep)
+            self.alive()
+
+    def begin(self):
+        with self._lock:
+            self._busy = True
+
+    def replied(self):
+        """The reply was written: request-scoped callbacks are done."""
+        with self._lock:
+            self._busy = False
+            self._cbs = [c for c in self._cbs if c[1]]
+
+    def gone(self):
+        with self._lock:
+            if self._gone:
+                return
+            self._gone = True
+            cbs, self._cbs = self._cbs, []
+        for fn, _ in cbs:
+            try:
+                fn()
+            except Exception as e:  # pragma: no cover - a callback must never kill the connection thread
+                print(f"lillith-voiced: owner-gone callback failed: {e}", flush=True)
+
+
+def _dispatch(core, req, owner):
+    if getattr(core, "takes_owner", False):
+        return core.dispatch(req, owner=owner)
+    return core.dispatch(req)
+
+
+def serve_lines(core, lines, write, owner=None):
+    """One connection: JSON lines in, JSON lines out; 'subscribe' turns it into an event stream.
+    `core` needs .hub (Hub) and .dispatch(dict) -> dict (or dispatch(dict, owner=Owner) when
+    `core.takes_owner`); `lines` yields bytes lines; `write(obj)` sends one line. When the connection ends
+    (or a reply can't be written) the `owner`'s callbacks run: a client that is gone releases what it held."""
+    owner = owner or Owner()
+    try:
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                req = json.loads(line)
+                if not isinstance(req, dict):
+                    raise ValueError("request must be a JSON object")
+                if (req.get("op") or req.get("cmd")) == "subscribe":
+                    topics = req.get("topics") or ["lipsync"]
+                    q = core.hub.add(topics)
+                    try:
+                        write({"ok": True, "subscribed": topics})
+                        while True:
+                            write(q.get())
+                    except (OSError, ValueError):
+                        return
+                    finally:
+                        core.hub.remove(q)
+                owner.begin()
+                rep = _dispatch(core, req, owner)
+            except Exception as e:
+                rep = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+            write(rep)          # raises when the client is gone -> finally releases
+            owner.replied()
+    finally:
+        owner.gone()
+
+
+def unix_peer_alive(sock):
+    """For an AF_UNIX stream: False once the peer has hung up (EOF or error). Never consumes data."""
+    def alive():
+        try:
+            r, _, x = select.select([sock], [], [sock], 0)
+        except (OSError, ValueError):
+            return False
+        if x:
+            return False
+        if not r:
+            return True
+        try:
+            return sock.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT) != b""
+        except BlockingIOError:
+            return True
+        except OSError:
+            return False
+    return alive
 
 
 def _locked_writer(send):
@@ -114,7 +230,8 @@ class _UnixHandler(socketserver.StreamRequestHandler):
                     return
                 yield ln
         try:
-            serve_lines(self.server.core, lines(), _locked_writer(send))
+            serve_lines(self.server.core, lines(), _locked_writer(send),
+                        Owner(unix_peer_alive(self.connection)))
         except (BrokenPipeError, ConnectionResetError):
             pass
 
@@ -158,6 +275,8 @@ class PipeServer:
         k.WriteFile.argtypes = [H, ctypes.c_void_p, w.DWORD, ctypes.POINTER(w.DWORD), ctypes.c_void_p]
         k.FlushFileBuffers.argtypes = [H]
         k.DisconnectNamedPipe.argtypes = [H]
+        k.PeekNamedPipe.argtypes = [H, ctypes.c_void_p, w.DWORD, ctypes.c_void_p, ctypes.POINTER(w.DWORD),
+                                    ctypes.c_void_p]
         k.CloseHandle.argtypes = [H]
         k.GetCurrentProcess.restype = H
         k.LocalFree.argtypes = [ctypes.c_void_p]
@@ -313,8 +432,12 @@ class PipeServer:
                 if not k.WriteFile(h, ct.c_char_p(bytes(mv[:65536])), min(len(mv), 65536), ct.byref(n), None):
                     raise self._err("WriteFile")  # client gone (ERROR_NO_DATA / BROKEN_PIPE) -> OSError
                 mv = mv[n.value:]
+        def peer_alive():
+            # PeekNamedPipe fails (ERROR_BROKEN_PIPE) once the client has closed its end.
+            avail = w.DWORD()
+            return bool(k.PeekNamedPipe(h, None, 0, None, ct.byref(avail), None))
         try:
-            serve_lines(self.core, lines(), _locked_writer(send))
+            serve_lines(self.core, lines(), _locked_writer(send), Owner(peer_alive))
         except OSError:
             pass
         finally:
