@@ -202,7 +202,7 @@
 # model = "local"
 # system_prompt = ""           # empty = [llm] system_prompt, else the built-in persona
 # temperature = 0.95
-# max_tokens = 320
+# max_tokens = 160
 # history_turns = 12
 # timeout_s = 120.0
 # save_history = true          # ~/.local/share/lillith/chat_history.json
