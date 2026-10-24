@@ -604,8 +604,6 @@ impl DaemonClient {
         req: &Request,
         timeout: Option<Duration>,
     ) -> Result<Box<dyn Conn>, DaemonError> {
-        let mut c = connect(&self.endpoint)?;
-        c.set_timeout(timeout)?;
         let mut line = req.encode();
         if line.len() >= MAX_LINE {
             return Err(DaemonError::Io(std::io::Error::new(
@@ -613,6 +611,8 @@ impl DaemonClient {
                 "request line over 1 MiB",
             )));
         }
+        let mut c = connect(&self.endpoint)?;
+        c.set_timeout(timeout)?;
         line.push('\n');
         c.write_all(line.as_bytes())?;
         c.flush()?;

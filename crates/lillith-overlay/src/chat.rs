@@ -219,6 +219,8 @@ pub struct Talk {
     mouth: TalkMouth,
     /// Local monotonic clock (ms, summed `dt`) for audio lip-sync.
     clock_ms: u64,
+    /// A lip-sync event (stop / reset) ended the audio mouth between ticks.
+    audio_ended: bool,
     /// Fallback lip-flap (no mouth patches): frames by baked mouth.
     frames: Option<MouthMap>,
     /// Mouth patches are pasted over the playing body (true lip-sync).
@@ -259,14 +261,18 @@ impl Talk {
     /// Feeds one voice-daemon lip-sync event line (drives her mouth from
     /// the audio while it plays). Malformed lines are ignored.
     pub fn feed_lipsync(&mut self, line: &str) {
+        let was = self.mouth.active();
         if let Err(e) = self.mouth.audio.feed_line(line, self.clock_ms) {
             tracing::debug!("lipsync line ignored: {e}");
         }
+        self.audio_ended |= was && !self.mouth.active();
     }
 
     /// Drops audio lip-sync (daemon gone, barge-in, safeword).
     pub fn reset_lipsync(&mut self) {
+        let was = self.mouth.active();
         self.mouth.audio.reset();
+        self.audio_ended |= was && !self.mouth.active();
     }
 
     pub fn speed(&self) -> f32 {
@@ -455,7 +461,7 @@ impl Talk {
         self.clock_ms = self
             .clock_ms
             .saturating_add((dt.max(0.0) * 1000.0).round() as u64);
-        let was = self.mouth.active();
+        let was = self.mouth.active() || std::mem::take(&mut self.audio_ended);
         let mouth = self.mouth.tick(dt, self.clock_ms);
         // The voice usually starts after the text finished: take the talk
         // clip again while the audio drives her mouth.
