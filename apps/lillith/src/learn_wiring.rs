@@ -59,6 +59,10 @@ pub fn cli(cfg: &Config, once: bool, dry_run: bool, reindex: bool) -> anyhow::Re
     }
     let brain = lillith_memory::Brain::open(&cfg.memory)?;
     if reindex {
+        if !cfg.learn.enabled {
+            println!("learning is off ([learn] enabled = false): nothing to do");
+            return Ok(());
+        }
         let mut l = Learner::new(cfg, brain);
         let n = l.reindex()?;
         println!(

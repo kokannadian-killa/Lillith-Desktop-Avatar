@@ -456,10 +456,22 @@ impl Learner {
         let path = store.write(lock, &note)?;
         let rel = store.rel(&path);
         let topic = rel.split('/').next().unwrap_or("inbox").to_string();
-        let node = self
+        let node = match self
             .brain
             .upsert_note(&row_of(&note, &rel, &topic), &note.body, &ctx)
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        {
+            Ok(node) => node,
+            Err(e) => {
+                // The DB step failed. Don't leave a note that isn't indexed or
+                // audited: roll back a brand-new file (a merge updated an
+                // existing note, so keep it), and always record a failure line.
+                if op == "write" {
+                    let _ = std::fs::remove_file(&path);
+                }
+                audit::record(self.audit_log.as_deref(), "fail", &topic, &note.id);
+                return Err(std::io::Error::other(e.to_string()));
+            }
+        };
         if let Some(node) = node {
             let text = format!("{} {}", note.title, note.body);
             let _ = self.brain.link_note(node, &text, &note.links, &ctx);

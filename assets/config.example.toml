@@ -316,9 +316,9 @@
 # sources = ["man", "info", "doc", "rust-doc", "python-doc", "chat", "memory", "habits", "shared"]
 # max_file_bytes = 262144      # bigger doc files are skipped
 # The keys below belong to later milestones; they are read but unused for now.
-# share_socket = true
+# share_socket = false   # P2; off until online learning is reviewed/merged
 # block_hosts = []
-# online = true
+# online = false         # P2; off until online learning is reviewed/merged
 # online_max_pages = 5
 # online_max_bytes = 2097152
 # tor_socks = "127.0.0.1:9050"
