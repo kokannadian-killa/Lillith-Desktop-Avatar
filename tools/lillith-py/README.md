@@ -99,7 +99,9 @@ has a `uri` and `thumbnail_uri` (`file://`) that a GUI can display.
 Extraction: text, code, JSON and CSV files are read directly, capped by `max_text_bytes`.
 PDFs go through `pdftotext -layout`. For images, the store records dimensions (Pillow or a
 stdlib header parser), makes a 256px PNG thumbnail (Pillow or ImageMagick), and runs
-optional OCR (pytesseract or the `tesseract` CLI).
+optional OCR (the `tesseract` CLI). pytesseract is no longer used, because it starts
+tesseract itself outside the launch wrapper. Every external tool goes through the
+launch wrapper and leaves one audit.log line (see "Program launches" below).
 
 Chat injection: attachments go in the user turn as
 `<attachment id=".." name=".." mime=".." size="..">…</attachment>`, and the system prompt
@@ -167,7 +169,34 @@ lillith-bot rm scout-2                                  # deletes bots/scout-2/ 
   that bridge exists. Tool calls: `<tool_call>{"name":…,"arguments":{…}}</tool_call>` or
   OpenAI `tool_calls`; at most 3 rounds per turn.
 - **Routines:** 5-field cron plus `@hourly/@daily/@weekly/@monthly/@yearly`; results go to
-  the bot's history (`routine:<name>`) and `notify-send`.
+  the bot's history (`routine:<name>`) and the job log, plus a `notify-send` popup when
+  it's installed (audited like every launch).
+
+## Program launches (`lillith_py/launch.py`) and `audit.log`
+Every external program lillith-py starts goes through one wrapper,
+`lillith_py.launch.run`. The programs are pdftotext, pdfinfo, ImageMagick
+(`magick`/`convert`), tesseract and notify-send. The project lead has exempted them
+from a Soul Contract card (review X5), so they run exactly as before, but **each
+launch writes exactly one append-only line** to Lillith's shared audit log.
+
+- **Path:** the Rust `audit_log_path()` (`crates/lillith-core/src/config.rs`), i.e.
+  `$XDG_DATA_HOME/lillith/audit.log`, else `~/.local/share/lillith/audit.log`.
+  `$LILLITH_HOME` is ignored for this file so both sides share it.
+- **Format:** the Rust `SoulContract::audit` line (`crates/lillith-core/src/soul_contract.rs`),
+  `<rfc3339 UTC>\t<DECISION>\t<kind>\t<what>`, with kind `lillith-py:launch`:
+  ```
+  2026-10-24T10:14:03Z	EXEMPT	lillith-py:launch	pdftotext $ pdftotext -layout -enc UTF-8 ~/.local/share/lillith/attachments/blobs/ab/<sha>.pdf - -> exit=0 [attachments: PDF text]
+  ```
+  The outcome after `->` is `exit=N`, `timeout` or `error: …`. Masking: `$HOME` becomes
+  `~`. Values of `--api-key`/`--token`/`--password`-style flags, `key=value` secrets,
+  `Bearer …` and token-looking strings become `<redacted>`. Other arguments over 80 chars
+  (a notification body, for example) become `<N chars>`.
+- **Pillow** runs in-process and is not a program launch, so it writes no line. It is
+  restricted to PNG/JPEG/GIF/WEBP/BMP/TIFF, so it can never call Ghostscript (EPS).
+- **No bypass:** no other module may import `subprocess` or call `os.system`/`exec*`/
+  `spawn*` (a source-scan test enforces this). Importing `lillith_py` installs a
+  runtime guard: any `subprocess.Popen` that didn't come through the wrapper is refused
+  and audited as `REFUSED … bypassed the lillith_py.launch wrapper`.
 
 ## HTTP API (for the Rust "Bots" tab)
 
@@ -248,7 +277,9 @@ python -m pytest -q             # offline; tests/mock_llama.py stands in for lla
 python tests/mock_llama.py --port 8080   # fake llama-server for manual GUI testing
 ```
 `tests/netguard.py` patches `socket.connect`/`create_connection`/`getaddrinfo` for the whole
-run; any non-loopback attempt fails the suite. CI: `.github/workflows/lillith-py.yml`
+run; any non-loopback attempt fails the suite. `tests/procguard.py` patches
+`subprocess.Popen` and `os.system`/`posix_spawn`/`exec*`/`spawn*`/`fork`; any launch that
+skips `lillith_py.launch.run` fails the suite as well. CI: `.github/workflows/lillith-py.yml`
 (runs on changes under `tools/lillith-py/**`).
 
 ## Limitations

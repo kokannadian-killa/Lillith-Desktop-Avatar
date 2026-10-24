@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import netguard  # noqa: E402
+import procguard  # noqa: E402
 from mock_llama import MockLlama  # noqa: E402
 from lillith_py.attachments import AttachmentStore, Config  # noqa: E402
 
@@ -55,6 +56,7 @@ def files(tmp_path):
 # ---------- network guard (loopback only, enforced for the whole run) ----------
 def pytest_configure(config):
     netguard.install()
+    procguard.install()
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -63,4 +65,10 @@ def pytest_sessionfinish(session, exitstatus):
         for v in netguard.VIOLATIONS:
             print("  " + v)
         session.exitstatus = 1
+    if procguard.VIOLATIONS:
+        print("\n\nPROCESS GUARD: program launch bypassed lillith_py.launch:")
+        for v in procguard.VIOLATIONS:
+            print("  " + v)
+        session.exitstatus = 1
+    procguard.uninstall()
     netguard.uninstall()
