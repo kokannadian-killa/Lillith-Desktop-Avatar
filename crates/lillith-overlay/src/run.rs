@@ -74,6 +74,8 @@ pub trait ActionSink {
 pub const CHAT_BARGE_IN: &str = "chat.barge_in";
 /// The bubble heard the safeword (voice or typed): everything stops.
 pub const CHAT_SAFEWORD: &str = "chat.safeword";
+/// Talk clip held after speech once the voice daemon is in use (s).
+pub const DAEMON_TALK_HOLD_S: f32 = 1.0;
 
 /// Shared [`ActionSink`] handle (cloneable so the Wayland → X11 fallback
 /// keeps the same voice).
@@ -226,6 +228,9 @@ pub struct Controller {
     feed: Option<EventFeed>,
     /// Feed events read but not applied yet (spread over frames).
     feed_backlog: std::collections::VecDeque<Event>,
+    /// The safeword cut the current reply: its queued tokens / `chat.end`
+    /// are ignored (never shown or spoken) until the next `chat.start`.
+    chat_stopped: bool,
     sink: Option<SinkHandle>,
     /// Menu "Pause system monitor": feed events are dropped while set.
     pub monitor_paused: bool,
@@ -353,6 +358,7 @@ impl Controller {
             quit: false,
             feed: opts.events.clone(),
             feed_backlog: std::collections::VecDeque::new(),
+            chat_stopped: false,
             sink: opts.sink.clone(),
             monitor_paused: false,
             menu: None,
@@ -1030,6 +1036,8 @@ impl Controller {
         let actions = self.brain.tick(dt, busy);
         self.apply(actions);
         self.pump_lipsync();
+        self.talk.body_free =
+            !self.drag.active() && !self.tease.active() && !self.gravity.sitting();
         self.talk.tick(dt, self.stage.animator_mut());
         self.pump_showoff();
         let view = self.talk.speech.as_ref().map(|s| s.view());
@@ -1465,6 +1473,11 @@ impl Controller {
             if safeword {
                 tracing::warn!("safeword from the chat bubble: stopping everything");
                 lillith_core::access::kill_switch::stop_all();
+                // The reply in flight is dead: wrap up what's shown, and
+                // nothing of it still queued is shown or spoken.
+                self.chat_stopped = true;
+                self.talk
+                    .event(crate::chat::CHAT_ERROR, None, self.stage.animator_mut());
             }
             self.talk.reset_lipsync();
             if let Some(sink) = &self.sink {
@@ -1475,6 +1488,14 @@ impl Controller {
             return;
         }
         if ev.name.starts_with("chat.") {
+            if ev.name == crate::chat::CHAT_START {
+                self.chat_stopped = false;
+            } else if self.chat_stopped
+                && (ev.name == crate::chat::CHAT_TOKEN || ev.name == crate::chat::CHAT_END)
+            {
+                tracing::debug!(event = %ev.name, "dropped: reply cut by the safeword");
+                return;
+            }
             self.talk
                 .event(&ev.name, ev.detail.as_deref(), self.stage.animator_mut());
             if ev.name == crate::chat::CHAT_END {
@@ -1500,6 +1521,11 @@ impl Controller {
             .unwrap_or(false);
         if gone {
             self.talk.reset_lipsync();
+        }
+        if !lines.is_empty() {
+            // The voice daemon is speaking: hold the talk clip between the
+            // text and the voice.
+            self.talk.set_hold(DAEMON_TALK_HOLD_S);
         }
         for l in &lines {
             self.talk.feed_lipsync(l);
@@ -1529,6 +1555,26 @@ impl Controller {
         let Some(feed) = &self.feed else { return };
         if let Ok(rx) = feed.lock() {
             self.feed_backlog.extend(rx.try_iter());
+        }
+        // Chat events queued before the (last) safeword belong to the reply
+        // it killed: drop them so they are never shown or spoken.
+        if let Some(last) = self
+            .feed_backlog
+            .iter()
+            .rposition(|e| e.name == CHAT_SAFEWORD)
+        {
+            let mut i = 0;
+            self.feed_backlog.retain(|e| {
+                let reply = [
+                    crate::chat::CHAT_START,
+                    crate::chat::CHAT_TOKEN,
+                    crate::chat::CHAT_END,
+                ]
+                .contains(&e.name.as_str());
+                let keep = i >= last || !reply;
+                i += 1;
+                keep
+            });
         }
         let (urgent, rest): (std::collections::VecDeque<Event>, _) =
             std::mem::take(&mut self.feed_backlog)
@@ -2964,9 +3010,13 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         lines: Arc<Mutex<Vec<String>>>,
         gone: Arc<Mutex<bool>>,
         interrupts: Arc<Mutex<Vec<String>>>,
+        spoken: Arc<Mutex<Vec<String>>>,
     }
     impl ActionSink for LipSink {
         fn on_actions(&mut self, _: &[Action]) {}
+        fn on_chat_reply(&mut self, reply: &str) {
+            self.spoken.lock().unwrap().push(reply.to_string());
+        }
         fn lipsync_lines(&mut self, out: &mut Vec<String>) -> bool {
             out.append(&mut self.lines.lock().unwrap());
             std::mem::take(&mut *self.gone.lock().unwrap())
@@ -3012,6 +3062,52 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         c.event(&Event::new(CHAT_SAFEWORD));
         assert!(lillith_core::access::kill_switch::stopped_since(before));
         assert_eq!(*sink.interrupts.lock().unwrap(), ["barge_in", "safeword"]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn safeword_kills_the_queued_reply_it_interrupts() {
+        let (dir, mut c) = m3_controller("safeword-reply", MoveMode::Stay);
+        let sink = LipSink::default();
+        c.sink = Some(SinkHandle::new(sink.clone()));
+        let (tx, rx) = std::sync::mpsc::channel();
+        c.feed = Some(Arc::new(Mutex::new(rx)));
+        let send = |name: &str, d: Option<&str>| {
+            tx.send(match d {
+                Some(d) => Event::with_detail(name, d),
+                None => Event::new(name),
+            })
+            .unwrap();
+        };
+        send(crate::chat::CHAT_START, None);
+        for _ in 0..(MAX_EVENTS_PER_TICK * 2) {
+            send(crate::chat::CHAT_TOKEN, Some("la "));
+        }
+        let full = format!("{}SECRET", "la ".repeat(MAX_EVENTS_PER_TICK * 2));
+        send(crate::chat::CHAT_END, Some(&full));
+        send(CHAT_SAFEWORD, None);
+        for _ in 0..10 {
+            c.tick(0.016).unwrap();
+        }
+        assert!(sink.spoken.lock().unwrap().is_empty(), "nothing spoken");
+        let shown = c
+            .talk
+            .speech
+            .as_ref()
+            .map(|s| s.text.clone())
+            .unwrap_or_default();
+        assert!(!shown.contains("SECRET"), "reply not re-shown: {shown:?}");
+        // Belt and braces: a stale chat.end arriving after the safeword (no
+        // new chat.start) is ignored too.
+        send(crate::chat::CHAT_END, Some("late SECRET"));
+        c.tick(0.016).unwrap();
+        assert!(sink.spoken.lock().unwrap().is_empty());
+        // The next reply works normally.
+        send(crate::chat::CHAT_START, None);
+        send(crate::chat::CHAT_TOKEN, Some("hi"));
+        send(crate::chat::CHAT_END, Some("hi"));
+        c.tick(0.016).unwrap();
+        assert_eq!(*sink.spoken.lock().unwrap(), ["hi"]);
         let _ = std::fs::remove_dir_all(dir);
     }
 

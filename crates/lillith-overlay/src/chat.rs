@@ -238,6 +238,14 @@ pub struct Talk {
     finish_pending: bool,
     /// The talk clip was set as base by us (so we restore idle after).
     took_base: bool,
+    /// Seconds the talk clip is held after speech ends (voice daemon: the
+    /// voice follows the text, so talk->idle->talk would flicker). 0 = none.
+    hold_s: f32,
+    /// Hold time left before she goes back to idle.
+    hold_left: Option<f32>,
+    /// Set by the overlay each frame: nothing else owns her body (no
+    /// drag, tease or sit). The voice may only take the talk clip then.
+    pub body_free: bool,
     /// Mouth shape this frame (drives a custom avatar's talk bob).
     pub mouth_now: Option<Mouth>,
     /// `speech` is a one-off line ([`Talk::show_line`]), not a chat reply.
@@ -249,6 +257,7 @@ impl Talk {
     pub fn with_speed(speed: f32) -> Self {
         Self {
             mouth: TalkMouth::new(LipFlap::with_speed(speed)),
+            body_free: true,
             ..Self::default()
         }
     }
@@ -463,9 +472,22 @@ impl Talk {
             .saturating_add((dt.max(0.0) * 1000.0).round() as u64);
         let was = self.mouth.active() || std::mem::take(&mut self.audio_ended);
         let mouth = self.mouth.tick(dt, self.clock_ms);
+        // Talk clip held after speech: speaking again keeps it, else back
+        // to idle once the hold runs out.
+        if let Some(left) = self.hold_left {
+            if self.mouth.active() {
+                self.hold_left = None;
+            } else if left - dt <= 0.0 {
+                self.hold_left = None;
+                self.release_talk_base(anim);
+            } else {
+                self.hold_left = Some(left - dt);
+            }
+        }
         // The voice usually starts after the text finished: take the talk
-        // clip again while the audio drives her mouth.
-        if self.mouth.audio_driven() && self.clip.is_none() {
+        // clip again while the audio drives her mouth, but only from plain
+        // standing (never over a drag, pose, tease or reaction).
+        if self.mouth.audio_driven() && self.clip.is_none() && self.may_take_base(anim) {
             self.take_talk_base(anim);
         }
         self.mouth_now = mouth;
@@ -489,15 +511,41 @@ impl Talk {
                 if on_talk_base {
                     anim.pin_base_frame(None);
                     anim.set_mouth(None);
-                    if self.took_base {
-                        anim.stand();
-                    }
                 }
-                self.took_base = false;
-                self.clip = None;
+                if on_talk_base && self.hold_s > 0.0 && self.took_base {
+                    self.hold_left = Some(self.hold_s);
+                } else {
+                    self.release_talk_base(anim);
+                }
             }
             None => {}
         }
+    }
+
+    /// Talk clip hold after speech (seconds; the voice daemon sets ~1 s).
+    pub fn set_hold(&mut self, s: f32) {
+        self.hold_s = s.max(0.0);
+    }
+
+    /// She stands plainly: idle base, no reaction overlay or stop blend,
+    /// and the overlay says nothing else owns her body.
+    fn may_take_base(&self, anim: &Animator) -> bool {
+        self.body_free && anim.on_idle_base() && anim.overlay_clip().is_none() && !anim.stopping()
+    }
+
+    /// Ends the talk clip: back to idle if we took it.
+    fn release_talk_base(&mut self, anim: &mut Animator) {
+        let on_talk_base = self.clip.as_deref().is_some_and(|c| anim.base() == c);
+        if on_talk_base {
+            anim.pin_base_frame(None);
+            anim.set_mouth(None);
+            if self.took_base {
+                anim.stand();
+            }
+        }
+        self.took_base = false;
+        self.clip = None;
+        self.hold_left = None;
     }
 }
 
@@ -522,11 +570,13 @@ mod tests {
         assert!(!g.poll(5.0, 0.35));
     }
 
+    const TALK_CLIP_POSE_TEST: &str = "pose_lean";
+
     #[test]
     fn daemon_lipsync_lines_drive_her_mouth_and_talk_clip() {
         use lillith_anim::animator::AnimatorConfig;
         let mut toml = String::new();
-        for name in ["idle", TALK_CLIP] {
+        for name in ["idle", TALK_CLIP, TALK_CLIP_POSE_TEST] {
             toml += &format!(
                 "[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\nmode = \"loop\"\nframes = ["
             );
@@ -578,6 +628,52 @@ mod tests {
         talk.reset_lipsync();
         talk.tick(0.016, &mut anim);
         assert!(!talk.active());
+        assert_ne!(anim.base(), TALK_CLIP);
+
+        // Voice daemon: the talk clip is held ~1 s after speech, so the
+        // next utterance doesn't flicker talk -> idle -> talk.
+        talk.set_hold(1.0);
+        let speak = |talk: &mut Talk, utt: u32| {
+            talk.feed_lipsync(&format!(
+                r#"{{"ev":"chunk_start","utt":{utt},"chunk":0,"mono_ms":1}}"#
+            ));
+        };
+        speak(&mut talk, 9);
+        talk.tick(0.016, &mut anim);
+        assert_eq!(anim.base(), TALK_CLIP);
+        talk.feed_lipsync(r#"{"ev":"stop","utt":9}"#);
+        for _ in 0..5 {
+            talk.tick(0.1, &mut anim);
+            assert_eq!(anim.base(), TALK_CLIP, "held between utterances");
+        }
+        assert!(!talk.active());
+        speak(&mut talk, 10);
+        talk.tick(0.016, &mut anim);
+        assert_eq!(anim.base(), TALK_CLIP);
+        talk.feed_lipsync(r#"{"ev":"stop","utt":10}"#);
+        for _ in 0..15 {
+            talk.tick(0.1, &mut anim);
+        }
+        assert_ne!(anim.base(), TALK_CLIP, "back to idle after the hold");
+        assert!(anim.on_idle_base());
+
+        // Dragged / teasing / sitting: the voice never swaps her clip.
+        talk.body_free = false;
+        speak(&mut talk, 11);
+        for _ in 0..3 {
+            talk.tick(0.016, &mut anim);
+        }
+        assert!(anim.on_idle_base(), "busy body keeps its clip");
+        talk.reset_lipsync();
+        talk.tick(0.016, &mut anim);
+        // Not standing plainly (a pose / other base): not taken either.
+        talk.body_free = true;
+        anim.set_base(TALK_CLIP_POSE_TEST, false).unwrap();
+        speak(&mut talk, 12);
+        for _ in 0..3 {
+            talk.tick(0.016, &mut anim);
+        }
+        assert_eq!(anim.base(), TALK_CLIP_POSE_TEST, "pose kept");
     }
 
     #[test]

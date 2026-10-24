@@ -661,6 +661,11 @@ impl Animator {
         &self.base
     }
 
+    /// `true` while the base is the idle (standing) clip.
+    pub fn on_idle_base(&self) -> bool {
+        self.base == self.idle_base
+    }
+
     /// Frames used for a blink (empty if there is no blink clip).
     pub fn blink_frames(&self) -> &[usize] {
         &self.blink_frames
