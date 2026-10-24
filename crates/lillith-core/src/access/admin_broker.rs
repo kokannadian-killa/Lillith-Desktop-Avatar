@@ -7,12 +7,13 @@
 //!   its command line and nothing else.
 //! - Lillith connects to `\\.\pipe\lillith-admin-<hex>` (ACL restricted to
 //!   Ko's account), checks the token, and sends the approved command.
-//! - In `per-session` mode the helper stays up until the app exits, the
-//!   safeword fires ([`super::kill_switch`]), or it is idle past the timeout.
+//! - In `per-session` mode the helper stays up until the app exits (or
+//!   Ctrl-C / SIGTERM pulls [`super::kill_switch::stop_all`]), or it is idle
+//!   past the timeout. The safeword ("red") no longer kills it.
 //!   In `per-command` mode the helper exits after each command, so every
 //!   elevated command brings its own UAC prompt.
 //!
-//! **Safeword / stop:** the broker keeps the helper's process handle in a
+//! **Stop (Ctrl-C / SIGTERM / app exit):** the broker keeps the helper's process handle in a
 //! separate lock from the pipe session. [`force_kill`] terminates that
 //! process (and, inside the helper, a Job Object with `KILL_ON_JOB_CLOSE`
 //! tears down any command children) without waiting on an in-flight
@@ -56,7 +57,7 @@ pub fn run_elevated(req: ElevatedRun<'_>) -> std::io::Result<String> {
     }
 }
 
-/// Force-kills the elevated helper out-of-band (safeword / app shutdown).
+/// Force-kills the elevated helper out-of-band (stop_all / app shutdown; not the safeword).
 /// Does not wait on the pipe session lock held by an in-flight command.
 pub fn force_kill() -> HelperKill {
     #[cfg(windows)]
@@ -69,8 +70,8 @@ pub fn force_kill() -> HelperKill {
     }
 }
 
-/// Soft shutdown: try a Stop frame, then [`force_kill`]. Same as the safeword
-/// path; kept as a name for app-exit call sites.
+/// Soft shutdown: try a Stop frame, then [`force_kill`]. Same as the
+/// [`super::kill_switch::stop_all`] hook; kept as a name for app-exit call sites.
 pub fn shutdown() -> HelperKill {
     force_kill()
 }
@@ -124,7 +125,7 @@ mod imp {
     }
 
     /// Process handle of the elevated helper. Separate from [`SESSION`] so
-    /// the safeword can TerminateProcess while a Run is mid-`read_frame`.
+    /// a stop can TerminateProcess while a Run is mid-`read_frame`.
     struct Proc {
         handle: HANDLE,
     }
@@ -241,7 +242,7 @@ mod imp {
                 Reply::Err { id: rid, message } if rid == id => Err(std::io::Error::other(message)),
                 _ => Err(std::io::Error::other("admin helper: id mismatch")),
             },
-            // The safeword killed the helper mid-command: report it as
+            // A stop (Ctrl-C / SIGTERM) killed the helper mid-command: report it as
             // stopped (audited RESULT-STOPPED), not as a pipe error.
             Err(_) if crate::access::kill_switch::stopped_since(epoch) => {
                 Ok(crate::access::commands::STOPPED_LINE.to_string())

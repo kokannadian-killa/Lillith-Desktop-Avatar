@@ -301,7 +301,8 @@ pub struct BridgeOptions {
     pub cfg: MemoryConfig,
     pub clock: Clock,
     pub open: BrainFactory,
-    /// The process-wide safeword epoch ([`lillith_core::access::kill_switch::epoch`]).
+    /// The process-wide safeword epoch ([`lillith_core::access::kill_switch::hush_epoch`]:
+    /// the safeword or a stop).
     pub stop_epoch: Arc<dyn Fn() -> u64 + Send + Sync>,
     pub say: Say,
 }
@@ -320,7 +321,7 @@ impl BridgeOptions {
                     None
                 }
             }),
-            stop_epoch: Arc::new(lillith_core::access::kill_switch::epoch),
+            stop_epoch: Arc::new(lillith_core::access::kill_switch::hush_epoch),
             say,
         }
     }

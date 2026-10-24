@@ -158,9 +158,9 @@ lillith-bot rm scout-2                                  # deletes bots/scout-2/ 
   finished/stalled task becomes a new task on the other bot; a running one is stopped and
   re-queued there. Routines run through the same task runner.
 - **Safeword:** `red` (the whole message) or `OOC: stop` anywhere, in any bot chat (CLI,
-  API, interactive), cancels every running and queued task, calls no model and stores
-  nothing (same rule as `crates/lillith-memory/src/safeword.rs`). `POST /stop-all` and
-  `lillith-bot stop-all` do the same.
+  API, interactive), calls no model and stores nothing (same rule as
+  `crates/lillith-memory/src/safeword.rs`). It no longer cancels running or queued
+  tasks (`"stopped"` is always 0); `POST /stop-all` and `lillith-bot stop-all` do that.
 - **Tools (closed set):** `list_attachments`, `read_attachment`, `search_attachments`,
   `search_memory`, `write_memory` (to the bot's own store). No file paths, shell, program
   launching or network. Anything privileged must go through Lillith's Soul Contract

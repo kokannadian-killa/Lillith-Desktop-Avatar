@@ -1,7 +1,7 @@
 """Safeword check, mirroring crates/lillith-memory/src/safeword.rs::is_safeword:
 the whole message is "red" (case/punctuation-insensitive), or it carries
-"OOC: stop" / "OOC stop" anywhere. A safeword cancels every running and
-queued bot task."""
+"OOC: stop" / "OOC stop" anywhere. A safeword stops the chat reply (no model
+call, nothing stored); it does not cancel running or queued bot tasks."""
 
 
 def is_safeword(text: str) -> bool:

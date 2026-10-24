@@ -214,7 +214,7 @@ impl KnobTab {
                         Knob {
                             path: &["mind", "access", "windows", "admin_prompt"],
                             label: "UAC prompt",
-                            help: "per-session = one UAC prompt, the helper stays until you quit, say the safeword, or it idles out. per-command = a UAC prompt for every elevated command.",
+                            help: "per-session = one UAC prompt, the helper stays until you quit or it idles out (the safeword doesn't close it). per-command = a UAC prompt for every elevated command.",
                             kind: Kind::Choice {
                                 options: &["per-session", "per-command"],
                                 default: "per-session",

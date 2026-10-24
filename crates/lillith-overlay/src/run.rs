@@ -1684,8 +1684,10 @@ impl Controller {
         if ev.name == CHAT_BARGE_IN || ev.name == CHAT_SAFEWORD {
             let safeword = ev.name == CHAT_SAFEWORD;
             if safeword {
-                tracing::warn!("safeword from the chat bubble: stopping everything");
-                lillith_core::access::kill_switch::stop_all();
+                // The safeword stops her talking (not her work: running
+                // commands and the admin helper are left alone).
+                tracing::warn!("safeword from the chat bubble: she stops talking");
+                lillith_core::access::kill_switch::hush();
                 // The reply in flight is dead: wrap up what's shown, and
                 // nothing of it still queued is shown or spoken.
                 self.chat_stopped = true;
@@ -3627,10 +3629,17 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         *sink.gone.lock().unwrap() = true;
         c.tick(0.016).unwrap();
         assert!(!c.talk.active());
-        // Safeword from the bubble: kill switch + voice cut.
+        // Safeword from the bubble: voice cut, nothing killed.
         let before = lillith_core::access::kill_switch::epoch();
         c.event(&Event::new(CHAT_SAFEWORD));
-        assert!(lillith_core::access::kill_switch::stopped_since(before));
+        assert!(
+            !lillith_core::access::kill_switch::stopped_since(before),
+            "the safeword no longer pulls the kill switch"
+        );
+        assert!(
+            lillith_core::access::kill_switch::hush_epoch() > 0,
+            "it hushes"
+        );
         assert_eq!(*sink.interrupts.lock().unwrap(), ["barge_in", "safeword"]);
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -3694,7 +3703,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         tx.send(Event::new(CHAT_SAFEWORD)).unwrap();
         let before = lillith_core::access::kill_switch::epoch();
         c.tick(0.016).unwrap();
-        assert!(lillith_core::access::kill_switch::stopped_since(before));
+        assert!(!lillith_core::access::kill_switch::stopped_since(before));
         assert_eq!(*sink.interrupts.lock().unwrap(), ["safeword"]);
         assert!(c.feed_backlog.is_empty());
         // Unpaused: a burst of tokens doesn't delay it past this frame.
@@ -3708,7 +3717,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         tx.send(Event::new(CHAT_SAFEWORD)).unwrap();
         let before = lillith_core::access::kill_switch::epoch();
         c.tick(0.016).unwrap();
-        assert!(lillith_core::access::kill_switch::stopped_since(before));
+        assert!(!lillith_core::access::kill_switch::stopped_since(before));
         assert_eq!(
             *sink.interrupts.lock().unwrap(),
             ["safeword", "barge_in", "safeword"]

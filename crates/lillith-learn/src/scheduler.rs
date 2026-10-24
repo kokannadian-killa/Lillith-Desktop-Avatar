@@ -5,9 +5,8 @@
 //!  ▲                   ▲  ▲                                     │
 //!  └── disabled        │  └──────────── step done ──────────────┤
 //!                      │                                        │ activity
-//!                Paused ◀── load / battery / fullscreen ────────┤
-//!                      ▲                                        │ safeword
-//!                Cooldown ◀─────────────────────────────────────┘
+//!                Paused ◀── load / battery / fullscreen ────────┘
+//!                         (a safeword / stop drops the step → Waiting)
 //! ```
 //!
 //! - idle: no activity for `idle_after_s` (when `pause_on_activity`);
@@ -15,8 +14,10 @@
 //! - duty: after a step of length t she rests ≥ t·(1/max_duty − 1)
 //!   (9·t at 10 %), and busy time in the last 10 minutes stays ≤ max_duty;
 //! - budgets: `max_steps_per_hour`, `max_tokens_per_day`;
-//! - safeword (`kill_switch::epoch()` changed or a `chat.safeword` event):
-//!   the running step is dropped and she rests `safeword_cooldown_min`.
+//! - safeword (`kill_switch::hush_epoch()` changed or a `chat.safeword` event):
+//!   the running step is dropped and nothing of it is kept. There is no
+//!   rest period after it any more (`learn.safeword_cooldown_min` is not
+//!   read); only the normal duty rest for the dropped step applies.
 
 use lillith_core::config::LearnConfig;
 use std::collections::VecDeque;
@@ -34,7 +35,6 @@ pub struct Limits {
     pub pause_on_activity: bool,
     pub pause_on_battery: bool,
     pub pause_on_fullscreen: bool,
-    pub safeword_cooldown_s: f64,
     pub max_tokens_per_day: u32,
     pub max_steps_per_hour: u32,
 }
@@ -49,7 +49,6 @@ impl From<&LearnConfig> for Limits {
             pause_on_activity: c.pause_on_activity,
             pause_on_battery: c.pause_on_battery,
             pause_on_fullscreen: c.pause_on_fullscreen,
-            safeword_cooldown_s: f64::from(c.safeword_cooldown_min.max(0.0)) * 60.0,
             max_tokens_per_day: c.max_tokens_per_day,
             max_steps_per_hour: c.max_steps_per_hour,
         }
@@ -63,7 +62,6 @@ pub enum State {
     Waiting,
     Running,
     Paused,
-    Cooldown,
 }
 
 /// Why no step may start now.
@@ -76,7 +74,6 @@ pub enum WaitReason {
     Duty,
     StepBudget,
     TokenBudget,
-    Safeword,
 }
 
 /// What [`Scheduler::tick`] decided.
@@ -97,7 +94,7 @@ pub struct Inputs {
     pub load1: Option<f32>,
     pub on_battery: bool,
     pub fullscreen: bool,
-    /// `kill_switch::epoch()`.
+    /// `kill_switch::hush_epoch()` (the safeword or a stop).
     pub kill_epoch: u64,
     /// A `chat.safeword` event arrived since the last tick.
     pub safeword: bool,
@@ -124,7 +121,6 @@ pub struct Scheduler {
     limits: Limits,
     state: State,
     epoch: Option<u64>,
-    cooldown_until: f64,
     next_allowed: f64,
     run_started: Option<f64>,
     /// (start, end) of recent steps.
@@ -146,7 +142,6 @@ impl Scheduler {
             limits,
             state,
             epoch: None,
-            cooldown_until: f64::NEG_INFINITY,
             next_allowed: f64::NEG_INFINITY,
             run_started: None,
             busy: VecDeque::new(),
@@ -173,11 +168,6 @@ impl Scheduler {
     /// used while a step runs, to drop it.
     pub fn safeword_fired(&self, i: &Inputs) -> bool {
         i.safeword || self.epoch.is_some_and(|e| e != i.kill_epoch)
-    }
-
-    fn enter_cooldown(&mut self, now: f64) {
-        self.cooldown_until = now + self.limits.safeword_cooldown_s;
-        self.state = State::Cooldown;
     }
 
     fn roll(&mut self, now: f64) {
@@ -209,18 +199,11 @@ impl Scheduler {
             self.state = State::Off;
             return Decision::Off;
         }
-        if self.safeword_fired(i) {
-            self.enter_cooldown(i.now);
-        }
         self.epoch = Some(i.kill_epoch);
         self.roll(i.now);
         if self.state == State::Running {
             // Only `begin`/`finish`/`abort` move out of Running.
             return Decision::Wait(WaitReason::Duty);
-        }
-        if i.now < self.cooldown_until {
-            self.state = State::Cooldown;
-            return Decision::Wait(WaitReason::Safeword);
         }
         let pause = if self.limits.pause_on_battery && i.on_battery {
             Some(WaitReason::Battery)
@@ -279,25 +262,21 @@ impl Scheduler {
         self.state = State::Waiting;
     }
 
-    /// The step was dropped: by the safeword (→ Cooldown) or by activity /
-    /// chat (→ Paused until idle again).
+    /// The step was dropped: by the safeword / a stop (→ Waiting, with only
+    /// the normal duty rest; no safeword rest period) or by activity / chat
+    /// (→ Paused until idle again).
     pub fn abort(&mut self, now: f64, safeword: bool) {
         self.record(now);
-        if safeword {
-            self.enter_cooldown(now);
+        self.state = if safeword {
+            State::Waiting
         } else {
-            self.state = State::Paused;
-        }
+            State::Paused
+        };
     }
 
     /// No step before `now + secs` (the model server isn't there).
     pub fn backoff(&mut self, now: f64, secs: f64) {
         self.next_allowed = self.next_allowed.max(now + secs);
-    }
-
-    /// Seconds until the cooldown ends (0 when none).
-    pub fn cooldown_left(&self, now: f64) -> f64 {
-        (self.cooldown_until - now).max(0.0)
     }
 }
 
@@ -370,7 +349,7 @@ mod tests {
     }
 
     #[test]
-    fn safeword_epoch_and_event_cool_down_for_an_hour() {
+    fn safeword_drops_the_step_but_never_rests_her() {
         let mut s = sched();
         assert_eq!(s.tick(&Inputs::calm(0.0)), Decision::Run);
         s.begin(0.0);
@@ -379,18 +358,22 @@ mod tests {
         i.kill_epoch = 1;
         assert!(s.safeword_fired(&i));
         s.abort(1.0, true);
-        assert_eq!(s.state(), State::Cooldown);
-        assert_eq!(s.tick(&i), Decision::Wait(WaitReason::Safeword));
-        let mut later = Inputs::calm(3599.0);
+        assert_eq!(s.state(), State::Waiting, "no safeword cooldown");
+        // Only the duty rest for the 1 s step (9 s at 10 %), not an hour.
+        let mut later = Inputs::calm(11.0);
         later.kill_epoch = 1;
-        assert_eq!(s.tick(&later), Decision::Wait(WaitReason::Safeword));
-        later.now = 3602.0;
         assert_eq!(s.tick(&later), Decision::Run);
-        // The chat.safeword event alone does it too.
-        later.safeword = true;
-        assert_eq!(s.tick(&later), Decision::Wait(WaitReason::Safeword));
-        assert_eq!(s.state(), State::Cooldown);
-        assert!((s.cooldown_left(3602.0) - 3600.0).abs() < 1e-6);
+        // The chat.safeword event alone does not hold her back either,
+        // even with safeword_cooldown_min set (that key is no longer read).
+        let mut s = Scheduler::new(Limits::from(&LearnConfig {
+            safeword_cooldown_min: 60.0,
+            ..LearnConfig::default()
+        }));
+        let mut ev = Inputs::calm(100.0);
+        ev.safeword = true;
+        assert!(s.safeword_fired(&ev));
+        assert_eq!(s.tick(&ev), Decision::Run);
+        assert_eq!(s.state(), State::Waiting);
     }
 
     #[test]

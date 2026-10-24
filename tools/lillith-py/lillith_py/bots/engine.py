@@ -28,7 +28,9 @@ TEMPLATE_VERSION = 1
 MAX_TOOL_ROUNDS = 3
 CPT = 4.0  # chars per token estimate
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
-SAFEWORD_REPLY = "Stopped. Every running and queued bot task was cancelled."
+# The safeword stops the chat reply only; it no longer cancels bot tasks
+# (Ko, 2026-10-24: "Only remove the shutdown part"). Use stop-all for that.
+SAFEWORD_REPLY = "Okay, stopping. You alright, Ko?"
 
 
 def bundled_templates() -> dict:
@@ -209,10 +211,11 @@ class Lillith:
              read_timeout: float | None = None, check_safeword: bool = True) -> dict:
         p = self.bots.get(bot)
         if check_safeword and is_safeword(message):
-            # Safeword: cancel everything, call no model, store nothing.
-            res = self.stop_all()
+            # Safeword: call no model, store nothing. Running / queued tasks
+            # are left alone (stop-all cancels them); "stopped" stays 0 for
+            # clients that read it.
             return {"bot": p.name, "reply": SAFEWORD_REPLY, "tools": [], "attachments": [],
-                    "safeword": True, "stopped": res["stopped"]}
+                    "safeword": True, "stopped": 0}
         for a in attachments or []:  # new files join the bot's attachment list
             self.attach(p.name, a)
         messages, report = self.build_messages(p, message)

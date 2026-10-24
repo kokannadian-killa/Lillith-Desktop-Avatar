@@ -491,7 +491,10 @@ pub fn run_captured(
     run_child(c, timeout, cap)
 }
 
-/// The last line of a command's output when the safeword killed it.
+/// The last line of a command's output when a stop ([`super::kill_switch::stop_all`]:
+/// Ctrl-C / SIGTERM / app shutdown) killed it. The text still says "safeword"
+/// because `soul_contract.rs` audits on it; the safeword itself no longer
+/// kills commands.
 pub const STOPPED_LINE: &str = "[stopped by the safeword]";
 
 /// Whether a command result says the safeword stopped it (audited as
@@ -502,8 +505,8 @@ pub fn was_stopped(output: &str) -> bool {
 
 /// Runs a prepared command with no stdin and captured stdout/stderr, a
 /// `timeout` and output capped at `cap` bytes. The whole child tree is
-/// killed on timeout or when the safeword fires
-/// ([`super::kill_switch::stop_all`]). Returns the combined output plus an
+/// killed on timeout or on a stop ([`super::kill_switch::stop_all`]:
+/// Ctrl-C / SIGTERM / app shutdown; not the safeword). Returns the combined output plus an
 /// `[exit N]` / `[timed out after Ns]` / `[stopped by the safeword]` line.
 pub fn run_child(
     c: std::process::Command,
@@ -539,7 +542,7 @@ fn run_child_ungated(
         c.creation_flags(super::winshell::CREATE_NO_WINDOW);
     }
     let mut child = c.spawn()?;
-    // Windows: put the child in a Job with KILL_ON_JOB_CLOSE so safeword /
+    // Windows: put the child in a Job with KILL_ON_JOB_CLOSE so a stop /
     // timeout tears down the whole tree (cmd → nested processes) at once.
     #[cfg(windows)]
     let job = match super::winjob::Job::new_kill_on_close() {
@@ -772,7 +775,24 @@ mod tests {
     }
 
     #[test]
-    fn safeword_kills_a_running_command() {
+    fn the_safeword_hush_leaves_a_running_command_alone() {
+        let _gate = super::super::kill_switch::TEST_GATE
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        let t = std::thread::spawn(|| {
+            let mut c = std::process::Command::new("sh");
+            c.arg("-c").arg("sleep 1; echo done");
+            run_child_ungated(c, Duration::from_secs(30), 4096)
+        });
+        std::thread::sleep(Duration::from_millis(300));
+        super::super::kill_switch::hush();
+        let out = t.join().unwrap().unwrap();
+        assert!(!was_stopped(&out), "{out}");
+        assert!(out.contains("done") && out.contains("[exit 0]"), "{out}");
+    }
+
+    #[test]
+    fn stop_all_kills_a_running_command() {
         let _gate = super::super::kill_switch::TEST_GATE
             .write()
             .unwrap_or_else(|e| e.into_inner());

@@ -104,6 +104,9 @@ pub enum MicEvent {
 pub(crate) enum MicCmd {
     Start,
     Stop,
+    /// `listen stop` with `drop`: the daemon throws the audio away (a mic
+    /// that opened after its press was already stopped).
+    DropStop,
     /// Stop her voice (`stop` with this reason).
     Hush(String),
     /// The safeword mid press: `stop` with this reason first, then (in
@@ -278,7 +281,8 @@ impl Mic {
                     }
                 }
                 let (start_tx, start_rx) = channel::<()>();
-                let (stop_tx, stop_rx) = channel::<()>();
+                // `true`: the listen stop drops the audio.
+                let (stop_tx, stop_rx) = channel::<bool>();
                 let (hush_tx, hush_rx) = channel::<(String, bool)>();
                 let c = client.clone();
                 worker("lillith-mic-start", start_rx, move |()| {
@@ -309,7 +313,7 @@ impl Mic {
                     }
                 });
                 let (c, end) = (client.clone(), std::sync::Arc::clone(&end_press));
-                worker("lillith-mic-stop", stop_rx, move |()| end(&c, false));
+                worker("lillith-mic-stop", stop_rx, move |drop: bool| end(&c, drop));
                 let (c, end) = (client, end_press);
                 worker(
                     "lillith-mic-hush",
@@ -332,7 +336,12 @@ impl Mic {
                 while let Ok(m) = cmd_rx.recv() {
                     let _ = match m {
                         MicCmd::Start => start_tx.send(()),
-                        MicCmd::Stop => stop_tx.send(()),
+                        MicCmd::Stop => stop_tx
+                            .send(false)
+                            .map_err(|_| std::sync::mpsc::SendError(())),
+                        MicCmd::DropStop => stop_tx
+                            .send(true)
+                            .map_err(|_| std::sync::mpsc::SendError(())),
                         MicCmd::Hush(r) => hush_tx
                             .send((r, false))
                             .map_err(|_| std::sync::mpsc::SendError(())),
@@ -431,9 +440,11 @@ impl Mic {
         }
     }
 
-    fn send_stop(&mut self, discard: bool) {
-        self.stops.push_back(discard);
-        let _ = self.cmd.send(MicCmd::Stop);
+    /// A `listen stop` with `drop` for a mic nobody is using any more: the
+    /// daemon throws the audio away and its transcript is never shown.
+    fn send_drop_stop(&mut self) {
+        self.stops.push_back(true);
+        let _ = self.cmd.send(MicCmd::DropStop);
     }
 
     /// Events since the last frame (never blocks). A transcript dropped by
@@ -457,8 +468,9 @@ impl Mic {
                     } else {
                         // Opened after the press was already stopped (an
                         // older daemon): close it again, the mic always
-                        // stops. Nothing it hears is used.
-                        self.send_stop(true);
+                        // stops. Nothing it hears is used, and the daemon
+                        // is told to drop the audio (never transcribed).
+                        self.send_drop_stop();
                         continue;
                     }
                 }
@@ -609,7 +621,11 @@ mod tests {
         ev.send(MicEvent::Heard(Transcript::default())).unwrap();
         ev.send(MicEvent::Listening).unwrap(); // an older daemon opened it late
         m.poll();
-        assert_eq!(cmds.try_recv(), Ok(MicCmd::Stop), "closed again");
+        assert_eq!(
+            cmds.try_recv(),
+            Ok(MicCmd::DropStop),
+            "closed again, dropping the audio"
+        );
         ev.send(MicEvent::Heard(Transcript {
             text: "late".into(),
             ..Default::default()
@@ -628,7 +644,11 @@ mod tests {
         assert_eq!(cmds.try_recv(), Ok(MicCmd::Stop));
         ev.send(MicEvent::Listening).unwrap(); // opened before the cancel landed
         m.poll();
-        assert_eq!(cmds.try_recv(), Ok(MicCmd::Stop), "closed again");
+        assert_eq!(
+            cmds.try_recv(),
+            Ok(MicCmd::DropStop),
+            "closed again, dropping the audio"
+        );
         assert_eq!(m.state, MicState::Busy);
         ev.send(MicEvent::Heard(Transcript::default())).unwrap();
         assert_eq!(m.poll(), [MicEvent::Heard(Transcript::default())]);
@@ -677,6 +697,9 @@ mod tests {
             /// `listen stop`s still to fail (connection dropped, no reply);
             /// `usize::MAX`: all of them.
             pub fail_stops: usize,
+            /// An older daemon: `listen start` opens the mic only after the
+            /// press's `listen stop` already arrived.
+            pub late_open: bool,
         }
 
         pub struct Fake {
@@ -692,6 +715,12 @@ mod tests {
 
         pub fn start(tag: &str, yes: bool) -> (Fake, DaemonClient) {
             start_with(tag, yes, 0)
+        }
+
+        pub fn start_late(tag: &str) -> (Fake, DaemonClient) {
+            let (f, c) = start_with(tag, false, 0);
+            f.log.0.lock().unwrap().late_open = true;
+            (f, c)
         }
 
         pub fn start_with(tag: &str, yes: bool, fail_stops: usize) -> (Fake, DaemonClient) {
@@ -754,8 +783,12 @@ mod tests {
                                     .wait_timeout_while(g, Duration::from_secs(5), |g| !g.stopped)
                                     .unwrap();
                                 g.start_replied = Some(Instant::now());
-                                r#"{"ok":false,"released":true,"need_card":true,"error":"released"}"#
-                                    .to_string()
+                                if g.late_open {
+                                    r#"{"ok":true,"listening":true}"#.to_string()
+                                } else {
+                                    r#"{"ok":false,"released":true,"need_card":true,"error":"released"}"#
+                                        .to_string()
+                                }
                             }
                             "listen stop" => {
                                 let mut g = m.lock().unwrap();
@@ -940,6 +973,33 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_mic_an_older_daemon_opens_late_is_closed_with_drop() {
+        use fake_daemon::*;
+        let (f, client) = start_late("lateopen");
+        let mut m = Mic::spawn(client, Duration::from_secs(5), || {});
+        poll_until(&mut m, |m| m.ready);
+        m.toggle();
+        wait_for(&f, "listen start");
+        std::thread::sleep(Duration::from_millis(100)); // the card is up
+        m.toggle(); // cancel; the old daemon opens the mic anyway
+        wait_for(&f, "listen stop");
+        // The late open is seen (and closed) by the next frames' polls.
+        let evs = poll_until(&mut m, |m| m.can_start());
+        assert!(
+            !evs.iter()
+                .any(|e| matches!(e, MicEvent::Heard(t) if !t.text.is_empty())),
+            "nothing the late mic heard is shown: {evs:?}"
+        );
+        assert_eq!(count(&f, "listen stop"), 1, "only the press's own cancel");
+        assert_eq!(
+            count(&f, "listen stop drop"),
+            1,
+            "the late mic is closed with drop"
+        );
     }
 
     #[cfg(unix)]

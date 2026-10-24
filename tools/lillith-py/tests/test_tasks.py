@@ -151,7 +151,7 @@ def test_stop_all_cancels_running_and_queued(app, mock_llama):
 
 
 @pytest.mark.parametrize("word", ["red", "RED!", " Red ", "OOC: stop", "ok (ooc stop) sorry"])
-def test_safeword_in_chat_stops_everything(app, mock_llama, word):
+def test_safeword_in_chat_stops_the_reply_but_cancels_no_task(app, mock_llama, word):
     app.bots.create("y")
     app.bots.create("z")
     mock_llama.script.append({"content": LONG, "_chunk_delay": 0.2})
@@ -161,11 +161,14 @@ def test_safeword_in_chat_stops_everything(app, mock_llama, word):
     time.sleep(0.6)
     n_before = len(mock_llama.requests)
     r = app.chat("z", word)
-    assert r["safeword"] is True and r["stopped"] == 2
+    assert r["safeword"] is True and r["stopped"] == 0
     assert len(mock_llama.requests) == n_before  # no model call
     assert app.bots.history("z") == []          # safeword is never stored
+    # Nothing is shut down: the running task goes on, the queued one waits.
+    assert app.tasks.get(t1["id"])["status"] == "running"
+    assert app.tasks.get(t2["id"])["status"] == "queued"
+    app.stop_all()  # tidy up for the next test
     assert app.tasks.wait(t1["id"], 10)["status"] == "cancelled"
-    assert app.tasks.get(t2["id"])["status"] == "cancelled"
 
 
 def test_is_safeword_matches_rust_rules():
@@ -228,7 +231,7 @@ def test_cli_task_commands(tmp_path, mock_llama, capsys):
     assert bot_cli(h + ["task", "list"]) == 0
     assert bot_cli(h + ["task", "log", tid]) == 0
     assert bot_cli(h + ["chat", "helper", "red"]) == 0
-    assert "Stopped" in capsys.readouterr().out
+    assert "Okay, stopping" in capsys.readouterr().out  # stops the reply, cancels no task
 
 
 # ---------- Bots-tab API ----------

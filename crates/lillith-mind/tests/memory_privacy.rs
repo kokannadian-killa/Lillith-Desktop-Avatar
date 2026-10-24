@@ -1,6 +1,7 @@
-//! Memory privacy guarantees at the chat-session level. Kept in its own test
-//! binary because sending the bare safeword calls the process-global
-//! `kill_switch::stop_all()`, which must not race the unit tests.
+//! Memory privacy guarantees at the chat-session level (and the safeword's
+//! chat path, which stops her talking but no longer pulls the process-global
+//! kill switch). Kept in its own test binary so the epoch checks don't race
+//! the unit tests.
 
 use lillith_core::config::{ChatConfig, MemoryConfig};
 use lillith_memory::{Brain, Ctx};
@@ -87,6 +88,31 @@ async fn safeword_is_checked_before_memory() {
     }
     // "I love red" is a mention, not the safeword: still never stored.
     assert!(lillith_memory::mentions_safeword("I love red"));
+}
+
+/// The safeword stops her talking but shuts nothing down: the kill-switch
+/// epoch (running commands, the admin helper) does not move, and the reply
+/// doesn't claim anything was killed.
+#[tokio::test]
+async fn safeword_stops_talking_but_kills_nothing() {
+    let mut s = ChatSession::new(&ChatConfig::default(), true);
+    for word in ["red", "Red.", "OOC: stop"] {
+        let before = lillith_core::access::kill_switch::epoch();
+        let hush = lillith_core::access::kill_switch::hush_epoch();
+        let mut streamed = String::new();
+        let out = s.send(word, |t| streamed.push_str(t)).await;
+        assert_eq!(out.text(), lillith_mind::chat::SAFEWORD_LINE, "{word}");
+        assert_eq!(streamed, lillith_mind::chat::SAFEWORD_LINE, "{word}");
+        assert!(!out.text().contains("dead") && !out.text().contains("helper"));
+        assert!(
+            !lillith_core::access::kill_switch::stopped_since(before),
+            "{word}: no stop_all on the safeword"
+        );
+        assert!(
+            lillith_core::access::kill_switch::hushed_since(hush),
+            "{word}: still hushes (cards and waits are cancelled)"
+        );
+    }
 }
 
 /// A pending "forget everything" is cancelled by the safeword: a later "yes"

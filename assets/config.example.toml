@@ -296,7 +296,7 @@
 # ~/.local/share/lillith/knowledge/<topic>/. Fully local: the idle loop never
 # uses the network, installs or runs anything; the only connection is the
 # loopback model server, and chat always gets it first. Off whenever memory
-# is off (enabled = false under memory). The safeword stops it at once and rests it.
+# is off (enabled = false under memory). The safeword drops a running step at once (no rest).
 # `lillith learn --once --dry-run` shows one step; `--reindex` rebuilds the index.
 # [learn]
 # enabled = true
@@ -306,7 +306,7 @@
 # pause_on_battery = true
 # pause_on_activity = true     # any input drops a running step
 # pause_on_fullscreen = true
-# safeword_cooldown_min = 60.0 # rest after the safeword
+# safeword_cooldown_min = 60.0 # no longer read (there is no rest after the safeword)
 # max_tokens_per_day = 40000
 # max_steps_per_hour = 12
 # note_half_life_days = 90.0   # (later milestone)

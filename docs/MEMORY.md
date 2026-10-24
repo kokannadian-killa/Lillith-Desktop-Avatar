@@ -85,7 +85,7 @@ thread, no queue and no file; the tee is the plain feed.
 calls `Brain::predict` and a `Proactive` gate picks the first prediction
 with `confidence ≥ proactive_min_confidence` (default 0.5). It stays quiet:
 
-- for 30 min after the safeword (the kill-switch epoch changed, or
+- for 30 min after the safeword (the safeword's hush epoch changed, or
   `chat.safeword` came through the feed);
 - for 5 min after any chat activity, and while `set_busy_for` is active
   (no fullscreen sensor exists yet; the overlay also drops the line while
