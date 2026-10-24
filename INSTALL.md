@@ -383,7 +383,7 @@ on 127.0.0.1 only. She does keep these files locally:
 | settings | `~/.config/lillith/config.toml` | `%APPDATA%\lillith\config.toml` |
 | learning memory (SQLite) | `~/.local/share/lillith/memory.db` | `%LOCALAPPDATA%\lillith\memory.db` |
 | saved chat history | `~/.local/share/lillith/chat_history.json` | `%LOCALAPPDATA%\lillith\chat_history.json` |
-| Soul Contract audit log | `~/.local/share/lillith/audit.log` | `%LOCALAPPDATA%\lillith\audit.log` |
+| audit log (Soul Contract + forgets) | `~/.local/share/lillith/audit.log` | `%LOCALAPPDATA%\lillith\audit.log` |
 | app log | stderr only (not saved) | `%LOCALAPPDATA%\lillith\lillith.log` when not started from a terminal |
 
 On Linux, `$XDG_DATA_HOME` (if set) replaces `~/.local/share`.
@@ -391,13 +391,17 @@ On Linux, `$XDG_DATA_HOME` (if set) replaces `~/.local/share`.
 **Memory.** She remembers what you tell her (people, likes, habits), which
 apps you use, and errors and their fixes. A short note from that goes into
 each chat turn, and unused memories fade over time.
-- The memory folder is owner-only (0700) and the file is 0600. The safeword
+- On Linux the memory folder is owner-only (0700) and the file is 0600
+  (Windows uses the default per-user permissions). The safeword
   is never stored.
 - **Turn it off** with `[memory] enabled = false`. Then nothing is read or
   written, and no file is created.
 - **Forget from the chat:**
   - "forget about <topic>" and "forget everything" ask first; answer "yes".
-  - "forget the last 30 minutes" (or hour, days, week) deletes right away.
+  - "forget the last 30 minutes" or "the last hour" deletes right away.
+    Longer windows (days, a week, months) ask for "yes" first.
+  - "forget the last thing I said" drops only your last message and her
+    reply from the chat history (and the last 5 minutes from memory).
   - Forgotten rows are deleted, the file is vacuumed, and the matching chat
     history lines go too.
 - To wipe it completely, quit her and delete `memory.db` (and

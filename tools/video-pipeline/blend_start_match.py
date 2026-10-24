@@ -15,8 +15,9 @@ the RGB of the overlap (mean abs diff, 0..255).
 With --write, a blend that matches (IoU >= threshold) gets the
 `start_matches` tag in manifest.json (the engine only lands through tagged
 blends; see START_MATCHES_TAG), one that does not loses it, and the sidecar
-JSON gets a `start_match` record. Only blends with `blend: true` are checked;
-the default is every landing blend (from the drag pose `drag_held` into a
+JSON gets a `start_match` record. The engine reads manifest.toml, so after
+--write re-run tools/import-manifest to regenerate it. Only blends with
+`blend: true` are checked; the default is every landing blend (from the drag pose `drag_held` into a
 clip with `seat_y`), the ones `landing_blend` considers.
 """
 import argparse, json, os, sys

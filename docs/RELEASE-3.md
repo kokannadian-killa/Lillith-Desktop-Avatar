@@ -32,15 +32,16 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   - It's one SQLite file with no network code:
     `~/.local/share/lillith/memory.db` (respects `$XDG_DATA_HOME`), or
     `%LOCALAPPDATA%\lillith\memory.db` on Windows (never the roaming
-    `%APPDATA%`). The folder is created
-    owner-only (0700) and the file 0600.
+    `%APPDATA%`). On Linux the folder is created owner-only (0700) and the
+    file 0600; on Windows it uses the default per-user permissions.
   - **Turn it off** with `[memory] enabled = false` in your config. Then
     nothing is read or written, and no memory file is created.
   - **Forget from the chat:**
     - "forget about <topic>" and "forget everything" ask first. Only a yes
       ("yes", "y", "confirm", "do it") goes ahead; anything else cancels.
-      The confirmation shows how many memories and chat messages match, plus
-      up to 3 examples.
+      For a topic or a window over an hour, the confirmation shows how many
+      memories and chat messages match, plus up to 3 examples. "Forget
+      everything" just asks, with no counts or examples.
     - "forget about <topic>" deletes only rows that contain the whole topic:
       every word of a one- or two-word topic, or at least two thirds of a
       longer one. Plurals match only the same word (job/jobs, never
@@ -52,8 +53,10 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
       reply from the chat history. In memory it covers the last 5 minutes.
     - Forgotten rows are deleted, the file is vacuumed, and the matching
       lines are also removed from her saved chat history. Each forget adds a
-      line to `audit.log` next to the memory file, with the kind of forget
-      and the counts only.
+      line to `audit.log` (the same log the Soul Contract uses) next to the
+      memory file, with the kind of forget and the counts only. If you set a
+      custom `[memory] db_path`, the forget lines go to an `audit.log` next to
+      that file instead.
   - A corrupt chat-history file is set aside as `.corrupt`. An unreadable one
     is never overwritten.
   - The safeword is never stored, nor is any message containing the word
@@ -67,7 +70,8 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
     or skipped with a hard switch. Before, she could briefly look like two
     translucent bodies.
   - Walk, run and the sultry `strut_*` walks always switch frames hard, so
-    there's no translucent back leg.
+    there's no translucent back leg. The same goes for the blends into or
+    out of a walk, run or strut.
   - The desktop and the Android renderer both use this.
 - **Logs go to stderr, never stdout.** The chat bubble and Settings windows
   use stdout to talk to the overlay, so log lines there could break them.
@@ -83,16 +87,19 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   - Its README shows the standard `llama-server` line on 127.0.0.1:8080
     with `--jinja`.
 - **Perching: she lands on windows and lounges on them.**
-  - Drop her (or let her fall) onto the top of a window and she plays the
-    drag-to-perch blend and settles into a seated pose on the window edge,
-    instead of landing standing and then sitting.
-  - If a clip has no landing blend, she lands standing as before.
+  - Drop her (or let her fall) onto the top of a window and she lands
+    standing, then sits or lounges on the window edge.
+  - The drag-to-perch landing blend stays off in this build. The engine only
+    lands through a blend whose first frame matches the drag pose, and the
+    current art doesn't yet; it will be re-rendered to match
+    (`tools/video-pipeline/blend_start_match.py` checks this).
+  - Sitting down on a window is smoother: `perch_sit` has in-between frames
+    for the leg cross and uncross (96 to 102 frames).
   - On a wide enough window she can also lie along the top edge
     (`perch_lounge`), shifted to fit the window top. On a narrow window she
     only sits.
   - When you resize the window, she refits, or stands up if she no longer
     fits.
-  - Grabbing her mid-landing, or losing the window, cancels the blend cleanly.
 - **New poses.** Five new "bold allure" clips:
   `hip_sway_slow`, `dom_throne_lean`, `kneel_sit_back_beckon`,
   `taskbar_lounge_lie` and `come_hither_crawl`, in the same outfit. They're
@@ -101,6 +108,9 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   floor shadow and purple smear on `come_hither_crawl`, the grey specks in
   the hair/neck gap on `kneel_sit_back_beckon`, and stray white pixels on
   `hip_sway_slow`. Their names, timing and placement are unchanged.
+- **Five more poses:** `leg_cross_slow_sit`, `hair_twirl_lip_bite`,
+  `tail_heart_wink`, `trace_heart_on_glass` and `dom_chin_tilt_summon`, in
+  the same outfit, wired into her idle, tease and banter moves.
 - **Art fixes:**
   - `dom_arms_crossed_demand` no longer jumps about 60 px for one frame, so
     no more double body flash during the crossfade. Only that frame was
@@ -109,6 +119,7 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
     blend, `arch_trace`, `chest_press_tease`, `cleavage_beckon`) lost their
     white edge fringe and the white patches between hair, neck and arms. Their
     positions are unchanged.
+  - `tail_tease` was regenerated with a single tail.
 - **Offline voice kit (source).** The Python source of the voice kit is now
   in the repo under `tools/lillith-voice/`. That covers the `lillith-voiced`
   daemon, `lillith-say` / `lillith-listen` / `lillith-chat`, fish shortcuts,
@@ -131,14 +142,20 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
 - **Windows build:** clippy fixes in the elevated admin helper, so Windows
   is still build-from-source.
 
-All 180 earlier clips are kept and 5 are new (185 in total); nothing was
+All 180 earlier clips are kept and 10 are new (190 in total); nothing was
 removed. The local AI runs on 127.0.0.1 only, with no downloads and no
 telemetry.
 
 ## Known issues
 
-- The white-fringe cleanup is done for the six perch clips and the five new
-  poses only. Other clips can still show a thin light edge (see *Coming
+- **Upgrading on Windows:** her data folder is now `%LOCALAPPDATA%\lillith`
+  (never the roaming `%APPDATA%`). That's where `audit.log`, the Soul
+  Contract's `plans.log` and `commands.log`, the `undo-organize` journal and
+  `memory.db` now live. Files from release #2 under
+  `%HOME%\.local\share\lillith` aren't moved, so an organize batch made
+  with release #2 can't be undone from release #3.
+- The white-fringe cleanup is done for the six perch clips and the first five
+  new poses only. Other clips can still show a thin light edge (see *Coming
   next*).
 - Voice kit:
   - The models aren't in any release yet (see above).

@@ -92,7 +92,7 @@ To forget from chat (handled locally, no model call):
   matching events/errors (same rule), and chat-history messages that match
   the same rule. If nothing matches she says so ("I don't have anything
   about X").
-- "forget the last 30 minutes" / "the last hour" / "the last week": deletes
+- "forget the last 30 minutes" / "the last hour": deletes
   rows created **or rewritten** (`updated_at`, schema v2) in that window
   (and the most recent chat turns, ~1 turn a minute).
 - "forget the last thing I said" / "what I just said": removes only the last
@@ -100,9 +100,9 @@ To forget from chat (handled locally, no model call):
   in the last 5 minutes. Runs at once.
 
 "forget everything", "forget about X" and any time window **longer than one
-hour** ("forget the last 2 hours", "the last 1000 months", which is
-everything) only *ask* first. The question says how much matched and shows
-up to three short examples, e.g. *"Forget everything about my job? That's 4
+hour** ("forget the last 2 hours", "the last week", "the last 1000 months",
+which is everything) only *ask* first. The question says how much matched
+and shows up to three short examples, e.g. *"Forget everything about my job? That's 4
 memories (like "Ko's job: barista", "request: job") and 2 chat messages."*
 Ko's next message must be "yes" (y / yes please / confirm / do it) to run
 it. Anything else cancels (the safeword too); "no" is answered locally.
