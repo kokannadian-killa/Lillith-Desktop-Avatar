@@ -2498,6 +2498,7 @@ dependencies = [
  "lillith-core",
  "lillith-mind",
  "lillith-theme",
+ "lillith-voice",
  "serde_json",
  "tiny-skia",
  "tokio",

@@ -16,6 +16,8 @@ lillith-theme = { workspace = true, features = ["egui"] }
 eframe.workspace = true
 tracing.workspace = true
 lillith-mind.workspace = true
+# Push-to-talk via the local voice daemon (protocol only, no audio deps).
+lillith-voice.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
 image.workspace = true
