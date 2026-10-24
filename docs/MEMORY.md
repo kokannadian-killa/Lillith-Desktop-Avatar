@@ -134,6 +134,20 @@ once; the chat stays usable while the card waits.
 | No answer for 120 s | text-only, cooldown | `TIMEOUT` |
 | No card surface (`lillith chat` CLI, headless) | text-only straight away, cooldown | `NO_UI` |
 | Safeword (`red`) while it waits | dropped, cooldown | `CANCELLED` |
+| Bubble closed (Esc / focus loss / window manager) while it waits | dropped by the bubble's close handler (`on_exit`, close-requested, `Drop`) | `CANCELLED` + note `chat bubble closed before an answer` |
+| Bubble killed (SIGKILL, crash) while it waits | the overlay sees the bubble's stdout end with the card still open | `CANCELLED` + note `chat bubble gone before an answer (killed)` |
+| Card still open from an earlier run (app killed too) | closed when the overlay starts | `CANCELLED` + note `orphaned PROPOSED closed at startup` |
+
+Every line of one card carries the same `card=<id>` column after the path
+(`<ts>\t<DECISION>\tstart_model_server\t<binary>\tcard=<id>[\t<note>]`),
+so a `PROPOSED` is matched to its decision by id. Lines are only ever
+appended: closing a card writes a new `CANCELLED` line, it never rewrites
+the `PROPOSED`. A `CANCELLED` is written only while the log still shows the
+card open, so the bubble's own close handler, the overlay's check and the
+startup scan never write it twice. (Older id-less `PROPOSED` lines pair with
+the next id-less decision; an orphaned one is closed with
+`proposed=<its timestamp>` instead of an id.) The bubble has no SIGTERM
+handler of its own; the overlay check and the startup scan cover it.
 
 - Typed or spoken "yes" never approves: chat text (`yes`, `/contract yes`)
   is just a message, the voice path is refused while a card is up, and the
@@ -152,8 +166,19 @@ once; the chat stays usable while the card waits.
   `chat.server_approved`, and the overlay spawns the server (it owns it and
   stops it on exit, Ctrl-C or SIGTERM). A standalone `lillith chat-bubble`
   (no `--app-server`) starts it in its own session instead.
-- `lillith chat --spawn-server` is Ko's own per-run command-line request, so
-  it starts the server without a card and is audited `CLI_FLAG`.
+- **`lillith chat --spawn-server` asks too** (the flag is a request, not an
+  approval; there is no `CLI_FLAG` consent any more). A server already
+  answering needs nothing. Otherwise, after `PROPOSED`:
+
+  | Surface | When | Approves | Audit |
+  | --- | --- | --- | --- |
+  | The same card, in its own window (`lillith server-card`) | a desktop is available (`WAYLAND_DISPLAY` / `DISPLAY`; always on Windows) | click on Yes only | `CONFIRM`, `DENY` (No / Esc), `TIMEOUT` (120 s), `CANCELLED` (window closed) |
+  | `Start local model server? [y/N]` on the controlling terminal | no card could be shown | exactly `y` / `yes` (any case); anything else, an empty line or end of input is No | `CONFIRM_TTY` / `DENY_TTY` |
+  | none | no card and no terminal (`/dev/tty` / `CONIN$` can't be opened) | never | `NO_UI` |
+
+  The terminal answer is read only from the controlling terminal
+  (`/dev/tty` on unix, `CONIN$` / `CONOUT$` on Windows), never from stdin,
+  so piped input can't answer it. Not approved: chat goes on text-only.
 
 ## On by default; turning it off; forgetting
 
@@ -248,8 +273,9 @@ says so).
   habits are learned on KDE only.
 - LLM-assisted extraction: `Extractor` trait hook exists; the default is the
   rule-based extractor.
-- Model-server card decisions for the lead: startup no longer auto-starts
-  `[chat.server]` (it now waits for the card on first chat), and
-  `lillith chat --spawn-server` counts as Ko's explicit request (audited
-  `CLI_FLAG`, no card). The bubble closing while a card is up leaves only
-  the `PROPOSED` line (the bubble process is killed, so no `CANCELLED`).
+- Model-server card (lead's decisions, done): startup waits for the card on
+  the first chat; `--spawn-server` asks (card, else tty, else `NO_UI`);
+  a card that loses its window is closed `CANCELLED` (bubble close handler,
+  overlay check for a killed bubble, startup scan for orphans).
+- The orphan scan runs when the overlay starts, not for `lillith chat`
+  (an overlay bubble may have a live card up then).

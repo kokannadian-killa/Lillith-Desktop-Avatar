@@ -65,9 +65,16 @@ Soul Contract, so she asks first: when you chat and nothing answers at
 click on its **Yes** starts `llama-server` (audited `CONFIRM`; No, Esc, no
 answer within 120 s, or no card surface leave her text-only for 10 minutes).
 The app then owns the server and stops it when she quits, including on
-Ctrl-C or SIGTERM. `lillith chat --spawn-server` starts it straight away
-because you asked on the command line (audited `CLI_FLAG`). See
-[MEMORY.md](MEMORY.md) ("Desktop wiring") for the full table.
+Ctrl-C or SIGTERM. Closing the bubble with the card up counts as
+`CANCELLED` (written by the bubble, or by the app if the bubble was killed;
+a card left open by a crash is closed the next time the app starts).
+
+`lillith chat --spawn-server` asks too: the same card in a small window when
+a desktop is available, otherwise `Start local model server? [y/N]` on your
+terminal (read from the terminal itself, never from piped stdin; only `y` /
+`yes` starts it, audited `CONFIRM_TTY`, anything else is `DENY_TTY`). With
+neither (e.g. under a service manager) it is `NO_UI` and the chat stays
+text-only. See [MEMORY.md](MEMORY.md) ("Desktop wiring") for the full table.
 
 ```toml
 # ~/.config/lillith/config.toml  (or any file passed with --config)
@@ -123,7 +130,7 @@ and doesn't spawn the server.
 ```sh
 lillith chat "Hi Lillith!"                  # one message, streamed to stdout
 lillith chat                                # prompt loop (/quit to exit)
-lillith chat --spawn-server "Hi"            # start [chat.server] first, stop it after
+lillith chat --spawn-server "Hi"            # ask to start [chat.server] first (card or [y/N]), stop it after
 lillith chat --endpoint http://127.0.0.1:9000 --no-history "Hi"
 ```
 
