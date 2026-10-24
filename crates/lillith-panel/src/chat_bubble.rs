@@ -263,7 +263,7 @@ fn mic_button(ui: &mut egui::Ui, mic: Option<&Mic>) -> Option<bool> {
         ui.ctx().request_repaint_after(Duration::from_millis(50));
     }
     let down = resp.is_pointer_button_down_on();
-    match (down, listening) {
+    match (down, m.held()) {
         (true, false) => Some(true),
         (false, true) => Some(false),
         _ => None,
@@ -807,8 +807,12 @@ impl Bubble {
         // queued "red" would only land after the command ended by itself.
         let safeword = stop_now_if_safeword(&text);
         if safeword {
-            // Her voice stops too (the overlay cuts it on this event).
+            // Her voice stops too: the overlay cuts it on this event, and
+            // the daemon is told directly in case the overlay is busy.
             (self.emit)("chat.safeword", None);
+            if let Some(m) = &self.mic {
+                m.hush("safeword");
+            }
         }
         if safeword && self.streaming.is_some() {
             self.lines.push(Line {
@@ -904,7 +908,7 @@ impl Bubble {
     /// Mic button pressed: barge-in (her voice stops) and the mic opens.
     fn mic_press(&mut self) {
         if let Some(m) = &mut self.mic {
-            if m.ready && !m.listening && !m.busy {
+            if m.ready && !m.listening && !m.busy && !m.held_failed {
                 m.press();
                 (self.emit)("chat.barge_in", None);
             }
@@ -1624,9 +1628,16 @@ mod tests {
         let (mut b, req_rx) = test_bubble(None, false);
         let ev = Arc::clone(&events);
         b.emit = Arc::new(move |n, _| ev.lock().unwrap().push(n.to_string()));
+        let (mic, cmds, _ev) = crate::voice_mic::Mic::for_test();
+        b.mic = Some(mic);
         b.input = "red".into();
         b.send();
         assert_eq!(*events.lock().unwrap(), ["chat.safeword"]);
+        assert_eq!(
+            cmds.try_recv(),
+            Ok(crate::voice_mic::MicCmd::Hush("safeword".into())),
+            "the daemon is told to stop"
+        );
         assert!(matches!(req_rx.try_recv(), Ok(Req::Send(t)) if t == "red"));
     }
 
