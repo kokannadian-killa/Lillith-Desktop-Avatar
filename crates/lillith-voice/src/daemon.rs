@@ -426,11 +426,28 @@ pub fn connect(ep: &Path) -> Result<Box<dyn Conn>, DaemonError> {
     }
     #[cfg(windows)]
     {
-        let f = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(ep)?;
-        Ok(Box::new(f))
+        use std::os::windows::fs::OpenOptionsExt;
+        // The daemon's pipe ACL admits the current user only. We also
+        // forbid it from impersonating us (identification level only).
+        const SECURITY_IDENTIFICATION: u32 = 1 << 16;
+        const ERROR_PIPE_BUSY: i32 = 231;
+        let mut tries = 0;
+        loop {
+            match std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .security_qos_flags(SECURITY_IDENTIFICATION)
+                .open(ep)
+            {
+                Ok(f) => return Ok(Box::new(f)),
+                // Every pipe instance busy: the daemon creates another.
+                Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) && tries < 20 => {
+                    tries += 1;
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     }
     #[cfg(not(any(unix, windows)))]
     {
@@ -498,6 +515,32 @@ impl DaemonClient {
 
     /// Sends `req` and returns its one reply.
     pub fn request(&self, req: &Request, timeout: Option<Duration>) -> Result<Value, DaemonError> {
+        if cfg!(windows) {
+            if let Some(t) = timeout {
+                // Pipe handles have no read timeout: wait on a helper thread.
+                let (tx, rx) = std::sync::mpsc::channel();
+                let (me, req) = (self.clone(), req.clone());
+                std::thread::Builder::new()
+                    .name("lillith-voiced-req".into())
+                    .spawn(move || {
+                        let _ = tx.send(me.request_blocking(&req, None));
+                    })?;
+                return rx.recv_timeout(t).unwrap_or_else(|_| {
+                    Err(DaemonError::Io(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "voice daemon did not answer",
+                    )))
+                });
+            }
+        }
+        self.request_blocking(req, timeout)
+    }
+
+    fn request_blocking(
+        &self,
+        req: &Request,
+        timeout: Option<Duration>,
+    ) -> Result<Value, DaemonError> {
         let c = self.send(req, timeout)?;
         let mut r = BufReader::new(c);
         parse_reply(&read_line(&mut r)?)
