@@ -40,7 +40,7 @@ cd /workspace/lillith/wt-nowhite-<me> && git lfs install --local && git lfs pull
 python3 tools/video-pipeline/qa_all.py --white-edge --mp4 assets/generated/g* | tee /workspace/verify/nowhite/qa_before_g.log
 
 # 2. clean in place: sheet re-matte + bbox refresh + MP4 repack (same crf/bleed), originals backed up once to
-#    /workspace/verify/nowhite/orig/ (override with MC_BACKUP=...). Safe to re-run: already-clean clips are skipped.
+#    /workspace/verify/nowhite/orig/<worktree>/ (override with MC_BACKUP=...; also recoverable from LFS). Safe to re-run: already-clean clips are skipped.
 MC_JOBS=3 python3 tools/matte-clean/matte_clean.py assets/generated/g* --report /workspace/verify/nowhite/report_g.json
 
 # 3. after: must print OK for every clip and exit 0
@@ -81,9 +81,14 @@ Raw takes in `assets/source/video/` are pipeline inputs only (read by `tools/vid
 
 `matte_clean` stamps `version` in each clip JSON. Version 2 added the opaque-gap pass (white backdrop seen between
 arm and waist / legs / tail with alpha left at 255, which the v1 metric could not see) and caps the edge erosion at
-2 px. A clip cleaned by an older version is re-cleaned **from its original** (`$MC_BACKUP/<clip>_sheet.png`,
-checked by sha256), never on top of the earlier output. If you ran v1 (commit 379900d), update your branch to the
-latest `fix/no-white-fringe` and re-run the same command.
+2 px. Version 3 despills (recolours from the interior, alpha kept) whatever is still light after that erosion,
+so single frames no longer fail by a few pixels. Version 4 (current) adds: (a) enclosed backdrop pockets
+(near-white neutral regions >= 12 px inside the body: hair/neck, arm/torso, thigh/tail) go fully clear, flood-limited
+to near-white neutral pixels, so helpers no longer hand-fix them; (b) a soft-edge despill: soft edge pixels whose
+colour is the nearest interior colour pushed toward white (including the alpha 251-254 band the MP4 path snaps to
+opaque) are recoloured to the interior colour with alpha kept. A clip cleaned by an older version is re-cleaned **from its original** (`$MC_BACKUP/<clip>_sheet.png` or the repo's
+Git LFS object store, located by the sha256 stamped in the JSON), never on top of the earlier output. If you ran an older version (v1 379900d, v2 11807e1), update your branch to the
+latest `fix/no-white-fringe` and re-run the same command (add `--force` only to redo v4 output).
 
 ## Options
 
@@ -95,7 +100,11 @@ qa_all.py --white-edge [--mp4] [--max N] DIR|GLOB...
 
 `white-edge` check: a light edge pixel has alpha > 0, lies within 2.5 px of a clear pixel, has min(RGB) >= 205 and
 max-min <= 20, and is more than 24 levels lighter than the nearest solid interior pixel (so real white art does
-not count). A frame fails with more than 6 (`--max`). Event/overlay clips are checked on the main body only.
+not count). A frame fails with more than 6 (`--max`), or with any enclosed backdrop pocket on the sheet (`white_edge.pocket_mask`,
+not checked on overlay clips). The soft-edge lift count (`soft`) is reported but not gated (H.264 chroma adds some on
+MP4 frames). Overlay clips are checked on the main body only; for `event_*` clips drawn over a `base_clip`, pixels
+where the original event differs from its original base frame (icons, panels, FX; dilated 2 px) are excluded, so
+intentional white effects never fail.
 
 ## Renderer (why the fix is in the assets)
 

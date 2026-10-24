@@ -36,9 +36,11 @@ sys.path.insert(0, VP); sys.path.insert(0, os.path.join(VP, 'clipclean'))
 os.environ.setdefault('CC_REPO', REPO)
 import cc_lib  # noqa: E402
 import white_edge  # noqa: E402
+import mc_orig  # noqa: E402
 
-VERSION = 2
-BACKUP = os.environ.get('MC_BACKUP', '/workspace/verify/nowhite/orig')
+VERSION = 4
+# per-worktree backup dir so parallel helpers never share or clobber one; originals are also recoverable from LFS
+BACKUP = os.environ.get('MC_BACKUP', os.path.join('/workspace/verify/nowhite/orig', os.path.basename(REPO)))
 LOCKED = {l.split('#')[0].strip() for l in open(os.path.join(HERE, 'locked.txt'))} - {''} \
     if os.path.exists(os.path.join(HERE, 'locked.txt')) else set()
 INVARIANT = ('frame_count', 'fps', 'frame_durations_ms', 'anchor', 'baseline_y', 'frame_points', 'loop',
@@ -76,6 +78,18 @@ def fringe_pass(c, overlay=False):
         out = np.dstack([np.clip(rgb, 0, 255), np.clip(a, 0, 255)]).round().astype(np.uint8)
         out[out[..., 3] <= 3] = 0
         total += int(L.sum())
+    # whatever is still flagged after the 2 px erosion is despilled only (colour from the interior, alpha kept),
+    # so no further ring is exposed and the silhouette does not shrink
+    L = white_edge.light_edge_mask(out, body_only=overlay)
+    if L.any():
+        rgb = out[..., :3].astype(np.float32); a = out[..., 3].astype(np.float32)
+        mn_ = rgb.min(-1); sat_ = rgb.max(-1) - mn_
+        d = nd.distance_transform_edt(~(a < 8))
+        ref = (a >= 250) & (d >= 3) & ~((mn_ >= white_edge.LIGHT_MIN) & (sat_ <= white_edge.SAT_MAX))
+        if ref.any():
+            _, (ry, rx) = nd.distance_transform_edt(~ref, return_indices=True)
+            out = out.copy(); out[..., :3][L] = rgb[ry, rx][L].round().astype(np.uint8)
+            total += int(L.sum())
     return out, total
 
 
@@ -99,18 +113,32 @@ def gap_pass(c):
     ids = np.arange(1, n + 1)
     touch = nd.maximum(near_out, lab, ids) > 0
     area = nd.sum(W, lab, ids); pure = nd.mean(mn, lab, ids)
-    G = np.isin(lab, ids[touch & (area <= GAP_MAX_PX) & (pure >= 238)])
+    # touching the outside, or an enclosed pocket (hair/neck, arm/torso, thigh/tail) of at least POCKET_MIN px;
+    # smaller enclosed specks are left alone (eye glints, teeth highlights)
+    G = np.isin(lab, ids[(touch | (area >= POCKET_MIN)) & (area <= GAP_MAX_PX) & (pure >= 238)])
     if not G.any():
         return c, 0
     G |= nd.binary_dilation(G, S8) & (mn >= 220) & (sat <= 18) & (a > 0)
     out = c.copy()
     na = (a * np.clip((255.0 - mn) / 55.0, 0, 1)).round().astype(np.int32)
+    na = np.where(mn >= 238, 0, na)   # the backdrop core goes fully clear; only the 232-237 / rim band is un-mixed
     out[..., 3] = np.where(G, np.minimum(a, na), a).astype(np.uint8)
     out[out[..., 3] <= 3] = 0
     return out, int(G.sum())
 
 
 S8 = np.ones((3, 3), bool)
+POCKET_MIN = 12
+
+
+def soft_despill(c, overlay=False):
+    """soft edge pixels whitened toward the backdrop (white_edge.soft_lift_mask, includes the alpha 251-254 band
+    the MP4 path snaps to opaque): recolour to the nearest solid interior colour, alpha kept."""
+    m, F = white_edge.soft_lift_mask(c, body_only=overlay, return_ref=True)
+    if not m.any():
+        return c, 0
+    out = c.copy(); out[..., :3][m] = F[m].round().astype(np.uint8)
+    return out, int(m.sum())
 
 
 def clean_cell(c, name):
@@ -119,6 +147,7 @@ def clean_cell(c, name):
     r, st['gap_px_cleared'] = gap_pass(r) if not ov else (r, 0)
     r, n = fringe_pass(r, overlay=ov)
     st['fringe_px_fixed'] = n
+    r, st['soft_px_despilled'] = soft_despill(r, overlay=ov)
     if not ov:
         r, k = cc_lib.drop_specks(r); st['specks_dropped'] = st.get('specks_dropped', 0) + k
     return r, st
@@ -137,7 +166,14 @@ def frame_stats(cells, overlay):
         a = c[..., 3].astype(np.int32)
         body = cc_lib.components(a)[0]
         leak.append(int((cc_lib.leak_mask(c[..., :3].astype(np.int32), a, body) & (a >= 128)).sum()))
-    return per, leak
+    soft = [white_edge.soft_count(c, body_only=overlay) for c in cells]
+    pock = [0 if overlay else int(white_edge.pocket_mask(c).sum()) for c in cells]
+    return per, leak, soft, pock
+
+
+def stats(cells, ov, res, when):
+    p, l, s_, k = frame_stats(cells, ov)
+    res[f'{when}_light_edge'], res[f'{when}_leak'], res[f'{when}_soft'], res[f'{when}_pockets'] = sum(p), sum(l), sum(s_), sum(k)
 
 
 def process(job):
@@ -151,26 +187,25 @@ def process(job):
     ov = cc_lib.is_overlay(name)
     im, cells = load_cells(sp)
     res['frames'] = len(cells)
-    res['before_light_edge'], res['before_leak'] = (lambda p, l: (sum(p), sum(l)))(*frame_stats(cells, ov))
+    stats(cells, ov, res, 'before')
     if name in LOCKED and not a.include_locked:
         res['status'] = 'locked (audit only)'; return res
     mc = js.get('matte_clean') or {}
     cur = sha(sp)
     if mc.get('version') == VERSION and mc.get('sheet_sha256') == cur and not a.force:
-        res['status'] = 'already clean'; res['after_light_edge'], res['after_leak'] = res['before_light_edge'], res['before_leak']
+        res['status'] = 'already clean'
+        for k in ('light_edge', 'leak', 'soft', 'pockets'): res[f'after_{k}'] = res[f'before_{k}']
         return res
-    # re-clean from the original, never on top of an earlier clean: if the sheet is our own earlier output
-    # (stamp matches) and the backup is that clip's original (source sha matches), start from the backup.
+    # re-clean from the original, never on top of an earlier clean (backup, else the LFS object store)
     bk = os.path.join(BACKUP, f'{name}_sheet.png')
     src_sha = cur
-    ours = mc.get('sheet_sha256') == cur
-    if ours and os.path.exists(bk) and (sha(bk) == mc.get('source_sha256') or (not mc.get('source_sha256') and mc.get('version', 0) < VERSION)):
-        # (v1 stamps carry no source sha; v1 backed the original up before its first write)
-        im, cells = load_cells(bk); src_sha = sha(bk)
-        res['before_light_edge'], res['before_leak'] = (lambda p, l: (sum(p), sum(l)))(*frame_stats(cells, ov))
-        res['from_backup'] = True
-    elif mc.get('sheet_sha256') == cur and mc.get('version', 0) < VERSION:
-        res['status'] = 'FAILED: cleaned by an older version but original backup missing/mismatched'; return res
+    op, osha, how = mc_orig.original_sheet(d, BACKUP)
+    if how == 'missing':
+        res['status'] = 'FAILED: sheet was cleaned before but its original is not in MC_BACKUP or LFS'; return res
+    if how in ('backup', 'lfs'):
+        im, cells = load_cells(op); src_sha = osha
+        stats(cells, ov, res, 'before')
+        res['from_backup'] = how
     base = bfr = None
     if name.startswith('event_'):
         b = (js.get('base_clip') or '').split('/')[-1]
@@ -185,8 +220,8 @@ def process(job):
         if base is not None and i < len(bfr):
             bn = os.path.basename(base)
             if bn not in bcache:
-                bsrc = os.path.join(BACKUP, f'{bn}_sheet.png')  # the ORIGINAL base (events were drawn on it)
-                bcache[bn] = load_cells(bsrc if os.path.exists(bsrc) else os.path.join(base, f'{bn}_sheet.png'))[1]
+                bop, _, bhow = mc_orig.original_sheet(base, BACKUP)  # the ORIGINAL base: events were drawn on it
+                bcache[bn] = load_cells(bop if bop else os.path.join(base, f'{bn}_sheet.png'))[1]
             bo = bcache[bn][bfr[i]]
             bc, _ = clean_cell(bo, bn)
             same = np.abs(c.astype(int) - bo.astype(int)).max(-1) <= 2
@@ -197,15 +232,12 @@ def process(job):
         out[:400, i * 400:(i + 1) * 400] = r
         for k, v in st.items(): tot[k] = tot.get(k, 0) + int(v)
     after = [out[:400, i * 400:(i + 1) * 400] for i in range(len(cells))]
-    res['after_light_edge'], res['after_leak'] = (lambda p, l: (sum(p), sum(l)))(*frame_stats(after, ov))
+    stats(after, ov, res, 'after')
     res['stats'] = tot
     if a.dry_run:
         res['status'] = 'dry-run'; return res
     os.makedirs(BACKUP, exist_ok=True)
     if not res.get('from_backup'):
-        if os.path.exists(bk) and sha(bk) != cur:
-            # a different original was backed up earlier (e.g. art re-imported since): keep it alongside
-            shutil.copy2(bk, bk + f'.{sha(bk)[:12]}')
         shutil.copy2(sp, bk)
     Image.fromarray(out, 'RGBA').save(sp, optimize=True)
     keep = {k: js.get(k) for k in INVARIANT}
@@ -254,14 +286,16 @@ def main():
         for r in pool.imap_unordered(process, [(d, a) for d in dirs]):
             rows.append(r)
             print(f"{r['clip']:<36} {r.get('status','?'):<28} light_edge {r.get('before_light_edge','-')} -> "
-                  f"{r.get('after_light_edge','-')}  leak {r.get('before_leak','-')} -> {r.get('after_leak','-')}", flush=True)
+                  f"{r.get('after_light_edge','-')}  leak {r.get('before_leak','-')} -> {r.get('after_leak','-')}  "
+                  f"soft {r.get('before_soft','-')} -> {r.get('after_soft','-')}  pockets {r.get('before_pockets','-')} -> {r.get('after_pockets','-')}", flush=True)
     rows.sort(key=lambda r: r['clip'])
     if a.report:
         os.makedirs(os.path.dirname(os.path.abspath(a.report)), exist_ok=True)
         json.dump(rows, open(a.report, 'w'), indent=1)
     s = lambda k: sum(r.get(k, 0) or 0 for r in rows)
     print(f"TOTAL {len(rows)} clips: light_edge {s('before_light_edge')} -> {s('after_light_edge')}, "
-          f"leak {s('before_leak')} -> {s('after_leak')}")
+          f"leak {s('before_leak')} -> {s('after_leak')}, soft {s('before_soft')} -> {s('after_soft')}, "
+          f"pockets {s('before_pockets')} -> {s('after_pockets')}")
     bad = [r['clip'] for r in rows if 'FAILED' in r.get('status', '')]
     if bad:
         print('FAILED:', ' '.join(bad)); sys.exit(1)
