@@ -1088,12 +1088,12 @@
     "height": 400,
     "frame_count": 72,
     "fps": 12.0,
-    "bytes": 329077,
+    "bytes": 345389,
     "quality": {
-      "edge_mae": 1.911,
-      "edge_p99": 18.0,
-      "halo_dark": 0.01,
-      "halo_light": -0.058,
+      "edge_mae": 1.935,
+      "edge_p99": 18.05,
+      "halo_dark": 0.002,
+      "halo_light": -0.076,
       "alpha_mae": 0.0291
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
@@ -1101,7 +1101,8 @@
   "matte_clean": {
     "version": 2,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "11dc467fb2916c151b5bddeb10326cc0c6f201dba2ecd4e65a6e7454bf6ba9fc",
-    "source_sha256": "9dca8939b9490260a4c67f0ae163f201a3daa94dfea5ebbba931e744b857c59f"
+    "sheet_sha256": "416919e546691c79ec0259e07eb243af7f235003e2f106eb7898698860557434",
+    "source_sha256": "9dca8939b9490260a4c67f0ae163f201a3daa94dfea5ebbba931e744b857c59f",
+    "post_fix": "b7fix: backdrop grey/white cleared from hair-neck gaps (f68-70 panels + enclosed white holes, checked against per-pixel clear frequency over all frames) + gate-targeted despill of exposed edge"
   }
 }
