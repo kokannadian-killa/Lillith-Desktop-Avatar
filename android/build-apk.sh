@@ -17,7 +17,7 @@
 #   (needs python3 for zip packaging)
 #   CARGO            cargo with the aarch64-linux-android std installed
 #                    (rustup target add aarch64-linux-android)   [cargo]
-# Voice (Ko's cloned voice + offline STT, from the lillith-voice kit; see
+# Voice (Ko's cloned voice, optional offline STT, from the lillith-voice kit; see
 # tools/lillith-voice/android/ANDROID_ASSETS.md). Everything ships inside the
 # APK under assets/voice/; nothing is downloaded at runtime.
 #   LILLITH_VOICE         1 = bundle the voice models (required), 0 = build without voice  [1]
@@ -26,9 +26,15 @@
 #                         ~/.local/share/lillith-voice/models that has SHA256SUMS]
 #   LILLITH_VOICE_FLAVOR  quality = fp32 flow_lm_main (recommended, ANDROID_ASSETS.md)
 #                         small   = int8 flow_lm_main (experimental: can cut lines short)  [quality]
-#   LILLITH_VOICE_STT     1 = whisper tiny.en + silero VAD for the mic, 0 = none   [1]
+#   LILLITH_VOICE_STT     1 = also pack whisper tiny.en + silero VAD (mic STT; the app has
+#                         no mic permission or STT runtime yet), 0 = none   [0]
 #   LILLITH_VOICE_KOKORO  1 = also ship the Kokoro p1 fallback (+353 MB; no Android
 #                         runtime or espeak-ng G2P for it yet)   [0]
+#   ORT_AAR               onnxruntime-android-$ORT_VERSION.aar for the voice runtime (ONNX
+#                         Runtime Java API + arm64 .so). If unset it is fetched once from
+#                         Maven Central into $OUT/dl (build time only) and SHA256-checked.
+#                         Its manifest is NOT merged and its 1DS telemetry classes are not
+#                         packaged (they need INTERNET, which the app does not have).
 #   STAGE_ONLY=1          only stage assets (clips + voice) into $OUT/stage and list
 #                         them; needs no SDK/NDK/cargo
 set -euo pipefail
@@ -39,6 +45,9 @@ TARGET_SDK=34
 BUILD_TOOLS=34.0.0
 NDK_VER=27.2.12479018
 CMAKE_VER=3.22.1
+# ONNX Runtime for the cloned voice (same version as the desktop kit's onnxruntime wheel)
+ORT_VERSION=1.31.0
+ORT_AAR_SHA256=72683787a80d0608a3121b967d8e1239aef48286826661c953211626690540a7
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
@@ -59,7 +68,7 @@ LLVM="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 [ -n "${JAVA_HOME:-}" ] && export PATH="$JAVA_HOME/bin:$PATH"
 
 if [ "$STAGE_ONLY" != 1 ]; then
-  for f in "$NDK" "$BT/aapt2" "$BT/d8" "$BT/zipalign" "$BT/apksigner" "$PLATFORM_JAR" "$CMAKE_BIN/cmake"; do
+  for f in "$NDK" "$BT/aapt" "$BT/aapt2" "$BT/d8" "$BT/zipalign" "$BT/apksigner" "$PLATFORM_JAR" "$CMAKE_BIN/cmake"; do
     [ -e "$f" ] || { echo "missing: $f (see android/INSTALL-android.md)" >&2; exit 1; }
   done
 fi
@@ -67,7 +76,7 @@ fi
 # ── voice: locate + verify the kit models before any long build step ──
 VOICE="${LILLITH_VOICE:-1}"
 VOICE_FLAVOR="${LILLITH_VOICE_FLAVOR:-quality}"
-VOICE_STT="${LILLITH_VOICE_STT:-1}"
+VOICE_STT="${LILLITH_VOICE_STT:-0}"
 VOICE_KOKORO="${LILLITH_VOICE_KOKORO:-0}"
 LINK_ASSETS="$REPO/tools/lillith-voice/android/link_assets.sh"
 VOICE_MODELS=""
@@ -118,7 +127,7 @@ if [ "$VOICE" != 1 ]; then
   echo "==> 4/7 voice: skipped (LILLITH_VOICE=0): the app will log that it has no voice models"
   return
 fi
-echo "==> 4/7 voice (assets/voice: cloned 'lillith' Pocket TTS, STT; stored uncompressed)"
+echo "==> 4/7 voice (assets/voice: cloned 'lillith' Pocket TTS$([ "$VOICE_STT" = 1 ] && echo ', STT'); stored uncompressed)"
 local stt_flag=""; [ "$VOICE_STT" = 1 ] || stt_flag="--no-stt"
 LILLITH_VOICE_MODELS="$VOICE_MODELS" LINK_KOKORO="$VOICE_KOKORO" \
   bash "$LINK_ASSETS" "$STAGE/assets" "$VOICE_FLAVOR" $stt_flag
@@ -178,6 +187,33 @@ fi
 cp "$OUT/build-llm/liblillith_llm.so" "$STAGE/lib/arm64-v8a/"
 "$LLVM/llvm-strip" --strip-unneeded "$STAGE/lib/arm64-v8a/liblillith_llm.so"
 
+echo "==> 2b/7 ONNX Runtime $ORT_VERSION (cloned voice runtime: Java API + arm64 .so, no telemetry)"
+ORT_AAR="${ORT_AAR:-}"
+if [ -z "$ORT_AAR" ]; then
+  ORT_AAR="$OUT/dl/onnxruntime-android-$ORT_VERSION.aar"
+  if [ ! -f "$ORT_AAR" ]; then
+    mkdir -p "$OUT/dl"
+    curl -fL --retry 3 -o "$ORT_AAR.part" \
+      "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$ORT_VERSION/onnxruntime-android-$ORT_VERSION.aar"
+    mv "$ORT_AAR.part" "$ORT_AAR"
+  fi
+fi
+echo "$ORT_AAR_SHA256  $ORT_AAR" | sha256sum -c --quiet - ||
+  { echo "ORT AAR checksum mismatch: $ORT_AAR (want $ORT_AAR_SHA256)" >&2; exit 1; }
+rm -rf "$OUT/ort" && mkdir -p "$OUT/ort/classes"
+unzip -q "$ORT_AAR" classes.jar 'jni/arm64-v8a/*' -d "$OUT/ort"
+# Only the inference API: drop the Android 1DS telemetry uploader (ai.onnxruntime.telemetry.*,
+# TelemetryInitializer). The AAR's manifest (INTERNET, ACCESS_NETWORK_STATE, that provider)
+# is never merged; the voice also calls OrtEnvironment.setTelemetry(false).
+( cd "$OUT/ort/classes" && unzip -q ../classes.jar 'ai/*' -x 'ai/onnxruntime/telemetry/*' \
+    'ai/onnxruntime/TelemetryInitializer*' )
+if [ "$VOICE" = 1 ]; then
+  cp "$OUT/ort/jni/arm64-v8a/libonnxruntime.so" "$OUT/ort/jni/arm64-v8a/libonnxruntime4j_jni.so" \
+    "$STAGE/lib/arm64-v8a/"
+else
+  echo "    LILLITH_VOICE=0: ONNX Runtime .so not packaged (no cloned voice to run)"
+fi
+
 stage_assets
 
 echo "==> 5/7 Java shell (javac + d8)"
@@ -185,10 +221,13 @@ rm -rf "$OUT/classes" "$OUT/dex" && mkdir -p "$OUT/classes" "$OUT/dex"
 find "$HERE/app/src" -name '*.java' > "$OUT/sources.txt"
 # --release 8 gives javac the JDK's java.* (android.jar lacks the
 # LambdaMetafactory javac needs); d8 desugars lambdas for API 26.
-"$JAVAC" --release 8 -Xlint:-options -encoding UTF-8 -classpath "$PLATFORM_JAR" \
+"$JAVAC" --release 8 -Xlint:-options -encoding UTF-8 -classpath "$PLATFORM_JAR:$OUT/ort/classes" \
   -d "$OUT/classes" @"$OUT/sources.txt"
+if find "$OUT/ort/classes" -path '*telemetry*' -o -name 'TelemetryInitializer*' | grep -q .; then
+  echo "ORT telemetry classes would be packaged" >&2; exit 1
+fi
 "$BT/d8" --release --min-api $API --lib "$PLATFORM_JAR" --output "$OUT/dex" \
-  $(find "$OUT/classes" -name '*.class')
+  $(find "$OUT/classes" "$OUT/ort/classes" -name '*.class')
 
 echo "==> 6/7 package (aapt2)"
 rm -rf "$OUT/res-compiled" && mkdir -p "$OUT/res-compiled"
@@ -218,9 +257,15 @@ if [ ! -f "$KS" ]; then
     -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
 fi
 "$BT/zipalign" -p -f 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
+rm -f "$OUT/unsigned.apk"   # the APK is ~0.9 GB with voice: keep at most two copies on disk
 "$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
   --out "$OUT/lillith-debug-arm64.apk" "$OUT/aligned.apk"
 "$BT/apksigner" verify "$OUT/lillith-debug-arm64.apk"
+# Speaking only, fully offline: the APK must never ask for the network or the microphone.
+if "$BT/aapt" dump permissions "$OUT/lillith-debug-arm64.apk" |
+    grep -E "android.permission.(INTERNET|RECORD_AUDIO|ACCESS_NETWORK_STATE)"; then
+  echo "forbidden permission in the APK (see above)" >&2; exit 1
+fi
 rm -f "$OUT/unsigned.apk" "$OUT/aligned.apk" "$OUT/lillith-debug-arm64.apk.idsig"
 ls -lh "$OUT/lillith-debug-arm64.apk"
 echo "APK: $OUT/lillith-debug-arm64.apk"
