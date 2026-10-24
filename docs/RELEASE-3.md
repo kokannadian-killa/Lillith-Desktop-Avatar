@@ -118,7 +118,8 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   `come_hither_crawl` are now removed too, along with the grey floor-shadow
   slivers under her shin and boot, the purple smears beside her boot and the
   lavender floor-shadow residue near the floor (plus a small shadow ledge
-  under her toe) on `come_hither_crawl`. Their names, timing and placement
+  under her toe) on `come_hither_crawl`, whose leg and thigh gaps are now
+  see-through too. Their names, timing and placement
   are unchanged.
 - **Five more poses:** `leg_cross_slow_sit`, `hair_twirl_lip_bite`,
   `tail_heart_wink`, `trace_heart_on_glass` and `dom_chin_tilt_summon`, in
