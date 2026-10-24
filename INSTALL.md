@@ -215,21 +215,21 @@ install steps, see `source/android/INSTALL-android.md`.
    ```
 
 4. **Start llama-server on 127.0.0.1:8080** with Lily's sampler settings
-   from `crates/lillith-setup/src/modelfile.rs`: temperature 0.85, top_p 0.9,
-   repeat_penalty 1.1, 160 reply tokens and a 4096 context:
+   from `crates/lillith-setup/src/modelfile.rs`: temperature 0.95, top_p 0.95, min_p 0.1,
+   repeat_penalty 1.1 over the last 256 tokens, 160 reply tokens and a 4096 context:
 
    ```sh
    llama-server -m ~/models/<model>.gguf --host 127.0.0.1 --port 8080 --jinja \
-       -c 4096 --temp 0.85 --top-p 0.9 --repeat-penalty 1.1 -n 160
+       -c 4096 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160
    ```
 
    **System prompt:** Lily's persona is `LILY_SYSTEM_PROMPT` in
-   `source/crates/lillith-setup/src/modelfile.rs` (the zip includes the
+   `source/crates/lillith-setup/src/modelfile.rs` (also saved as `setup/persona.txt` in the zip, which includes the
    source). llama-server has no command-line flag for a system prompt. Paste
    the text into the system message field in the web UI's settings.
 5. **Chat:** open `http://127.0.0.1:8080` in the phone's browser (llama-server's
    built-in web UI), or chat in the terminal with
-   `llama-cli -m ~/models/<model>.gguf --temp 0.85 --top-p 0.9 --repeat-penalty 1.1`.
+   `llama-cli -m ~/models/<model>.gguf --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1`.
    `llama-cli --help` lists its system-prompt option.
 
 Keep `--host 127.0.0.1` so nothing else on the network can reach the server.
