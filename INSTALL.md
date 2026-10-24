@@ -164,18 +164,40 @@ SmartScreen may block it: click **More info ▸ Run anyway**. Or unzip the
 portable zip and run `lillith.exe`. The installer can add a desktop shortcut
 and **Start Lillith when I sign in** (autostart).
 
-**Brain:** put your `.gguf` in a folder such as `%USERPROFILE%\models\`, unzip
-a llama.cpp Windows release (keep the DLLs next to `llama-server.exe`), then
-run:
+**Brain:** get the model file yourself (Lillith never downloads anything) and
+put it in `%USERPROFILE%\models\`. That's the Windows `~/models`, and the
+**Brain** tab scans it (along with `%USERPROFILE%\Downloads`,
+`%LOCALAPPDATA%\lillith\models` and the LM Studio / Ollama folders). On a
+low-power CPU with 8–16 GB of RAM it recommends
+`dolphin3.0-llama3.2-3b-q4_k_m.gguf` (Dolphin 3.0 Llama 3.2 3B Q4_K_M), and
+it ranks uncensored models (Dolphin, abliterated, Hermes) above stock ones of
+the same size. A Mistral 7B GGUF still works as a fallback if it's the only one
+you have, but it's slow on that kind of CPU. Unzip a llama.cpp Windows release
+into `C:\llama.cpp\` or `%LOCALAPPDATA%\Programs\llama.cpp\`, where the Brain
+tab finds it on its own (keep the DLLs next to `llama-server.exe`). Then run:
 
 ```bat
-lillith.exe setup --gguf "%USERPROFILE%\models\<model>.gguf" --llama-server "C:\llama.cpp\llama-server.exe"
+lillith.exe setup --gguf "%USERPROFILE%\models\dolphin3.0-llama3.2-3b-q4_k_m.gguf" --llama-server "C:\llama.cpp\llama-server.exe"
 ```
 
-Or use **Lillith Settings ▸ Brain**. Either way, she then starts llama-server
-on 127.0.0.1 herself. The **kill switch** on Windows is the same safeword
+Or use **Lillith Settings ▸ Brain**. Either way, this writes `[llm]`, `[chat]`
+and `[chat.server]` to `%APPDATA%\lillith\config.toml`, and she then starts
+llama-server herself, hidden and on loopback only:
+
+```bat
+llama-server.exe -m <model>.gguf --host 127.0.0.1 --port 8080 -c 4096 -t <physical cores> --jinja
+```
+
+Chat needs `--jinja` (the model's own chat template). Windows doesn't expose the
+CPU name or core count to her, so there "low-power" means 4 threads or fewer,
+and `-t` is half the thread count unless you set `[llm] threads`. Lily's sampler settings
+(temperature 0.95, top_p 0.95, min_p 0.1, repeat_penalty 1.1 over the last 256
+tokens, 160 reply tokens) are sent with every chat request, so they aren't on
+the command line. If you use Ollama instead (`backend = "ollama"`), it must be
+on `http://127.0.0.1:11434`. The **kill switch** on Windows is the same safeword
 (see below), and it also shuts down the elevated `lillith-admin` helper.
-More detail: [`windows/INSTALL-windows.md`](windows/INSTALL-windows.md).
+More detail: [`windows/INSTALL-windows.md`](windows/INSTALL-windows.md)
+(`source/windows/INSTALL-windows.md` in the zip).
 
 ---
 
@@ -211,11 +233,11 @@ install steps, see `source/android/INSTALL-android.md`.
    ```sh
    termux-setup-storage                 # once, grants access to shared storage
    mkdir -p ~/models
-   cp ~/storage/downloads/<model>.gguf ~/models/
+   cp ~/storage/downloads/<model>.gguf ~/models/   # e.g. dolphin3.0-llama3.2-3b-q4_k_m.gguf
    ```
 
 4. **Start llama-server on 127.0.0.1:8080** with Lily's sampler settings
-   from `crates/lillith-setup/src/modelfile.rs`: temperature 0.95, top_p 0.95, min_p 0.1,
+   from `source/crates/lillith-setup/src/modelfile.rs`: temperature 0.95, top_p 0.95, min_p 0.1,
    repeat_penalty 1.1 over the last 256 tokens, 160 reply tokens and a 4096 context:
 
    ```sh
@@ -229,7 +251,7 @@ install steps, see `source/android/INSTALL-android.md`.
    the text into the system message field in the web UI's settings.
 5. **Chat:** open `http://127.0.0.1:8080` in the phone's browser (llama-server's
    built-in web UI), or chat in the terminal with
-   `llama-cli -m ~/models/<model>.gguf --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1`.
+   `llama-cli -m ~/models/<model>.gguf --jinja -c 4096 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160`.
    `llama-cli --help` lists its system-prompt option.
 
 Keep `--host 127.0.0.1` so nothing else on the network can reach the server.
