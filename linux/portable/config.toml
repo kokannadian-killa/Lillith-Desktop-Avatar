@@ -1,0 +1,87 @@
+# Lillith bundled config (portable package).
+# Deliberately minimal: everything not set here uses the binary's built-in
+# defaults (wander mode, varied flirty idle, 0.55 scale ~ 220 px). CLI flags override
+# this file. The [overlay] table is rewritten when you drag her.
+# To use a personal config instead, create ~/.config/lillith/config.toml;
+# run.sh / run.fish prefer it when it exists.
+
+mode = "wander"      # stay | wander | follow  (G toggles wander)
+scale = 0.55         # size on the 400 px cell (0.45 smaller, 0.75 larger)
+
+[overlay]          # where she sits (px from the bottom-left corner)
+margin_left = 80
+margin_bottom = 48
+# auto_fix_kwin = true   # before she appears, exclude her from KDE force blur
+#                        # (Better Blur DX etc.), so no black box; false = skip
+
+# Drop gravity + window perching. After a drag-release she falls to the
+# bottom of the screen (or the top of the taskbar). Dropped over a window,
+# she lands on its top edge, walks along it and sits there now and then.
+# Perching needs the KWin script kwin/lillith-bridge (see INSTALL.md);
+# without it she always falls to the floor. g_px_s2 = 0 turns falling off.
+[behavior.gravity]
+g_px_s2 = 2600.0          # gravity, px/s² (down)
+max_fall_speed = 2200.0   # terminal fall speed, px/s
+bounce = 0.22             # landing rebound fraction (0 = none, max 0.9)
+perch_enabled = true      # land on window tops (needs the KWin bridge)
+sit_every_s = [8.0, 20.0] # pause between sits while perched, [min, max] s
+sit_for_s = [20.0, 45.0]  # how long a sit on a window edge lasts, [min, max] s
+
+# Optional tuning (defaults shown; uncomment to change):
+# [behavior]
+# pose_cycle_s = 45.0            # automatic pose change while idle
+# sleepy_after_s = 300.0
+# asleep_after_s = 900.0
+# [behavior.idle]
+# transition_every_s = [25.0, 40.0]
+# reaction_every_s = [45.0, 90.0]
+# variant_hold_s = 30.0
+
+# Mind (Phase 1+2): knowledge/skills injection and the scoped file tools.
+# Defaults shown. Skill writes, file writes and every shell command need a
+# Soul Contract Yes; raw shell is off unless allow_shell = true. No network tool.
+# [mind]
+# enabled = true
+# knowledge_dir = ""             # empty = ~/.local/share/lillith/knowledge
+# skills_dir = ""                # empty = ~/.local/share/lillith/skills
+# allow_paths = ["~/Projects"]   # extra roots her file tools may read (audited)
+# allow_shell = false
+# max_read_bytes = 65536
+# unlock_paths = []              # opt back into denied dirs (/etc, ~/.ssh, ...)
+
+# File, program and command access (on by default; also Settings > Access).
+# Reads/listing/searching are free. Every write, move, rename, delete,
+# skills-folder edit, program launch and command is proposed as one Soul
+# Contract plan you approve in full, in part, or decline; all audit-logged.
+# Deletes also need a typed phrase and go to the Trash by default.
+# [mind.access]
+# files = true                   # browse/read/search/locate under roots
+# organize = true                # move/copy/rename/mkdir/sort (never overwrites, undoable)
+# programs = true                # list apps, check installed, open apps
+# commands = true                # run commands for a task (each one is a plan item)
+# skills = true                  # list/read/use her skills
+# import_desktop_skills = true   # propose copying ~/Desktop/skills into skills_dir
+# roots = ["~", "/mnt", "/media", "/run/media"]
+# command_timeout_s = 30
+
+# Build tab (Phase 3) in lillith-settings: offline New project / Build / Run,
+# every action behind a Soul Contract Yes, confined to projects_dir.
+# [build]
+# enabled = true
+# projects_dir = ""              # empty = ~/Projects/lillith-builds
+# default_language = "rust"      # rust | python | fish
+
+# "Come closer" idle tease: every few minutes of calm idle she eases up to
+# peak_scale x her size, plays a flirty beat, holds a smile, then shrinks back.
+# Defaults shown; enabled = false turns it off.
+# [behavior.tease]
+# enabled = true
+# every_s = [180.0, 360.0]       # calm idle time between teases, [min, max] s
+# grow_s = 3.0
+# beat_s = 3.0
+# pause_s = 2.0
+# shrink_s = 3.0
+# peak_scale = 1.6               # 0.55 -> 0.88 at the default size (auto-lowered to fit)
+# approach_clips = ["idle_flirt_hands_behind_sway", "hip_sway"]
+# beat_clips = ["tease_closeup", "bend_forward_wink", "lean_tease", "idle_flirt_lip_bite", "hip_pop_wink"]
+# pause_clips = ["blink_wink"]
