@@ -2,15 +2,17 @@
 
 Status: **design only** (no code yet). Base: `feat/memory-wiring` (e72c85c);
 lands on `main` after memory-wiring merges. Owner: memory/mind bot.
-Requested by Ko, 2026-10-24 03:00 MDT. Decisions below from Ko (pt16u,
-pt19u) and New Bot defaults Ko can change.
+Requested by Ko, 2026-10-24 03:00 MDT. Decisions below from Ko (pt16u–
+pt19u, plus dream learning 03:24, memory compaction 03:26, worker
+lifespans/error handling 03:26 MDT) and New Bot defaults Ko can change.
+Items Ko decided are marked **decided by Ko**.
 
 ## Goal
 
 Lillith keeps learning when nobody is talking to her: she reads installed
-docs, distils Ko's saved chat history and habits, reads pages Ko has opened
-(locally), and — only when Ko clicks Yes — may fetch a short, announced
-list of URLs over Tor. She writes what she learned into topic folders of
+docs, distils Ko's saved chat history and habits, reads pages Ko explicitly
+shares with her, and — only when Ko clicks Yes — may fetch a short, announced
+list of URLs over Tor, or "dream" online for a session length Ko picks (§11). She writes what she learned into topic folders of
 markdown notes, links them in the memory graph, quizzes herself, and later
 practises small programs in a locked-down sandbox (each compile/run needs
 a click). Long term this is the path to her building apps.
@@ -223,68 +225,53 @@ can read **the internet pages he opens**. That is all. No other sources.
 | Installed docs: Python | `/usr/share/doc/python*/html` if present; `pydoc` is **not** run | never install doc packages |
 | Saved chat history | `chat_history.json` under its lock (D5, Ko) | skip safeword turns (`lillith_memory::is_safeword`); skip forgotten turns |
 | Memory + habits | memory nodes; `Brain::predict`, `events`, `habits.rs` | app ids only, as stored |
-| Pages Ko opens | local browser data only (§3.1); never fetches the URL for this source | Firefox + Chromium/Chrome; detect what's present |
+| Pages Ko shares | explicit "Share this page with Lillith" action Ko triggers (§3.1); never fetches the URL for this source | per-site block list; note stores the source URL |
 
 **Not sources** (explicitly removed from the earlier draft):
 `[learn] allow_paths` folders, Bots tab / Build tab job results. The Bots
 tab still has a read-only query API (§8); its logs are for the tab, not for
 learning.
 
-Every path is canonicalised and must sit under one of the fixed roots above
-(or the browser-profile roots approved in §3.1). Symlinks escaping a root
-are refused. Never read: `~/.ssh`, `~/.gnupg`, `~/.config/lillith`, keyrings,
+Every path is canonicalised and must sit under one of the fixed roots above.
+Symlinks escaping a root are refused. Never read: `~/.ssh`, `~/.gnupg`,
+`~/.config/lillith`, **browser profiles, history, sessions or caches**, keyrings,
 `*.key|*.pem|*.kdbx`, `.env`, anything matching `password|secret|token` in
 the name (hard denylist). No source in this table triggers a program launch
-or a network fetch; the learner only uses `std::fs` here.
+or a network fetch; the learner only uses `std::fs` plus the local share
+socket (§3.1) here.
 
-### 3.1 Pages Ko opens (local, read-only)
+### 3.1 Pages Ko shares (explicit, opt-in) — decided by Ko
 
-**Pick: local browser history + cache/session files for Firefox and
-Chromium/Chrome**, detected by which profile dirs exist. A browser
-extension / native-messaging host remains a future option if the profile
-read proves too brittle or too invasive; it is not the P1–P3 path.
+Ko: *"she can read the internet pages i open"*. Designed as an **explicit
+share**, which is what Ko was told: she reads a page only when Ko himself
+sends it to her. There is **no background reading** of browser profiles,
+history, sessions or caches.
 
-Why this pick: no install for Ko, no extension to keep alive, works for
-pages already opened (including when the browser is closed), and stays
-fully local. The extension path would give cleaner "current page text" but
-needs Ko to install and keep an extension, and still needs a Unix socket.
+- **Trigger:** Ko clicks "Share this page with Lillith" — a small local
+  browser extension button (Firefox / Chromium, talking to a native-messaging
+  host shipped with Lillith) or a KDE Purpose share action. It sends the
+  current page's URL, title and visible text only (no cookies, form fields,
+  scripts, or other tabs). Private/incognito windows: the action is not
+  offered.
+- **Transport:** local Unix socket `<runtime>/lillith/share.sock` (dir 0700,
+  socket 0600, peer uid checked with `SO_PEERCRED`); no TCP port. Body cap
+  512 KiB. The text is queued as a learn job and processed while idle.
+- **Per-site block list** in the Knowledge panel (`[learn] block_hosts`);
+  blocked hosts are refused at the socket with a short notice. A built-in
+  denylist (banks, password managers, webmail compose, login/auth pages) is
+  refused the same way.
+- Stored notes carry `source.type = shared`, `source.url = <url>` and a
+  content hash. **Never re-fetched** by this source; a fresh copy needs an
+  online research trip (§5).
+- Shared text is untrusted data: same ingest filter and fenced-reference
+  rule as everything else (§7).
+- Audit: `<ts>\tLEARN\tshare\t<host>\tnote=<id>` (no page text).
 
-| Browser | Roots (read-only) | What is read |
-| --- | --- | --- |
-| Firefox | `~/.mozilla/firefox/<profile>/` (default + relative profiles from `profiles.ini`) | `places.sqlite` (url, title, last_visit_date; open with
-  `SQLITE_OPEN_READONLY` + immutable/`?mode=ro` so Firefox's lock is not
-  disturbed), `SessionStore` / `sessionstore-backups/*.jsonlz4` for open
-  tabs; cache entry bodies under `cache2/` keyed by URL when present |
-| Chromium / Chrome / ungoogled | `~/.config/chromium/`, `~/.config/google-chrome/`, `~/.config/brave-browser/` (Default + Profile *) | `History` SQLite (urls, visits), `Current Session` / `Current Tabs` /
-  `Last Session` for open tabs; HTTP cache under `Cache/` / `Code Cache/`
-  when a body is available |
-
-Rules:
-
-- Only URLs with at least one visit (or currently open in a normal window).
-- **Excluded:** private / incognito windows (Firefox: no places writes for
-  private; Chromium: separate encrypted profile — skipped), banking and
-  login pages (path/host heuristics: `/login`, `/signin`, `/auth`,
-  `accounts.`, `banking.`, `paypal.`, password managers), and a built-in
-  domain denylist (banks, password managers, government ID, webmail
-  compose). A **per-site block list** is editable in the Knowledge panel
-  and stored in `[learn] block_hosts`.
-- Text is stored as a note with `source.type = browser`, `source.ref = <url>`,
-  content hash of the extracted text. **Never re-fetched** by this source;
-  if Ko wants a fresh copy he approves an online research trip (§5).
-- Cache bodies are used only when already on disk; missing body → title +
-  URL only (low confidence note), never a network GET.
-- Rate: at most one new browser URL per learner step; skip visits older
-  than `browser_max_age_days` (default 30).
-
-**Approval flag for Ko:** reading the browser profile (history DB + cache)
-touches personal browsing data. First enable shows a one-time Soul Contract
-card: *"Let me read the local history and cache of Firefox/Chromium that
-are installed, so I can learn from pages you've opened? Private windows,
-banking and login pages stay out. [Yes / No]"*. Only a mouse click on Yes
-enables the source; the decision is audited (`CONFIRM` /
-`browser_profile_read`) and stored in config. Denying leaves the other
-sources on. Re-prompt if a new browser family appears.
+**Alternative Ko can opt into later (not built, off):** automatic reading of
+pages he has opened from local Firefox/Chromium history, session and cache
+files. It would need its own one-time Soul Contract card, would exclude
+private windows, banking and login pages, and would honour the same block
+list. Only built if Ko asks for it.
 
 ## 4. The loop
 
@@ -292,7 +279,7 @@ One *job* = one source chunk or one maintenance task. The idle loop **never**
 starts an online trip, a download/install, or a sandbox run by itself.
 
 1. **Pick** (no LLM): highest score of `usefulness(topic, Ko's habits) ×
-   novelty(source hash unseen) ÷ size`. Conversation/habit/browser jobs
+   novelty(source hash unseen) ÷ size`. Conversation/habit/shared-page jobs
    first, then docs for commands Ko uses, then the rest.
 2. **Read** one chunk (≤ 2 KiB), strip markup, drop lines matching the
    denylist or looking like secrets (high-entropy ≥ 32 chars).
@@ -534,9 +521,15 @@ Rules:
   sets `origin: ko`.
 - **Activity log:** last 50 `LEARN` / `online_research` / `sandbox_run` /
   `install` audit lines (no note bodies).
-- **Sources:** installed-docs checklist, chat+memory toggle, browser-source
-  status (and the one-time profile-read card state), **block_hosts** editor.
-  No folder allow_paths picker.
+- **Sources:** installed-docs checklist, chat+memory toggle, recent shared
+  pages (URL, notes made), **block_hosts** editor. No folder allow_paths
+  picker, no browser-profile reading.
+- **Dreaming:** start (duration 30 min–8 h → card), live log, End early,
+  past dream reports with per-item forget (§11).
+- **Workers:** live helper workers (TTL left, budget used), killed /
+  quarantined jobs, circuit-breaker state per domain (§12).
+- **Storage:** DB size vs `max_db_mb`, last compaction run (rows merged,
+  bytes saved), "Compact now" (still idle/AC only) (§13).
 - **Online trips:** "Research…" (purpose + URL list → card), history of
   trips with went-to URLs and saved notes.
 - **Practice queue:** proposed sandbox argv list; each still opens its own
@@ -544,6 +537,172 @@ Rules:
 - **Installs:** list + gated uninstall (§9).
 - The panel never starts the learner's model calls itself; "Learn now" only
   clears the idle wait if the other conditions hold.
+
+## 11. Dream learning (Ko-started, time-boxed) — decided by Ko
+
+Ko (03:24 MDT): *"when the user asks say for 8 or 6 hours she can learn
+using the internet and learn anything she wants during that 6 to 8 hour
+peroid (user states how long from 30min to 8hours) it needs a end early
+option and she can even use the task bots to do the reasearching for her"*.
+
+1. **Start only when Ko asks.** Ko picks the duration; it must be between
+   **30 min and 8 h** (validated; anything outside is rejected with a short
+   message, no clamping). He confirms with **one Soul Contract mouse click**
+   on a `PendingAction::DreamSession { id, minutes, deadline, budgets, card }`
+   card that shows the duration, end time, budgets and the rules below. That
+   click is **session-scoped consent**: it replaces the per-trip click (§5)
+   for research trips *inside this session only*. It never carries over to
+   another session, to the idle learner, or to sandbox runs or installs.
+2. **She picks topics** from a curiosity queue: gaps in the memory graph
+   (entities with few notes / low confidence), recent chats, past errors
+   without a known fix. Same rules as §5: Tor only, anonymous, read-only
+   GET of text/HTML, no logins, cookies or identity, **no uploads of Ko's
+   data** (queries are built from topic words only, never from chat text or
+   memory contents verbatim). **No installs or program launches** without
+   their own per-item click; installs are still only for a task Ko asked for
+   (§9), so effectively none during dreaming. No Tor → dreaming can't start
+   (card says so).
+3. **Visible and stoppable.** A visible "dreaming" indicator on the avatar
+   and tray while it runs, plus an **End early** item in the right-click menu
+   and the tray. The safeword (red / `OOC: stop`) ends it instantly. Hard
+   stop at the deadline. Also stops on low battery (`stop_battery_pct`) or
+   thermal limits (`stop_cpu_temp_c`). If Ko chats, chat takes priority on
+   `llama-server` (LlmGate §1) and dreaming yields until he is idle again; the
+   deadline does not move. Every stop is audited (`DREAM\tend\t<reason>`).
+4. **Light on the i5-7200U.** One fetch at a time (`fetch_interval_s`),
+   per-hour page and per-session byte caps, nice 19 / ionice idle, disk
+   budget (`max_disk_mb`) and the session time limit.
+5. **Helper workers.** She may split research into sub-tasks run by her own
+   **local helper task workers** (bounded, `max_workers` 1–2), each under the
+   same sandbox and Tor rules and the lifespan/capture rules in §12. Each job
+   is logged in the D8 job log (`~/.local/share/lillith/bots/<job-id>.jsonl`).
+   **Open question (D12):** we assume "task bots" means these local helper
+   workers. If Ko meant his other Grok assistants, that would send research
+   off the machine, so it is not in this local design unless Ko confirms.
+6. **Live log + dream report.** While dreaming the panel shows a live log of
+   where she is going (each planned URL before the GET, each visited URL
+   after). When it ends she gives a **dream report** (chat + panel + audit):
+   sites visited, what she learned, what was saved to memory (note paths,
+   node ids), each item with its own **Forget** button.
+7. **Low-strength memories.** Learned items are saved as memories/notes with
+   `strength = dream_strength` (0.2) and tag `source=dream` (plus
+   `dream_id`), so they decay unless reinforced by use or Ko, and are easy to
+   review and forget (forget "dream <date>" removes the whole session).
+
+## 12. Helper workers: lifespans, capture handling, errors — decided by Ko
+
+Ko (03:26 MDT): *"with advanced error handling and bot life spans incase of
+capture ect"*. Applies to every helper worker (dream learning, online
+research, compaction).
+
+**Lifespans.** Every worker gets a hard TTL at spawn: wall clock plus fetch,
+page, byte and token budgets. The parent **supervisor** enforces them by
+killing the worker (SIGKILL of its process group; no asking). Heartbeat
+every `heartbeat_s`; `missed_heartbeats_kill` missed → kill. Workers never
+outlive the dream session, the safeword, End early, or the parent process
+(`PR_SET_PDEATHSIG`, bwrap `--die-with-parent`).
+
+**Capture / compromise handling.**
+
+- All fetched content is untrusted data (prompt-injection defence): page
+  text never becomes instructions, and no action is derived from page text
+  beyond the planned read-only GET.
+- Least privilege: a worker has **no direct memory write access** — it
+  returns candidate facts to the parent, which validates them (ingest filter
+  §7, schema, size) or quarantines them. No filesystem outside its scratch
+  dir, no network except the Tor SOCKS port, no exec (bwrap + seccomp deny
+  `execve` after start, no tools in the sandbox).
+- Canary / anomaly checks: unexpected domains, output asking to run
+  commands or change settings, oversized output, attempts to reach loopback
+  or LAN addresses, canary strings planted in its prompt showing up in a
+  request → **kill the worker, quarantine its results** (kept read-only in
+  the panel for Ko, never ingested), audit line
+  (`WORKER\tkill\t<reason>\tjob=<id>`), and mention it in the dream report.
+- Fresh worker per task: no reused state or circuits; scratch dir wiped on
+  exit (success, kill or crash).
+
+**Anonymity for helper workers (hard rule, not configurable down) — decided
+by Ko.** Ko (03:28 MDT): *"smart thinking and keep the zero finger printing
+and footprinting anon for the bots esspecially"*. Applies to every worker
+fetch and to §5 trips; config can only make it stricter.
+
+- **Client:** a plain HTTP GET client only (no JS engine, no browser, so no
+  WebRTC, fonts, canvas or other browser fingerprint surface), via Tor
+  SOCKS5 with remote DNS (`socks5h`; no local DNS lookups, tested by a
+  resolver that fails the test if called).
+- **Headers:** a fixed generic set matching Tor Browser's common
+  User-Agent / Accept / Accept-Language (`en-US`) set, pinned in code. No
+  `Referer`. No cookies, storage or cache persisted; no `ETag` /
+  `If-Modified-Since` revalidation across sessions.
+- **Stream isolation:** a new Tor circuit per worker/task via SOCKS auth
+  isolation (`IsolateSOCKSAuth`, random per-task credentials).
+- **Timing:** randomized, jittered delays and rate limits on top of §11
+  budgets, so request patterns don't fingerprint.
+- **No identifiers in queries:** never Ko's name, usernames, local paths,
+  hostnames, timezone, or locale beyond generic `en-US`; queries are checked
+  against a denylist built from local identity data (user/host names, home
+  path, known names in memory) before sending. Tracking params (`utm_*`,
+  `fbclid`, `gclid`, …) are stripped from URLs.
+- **Read-only:** no uploads, POSTs, forms or logins.
+- **Storage:** fetched pages are kept only as extracted text, locally; raw
+  HTML is discarded with the scratch dir.
+- **Footprint on Ko's machine:** worker scratch lives in tmpfs and is wiped
+  on exit; nothing persists outside `memory.db` / knowledge notes and the
+  audit and job logs.
+- **Smart thinking:** the planner picks a few focused queries, ranks
+  candidate pages before fetching, and stops early once it has enough
+  (confidence target met or no new facts in the last N pages), to keep the
+  number of requests minimal.
+- **Honest limit:** this minimises fingerprinting and footprint; no setup
+  can guarantee zero fingerprinting or perfect anonymity.
+
+**Advanced error handling.**
+
+- Supervisor restart limits (`max_restarts`) with exponential backoff
+  (`backoff_base_s`, capped at 300 s); then the job is marked failed.
+- Circuit breakers per domain and per source: `breaker_failures` in a row →
+  open for 30 min, then half-open with one probe.
+- All failures are recorded in error memory (`record_error` /
+  `known_fix`), so repeats are avoided and known fixes tried first.
+- Crash-safe, resumable job log (D8 JSONL, append-only, fsync per line);
+  on restart unfinished jobs resume or close as `CANCELLED`.
+- Graceful degradation: Tor down → offline-only learning continues; model
+  server down → wait (never restart it, §1).
+- Never blocks chat: workers and supervisor sit behind the LlmGate.
+
+## 13. Memory compaction (self-compression) — decided by Ko
+
+Ko (03:26 MDT): *"the memory folders need a method of self compression for
+storage and easy access for her"*. Extends the storage model in
+`docs/MEMORY.md` (nodes/edges/events, strength decay).
+
+1. **Consolidation.** Old, low-strength episodic events
+   (`> digest_after_days`, strength `< digest_max_strength`) are merged into
+   summary nodes (`kind = 'digest'`, daily then weekly), written by
+   deterministic rollups (counts, habits, entities) and, when idle, a short
+   3B summary. Digests keep edges to the entities/habits the originals
+   linked, so retrieval still works. Originals are pruned after the digest is
+   written and indexed. **Forget still reaches digests:** forgetting a topic
+   also scrubs and rebuilds any digest mentioning it (rebuilt from remaining
+   sources, or deleted if none). `origin: ko` items are never compacted away.
+2. **Storage.** Long text (chat history archive, dream/research page
+   extracts) is stored as zstd-compressed blobs with a small trained
+   dictionary; hot recent data (`hot_days`) stays uncompressed. On idle:
+   SQLite `incremental_vacuum` (VACUUM rarely), FTS5 `optimize`, and
+   `wal_checkpoint(TRUNCATE)`. Size budget `memory.max_db_mb`; over budget →
+   prune oldest-weakest first (never `origin: ko`, never preference notes
+   without listing them in the panel).
+3. **Easy access.** FTS index plus recency and strength indexes over digests,
+   so lookup stays fast; blobs are decompressed on demand through an LRU
+   cache (`lru_cache_mb`).
+4. **Light on the i5-7200U.** Only when idle and on AC, chunked (≤ 2 s CPU
+   per chunk), nice 19 / ionice idle, never during chat, resumable from a
+   checkpoint. The safeword and forget always win (abort and roll back the
+   current chunk).
+5. **Audit** one line per run: `<ts>\tCOMPACT\trows_merged=N\tbytes_saved=B`.
+
+Fully local. The only new dependency is the `zstd` crate via cargo (not in
+`Cargo.lock` today; vendored with the release build), no other downloads.
 
 ## Config (`[learn]`, all new)
 
@@ -563,15 +722,42 @@ note_half_life_days = 90
 topics = ["coding","linux-garuda","rust","python","ko-preferences","self","fixes","tools","web"]
 allow_create_topics = true # D6, New Bot default; Ko can change
 prefer_notes_need_review = false  # D5b, New Bot default; Ko can change
-sources = ["man","info","doc","rust-doc","python-doc","chat","memory","habits","browser"]
-browser_profile_read = false      # flipped by the one-time card
-browser_max_age_days = 30
+sources = ["man","info","doc","rust-doc","python-doc","chat","memory","habits","shared"]
+share_socket = true               # "Share this page with Lillith" (explicit, Ko-triggered)
 block_hosts = []                  # per-site block list (panel)
 online = true                     # master switch; still needs Tor + a card per trip
 online_max_pages = 5
 online_max_bytes = 2097152
 tor_socks = "127.0.0.1:9050"
 practice = true                   # P4; each run still needs a card (D2 = A)
+
+[learn.dream]                     # §11, decided by Ko; only when Ko starts it
+min_minutes = 30
+max_minutes = 480
+max_workers = 2                   # helper workers (§12)
+fetch_interval_s = 20             # one fetch at a time, ≥ 20 s apart
+max_pages_per_hour = 60
+max_bytes_per_session = 52428800  # 50 MiB fetched
+max_disk_mb = 100                 # notes + extracts written per session
+dream_strength = 0.2              # low-strength memories, source=dream
+stop_battery_pct = 20
+stop_cpu_temp_c = 85
+
+[learn.workers]                   # §12, decided by Ko
+heartbeat_s = 10
+missed_heartbeats_kill = 3
+max_restarts = 3
+backoff_base_s = 5                # 5, 10, 20 … capped at 300
+breaker_failures = 3              # per domain/source → open 30 min
+
+[memory.compaction]               # §13, decided by Ko
+enabled = true
+max_db_mb = 512
+digest_after_days = 14            # episodic events older than this → digests
+digest_max_strength = 0.3
+zstd_level = 9
+hot_days = 7                      # newer data stays uncompressed
+lru_cache_mb = 8
 ```
 
 ## Milestones
@@ -579,10 +765,13 @@ practice = true                   # P4; each run still needs a card (D2 = A)
 | | Scope | Tests | Perf budget | Risks |
 | --- | --- | --- | --- | --- |
 | **P1** Idle scheduler + installed docs + notes + index + move context out of system message | `lillith-learn`, scheduler, LlmGate, man/info/doc/rust-doc/python-doc readers, NoteStore (0700/0600, atomic), schema v3, `--once --dry-run`, fenced reference message (D3) | scheduler state table; duty ≤ 10 %; gate preemption ≤ 200 ms; path confinement + denylist + symlink escape; perms; v2→v3 + reindex; no network from idle path; `memory.enabled=false` creates nothing; `[learn] enabled=true` by default | chat first-token +≤ 300 ms; learner RSS ≤ 40 MB; ≤ 12 steps/h | llama-server single-slot starvation; man roff quality; reply-quality change from moving context |
-| **P2** Chat history + memory/habit distillation, browser source (local), self-quiz, dedupe, decay, contradictions, forget | chat/habit/browser jobs, quiz, merge, prune, `forgotten_hashes`, forget for notes | forget deletes files + nodes + no residue; forgotten/safeword turns never re-learned; browser skips private/login/blocked; one-time profile-read card; `origin: ko` untouched | quiz ≤ 2 steps/h; browser scan ≤ 2 s/idle step | profile schema churn; privacy of preference notes; Firefox lock races |
+| **P2** Chat history + memory/habit distillation, self-quiz, dedupe, decay, contradictions, forget | chat/habit/shared-page jobs, quiz, merge, prune, `forgotten_hashes`, forget for notes | forget deletes files + nodes + no residue; forgotten/safeword turns never re-learned; `origin: ko` untouched | quiz ≤ 2 steps/h;  | privacy of preference notes |
 | **P3** Knowledge panel | tab: status, browse, search, edit, delete, forget, activity, sources, block_hosts, trips, practice queue, installs | egui state tests; edit sets `origin: ko`; toggles write config; Off stops the thread | panel open ≤ 150 ms with 5k notes | GUI/learner lock contention |
 | **P4** Sandbox practice (card per run) | generator, static check, bwrap wrapper, `SandboxRun` card, skills write, proposal queue | argv golden test; network denied; write outside `/work` fails; limits kill fork bomb / 1 GiB / infinite loop; no card → no launch; spoken yes rejected | ≤ 6 proposals/day; rustc single file ≤ 15 s | bwrap / userns missing |
 | **P5** Online research (Tor) + gated install path + Bots/Pose API | `OnlineResearch` card, Tor SOCKS client, trip reporting, `Install`/`Download` cards, pkexec, installs ledger, `KnowledgeApi`, bots JSONL layout | Tor missing → online off; non-listed redirect refused; caps; no cookies/POST; circuit isolation; fetched text fenced untrusted; install refused without a Ko-asked task; learner never proposes install; pkexec cancel = DENY; uninstall card | trip ≤ 60 s wall; install card → agent ≤ 30 s to show | Tor/arti absent; exit-node HTTP risk; polkit UX |
+| **P6** Shared pages | share socket, native-messaging host + extension, KDE share action, block list | peer-uid check; blocked/denylisted host refused; no browser-profile reads (denylist test); URL stored; injection text dropped | share → queued ≤ 50 ms | extension packaging per browser |
+| **P7** Helper workers + dream learning | supervisor, worker sandbox, TTL/heartbeat, breakers, quarantine; `DreamSession` card, curiosity queue, live log, End early (menu/tray), dream report, `source=dream` memories | duration outside 30–480 min rejected; one click covers only that session's trips; deadline hard stop; safeword/End early/battery/thermal stop ≤ 1 s; chat preempts; worker killed on TTL/missed heartbeat/anomaly; quarantine never reaches memory; scratch wiped; breaker opens; Tor down → offline only; per-item forget | 1 fetch at a time; dream CPU outside model calls < 5 % one core | injection via pages; 3B summary quality; "task bots" meaning (D12) |
+| **P8** Memory compaction | digests, prune-after-summarise, zstd blobs + dictionary, LRU, vacuum/optimize/checkpoint, size budget, forget rebuilds digests | digest keeps entity/habit links (retrieval golden test); forget topic scrubs + rebuilds digests; budget prunes oldest-weakest first, never `origin: ko`; resumable after kill; safeword aborts; audit line per run | chunk ≤ 2 s CPU; lookup p95 unchanged (≤ 20 ms on 5k notes) | dictionary drift; summary loses detail |
 
 ## Decisions
 
@@ -593,7 +782,10 @@ practice = true                   # P4; each run still needs a card (D2 = A)
 | **D1** | Self-learning is **on by default**; Off toggle in the Knowledge panel. |
 | **D2** | Sandbox: **user-gated, option A** — every compile/run needs a mouse-click Yes on a Soul Contract card + audit. Standing approval (B) removed. Batching (C) may queue proposals only; each still gets its own card. |
 | **D5** | She learns from **saved chat history** (`chat_history.json`, skipping safeword and forgotten turns) **as well as** memory, habits, and installed docs. |
-| **Sources** | Exactly: installed docs (man/info/`/usr/share/doc`/Rust/Python), saved chat + memory + habits, and **pages Ko opens** (local browser read). Nothing else. |
+| **Sources** | Exactly: installed docs (man/info/`/usr/share/doc`/Rust/Python), saved chat + memory + habits, and **pages Ko shares** via an explicit "Share this page with Lillith" action. Nothing else. No allow-listed folders, no Bots job results. |
+| **D9 Dream learning** | Ko-started sessions of 30 min–8 h, one session-scoped click, her own topic choice, Tor/read-only rules, End early + safeword + deadline stops, light budgets, local helper workers, live log + dream report with per-item forget, `source=dream` low-strength memories (§11). |
+| **D10 Workers** | Anonymity hard rule for workers (plain GET via Tor `socks5h`, generic headers, stream isolation, jitter, no identifiers, tmpfs scratch, smart early stopping); hard TTLs + heartbeats enforced by the supervisor, least privilege, quarantine on anomalies, fresh worker per task, restart limits/backoff, circuit breakers, error memory, resumable job log, graceful degradation (§12). |
+| **D11 Compaction** | Self-compression of memory: digests, zstd blobs, vacuum/optimize, size budget, fast lookup, idle/AC only, audited (§13). |
 | **Online** | User-gated online research: click per trip, announce where going / went / what saved, audited, through Tor, anonymous, read-only GET. Replaces local-only for this feature only. Idle loop never goes online alone. |
 | **Installs** | User-gated downloads/installs, **only when Ko asked her to complete a task and it is needed for that task**. Learner never proposes installs. Click + audit; root via pkexec/polkit (she never handles the password); verified downloads; panel list + gated uninstall; no auto-updates. Tor not installed by the learner; if Tor is missing, online stays off unless Ko asks for a task that needs it. |
 
@@ -607,8 +799,13 @@ practice = true                   # P4; each run still needs a card (D2 = A)
 | **D6** | She **may** create new topic folders herself (slug rules above). |
 | **D7** | Index only docs that are already installed; never install doc packages from the learner. |
 | **D8** | Bots job logs at `~/.local/share/lillith/bots/<job-id>.jsonl` (append-only JSONL: id, bot, task, status, ts, result_path). Not a learning source. Pose Builder: read-only `poses()` now; later a feedback write path for liked/rejected poses. |
-| **Browser pick** | Local Firefox + Chromium history/cache/session (detect present). One-time profile-read card. Extension/native-messaging left as a future alternative. |
+| **Share mechanism** | Explicit "Share this page with Lillith" (extension/native-messaging or KDE share) over a local Unix socket; no background browser reads. Automatic reading of opened pages is an opt-in alternative for later, only if Ko asks. |
 
 ### Still open
 
-None that block P1. Lead confirms D8 log path when `feat/bots-tab` lands; Ko can flip any New Bot default in the panel or config.
+- **D12 (Ko):** does "task bots" in dream learning mean her local helper
+  workers (assumed, §11.5) or Ko's other Grok assistants? The latter would
+  leave the machine, so it is not designed in unless Ko confirms.
+- Lead confirms the D8 log path when `feat/bots-tab` lands.
+
+None block P1. Ko can flip any New Bot default in the panel or config.
