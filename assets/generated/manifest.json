@@ -3821,7 +3821,7 @@
    "video": "tada_celebrate/tada_celebrate.mp4"
   },
   {
-   "frame_count": 23,
+   "frame_count": 24,
    "frame_width": 400,
    "frame_height": 400,
    "fps": 12.0,
@@ -3831,7 +3831,7 @@
     200,
     392
    ],
-   "scale": 0.528,
+   "scale": 0.54,
    "body_anchor_x": 200,
    "facing": "front",
    "canvas_compliant": true,

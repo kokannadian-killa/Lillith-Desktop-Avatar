@@ -45454,7 +45454,7 @@ page = "tail_tease/tail_tease_sheet.png"
 fps = 12.0
 mode = "loop"
 baseline_y = 392
-scale = 0.528
+scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
 video = "tail_tease/tail_tease.mp4"
 
@@ -45614,6 +45614,13 @@ anchor = [200, 392]
 
 [[clips.tail_tease.frames]]
 x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_tease.frames]]
+x = 9200
 y = 0
 w = 400
 h = 400
