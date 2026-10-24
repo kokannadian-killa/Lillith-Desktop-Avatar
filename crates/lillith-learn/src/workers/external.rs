@@ -4,8 +4,9 @@
 //! [`Backend::External`] = Ko's own TaskCompletion bots in the cloud. That
 //! path **leaves the machine and is not anonymous**; it is off unless
 //! `[learn.dream] external_bots = true` *and* Ko ticked it on this
-//! session's card, and the safeword turns it off for the rest of the
-//! session. This slice models it only: nothing is ever sent
+//! session's card, and any stop (End early, the plain stop, the kill
+//! switch) turns it off for the rest of the session; the safeword only
+//! hushes her voice. This slice models it only: nothing is ever sent
 //! ([`send`] always refuses), but the request shape and the validation of
 //! returned results are fixed here.
 
@@ -28,8 +29,8 @@ impl Backend {
     /// Local unless the config allows it (`[learn.dream] external_bots`),
     /// Ko ticked "also use my TaskCompletion bots" on **this session's
     /// card** ([`Session::external_allowed`]; the tick comes from the card,
-    /// never from a caller), nothing (the safeword, End early, the kill
-    /// switch, any stop) has stopped the session, and a bot is named.
+    /// never from a caller), nothing (End early, the kill switch, any stop;
+    /// not the safeword, which only hushes her voice) has stopped the session, and a bot is named.
     pub fn choose(external_bots: bool, session: &Session, bot_id: Option<&str>) -> Backend {
         match bot_id {
             Some(b) if external_bots && session.external_allowed() && !b.trim().is_empty() => {
@@ -269,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn external_is_off_unless_config_and_session_tick_and_no_safeword() {
+    fn external_is_off_unless_config_and_session_tick_and_no_stop() {
         let s = |tick: bool| {
             Session::new("s-x", Duration::from_secs(600))
                 .with_kill_switch_probe(std::sync::Arc::new(|| false))
@@ -278,10 +279,19 @@ mod tests {
         assert_eq!(Backend::choose(false, &s(true), Some("b1")), Backend::Local);
         assert_eq!(Backend::choose(true, &s(false), Some("b1")), Backend::Local);
         assert_eq!(Backend::choose(true, &s(true), None), Backend::Local);
-        // The safeword (or any stop) disables external for the rest of it.
-        let fired = s(true);
-        assert!(fired.observe_chat("red"));
-        assert_eq!(Backend::choose(true, &fired, Some("b1")), Backend::Local);
+        // The safeword only hushes her voice: external stays as ticked.
+        let hushed = s(true);
+        assert!(hushed.observe_chat("red"));
+        assert_eq!(
+            Backend::choose(true, &hushed, Some("b1")),
+            Backend::External {
+                bot_id: "b1".into()
+            }
+        );
+        // Any stop disables external for the rest of it.
+        let stopped = s(true);
+        stopped.stop();
+        assert_eq!(Backend::choose(true, &stopped, Some("b1")), Backend::Local);
         let ended = s(true);
         ended.end_early();
         assert_eq!(Backend::choose(true, &ended, Some("b1")), Backend::Local);

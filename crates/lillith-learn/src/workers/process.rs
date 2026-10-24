@@ -712,11 +712,16 @@ pub enum SandboxEnd {
     OverCap,
 }
 
+/// How often a sandboxed step's stop probe and size watchdog are polled
+/// (review N3-3: 10 ms, down from 20 ms, so `/work` can't grow far past its
+/// cap between two looks; `--fsize` bounds what one write adds).
+pub(crate) const SANDBOX_POLL: Duration = Duration::from_millis(10);
+
 /// Runs one fully built sandbox argv (`bwrap … -- prlimit … timeout …`):
 /// its own process group, `PR_SET_PDEATHSIG`, `PR_SET_NO_NEW_PRIVS`, nice 19
 /// and the idle I/O class (inherited by everything inside), stdin closed,
 /// stdout / stderr kept up to `out_cap` bytes each. `stop` is polled every
-/// 20 ms: a reason kills the whole group (SIGKILL) and discards the output;
+/// [`SANDBOX_POLL`]: a reason kills the whole group (SIGKILL) and discards the output;
 /// so does running past `hard_wall`. Only [`super::build`] calls this, and
 /// only with an argv that starts with `bwrap`. Tests only: production
 /// always goes through [`run_sandboxed_watched`] (the size watchdog).
@@ -732,7 +737,7 @@ pub(crate) fn run_sandboxed(
 }
 
 /// [`run_sandboxed`] plus a watchdog: `over_cap` is polled with `stop`
-/// (every 20 ms); `true` kills the whole group at once
+/// (every [`SANDBOX_POLL`]); `true` kills the whole group at once
 /// ([`SandboxEnd::OverCap`]).
 pub(crate) fn run_sandboxed_watched(
     argv: &[String],
@@ -812,7 +817,7 @@ pub(crate) fn run_sandboxed_watched(
         }
         match child.try_wait() {
             Ok(Some(s)) => break s,
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Ok(None) => std::thread::sleep(SANDBOX_POLL),
             Err(e) => {
                 kill(&mut child);
                 return Err(e);

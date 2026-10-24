@@ -25,7 +25,8 @@ pub enum JobStatus {
     Failed,
     /// Killed on an anomaly; results quarantined.
     Killed,
-    /// Safeword, End early, the deadline, parent exit, battery, thermal.
+    /// End early, a stop, the kill switch, the deadline, parent exit,
+    /// battery, thermal (never the safeword: it only hushes her voice).
     Cancelled,
     /// Tor down: nothing spawned (offline-only learning continues).
     Offline,
