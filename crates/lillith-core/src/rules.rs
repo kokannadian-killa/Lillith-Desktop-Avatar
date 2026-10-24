@@ -352,6 +352,7 @@ mod tests {
         ("clipboard.copied", "event_clipboard"),
         ("notify.received", "event_notification"),
         ("calendar.reminder", "event_calendar"),
+        ("memory.suggest", "event_calendar"),
         ("window.opened.app", "event_window_open"),
         ("window.closed", "event_window_close"),
         ("window.minimized", "event_window_minimize"),
@@ -481,8 +482,8 @@ mod tests {
     #[test]
     fn counts_and_aliases() {
         let rs = RuleSet::bundled();
-        assert_eq!(rs.rules.len(), 57);
-        assert_eq!(MAPPED.len(), 57);
+        assert_eq!(rs.rules.len(), 58);
+        assert_eq!(MAPPED.len(), 58);
         assert_eq!(UNMAPPED.len(), 0);
         assert_eq!(rs.rules_without_clip().count(), 0);
         assert_eq!(KNOWN_EVENT_CLIPS.len(), 44);

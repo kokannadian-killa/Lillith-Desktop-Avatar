@@ -586,6 +586,10 @@ recipe = "low"
 recipe = "alert_jolt"
 scale = 0.8
 mood = "Alert"
+[events."memory.suggest"]
+recipe = "low"
+scale = 0.6
+mood = "Playful"
 [events."timer.fired"]
 recipe = "alert_jolt"
 scale = 0.8

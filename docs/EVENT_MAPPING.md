@@ -1,6 +1,6 @@
 # Event mapping: rules.toml ↔ generated clips
 
-Reconciles the 57 `[[rule]]` events in `assets/rules.toml` with the generated
+Reconciles the 58 `[[rule]]` events in `assets/rules.toml` with the generated
 clip sets. Current counts (2026-10-20):
 
 | Set | Clips | Breakdown |
@@ -27,14 +27,14 @@ The mapping lives in `assets/rules.toml` under `[rule_clips]` (the older name
 `lillith_core::rules::RuleSet::clip_for(event)`; `event_clip()` is kept as an
 alias. A rule's clip can be an event reaction or any regular animation. A rule
 with no entry falls back to its `pose`. Tests in `lillith-core` (`rules::tests`)
-pin every mapped pair, check that 57 mapped + 0 unmapped = 57, and check that every target is in `KNOWN_EVENT_CLIPS` or
+pin every mapped pair, check that 58 mapped + 0 unmapped = 58, and check that every target is in `KNOWN_EVENT_CLIPS` or
 `KNOWN_BASE_CLIPS`.
 
-**Totals: 57 / 57 rules have a clip** (27 event-clip links + 14 dedicated
+**Totals: 58 / 58 rules have a clip** (28 event-clip links + 14 dedicated
 batch-3 event clips + 6 dedicated batch-4 event clips + 10 regular animations).
 **0 low-confidence stand-ins, 0 true art gaps.** All 44 event clips are used.
 
-## 1. Event reaction clips: 27 rules → 24 clips
+## 1. Event reaction clips: 28 rules → 24 clips
 
 | Event clip | Rule event(s) | Basis | Confidence |
 |---|---|---|---|
@@ -54,6 +54,7 @@ batch-3 event clips + 6 dedicated batch-4 event clips + 10 regular animations).
 | event_incognito | `window.private` | pose `private`; dark glasses + fade to ~45% | exact (semantics) |
 | event_notification | `notify.received` | pose `dismiss_notif`; bell with a "1" badge | exact (semantics) |
 | event_calendar | `calendar.reminder` | pose `calendar`; page flips, day circled | exact |
+| event_calendar | `memory.suggest` | rule also uses pose `calendar` (habit nudge: "about now you usually…") | pose match |
 | event_screenshot | `screenshot.taken` | pose `screenshot`; crop corners, flash, thumbnail | exact |
 | event_clipboard | `clipboard.copied` | pose `clipboard`; check mark | exact |
 | event_window_open | `window.opened.app` | generic window grows open; `.app` is the generic case | medium (see note A) |
@@ -136,7 +137,7 @@ compose.
 
 ## 5. TRUE art gaps: none
 
-All 57 rules have a clip. `UNMAPPED` in `rules::tests` is empty; a new rule
+All 58 rules have a clip. `UNMAPPED` in `rules::tests` is empty; a new rule
 without art fails the tests until it is either mapped or listed there.
 
 ## 6. Event clips with NO rule: 0

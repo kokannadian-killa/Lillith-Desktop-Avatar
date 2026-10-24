@@ -284,6 +284,16 @@ source = "KOrganizer/Merkuro notifications or .ics, guess"
 status = "ART"
 
 [[rule]]
+event = "memory.suggest"
+pose = "calendar"
+line = "{summary}"
+mood = "Playful"
+priority = 30
+cooldown_s = 600.0
+source = "lillith_memory::bridge proactive habit suggestion (line = detail)"
+status = "ART"
+
+[[rule]]
 event = "timer.fired"
 pose = "scheduler"
 priority = 60
@@ -621,6 +631,7 @@ status = "PY-missing"
 "clipboard.copied"   = "event_clipboard"       # pose clipboard
 "notify.received"    = "event_notification"    # pose dismiss_notif; bell with badge
 "calendar.reminder"  = "event_calendar"        # pose calendar
+"memory.suggest"     = "event_calendar"        # pose calendar (habit nudge)
 "window.opened.app"  = "event_window_open"     # generic app window (folder/browser/terminal/media have their own clips)
 "window.closed"      = "event_window_close"    # NOTE: rule pose/line is knife "Gotcha!", clip is a wave bye
 "window.minimized"   = "event_window_minimize" # pose minimize
