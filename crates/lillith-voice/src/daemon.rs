@@ -17,6 +17,23 @@
 //! - [`route_transcript`]: the client-side safety rules for a voice
 //!   transcript: the safeword ("red" / "OOC: stop") stops everything, and a
 //!   voice transcript is **never** consent to a Soul Contract.
+//!
+//! Timeouts (a hung daemon must never freeze the caller):
+//! - connect: Unix [`CONNECT_TIMEOUT`] (2 s); Windows retries
+//!   `ERROR_PIPE_BUSY` for at most [`PIPE_BUSY_RETRY`] (~1 s).
+//! - writes: at most [`SHORT_TIMEOUT`] (3 s) per connection.
+//! - `ping` [`PING_TIMEOUT`] (800 ms); `stop` [`SHORT_TIMEOUT`] (3 s);
+//!   `listen start` [`MIC_CARD_TIMEOUT`] (90 s: the daemon holds the reply
+//!   up to ~70 s while the mic card is shown); `listen stop` / `stt`: the
+//!   caller's timeout.
+//! - `say wait:true`: [`say_timeout`] per line (30 s + 250 ms/char, at most
+//!   10 min), enforced by the playback poll, which then stops the line.
+//! - `subscribe lipsync`: no idle timeout (it is idle whenever she is
+//!   quiet); Unix reads wake every `SUB_POLL` to check for shutdown and
+//!   Windows reads are cancelled on shutdown.
+//!
+//! Windows pipes have no read timeout, so timed requests run on a helper
+//! thread (`run_with_deadline`) whose I/O is cancelled on expiry.
 
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -36,8 +53,34 @@ pub const WINDOWS_PIPE: &str = r"\\.\pipe\lillith-voice";
 pub const SUBSCRIBE_LIPSYNC: &str = r#"{"op":"subscribe","topics":["lipsync"]}"#;
 /// `ping` must answer within this (start-up probe).
 pub const PING_TIMEOUT: Duration = Duration::from_millis(800);
-/// Short commands (`stop`, `listen start`).
+/// Short control commands (`stop`, `listen stop` without STT), and the
+/// write timeout of every connection.
 pub const SHORT_TIMEOUT: Duration = Duration::from_secs(3);
+/// Opening a connection: a Unix `connect` to a daemon whose backlog is
+/// full would otherwise block forever. (Windows: the `ERROR_PIPE_BUSY`
+/// retry is capped at [`PIPE_BUSY_RETRY`] instead.)
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+/// Requests the daemon may hold while it shows Ko the mic card
+/// (`listen start`, `listen_mode on`: up to ~70 s, PROTOCOL.md), plus a
+/// margin. Never call those from the UI thread.
+pub const MIC_CARD_TIMEOUT: Duration = Duration::from_secs(90);
+/// `say wait:true` replies when playback ends, so it gets a per-line
+/// deadline instead of a short timeout: [`SAY_BASE_TIMEOUT`] plus
+/// [`SAY_PER_CHAR`] for every character, capped at [`SAY_MAX_TIMEOUT`]
+/// (see [`say_timeout`]). On expiry the line is stopped and dropped.
+pub const SAY_BASE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Per character of a `say` line (speech is ~15 chars/s; this is 4x slack).
+pub const SAY_PER_CHAR: Duration = Duration::from_millis(250);
+/// Longest any one `say` may take before it is treated as hung.
+pub const SAY_MAX_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// The deadline for one `say` of `text` (see [`SAY_BASE_TIMEOUT`]).
+pub fn say_timeout(text: &str) -> Duration {
+    let chars = u32::try_from(text.chars().count()).unwrap_or(u32::MAX);
+    SAY_BASE_TIMEOUT
+        .saturating_add(SAY_PER_CHAR.saturating_mul(chars))
+        .min(SAY_MAX_TIMEOUT)
+}
 /// Longest line accepted from the daemon (a big envelope is ~10 KB).
 pub const MAX_LINE: usize = 1 << 20;
 
@@ -362,7 +405,8 @@ pub trait Conn: Read + Write + Send {
 impl Conn for std::os::unix::net::UnixStream {
     fn set_timeout(&self, t: Option<Duration>) -> std::io::Result<()> {
         self.set_read_timeout(t)?;
-        self.set_write_timeout(t.or(Some(SHORT_TIMEOUT)))
+        // Writes are one short line: never wait longer than a control op.
+        self.set_write_timeout(Some(t.map_or(SHORT_TIMEOUT, |t| t.min(SHORT_TIMEOUT))))
     }
 }
 
@@ -433,14 +477,14 @@ extern "system" {
 /// Unblocks a thread stuck in a synchronous pipe read/write (Windows pipe
 /// handles have no read timeout). A no-op elsewhere: Unix sockets use
 /// read timeouts instead.
-fn cancel_blocking_io<T>(thread: &std::thread::JoinHandle<T>) {
+pub(crate) fn cancel_blocking_io<T>(thread: &std::thread::JoinHandle<T>) {
     #[cfg(windows)]
     {
         use std::os::windows::io::AsRawHandle;
         // SAFETY: the JoinHandle keeps the thread handle open; cancelling
         // I/O on it only makes that thread's pending call fail.
         unsafe {
-            CancelSynchronousIo(thread.as_raw_handle() as *mut std::ffi::c_void);
+            CancelSynchronousIo(thread.as_raw_handle());
         }
     }
     #[cfg(not(windows))]
@@ -555,7 +599,7 @@ pub fn connect(ep: &Path) -> Result<Box<dyn Conn>, DaemonError> {
                 )));
             }
         }
-        let s = std::os::unix::net::UnixStream::connect(ep)?;
+        let s = connect_unix_bounded(ep, CONNECT_TIMEOUT)?;
         Ok(Box::new(s))
     }
     #[cfg(windows)]
@@ -583,6 +627,29 @@ pub fn connect(ep: &Path) -> Result<Box<dyn Conn>, DaemonError> {
             "no local voice daemon transport on this platform",
         )))
     }
+}
+
+/// `UnixStream::connect` with a deadline (std has no `connect_timeout`
+/// for Unix sockets): the connect runs on a helper thread, which is left
+/// to finish on its own if the daemon never accepts.
+#[cfg(unix)]
+fn connect_unix_bounded(
+    ep: &Path,
+    timeout: Duration,
+) -> std::io::Result<std::os::unix::net::UnixStream> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let ep = ep.to_path_buf();
+    std::thread::Builder::new()
+        .name("lillith-voiced-connect".into())
+        .spawn(move || {
+            let _ = tx.send(std::os::unix::net::UnixStream::connect(&ep));
+        })?;
+    rx.recv_timeout(timeout).unwrap_or_else(|_| {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "voice daemon did not accept the connection",
+        ))
+    })
 }
 
 /// Reads one `\n`-terminated line (at most [`MAX_LINE`] bytes).
@@ -686,8 +753,10 @@ impl DaemonClient {
     }
 
     /// Push-to-talk down: opens the mic (the daemon stops her: barge-in).
+    /// The daemon may hold the reply while Ko answers its mic card, so
+    /// this waits up to [`MIC_CARD_TIMEOUT`]: call it off the UI thread.
     pub fn listen_start(&self) -> Result<(), DaemonError> {
-        self.request(&Request::ListenStart, Some(SHORT_TIMEOUT))
+        self.request(&Request::ListenStart, Some(MIC_CARD_TIMEOUT))
             .map(|_| ())
     }
 

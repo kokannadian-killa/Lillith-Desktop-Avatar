@@ -877,6 +877,19 @@ impl lillith_overlay::ActionSink for VoiceSink {
 
     fn lipsync_lines(&mut self, out: &mut Vec<String>) -> bool {
         use lillith_voice::daemon::LipsyncMsg;
+        // The daemon came up after her (the voice re-probe switched to
+        // it): subscribe now. Only spawns a thread; never blocks.
+        if self.lipsync.is_none() && self.voice.engine_name() == "voiced" {
+            if let Some(d) = self.daemon.clone() {
+                match lillith_voice::daemon::LipsyncReader::spawn(d) {
+                    Ok(r) => self.lipsync = Some(r),
+                    Err(e) => {
+                        tracing::warn!("voice daemon lip-sync reader: {e}");
+                        self.daemon = None;
+                    }
+                }
+            }
+        }
         let Some(r) = &self.lipsync else {
             return false;
         };
