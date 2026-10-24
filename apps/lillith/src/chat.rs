@@ -203,6 +203,11 @@ impl ServerGuard {
                 let sig = g.clone();
                 tokio::spawn(async move {
                     wait_for_signal().await;
+                    // Ctrl-C / SIGTERM: kill running commands (their own
+                    // process group never sees the terminal's Ctrl-C) and
+                    // the admin helper first.
+                    let r = lillith_core::access::kill_switch::stop_all();
+                    println!("\n[safeword] {}", r.chat_line());
                     tracing::info!("signal: stopping llama-server");
                     sig.stop();
                     std::process::exit(130);
@@ -352,6 +357,7 @@ pub async fn cli_chat(
     let skills_note = session.import_desktop_skills();
     match message {
         Some(m) => {
+            spawn_ctrl_c_kill();
             if let Some(note) = skills_note {
                 // One-shot mode can't review; drop the plan, copy nothing.
                 let _ = session.take_pending();
@@ -373,17 +379,23 @@ pub async fn cli_chat(
             }
         }
         None => {
-            let stdin = std::io::stdin();
+            // stdin is read on its own thread so "red" / "OOC: stop" fires
+            // the kill switch even while an approved command runs inline.
+            let mut stdin = ConsoleLines::new(spawn_console_reader(
+                std::io::BufReader::new(std::io::stdin()),
+                console_safeword,
+            ));
+            spawn_ctrl_c_kill();
             if let Some(note) = skills_note {
                 println!("[skills] {note}");
                 // Review it now; the answer is not sent to her.
-                let _ = offer_pending(&mut session, &stdin)?;
+                let _ = offer_pending(&mut session, &mut stdin)?;
             }
             loop {
                 print!("you: ");
                 let _ = std::io::stdout().flush();
                 let mut line = String::new();
-                if stdin.lock().read_line(&mut line)? == 0 {
+                if stdin.read_line(&mut line)? == 0 {
                     break;
                 }
                 let line = line.trim().to_string();
@@ -393,16 +405,22 @@ pub async fn cli_chat(
                 if line == "/quit" {
                     break;
                 }
+                if lillith_core::access::kill_switch::is_safeword(&line) {
+                    // The reader thread already pulled the kill switch and
+                    // said so; drop anything still waiting for a Yes.
+                    while session.take_pending().is_some() {}
+                    continue;
+                }
                 ask(&mut session, line).await;
                 // Tool results (and Ko's answers) go back to her so she can
                 // say what happened; she may chain a few tools.
                 for _ in 0..MAX_TOOL_CHAIN {
-                    let Some(feedback) = offer_pending(&mut session, &stdin)? else {
+                    let Some(feedback) = offer_pending(&mut session, &mut stdin)? else {
                         break;
                     };
                     ask(&mut session, feedback).await;
                 }
-                if let Some(fb) = offer_pending(&mut session, &stdin)? {
+                if let Some(fb) = offer_pending(&mut session, &mut stdin)? {
                     println!("{fb}");
                 }
             }
@@ -418,14 +436,14 @@ pub async fn cli_chat(
 /// prints the full list and needs the typed phrase instead (see
 /// [`sign_on_console`]). Returns the message to feed back to her (the tool
 /// result or Ko's answer), if any.
-fn offer_pending(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<Option<String>> {
+fn offer_pending(session: &mut ChatSession, stdin: &mut dyn BufRead) -> Result<Option<String>> {
     let Some(action) = session.take_pending() else {
         return Ok(session.take_tool_feedback());
     };
     let mut contract = session.soul_contract();
     if matches!(action, PendingAction::Plan { .. }) {
         let id = contract.request(action.clone());
-        let res = review_plan_on_console(&mut contract, id, stdin)?;
+        let res = review_plan(&mut contract, id, stdin, &mut std::io::stdout())?;
         return Ok(Some(ChatSession::answer_feedback(
             &action,
             res.as_deref().map_err(|e| e.as_str()),
@@ -449,7 +467,7 @@ fn offer_pending(session: &mut ChatSession, stdin: &std::io::Stdin) -> Result<Op
     );
     let _ = std::io::stdout().flush();
     let mut answer = String::new();
-    stdin.lock().read_line(&mut answer)?;
+    stdin.read_line(&mut answer)?;
     let id = contract.request(action.clone());
     let res = if is_yes(&answer) {
         match contract.confirm(id) {
@@ -593,7 +611,7 @@ pub(crate) fn review_plan(
 fn sign_on_console(
     contract: &mut SoulContract,
     mut id: RequestId,
-    stdin: &std::io::Stdin,
+    stdin: &mut dyn BufRead,
 ) -> Result<Result<String, String>> {
     loop {
         let Some(PendingAction::DeletePaths { manifest }) = contract
@@ -609,7 +627,7 @@ fn sign_on_console(
         print!("Where to? [T]rash (default) / type `permanent` to erase for good / `n` cancels: ");
         let _ = std::io::stdout().flush();
         let mut mode = String::new();
-        stdin.lock().read_line(&mut mode)?;
+        stdin.read_line(&mut mode)?;
         let mode = match mode.trim().to_ascii_lowercase().as_str() {
             "" | "t" | "trash" => DeleteMode::Trash,
             "permanent" => DeleteMode::Permanent,
@@ -622,7 +640,7 @@ fn sign_on_console(
         print!("To sign, type exactly: {}\n> ", manifest.phrase());
         let _ = std::io::stdout().flush();
         let mut typed = String::new();
-        stdin.lock().read_line(&mut typed)?;
+        stdin.read_line(&mut typed)?;
         let Ok(sig) = DeletionSignature::sign(&manifest, &typed, mode) else {
             contract.deny(id)?;
             println!("[soul contract] not signed; nothing deleted.");
@@ -643,6 +661,101 @@ fn sign_on_console(
                 return Ok(Err(e.to_string()));
             }
         }
+    }
+}
+
+/// Reads `input` line by line on its own thread and forwards every line.
+/// A safeword line also calls `on_safeword` right away, before the chat loop
+/// gets to it — so it works while an approved command runs inline.
+pub(crate) fn spawn_console_reader<R, F>(
+    input: R,
+    on_safeword: F,
+) -> std::sync::mpsc::Receiver<String>
+where
+    R: BufRead + Send + 'static,
+    F: Fn() + Send + 'static,
+{
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut input = input;
+        loop {
+            let mut line = String::new();
+            match input.read_line(&mut line) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {
+                    if lillith_core::access::kill_switch::is_safeword(&line) {
+                        on_safeword();
+                    }
+                    if tx.send(line).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    rx
+}
+
+/// The console safeword: pull the kill switch (commands and the admin
+/// helper die out-of-band) and say truthfully what happened.
+fn console_safeword() {
+    let r = lillith_core::access::kill_switch::stop_all();
+    println!("\n[safeword] {}", r.chat_line());
+}
+
+/// Ctrl-C in `lillith chat`: the kill switch first (command children run in
+/// their own process group and never see the terminal's Ctrl-C), then exit.
+fn spawn_ctrl_c_kill() {
+    tokio::spawn(async {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            console_safeword();
+            std::process::exit(130);
+        }
+    });
+}
+
+/// A [`BufRead`] over the console reader thread's lines.
+pub(crate) struct ConsoleLines {
+    rx: std::sync::mpsc::Receiver<String>,
+    buf: Vec<u8>,
+    pos: usize,
+}
+
+impl ConsoleLines {
+    pub(crate) fn new(rx: std::sync::mpsc::Receiver<String>) -> Self {
+        Self {
+            rx,
+            buf: Vec::new(),
+            pos: 0,
+        }
+    }
+}
+
+impl std::io::Read for ConsoleLines {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        let n = {
+            let b = self.fill_buf()?;
+            let n = b.len().min(out.len());
+            out[..n].copy_from_slice(&b[..n]);
+            n
+        };
+        self.consume(n);
+        Ok(n)
+    }
+}
+
+impl BufRead for ConsoleLines {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        if self.pos >= self.buf.len() {
+            self.pos = 0;
+            // EOF (reader thread gone) reads as an empty buffer.
+            self.buf = self.rx.recv().map(String::into_bytes).unwrap_or_default();
+        }
+        Ok(&self.buf[self.pos..])
+    }
+
+    fn consume(&mut self, n: usize) {
+        self.pos = (self.pos + n).min(self.buf.len());
     }
 }
 
@@ -717,6 +830,85 @@ mod tests {
             "settings.changed"
         );
         assert!(decode(&encode("menu.pose", Some("wave"))).is_none());
+    }
+
+    #[test]
+    fn console_reader_fires_the_safeword_before_the_chat_loop_reads() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static FIRED: AtomicUsize = AtomicUsize::new(0);
+        let rx = spawn_console_reader(
+            std::io::Cursor::new(b"hello\nred\nOOC: stop\nI read a red book\n".to_vec()),
+            || {
+                FIRED.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+        // Nobody reads the channel yet (the chat loop is "busy running a
+        // command"); the reader thread must still pull the switch.
+        let t0 = Instant::now();
+        while FIRED.load(Ordering::SeqCst) < 2 && t0.elapsed() < Duration::from_secs(2) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(FIRED.load(Ordering::SeqCst), 2, "red and OOC: stop only");
+        // Every line still reaches the chat loop, in order.
+        let mut lines = ConsoleLines::new(rx);
+        let mut got = Vec::new();
+        loop {
+            let mut l = String::new();
+            if lines.read_line(&mut l).unwrap() == 0 {
+                break;
+            }
+            got.push(l.trim().to_string());
+        }
+        assert_eq!(got, ["hello", "red", "OOC: stop", "I read a red book"]);
+    }
+
+    #[test]
+    fn console_lines_drive_the_plan_review_and_red_declines_it() {
+        use lillith_core::access::plan::{ChangePlan, PlanRequest};
+        let dir = std::env::temp_dir().join(format!("lillith-console-red-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut sc = SoulContract::new(None);
+        let id = sc.request(PendingAction::Plan {
+            plan: ChangePlan::build(
+                vec![PlanRequest::Mkdir {
+                    path: dir.join("A"),
+                }],
+                None,
+                None,
+            )
+            .unwrap(),
+        });
+        let mut input = ConsoleLines::new(spawn_console_reader(
+            std::io::Cursor::new(b"red\n".to_vec()),
+            || {},
+        ));
+        let mut out = Vec::new();
+        let r = review_plan(&mut sc, id, &mut input, &mut out).unwrap();
+        assert!(r.is_err(), "the safeword is never an approval");
+        assert!(!dir.join("A").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn console_safeword_kills_an_inline_command() {
+        use lillith_core::access::commands::{run_child, was_stopped};
+        // The "chat loop" is blocked running an approved command inline.
+        let t = std::thread::spawn(|| {
+            let mut c = std::process::Command::new("sh");
+            c.arg("-c").arg("sleep 20");
+            run_child(c, Duration::from_secs(30), 4096)
+        });
+        std::thread::sleep(Duration::from_millis(300));
+        let started = Instant::now();
+        // Ko types "red" on the console meanwhile.
+        let _rx = spawn_console_reader(std::io::Cursor::new(b"red\n".to_vec()), || {
+            lillith_core::access::kill_switch::stop_all();
+        });
+        let out = t.join().unwrap().unwrap();
+        assert!(was_stopped(&out), "{out}");
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     #[test]

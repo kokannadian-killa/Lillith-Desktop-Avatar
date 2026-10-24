@@ -491,6 +491,15 @@ pub fn run_captured(
     run_child(c, timeout, cap)
 }
 
+/// The last line of a command's output when the safeword killed it.
+pub const STOPPED_LINE: &str = "[stopped by the safeword]";
+
+/// Whether a command result says the safeword stopped it (audited as
+/// `RESULT-STOPPED`, not `RESULT-OK`).
+pub fn was_stopped(output: &str) -> bool {
+    output.trim_end().ends_with(STOPPED_LINE)
+}
+
 /// Runs a prepared command with no stdin and captured stdout/stderr, a
 /// `timeout` and output capped at `cap` bytes. The whole child tree is
 /// killed on timeout or when the safeword fires
@@ -530,6 +539,19 @@ fn run_child_ungated(
         c.creation_flags(super::winshell::CREATE_NO_WINDOW);
     }
     let mut child = c.spawn()?;
+    // Windows: put the child in a Job with KILL_ON_JOB_CLOSE so safeword /
+    // timeout tears down the whole tree (cmd → nested processes) at once.
+    #[cfg(windows)]
+    let job = match super::winjob::Job::new_kill_on_close() {
+        Ok(j) => {
+            let _ = j.assign_pid(child.id());
+            Some(j)
+        }
+        Err(e) => {
+            tracing::warn!("could not create kill-job for command child: {e}");
+            None
+        }
+    };
     let mut so = child.stdout.take();
     let mut se = child.stderr.take();
     let t_out = std::thread::spawn(move || {
@@ -561,6 +583,10 @@ fn run_child_ungated(
         };
         if let Some(w) = why {
             stop = Some(w);
+            #[cfg(windows)]
+            if let Some(ref j) = job {
+                j.terminate();
+            }
             kill_tree(&mut child);
             break None;
         }
@@ -588,7 +614,7 @@ fn run_child_ungated(
         text.push('\n');
     }
     match (stop, status) {
-        (Some("safeword"), _) => text.push_str("[stopped by the safeword]"),
+        (Some("safeword"), _) => text.push_str(STOPPED_LINE),
         (Some(_), _) => text.push_str(&format!("[timed out after {}s]", timeout.as_secs())),
         (_, Some(st)) => text.push_str(&format!(
             "[exit {}]",
@@ -756,6 +782,16 @@ mod tests {
         super::super::kill_switch::stop_all();
         let out = t.join().unwrap().unwrap();
         assert!(out.contains("stopped by the safeword"), "{out}");
+        assert!(was_stopped(&out), "{out}");
         assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn was_stopped_only_matches_the_final_marker() {
+        assert!(was_stopped("partial\n[stopped by the safeword]"));
+        assert!(was_stopped("[stopped by the safeword]\n"));
+        assert!(!was_stopped("hi\n[exit 0]"));
+        assert!(!was_stopped("echo [stopped by the safeword]\n[exit 0]"));
+        assert!(!was_stopped(""));
     }
 }
