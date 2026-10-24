@@ -778,5 +778,17 @@
   "tool": "tools/matte-clean/matte_clean.py",
   "sheet_sha256": "88219fa0278dfa79daeab2b069902240c55e3f19f72238ae6960e23212d01f4b",
   "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
+ },
+ "start_match": {
+  "from": "drag_held",
+  "from_frame": 0,
+  "shift_px": [
+   0,
+   152
+  ],
+  "iou": 0.0094,
+  "rgb_mae": 105.32,
+  "threshold": 0.98,
+  "matches": false
  }
 }

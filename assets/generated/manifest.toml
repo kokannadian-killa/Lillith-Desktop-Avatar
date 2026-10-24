@@ -33408,6 +33408,48 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[[clips.perch_sit.frames]]
+x = 38400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.perch_sit.frames]]
+x = 38800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.perch_sit.frames]]
+x = 39200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.perch_sit.frames]]
+x = 39600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.perch_sit.frames]]
+x = 40000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.perch_sit.frames]]
+x = 40400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.point]
 page = "point/point_sheet.png"
 fps = 8.0

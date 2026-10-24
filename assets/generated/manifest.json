@@ -4872,7 +4872,7 @@
   },
   {
    "name": "perch_sit",
-   "frame_count": 96,
+   "frame_count": 102,
    "frame_width": 400,
    "frame_height": 400,
    "fps": 12.0,
