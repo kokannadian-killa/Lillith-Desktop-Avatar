@@ -101,14 +101,57 @@ check("card shows the recorder one argument per line", "$ /usr/bin/arecord\n    
       asked[0][2])
 L.mic.stop()
 r = L.ptt_start()
-check("ptt: the session grant covers later presses (no second card)", r.get("ok") and len(asked) == 1
-      and L.mic.starts == 2)
+check("ptt: the next press needs a fresh card (no session grant)", r.get("ok") is False and r.get("need_card")
+      and len(asked) == 2 and L.mic.starts == 1, str(r))
 r = L.set_always(True)
-check("always-listening is NOT covered by the ptt grant", r.get("ok") is False and len(asked) == 2 and not L.always)
-L.gate.revoke()
-L.mic.stop()
+check("always-listening is NOT covered by a ptt Yes", r.get("ok") is False and len(asked) == 3 and not L.always)
+
+# card on EVERY press: 5 presses, 5 cards, 5 captures; a No in between leaves that press off
+L, asked = listener(["yes", "yes", "no", "yes", "yes"])
+oks = []
+for _ in range(5):
+    oks.append(bool(L.ptt_start().get("ok")))
+    L.mic.stop()
+check("ptt: one card per press (5 presses -> 5 cards)", len(asked) == 5 and all(a[0] == "listen" for a in asked),
+      str(asked))
+check("ptt: only the presses answered Yes open the mic", oks == [True, True, False, True, True]
+      and L.mic.starts == 4, str(oks))
+check("ptt: each capture carries its own card id", len(set(L.mic.cards)) == 4 and all(L.mic.cards), str(L.mic.cards))
+check("ptt card text says it covers one press", "one press" in M._TEXT["listen"][1])
+check("no standing grant attribute is left", not hasattr(L.gate, "listen_card"))
+
+# a mic left open by an earlier press (no stop) is not reused without a new Yes
+L, asked = listener(["yes", "no"])
+L.ptt_start()
 r = L.ptt_start()
-check("mic_revoke ends the ptt grant (card again)", r.get("ok") is False and len(asked) == 3)
+check("ptt: a second press with the mic still open needs a card too", r.get("ok") is False and len(asked) == 2,
+      str(r))
+
+# a press while always-listening is on reuses that switch-on's open mic (no new capture, no card)
+L, asked = listener(["yes"])
+L.set_always(True)
+r = L.ptt_start()
+check("ptt during always-listening: no extra card (the mic is already open under that Yes)",
+      r.get("ok") and len(asked) == 1 and L.always, str(r))
+
+# a ptt token works for exactly one press
+clock = Clock()
+L, asked = listener(["yes"], clock)
+t = L.gate.card("listen")
+r = L.ptt_start(token=t["token"])
+check("ptt with a valid listen token opens the mic once", r.get("ok") and L.mic.starts == 1
+      and L.mic.cards[-1] == t["card"], str(r))
+L.mic.stop()
+r = L.ptt_start(token=t["token"])
+check("the same ptt token is refused on the next press", r.get("ok") is False and L.mic.starts == 1, str(r))
+r = L.ptt_start()
+check("...and without a token the next press shows a card again", r.get("ok") is False and len(asked) == 2)
+
+L, asked = listener(["yes", "yes"])
+check("listen once: card Yes allows exactly one", L.gate.allow("listen") is None)
+L.mic.running = False
+check("listen once: the next listen asks again", L.gate.allow("listen") is None and len(asked) == 2)
+L.gate.revoke()
 
 # tokens
 clock = Clock()

@@ -10,12 +10,12 @@ Minimal design (PROTOCOL.md, "Mic gate"):
   ``listen`` / ``listen_mode``.
 * A gated request without a token shows the card inline (the reply waits for Ko) and, on Yes, uses a
   freshly minted one-time token at once, so old clients keep working.
-* ``kind:"listen"`` (push-to-talk and one-shot listen): after a Yes, further push-to-talk / listen
-  starts are allowed for the rest of this daemon session (``mic_revoke`` ends that); otherwise every
-  press would need a card.
+* ``kind:"listen"`` (push-to-talk and one-shot listen): EVERY press / listen start needs its own fresh
+  card Yes (inline card or one-time token). There is no session-long grant: a Yes covers exactly one
+  capture (Ko's rule, "Push-to-talk: card on every press").
 * ``kind:"always"`` (always-listening on): every switch-on needs its own card or token.
 * No, timeout, a closed card or no card UI: the mic stays off (``{"ok":false,"need_card":true,...}``).
-  ``listen_mode`` off, ``stt`` on a file and ``mic_revoke`` are never gated.
+  ``listen_mode`` off, ``stt`` on a file and ``mic_revoke`` (drops unused tokens) are never gated.
 * Every decision is audited (``PROPOSED`` / ``CONFIRM`` / ``DENY`` / ``TIMEOUT`` / ``CANCELLED`` /
   ``NO_UI``, ``card=<id>``) and so is every capture start (``LAUNCH``).
 
@@ -36,7 +36,7 @@ CARD_TIMEOUT_S = 60
 KINDS = {"listen": "mic_listen", "always": "mic_always"}
 
 _TEXT = {
-    "listen": ("MICROPHONE", "listen on your microphone when you press talk (until the voice daemon restarts)"),
+    "listen": ("MICROPHONE", "listen on your microphone for this one press of talk (the next press asks again)"),
     "always": ("ALWAYS LISTENING", "keep your microphone open and transcribe everything until you switch it off"),
 }
 
@@ -72,7 +72,7 @@ _TAG = {"yes": "CONFIRM", "no": "DENY", "timeout": "TIMEOUT", "cancelled": "CANC
 
 
 class MicGate:
-    """Tokens + the session grant. `ask(kind, title, summary, target, detail) -> word` is injectable (tests)."""
+    """One-time tokens, no standing grant. `ask(kind, title, summary, target, detail) -> word` is injectable."""
 
     def __init__(self, mic_argv=None, ask=None, log=None, clock=time.monotonic):
         self.mic_argv = mic_argv or (lambda: ["(sounddevice)"])
@@ -82,7 +82,6 @@ class MicGate:
         self._lock = threading.Lock()
         self._card_open = False
         self._tokens = {}          # token -> (kind, expires, card id)
-        self.listen_card = None    # card id of the session grant for push-to-talk / listen
         self.last_card = None      # card id of the last approved capture (for LAUNCH lines)
 
     # ------------------------------------------------------------------ cards
@@ -135,10 +134,10 @@ class MicGate:
 
     # ------------------------------------------------------------------ gate
     def allow(self, kind, token=None):
-        """None when the capture may start (self.last_card = the approving card), else the error reply."""
-        if kind == "listen" and self.listen_card and not token:
-            self.last_card = self.listen_card
-            return None
+        """None when ONE capture may start (self.last_card = the approving card), else the error reply.
+
+        Every call needs a fresh Yes: a valid unused token for `kind`, or an inline card answered Yes now.
+        Nothing is remembered between presses (no session grant for push-to-talk)."""
         if token:
             card = self._take(kind, token)
             if card is None:
@@ -149,13 +148,10 @@ class MicGate:
             if not r.get("ok"):
                 return r
             card = self._take(kind, r["token"])
-        if kind == "listen":
-            self.listen_card = card
         self.last_card = card
         return None
 
     def revoke(self):
         with self._lock:
             self._tokens.clear()
-        self.listen_card = None
         return {"ok": True, "revoked": True}

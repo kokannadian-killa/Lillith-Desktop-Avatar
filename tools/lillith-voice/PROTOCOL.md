@@ -132,9 +132,15 @@ target, then detail lines; stdout: `yes` / `no` / `timeout` / `cancelled` / `no_
   (kind `always`).
 - **No token**: the daemon shows the card inline, and the reply waits until Ko answers (at most about 70 s).
   On Yes it mints a one-time token and uses it immediately, so existing clients keep working unchanged.
-- **Push-to-talk / listen once** (`kind:"listen"`): after one Yes, later push-to-talk and listen starts are
-  allowed for the rest of the daemon session. `{"cmd":"mic_revoke"}` → `{"ok":true,"revoked":true}` ends that
-  grant and drops any unused tokens.
+- **Push-to-talk / listen once** (`kind:"listen"`): **every press needs its own fresh Yes** (inline card or a
+  one-time token). There is no session-long grant: one Yes covers exactly one capture, and the next press
+  asks again (Ko: "Push-to-talk: card on every press"). The only exception is a press while always-listening
+  is already on: the mic is already open under that switch-on's Yes, so nothing new starts.
+  `{"cmd":"mic_revoke"}` → `{"ok":true,"revoked":true}` drops any unused tokens.
+  - Hold-to-talk clients: the card's reply waits for Ko's click, and clicking Yes means letting go of the
+    talk button, so start-on-press / stop-on-release would capture almost nothing. Such a client should
+    treat the Yes as the start of the capture and stop on the next press (or use `listen` once, which ends
+    on silence).
 - **Always listening** (`kind:"always"`): every switch-on needs its own Yes (inline card or token). Turning it
   off (`"on":false`) is never gated.
 - Refusals: No, timeout, a closed card, no card UI (no display, or no `lillith` binary), or a bad, used,

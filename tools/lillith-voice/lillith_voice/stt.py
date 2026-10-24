@@ -11,8 +11,9 @@ Everything is on-device: models live in <models>/stt, sherpa-onnx is a bundled w
 Capture: LILLITH_MIC_CMD (an allowlisted recorder, absolute path: arecord / parecord / parec / pw-record /
 ffmpeg, writing s16le 16 kHz mono to stdout; see launchguard.check_mic_command), else
 pw-record (PipeWire) -> parec (Pulse) -> arecord (ALSA) on Linux; sounddevice (WASAPI) on Windows.
-Mic gate: capture starts only after Ko's mouse-click Yes on a Soul Contract card (micgate.py, PROTOCOL.md),
-and every capture start writes one LAUNCH line to Lillith's audit log.
+Mic gate: capture starts only after Ko's mouse-click Yes on a Soul Contract card (micgate.py, PROTOCOL.md):
+EVERY push-to-talk press / listen needs its own fresh Yes (no session grant), and every always-listening
+switch-on needs its own Yes. Every capture start writes one LAUNCH line to Lillith's audit log.
 """
 from . import netguard  # noqa: F401
 
@@ -522,7 +523,9 @@ class Listener:
 
     # ---------------------------------------------------------------- API
     def ptt_start(self, token=None):
-        if not self.mic.running:
+        # Every press needs a fresh card Yes (or one-time token). Only a mic already open under an
+        # always-listening Yes is reused; a mic left open by an earlier press is not.
+        if not (self.always and self.mic.running):
             refused = self.gate.allow("listen", token)
             if refused is not None:
                 return refused
@@ -566,7 +569,7 @@ class Listener:
         return info
 
     def listen_once(self, timeout=15.0, token=None):
-        if not self.mic.running:
+        if not (self.always and self.mic.running):   # a fresh Yes per listen, like push-to-talk
             refused = self.gate.allow("listen", token)
             if refused is not None:
                 return refused
