@@ -401,7 +401,7 @@ impl ServerGuard {
             // process group never sees the terminal's Ctrl-C) and
             // the admin helper first.
             let r = lillith_core::access::kill_switch::stop_all();
-            println!("\n[safeword] {}", r.chat_line());
+            println!("\n[stop] {}", r.chat_line());
             tracing::info!("signal: stopping llama-server");
             sig.stop();
             std::process::exit(130);
@@ -619,8 +619,9 @@ pub async fn cli_chat(
             }
         }
         None => {
-            // stdin is read on its own thread so "red" / "OOC: stop" fires
-            // the kill switch even while an approved command runs inline.
+            // stdin is read on its own thread so "red" / "OOC: stop" hushes
+            // her even while an approved command runs inline (the safeword
+            // stops her talking; it never kills the command — Ctrl-C does).
             let mut stdin = ConsoleLines::new(spawn_console_reader(
                 std::io::BufReader::new(std::io::stdin()),
                 console_safeword,
@@ -646,8 +647,8 @@ pub async fn cli_chat(
                     break;
                 }
                 if lillith_core::access::kill_switch::is_safeword(&line) {
-                    // The reader thread already pulled the kill switch and
-                    // said so; drop anything still waiting for a Yes.
+                    // The reader thread already hushed her and said so;
+                    // drop anything still waiting for a Yes.
                     while session.take_pending().is_some() {}
                     continue;
                 }
@@ -1150,11 +1151,22 @@ where
     rx
 }
 
-/// The console safeword: pull the kill switch (commands and the admin
-/// helper die out-of-band) and say truthfully what happened.
+/// The console safeword ("red" / "OOC: stop"): she stops talking and
+/// anything waiting for Ko is cancelled ([`kill_switch::hush`]). It shuts
+/// nothing down: a running command and the admin helper are left alone
+/// (Ko: "Only remove the shutdown part; red still stops her talking").
+///
+/// [`kill_switch::hush`]: lillith_core::access::kill_switch::hush
 fn console_safeword() {
+    lillith_core::access::kill_switch::hush();
+    println!("\n[safeword] {}", lillith_mind::chat::SAFEWORD_LINE);
+}
+
+/// The console stop (Ctrl-C): pull the kill switch (commands and the admin
+/// helper die out-of-band) and say truthfully what happened.
+fn console_stop() {
     let r = lillith_core::access::kill_switch::stop_all();
-    println!("\n[safeword] {}", r.chat_line());
+    println!("\n[stop] {}", r.chat_line());
 }
 
 /// Ctrl-C in `lillith chat`: the kill switch first (command children run in
@@ -1162,7 +1174,7 @@ fn console_safeword() {
 fn spawn_ctrl_c_kill() {
     tokio::spawn(async {
         if tokio::signal::ctrl_c().await.is_ok() {
-            console_safeword();
+            console_stop();
             std::process::exit(130);
         }
     });
@@ -1508,11 +1520,52 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The two inline-command tests below must not overlap: a stop kills
+    /// every running command, including the other test's.
+    #[cfg(unix)]
+    static INLINE_CMD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[cfg(unix)]
     #[test]
-    fn console_safeword_kills_an_inline_command() {
+    fn console_safeword_leaves_an_inline_command_running() {
         use lillith_core::access::commands::{run_child, was_stopped};
+        let _g = INLINE_CMD.lock().unwrap_or_else(|e| e.into_inner());
+        let hush0 = lillith_core::access::kill_switch::hush_epoch();
+        let stop0 = lillith_core::access::kill_switch::epoch();
         // The "chat loop" is blocked running an approved command inline.
+        let t = std::thread::spawn(|| {
+            let mut c = std::process::Command::new("sh");
+            c.arg("-c").arg("sleep 1; echo still-ran");
+            run_child(c, Duration::from_secs(30), 4096)
+        });
+        std::thread::sleep(Duration::from_millis(300));
+        // Ko types "red" on the console meanwhile: the real console handler.
+        let _rx = spawn_console_reader(std::io::Cursor::new(b"red\n".to_vec()), console_safeword);
+        let t0 = Instant::now();
+        while !lillith_core::access::kill_switch::hushed_since(hush0)
+            && t0.elapsed() < Duration::from_secs(2)
+        {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            lillith_core::access::kill_switch::hushed_since(hush0),
+            "red hushes her"
+        );
+        let out = t.join().unwrap().unwrap();
+        assert!(!was_stopped(&out), "red must not kill the command: {out}");
+        assert!(out.contains("still-ran"), "{out}");
+        assert_eq!(
+            lillith_core::access::kill_switch::epoch(),
+            stop0,
+            "red never moves the stop epoch"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn console_stop_ctrl_c_still_kills_an_inline_command() {
+        use lillith_core::access::commands::{run_child, was_stopped};
+        let _g = INLINE_CMD.lock().unwrap_or_else(|e| e.into_inner());
         let t = std::thread::spawn(|| {
             let mut c = std::process::Command::new("sh");
             c.arg("-c").arg("sleep 20");
@@ -1520,10 +1573,8 @@ mod tests {
         });
         std::thread::sleep(Duration::from_millis(300));
         let started = Instant::now();
-        // Ko types "red" on the console meanwhile.
-        let _rx = spawn_console_reader(std::io::Cursor::new(b"red\n".to_vec()), || {
-            lillith_core::access::kill_switch::stop_all();
-        });
+        // Ctrl-C: what spawn_ctrl_c_kill runs before exiting.
+        console_stop();
         let out = t.join().unwrap().unwrap();
         assert!(was_stopped(&out), "{out}");
         assert!(started.elapsed() < Duration::from_secs(5));

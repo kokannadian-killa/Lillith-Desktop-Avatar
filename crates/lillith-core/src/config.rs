@@ -448,7 +448,7 @@ pub struct AccessConfig {
 /// - `admin`: allow commands to run elevated through the `lillith-admin`
 ///   helper (each one still shows an `ELEVATED (admin)` badge on the card).
 /// - `admin_prompt`: `"per-session"` (one UAC prompt, the helper stays up
-///   until Lillith exits, the safeword, or `admin_idle_timeout_min` without
+///   until Lillith exits, Ctrl-C, or `admin_idle_timeout_min` without
 ///   use) or `"per-command"` (a UAC prompt for every elevated command).
 /// - `admin_idle_timeout_min`: idle minutes before the helper exits.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -856,8 +856,6 @@ pub struct LearnConfig {
     pub pause_on_battery: bool,
     pub pause_on_activity: bool,
     pub pause_on_fullscreen: bool,
-    /// Minutes of rest after the safeword.
-    pub safeword_cooldown_min: f32,
     pub max_tokens_per_day: u32,
     pub max_steps_per_hour: u32,
     pub note_half_life_days: f32,
@@ -896,7 +894,6 @@ impl Default for LearnConfig {
             pause_on_battery: true,
             pause_on_activity: true,
             pause_on_fullscreen: true,
-            safeword_cooldown_min: 60.0,
             max_tokens_per_day: 40_000,
             max_steps_per_hour: 12,
             note_half_life_days: 90.0,
@@ -1730,5 +1727,10 @@ mod tests {
         assert_eq!(c.learn.dream.max_minutes, 480);
         assert!(!c.learn.dream.external_bots);
         assert!(c.memory.enabled);
+        // The removed `safeword_cooldown_min` key (no rest after the
+        // safeword any more) still loads from an old config.
+        let old: Config =
+            toml::from_str("[learn]\nsafeword_cooldown_min = 60.0\nmax_duty = 0.2\n").unwrap();
+        assert_eq!(old.learn.max_duty, 0.2);
     }
 }

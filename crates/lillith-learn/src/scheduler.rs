@@ -363,12 +363,9 @@ mod tests {
         let mut later = Inputs::calm(11.0);
         later.kill_epoch = 1;
         assert_eq!(s.tick(&later), Decision::Run);
-        // The chat.safeword event alone does not hold her back either,
-        // even with safeword_cooldown_min set (that key is no longer read).
-        let mut s = Scheduler::new(Limits::from(&LearnConfig {
-            safeword_cooldown_min: 60.0,
-            ..LearnConfig::default()
-        }));
+        // The chat.safeword event alone does not hold her back either
+        // (the old safeword_cooldown_min key is gone).
+        let mut s = Scheduler::new(Limits::from(&LearnConfig::default()));
         let mut ev = Inputs::calm(100.0);
         ev.safeword = true;
         assert!(s.safeword_fired(&ev));

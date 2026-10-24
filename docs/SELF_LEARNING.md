@@ -96,7 +96,7 @@ State machine: `Off → Waiting → Running(job) → Paused(reason)`. (The safew
 | On battery (`PowerState::discharging()`) | `pause_on_battery = true` (New Bot default; Ko can change) | pause |
 | Load: 1-min loadavg > `max_load` | 1.5 (2c/4t CPU) | pause |
 | Fullscreen app | counts as busy once a sensor exists (New Bot default; Ko can change) | pause |
-| Safeword (`epoch()` changed or `chat.safeword`) | — (`safeword_cooldown_min` is no longer read) | **immediate stop**: abort request, drop job, discard partial output (no rest period afterwards); cancels any open online/sandbox/install card |
+| Safeword (`epoch()` changed or `chat.safeword`) | — (no rest period; the old `safeword_cooldown_min` key is removed and ignored) | **immediate stop**: abort request, drop job, discard partial output (no rest period afterwards); cancels any open online/sandbox/install card |
 | Duty cycle | `max_duty = 0.10` | over a rolling 10-min window, busy time ≤ 10 %; after a step of length *t* sleep ≥ 9·*t* |
 | Daily budget | `max_tokens_per_day = 40_000`, `max_steps_per_hour = 12` | stop for the day/hour |
 
@@ -758,7 +758,6 @@ max_load = 1.5
 pause_on_battery = true    # New Bot default; Ko can change
 pause_on_activity = true   # New Bot default; Ko can change
 pause_on_fullscreen = true # New Bot default; Ko can change (sensor pending)
-safeword_cooldown_min = 60  # no longer read (no rest after the safeword)
 max_tokens_per_day = 40000
 max_steps_per_hour = 12
 note_half_life_days = 90
