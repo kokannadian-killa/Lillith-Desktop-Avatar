@@ -261,6 +261,9 @@ pub struct DaemonEngine {
     pub preset: Option<String>,
     /// Set when the cloned 'lillith' voice is unavailable (fallback p1).
     pub fallback: Option<String>,
+    /// Per-line `say` deadline; `None` = [`crate::daemon::say_timeout`]
+    /// of the text. A line past it is stopped and dropped (hung daemon).
+    pub say_timeout: Option<std::time::Duration>,
 }
 
 impl DaemonEngine {
@@ -275,6 +278,7 @@ impl DaemonEngine {
             client,
             preset: info.pick_preset(want),
             fallback,
+            say_timeout: None,
         }
     }
 }
@@ -284,6 +288,22 @@ struct DaemonPlayback {
     done: std::sync::Arc<std::sync::atomic::AtomicBool>,
     reply: std::sync::mpsc::Receiver<Result<SayReply, String>>,
     finished: bool,
+    /// Past this the daemon is treated as hung: stop and drop the line.
+    deadline: std::time::Instant,
+    /// The reply reader (a blocked Windows pipe read is cancelled on stop).
+    reader: Option<std::thread::JoinHandle<()>>,
+}
+
+impl DaemonPlayback {
+    /// Unblocks the reader thread if it is still waiting (Windows pipes
+    /// have no read timeout; on Unix it times out at the deadline).
+    fn release_reader(&mut self) {
+        if let Some(h) = self.reader.take() {
+            if !h.is_finished() {
+                crate::daemon::cancel_blocking_io(&h);
+            }
+        }
+    }
 }
 
 impl Playback for DaemonPlayback {
@@ -299,7 +319,12 @@ impl Playback for DaemonPlayback {
                 self.finished = true;
             }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => self.finished = true,
-            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                if std::time::Instant::now() >= self.deadline {
+                    tracing::warn!("voice daemon: say did not finish in time; line dropped");
+                    self.stop();
+                }
+            }
         }
         self.finished
     }
@@ -313,6 +338,7 @@ impl Playback for DaemonPlayback {
             tracing::debug!("voice daemon stop: {e}");
         }
         self.finished = true;
+        self.release_reader();
     }
 }
 
@@ -331,15 +357,22 @@ impl Engine for DaemonEngine {
             preset: self.preset.clone(),
             speed: Some(o.rate),
         };
-        // Blocks until playback ends: no read timeout on this connection.
+        // The reply comes when playback ends. `poll` enforces the line's
+        // deadline (and stops the daemon); the Unix read timeout is a
+        // backstop a little later so the reader thread always ends
+        // (Windows: `stop` cancels its blocked read).
+        let limit = self
+            .say_timeout
+            .unwrap_or_else(|| crate::daemon::say_timeout(text_of(&req)));
+        let deadline = std::time::Instant::now() + limit;
         let conn = self
             .client
-            .send(&req, None)
+            .send(&req, Some(limit + crate::daemon::SHORT_TIMEOUT))
             .map_err(|e| std::io::Error::other(e.to_string()))?;
         let (tx, rx) = std::sync::mpsc::channel();
         let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let flag = std::sync::Arc::clone(&done);
-        std::thread::Builder::new()
+        let reader = std::thread::Builder::new()
             .name("lillith-voiced-say".into())
             .spawn(move || {
                 use std::io::BufRead;
@@ -360,7 +393,16 @@ impl Engine for DaemonEngine {
             done,
             reply: rx,
             finished: false,
+            deadline,
+            reader: Some(reader),
         }))
+    }
+}
+
+fn text_of(req: &Request) -> &str {
+    match req {
+        Request::Say { text, .. } => text,
+        _ => "",
     }
 }
 
@@ -947,6 +989,60 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(p.poll());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hung_say_is_dropped_at_its_deadline_without_blocking_poll() {
+        use crate::daemon::{fake::FakeDaemon, request_command};
+        use serde_json::Value;
+        use std::time::{Duration, Instant};
+        // Answers ping and stop; accepts `say` and never replies.
+        let d = FakeDaemon::start(
+            "hung-say",
+            Box::new(|v: &Value| match request_command(v) {
+                "ping" => vec![r#"{"ok":true,"protocol":2,"presets":["lillith"]}"#.into()],
+                "say" => Vec::new(),
+                _ => vec![r#"{"ok":true}"#.into()],
+            }),
+        );
+        let cfg = VoiceConfig {
+            daemon_socket: Some(d.sock.clone()),
+            ..VoiceConfig::default()
+        };
+        let (client, info) = ping_daemon(&cfg).expect("fake answers ping");
+        let mut e = DaemonEngine::new(client, &info, "lillith");
+        assert_eq!(e.voice_warning(), None);
+        e.say_timeout = Some(Duration::from_millis(150));
+        let mut p = e.start("hello?", &SpeakOpts::from_config(&cfg)).unwrap();
+        let t = Instant::now();
+        let mut longest = Duration::ZERO;
+        loop {
+            assert!(t.elapsed() < Duration::from_secs(3), "never gave up");
+            let s = Instant::now();
+            if p.poll() {
+                break;
+            }
+            // Polls before the deadline never wait on the daemon.
+            longest = longest.max(s.elapsed());
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(t.elapsed() >= Duration::from_millis(140));
+        assert!(longest < Duration::from_millis(50), "poll blocked");
+        // The hung line was stopped on a second connection.
+        assert!(d.commands().contains(&"stop".to_string()));
+    }
+
+    #[test]
+    fn say_deadline_grows_with_the_text_and_is_capped() {
+        use crate::daemon::{say_timeout, SAY_BASE_TIMEOUT, SAY_MAX_TIMEOUT, SAY_PER_CHAR};
+        assert_eq!(say_timeout(""), SAY_BASE_TIMEOUT);
+        assert_eq!(say_timeout("hiii"), SAY_BASE_TIMEOUT + SAY_PER_CHAR * 4);
+        // A full 1200-char chat reply still fits.
+        let long = "a".repeat(crate::speech::REPLY_MAX_CHARS);
+        assert!(say_timeout(&long) > SAY_BASE_TIMEOUT + std::time::Duration::from_secs(120));
+        assert!(say_timeout(&long) <= SAY_MAX_TIMEOUT);
+        assert_eq!(say_timeout(&"a".repeat(1_000_000)), SAY_MAX_TIMEOUT);
     }
 
     #[test]
