@@ -26,7 +26,7 @@ import wave
 
 import numpy as np
 
-from .core import MODEL_DIR, CONFIG_HOME
+from .core import MODEL_DIR, CONFIG_HOME, NO_WINDOW
 
 STT_DIR = os.environ.get("LILLITH_STT_DIR") or os.path.join(MODEL_DIR, "stt")
 STT_MODEL = os.environ.get("LILLITH_STT_MODEL", "tiny.en")
@@ -365,7 +365,8 @@ class Mic:
                                          callback=lambda d, *_: self.on_audio(d[:, 0].copy()))
             self.stream.start()
             return
-        self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                                     **NO_WINDOW)
         threading.Thread(target=self._read, daemon=True, name="lillith-mic").start()
 
     def _read(self):

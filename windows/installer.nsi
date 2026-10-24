@@ -1,7 +1,14 @@
 ; Lillith for Windows: NSIS installer (built by windows/build.sh).
 ;
 ;   makensis -DVERSION=0.0.1 -DSTAGE=<staged folder> -DOUTFILE=<setup.exe>
-;            -DICON=windows/lillith.ico -DICONS_NSH=<icons.nsh> windows/installer.nsi
+;            -DICON=windows/lillith.ico -DICONS_NSH=<icons.nsh>
+;            [-DVOICE=<voice payload folder>] windows/installer.nsi
+;
+; -DVOICE (windows/build.sh sets it from VOICE_PAYLOAD=lillith-voice-win-<id>.zip)
+; adds "Lillith's voice": Ko's cloned voice + the p1 fallback + offline speech
+; recognition (tools/lillith-voice/windows/build-voice-win.sh builds it), installed
+; per-user to %LOCALAPPDATA%\Lillith\voice and started at sign-in from
+; HKCU\...\Run (no admin, no UAC). It serves \\.\pipe\lillith-voice only.
 ;
 ; Per-user install (no admin): %LOCALAPPDATA%\Programs\Lillith. Start menu
 ; shortcuts, a desktop shortcut (on by default, untickable), an optional
@@ -13,7 +20,7 @@
 ; Nothing is downloaded, ever: no models, no runtimes, no update checks.
 ;
 ; Silent:  Lillith-setup.exe /S [/GGUF=C:\models\x.gguf] [/LLAMASERVER=C:\llama.cpp\llama-server.exe]
-;          [/AUTOSTART] [/NODESKTOP] [/ICON=<id>] [/D=C:\path\to\Lillith]   (/D must be last)
+;          [/AUTOSTART] [/NODESKTOP] [/NOVOICE] [/ICON=<id>] [/D=C:\path\to\Lillith]   (/D must be last)
 ;          /ICON= takes an id from branding/icons.toml (e.g. glitch); default:
 ;          keep the configured icon (new installs: phantomcore-red).
 ;          The desktop shortcut is created by default (also with /S); /NODESKTOP skips it.
@@ -43,6 +50,11 @@ SetCompressor /SOLID lzma
 !define UNINST   "Uninstall Lillith.exe"
 !define REG_APP  "Software\Lillith"
 !define REG_UNINST "Software\Microsoft\Windows\CurrentVersion\Uninstall\Lillith"
+!define REG_RUN    "Software\Microsoft\Windows\CurrentVersion\Run"
+; Voice payload home. NB: Windows paths are case-insensitive, so this is inside
+; the app's own %LOCALAPPDATA%\lillith folder (chat history, log): never RMDir /r it.
+!define VOICEDIR   "$LOCALAPPDATA\Lillith\voice"
+!define VOICE_RUN  '"$LOCALAPPDATA\Lillith\voice\python\pythonw.exe" -m lillith_voice.winlaunch'
 
 !include MUI2.nsh
 !include nsDialogs.nsh
@@ -112,6 +124,16 @@ Page custom BrainPage BrainLeave
   nsExec::Exec '"$SYSDIR\taskkill.exe" /IM lillith-admin.exe /T /F'
   Pop $0
   Sleep 300
+!macroend
+
+; Asks the bundled voice daemon to quit (its own --stop: a "shutdown" over the
+; pipe), so its files can be replaced. Never a taskkill on python*.exe: that
+; would hit the user's other Pythons.
+!macro StopVoice
+  ${If} ${FileExists} "${VOICEDIR}\python\python.exe"
+    nsExec::Exec '"${VOICEDIR}\python\python.exe" -m lillith_voice.winlaunch --stop'
+    Pop $0
+  ${EndIf}
 !macroend
 
 ; Runs `lillith.exe setup` with $Gguf / $Server. Leaves exit code in $1,
@@ -202,6 +224,40 @@ Section /o "Start Lillith when I sign in" SecAutostart
   CreateShortcut "$SMSTARTUP\Lillith.lnk" "$INSTDIR\lillith.exe" "" "$R9"
 SectionEnd
 
+!ifdef VOICE
+; Lillith's own voice: everything is in the installer (Python, wheels, models,
+; ffmpeg); nothing is downloaded. Per-user, no admin.
+Section "Lillith's voice (Ko's cloned voice, offline)" SecVoice
+  !insertmacro StopVoice
+  Sleep 300
+  ; Replace the bundled parts cleanly; voices\ (your own clones) and logs\ stay.
+  RMDir /r "${VOICEDIR}\python"
+  RMDir /r "${VOICEDIR}\lib"
+  RMDir /r "${VOICEDIR}\models"
+  RMDir /r "${VOICEDIR}\bin"
+  RMDir /r "${VOICEDIR}\tests"
+  RMDir /r "${VOICEDIR}\licenses"
+  SetOutPath "${VOICEDIR}"
+  File /r "${VOICE}/*"
+  WriteRegStr HKCU "${REG_APP}" "VoiceDir" "${VOICEDIR}"
+  ; Per-user autostart of the voice daemon (hidden pythonw; exits at once if one
+  ; is already running). Lillith finds it on \\.\pipe\lillith-voice by default.
+  WriteRegStr HKCU "${REG_RUN}" "LillithVoice" '${VOICE_RUN}'
+  CreateDirectory "$SMPROGRAMS\Lillith"
+  CreateShortcut "$SMPROGRAMS\Lillith\Lillith voice - microphone setup.lnk" "${VOICEDIR}\lillith-listen.cmd" "--setup" "$INSTDIR\lillith.ico" 0 SW_SHOWNORMAL "" "Pick and test the microphone Lillith listens to"
+  ; Sign-in autostart of the app: go through the voice launcher, which waits until
+  ; the daemon answers (the app probes it once at startup, else falls back to SAPI).
+  ${If} ${SectionIsSelected} ${SecAutostart}
+    Call ShortcutIcon
+    Delete "$SMSTARTUP\Lillith.lnk"
+    CreateShortcut "$SMSTARTUP\Lillith.lnk" "${VOICEDIR}\python\pythonw.exe" '-m lillith_voice.winlaunch --start-app "$INSTDIR\lillith.exe"' "$R9" 0 SW_SHOWNORMAL "" "Lillith (waits for her voice at sign-in)"
+  ${EndIf}
+  ; Start it now so she talks on the first run.
+  DetailPrint "Starting Lillith's voice..."
+  Exec '${VOICE_RUN}'
+SectionEnd
+!endif
+
 ; App icon: a picked one is saved to config.toml; otherwise the configured
 ; icon (an earlier pick, or the default) is re-applied to the shortcuts.
 Section "-AppIcon"
@@ -242,6 +298,13 @@ Function .onInit
   ${IfNot} ${Errors}
     !insertmacro UnselectSection ${SecDesktop}
   ${EndIf}
+!ifdef VOICE
+  ClearErrors
+  ${GetOptions} $R0 "/NOVOICE" $R1
+  ${IfNot} ${Errors}
+    !insertmacro UnselectSection ${SecVoice}
+  ${EndIf}
+!endif
   ClearErrors
   ${GetOptions} $R0 "/ICON=" $IconId
   ${If} ${Errors}
@@ -259,6 +322,9 @@ FunctionEnd
   !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} "Lillith, Lillith Settings, her animations, and Start menu shortcuts."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A Lillith shortcut on the desktop."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAutostart} "Start Lillith automatically when you sign in to Windows."
+!ifdef VOICE
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecVoice} "Her own voice (Ko's cloned voice, a backup voice) and offline speech recognition for the mic. All local, no admin; starts hidden when you sign in. Installs to %LOCALAPPDATA%\Lillith\voice."
+!endif
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ; ── icon page ─────────────────────────────────────────────────────────
@@ -370,6 +436,25 @@ FunctionEnd
 
 Section "Uninstall"
   !insertmacro KillRunning
+  ; Lillith's voice (whether or not this installer added it)
+  !insertmacro StopVoice
+  DeleteRegValue HKCU "${REG_RUN}" "LillithVoice"
+  Delete "$SMPROGRAMS\Lillith\Lillith voice - microphone setup.lnk"
+  RMDir /r "${VOICEDIR}\python"
+  RMDir /r "${VOICEDIR}\lib"
+  RMDir /r "${VOICEDIR}\models"
+  RMDir /r "${VOICEDIR}\bin"
+  RMDir /r "${VOICEDIR}\tests"
+  RMDir /r "${VOICEDIR}\licenses"
+  RMDir /r "${VOICEDIR}\logs"
+  Delete "${VOICEDIR}\lillith-voiced.cmd"
+  Delete "${VOICEDIR}\lillith-say.cmd"
+  Delete "${VOICEDIR}\lillith-listen.cmd"
+  Delete "${VOICEDIR}\*.md"
+  Delete "${VOICEDIR}\voice-win.lock.json"
+  Delete "${VOICEDIR}\PAYLOAD_ID"
+  Delete "${VOICEDIR}\SHA256SUMS"
+  RMDir "${VOICEDIR}"   ; only if empty (voices\ = your own clones stay unless you delete settings)
 
   Delete "$SMPROGRAMS\Lillith\Lillith.lnk"
   Delete "$SMPROGRAMS\Lillith\Lillith Settings.lnk"
@@ -396,11 +481,14 @@ Section "Uninstall"
   DeleteRegKey HKCU "${REG_UNINST}"
   DeleteRegKey HKCU "${REG_APP}"
 
-  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Also delete your Lillith settings, chat history and log?$\r$\n$\r$\n($APPDATA\lillith\config.toml, Modelfile.lily, $LOCALAPPDATA\lillith\chat_history.json, lillith.log)$\r$\n$\r$\nYour GGUF models and llama.cpp are never touched." /SD IDNO IDNO keep
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Also delete your Lillith settings, chat history and log?$\r$\n$\r$\n($APPDATA\lillith\config.toml, Modelfile.lily, $LOCALAPPDATA\lillith\chat_history.json, lillith.log, the voice's mic settings and any voices you cloned yourself)$\r$\n$\r$\nYour GGUF models and llama.cpp are never touched." /SD IDNO IDNO keep
     Delete "$APPDATA\lillith\config.toml"
     Delete "$APPDATA\lillith\config.toml.bak"
     Delete "$APPDATA\lillith\Modelfile.lily"
     RMDir "$APPDATA\lillith"
+    RMDir /r "$APPDATA\lillith-voice"   ; voice: mic.json, presets.json
+    RMDir /r "${VOICEDIR}\voices"
+    RMDir "${VOICEDIR}"
     Delete "$LOCALAPPDATA\lillith\chat_history.json"
     Delete "$LOCALAPPDATA\lillith\lillith.log"
     RMDir "$LOCALAPPDATA\lillith"

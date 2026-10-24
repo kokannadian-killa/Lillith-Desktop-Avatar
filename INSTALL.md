@@ -267,10 +267,40 @@ tokens, 160 reply tokens) are sent with every chat request, so they aren't on
 the command line. If you use Ollama instead (`backend = "ollama"`), it must be
 on `http://127.0.0.1:11434`. The **kill switch** on Windows is the same safeword
 (see below), and it also shuts down the elevated `lillith-admin` helper.
-**Voice on Windows:** she uses the built-in Windows (SAPI) voice. The offline
-voice kit's Windows notes are in `tools/lillith-voice/windows/INSTALL-windows.md`.
-Only its named-pipe transport has been tested, and only under wine. It has
-not run on real Windows, and no Windows installer bundles it yet.
+### Windows: her own voice (Ko's cloned voice, offline)
+
+The installer can carry her real voice, so she doesn't sound like SAPI. Build
+the voice payload once (Linux; it downloads pinned, sha256-checked files at
+*build* time only), then hand it to `windows/build.sh`:
+
+```sh
+tools/lillith-voice/windows/build-voice-win.sh \
+  --kit-tarball lillith-voice-kit-<sha>.tar.xz --out /tmp/voice-win
+VOICE_PAYLOAD=/tmp/voice-win/lillith-voice-win-<id>.zip windows/build.sh
+```
+
+- The setup then has a section **Lillith's voice** (on by default; `/NOVOICE`
+  skips it in a silent install). It installs about 1.3 GB to
+  `%LOCALAPPDATA%\Lillith\voice\`: embedded Python 3.13, onnxruntime,
+  sherpa-onnx, the models (Ko's cloned voice `lillith`, the `p1` backup voice,
+  whisper speech recognition), ffmpeg and the MSVC runtime. Nothing is
+  downloaded at install or run time.
+- It's per-user and needs no admin, so it adds no UAC prompt (the one prompt
+  per session stays for `lillith-admin`). It autostarts hidden at sign-in
+  (`HKCU\...\Run\LillithVoice`) and serves only the local named pipe
+  `\\.\pipe\lillith-voice`, where the app finds it on its own.
+- Start menu ▸ Lillith ▸ *Lillith voice - microphone setup* picks the mic.
+  The log is `%LOCALAPPDATA%\Lillith\voice\logs\voiced.log`.
+- Uninstall stops it and removes it.
+- In the portable zip it's `Lillith\voice\`: start with
+  `Start Lillith with voice.cmd`.
+- Without the voice section she uses the built-in Windows (SAPI) voice and
+  says so.
+
+Status: the whole payload passed its self-test under wine with the network
+off. It has not run on real Windows yet. Details are in
+`tools/lillith-voice/windows/INSTALL-windows.md`.
+
 More detail: `source/windows/INSTALL-windows.md` in the release zip
 ([`windows/INSTALL-windows.md`](windows/INSTALL-windows.md) in the repo).
 
