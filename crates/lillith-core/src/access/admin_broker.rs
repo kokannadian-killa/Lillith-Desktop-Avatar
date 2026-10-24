@@ -103,9 +103,10 @@ mod imp {
     use windows_sys::Win32::Security::{
         GetTokenInformation, TokenUser, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
     };
+    use windows_sys::Win32::Storage::FileSystem::PIPE_ACCESS_DUPLEX;
     use windows_sys::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE,
-        PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
+        PIPE_TYPE_BYTE, PIPE_WAIT,
     };
     use windows_sys::Win32::System::Threading::{
         GetCurrentProcess, OpenProcessToken, TerminateProcess, WaitForSingleObject,
@@ -226,7 +227,8 @@ mod imp {
             g.take()
                 .ok_or_else(|| std::io::Error::other("admin helper session gone"))?
         };
-        let write_res = write_frame(&mut session.pipe, &frame.encode(&session.token));
+        let write_res = write_frame(&mut session.pipe, &frame.encode(&session.token))
+            .map_err(|e| std::io::Error::other(format!("admin helper: {e}")));
         let read_res = write_res.and_then(|()| {
             read_frame(&mut session.pipe)
                 .map_err(|e| std::io::Error::other(format!("admin helper: {e}")))
@@ -408,7 +410,9 @@ mod imp {
     }
 
     #[allow(dead_code)]
-    fn _link(_: Instant, _: Duration, _: GENERIC_READ, _: GENERIC_WRITE) {}
+    fn _link(_: Instant, _: Duration) -> u32 {
+        GENERIC_READ | GENERIC_WRITE
+    }
 }
 
 #[cfg(test)]
