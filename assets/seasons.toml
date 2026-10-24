@@ -1,0 +1,125 @@
+# Seasonal outfits: date windows, outfit-menu entries and clip lists.
+# Read by the GUI / runtime (wiring: docs/SEASONS.md). Data only; nothing parses it yet.
+#
+# Selection (user setting `seasonal_outfit`, see [setting]):
+#   "auto"        -> pick the season whose window contains today's local date
+#                    (highest `priority` wins on overlap, e.g. newyear over xmas on Dec 31)
+#   "off"         -> never use seasonal clips
+#   "<outfit id>" -> manual choice, always that outfit regardless of date
+# Windows are inclusive month-day ranges in local time; a window whose end is before
+# its start wraps over New Year (newyear: Dec 31 -> Jan 2).
+
+schema = 1
+
+[setting]
+key = "seasonal_outfit"
+default = "auto"
+values = ["auto", "off"]   # plus any [[outfit]].id
+
+[[season]]
+id = "halloween"
+name = "Halloween"
+start = "10-01"
+end = "11-02"
+priority = 10
+outfit = "halloween"
+
+[[season]]
+id = "xmas"
+name = "Christmas / Winter"
+start = "12-01"
+end = "12-31"
+priority = 10
+outfit = "xmas"
+
+[[season]]
+id = "newyear"
+name = "New Year"
+start = "12-31"
+end = "01-02"
+priority = 20               # beats xmas on Dec 31
+outfit = "newyear"
+
+[[season]]
+id = "valentines"
+name = "Valentine's Day"
+start = "02-07"
+end = "02-15"
+priority = 10
+outfit = "valentines"
+
+[[season]]
+id = "spring"
+name = "Spring"
+start = "03-20"
+end = "05-31"
+priority = 5
+outfit = "spring"
+
+[[season]]
+id = "summer"
+name = "Summer"
+start = "06-01"
+end = "08-31"
+priority = 5
+outfit = "summer"
+
+# Outfit-menu entries (one per selectable outfit). `clips` are manifest animation names
+# (assets/generated/manifest.toml); a clip missing from the manifest is simply skipped, so
+# the menu should hide an outfit whose clips are all missing (`available` = any clip present).
+# `thumbnail` = 128x128 RGBA PNG, transparent background.
+# Reserved for hidden/unlockable entries: `hidden = true` keeps it out of the menu and out of
+# "auto"; `unlock = "<condition id>"` (free-form string, e.g. "secret:oops_retie") names what
+# reveals it. Same two keys may also appear on a single clip via [[outfit.secret]] tables:
+#   [[outfit.secret]]
+#   clip = "<clip name>"
+#   hidden = true
+#   unlock = "<condition id>"
+
+[[outfit]]
+id = "halloween"
+name = "Micro Witch (Halloween)"
+season = "halloween"
+thumbnail = "assets/generated/outfits/halloween.png"
+clips = ["halloween_hat_tip_wink", "halloween_broom_sit_lollipop", "halloween_pumpkin_hug_candy", "halloween_cape_swirl_arch"]
+hidden = false
+
+[[outfit]]
+id = "xmas"
+name = "Santa Bikini (Christmas)"
+season = "xmas"
+thumbnail = "assets/generated/outfits/xmas.png"
+clips = []                  # filled by the Christmas batch (prefix xmas_)
+hidden = false
+
+[[outfit]]
+id = "valentines"
+name = "Heart Straps (Valentine's)"
+season = "valentines"
+thumbnail = "assets/generated/outfits/valentines.png"
+clips = []                  # feat/seasonal-valentines-spring (prefix valentines_)
+hidden = false
+
+[[outfit]]
+id = "spring"
+name = "Spring Blossom"
+season = "spring"
+thumbnail = "assets/generated/outfits/spring.png"
+clips = []                  # feat/seasonal-valentines-spring (prefix spring_)
+hidden = false
+
+[[outfit]]
+id = "summer"
+name = "String Bikini (Summer)"
+season = "summer"
+thumbnail = "assets/generated/outfits/summer.png"
+clips = []                  # feat/seasonal-summer-newyear (prefix summer_)
+hidden = false
+
+[[outfit]]
+id = "newyear"
+name = "New Year Sparkle"
+season = "newyear"
+thumbnail = "assets/generated/outfits/newyear.png"
+clips = []                  # feat/seasonal-summer-newyear (prefix newyear_)
+hidden = false

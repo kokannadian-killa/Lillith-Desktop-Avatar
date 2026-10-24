@@ -1046,6 +1046,11 @@ pub struct Config {
     /// `classic`): menu entry, desktop shortcut, Windows shortcuts. Settings
     /// ▸ Icon or `lillith icon <id>` change it; unknown ids mean the default.
     pub icon: String,
+    /// Seasonal outfit (`assets/seasons.toml`, docs/SEASONS.md): `auto`
+    /// (by today's date, the default), `off` (base outfit only) or an
+    /// outfit id (always that one). Right-click ▸ Avatar ▸ Outfit, or
+    /// Settings ▸ Companion. Unknown ids mean the base outfit.
+    pub seasonal_outfit: String,
     pub avatar: AvatarConfig,
     pub muted: bool,
     pub voice_enabled: bool,
@@ -1093,6 +1098,7 @@ impl Default for Config {
             click_through: false,
             autostart: false,
             icon: crate::icons::DEFAULT_ICON.into(),
+            seasonal_outfit: crate::seasons::AUTO.into(),
             avatar: AvatarConfig::default(),
             muted: false,
             voice_enabled: true,
@@ -1246,6 +1252,17 @@ pub fn save_icon(path: &Path, id: &str) -> Result<(), ConfigError> {
     })
 }
 
+/// Persists `seasonal_outfit` (`auto` / `off` / an outfit id), keeping the
+/// rest of the file (like [`save_scale`]).
+pub fn save_seasonal_outfit(path: &Path, value: &str) -> Result<(), ConfigError> {
+    update_config(path, |t| {
+        t.insert(
+            "seasonal_outfit".into(),
+            toml::Value::String(value.to_string()),
+        );
+    })
+}
+
 /// Read-modify-write of the config file as a TOML table (atomic rename;
 /// creates the file and directory; comments are not kept).
 pub fn update_config(path: &Path, f: impl FnOnce(&mut toml::Table)) -> Result<(), ConfigError> {
@@ -1385,6 +1402,33 @@ mod tests {
         let back = Config::load(&p).unwrap();
         assert_eq!(back.icon, "classic");
         assert_eq!(back.scale, 0.75);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn seasonal_outfit_key_defaults_parses_and_saves() {
+        assert_eq!(Config::default().seasonal_outfit, "auto");
+        assert_eq!(
+            Config::from_toml_str("scale = 0.75\n")
+                .unwrap()
+                .seasonal_outfit,
+            "auto"
+        );
+        for v in ["off", "halloween", "auto"] {
+            let c = Config::from_toml_str(&format!("seasonal_outfit = \"{v}\"\n")).unwrap();
+            assert_eq!(c.seasonal_outfit, v);
+        }
+        assert!(Config::from_toml_str("seasonal_outfit = 1\n").is_err());
+        assert!(crate::menu::settings_template().contains("seasonal_outfit = \"auto\""));
+        let dir = std::env::temp_dir().join(format!("lillith-cfg-season-{}", std::process::id()));
+        let p = dir.join("config.toml");
+        save_icon(&p, "classic").unwrap();
+        save_seasonal_outfit(&p, "halloween").unwrap();
+        let back = Config::load(&p).unwrap();
+        assert_eq!(back.seasonal_outfit, "halloween");
+        assert_eq!(back.icon, "classic");
+        save_seasonal_outfit(&p, "off").unwrap();
+        assert_eq!(Config::load(&p).unwrap().seasonal_outfit, "off");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

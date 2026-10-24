@@ -18,8 +18,9 @@ use crate::store::ConfigStore;
 use lillith_anim::atlas::Manifest;
 use lillith_anim::avatar::AvatarStore;
 use lillith_core::config::{MoveMode, OverlayPos};
-use lillith_core::menu::{MenuAction, MenuExtras, MenuState, PoseGroup};
+use lillith_core::menu::{MenuAction, MenuExtras, MenuState, OutfitChoice, PoseGroup};
 use lillith_core::mood::Mood;
+use lillith_core::seasons::{Outfit, Seasons};
 
 /// Menu state as stored in config.toml (mood isn't persisted by the core:
 /// it starts at its default).
@@ -44,8 +45,18 @@ pub fn state_from_store(s: &ConfigStore) -> MenuState {
             ..Default::default()
         }
         .overlay_scale(),
-        extras: Default::default(),
+        extras: MenuExtras {
+            outfit: outfit_from_store(s),
+            ..Default::default()
+        },
     }
+}
+
+/// The `seasonal_outfit` setting (default `auto`).
+pub fn outfit_from_store(s: &ConfigStore) -> String {
+    s.get_str(&["seasonal_outfit"])
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| lillith_core::seasons::AUTO.into())
 }
 
 /// Applies a pick to the local state (like the overlay does with
@@ -70,7 +81,18 @@ pub fn apply(state: &mut MenuState, a: MenuAction) {
             }
         }
         MenuAction::PosePage(p) => state.extras.page = Some(p),
-        MenuAction::MenuBack => state.extras.page = None,
+        MenuAction::MenuBack => {
+            state.extras.page = None;
+            state.extras.outfit_page = false;
+        }
+        MenuAction::OutfitPage => state.extras.outfit_page = true,
+        MenuAction::Outfit(n) => {
+            let x = &state.extras;
+            let ok = n < 2 || x.outfits.get(n as usize - 2).is_some_and(|o| o.available);
+            if let Some(v) = x.outfit_value(n).filter(|_| ok) {
+                state.extras.outfit = v;
+            }
+        }
         _ => {}
     }
 }
@@ -126,6 +148,12 @@ pub fn persist(store: &mut ConfigStore, state: &MenuState, a: MenuAction) -> Per
             store.set_bool(&["monitor", "enabled"], !state.monitor_paused);
             Persisted::Staged
         }
+        MenuAction::Outfit(_) => {
+            // The overlay saves it too (same value); staging it here makes
+            // the choice stick when she isn't running.
+            store.set_str(&["seasonal_outfit"], state.extras.outfit.clone());
+            Persisted::Staged
+        }
         MenuAction::ResetPosition => {
             let d = OverlayPos::default();
             store.set_i64(&["overlay", "margin_left"], d.margin_left as i64);
@@ -144,9 +172,14 @@ pub use lillith_core::menu::{
 };
 
 /// Poses ▸ categories from the animation set, exactly as the overlay builds
-/// them (`lillith_anim::catalog::grouped` + `label`).
+/// them (`lillith_anim::catalog::grouped` + `label`), base outfit only.
 pub fn poses_of(m: &Manifest) -> Vec<PoseGroup> {
-    lillith_anim::catalog::grouped(m)
+    poses_for(m, None)
+}
+
+/// [`poses_of`] with the worn outfit's seasonal clips (in Flirty / Allure).
+pub fn poses_for(m: &Manifest, active: Option<&Outfit>) -> Vec<PoseGroup> {
+    lillith_anim::catalog::grouped_for(m, active)
         .into_iter()
         .map(|(label, clips)| PoseGroup {
             label: label.to_string(),
@@ -157,6 +190,19 @@ pub fn poses_of(m: &Manifest) -> Vec<PoseGroup> {
                     (c, l)
                 })
                 .collect(),
+        })
+        .collect()
+}
+
+/// Avatar ▸ Outfit entries as the overlay lists them: non-hidden outfits
+/// of `seasons`, available when the set has one of their clips.
+pub fn outfits_of(m: &Manifest, seasons: &Seasons) -> Vec<OutfitChoice> {
+    seasons
+        .listed()
+        .map(|o| OutfitChoice {
+            id: o.id.clone(),
+            label: o.label().to_string(),
+            available: o.available(|c| m.clips.contains_key(c)),
         })
         .collect()
 }
@@ -192,6 +238,10 @@ pub fn extras_for(poses: Vec<PoseGroup>, avatars: Option<&AvatarStore>) -> MenuE
         avatar,
         chat: true,
         speaker: None,
+        outfits: Vec::new(),
+        outfit: lillith_core::seasons::AUTO.into(),
+        outfit_active: None,
+        outfit_page: false,
     }
 }
 
@@ -216,14 +266,22 @@ pub fn to_pick(a: MenuAction, extras: &MenuExtras) -> MenuPick {
             Some((id, _)) => MenuPick::Avatar(Some(id.clone())),
             None => MenuPick::Action(a),
         },
+        MenuAction::Outfit(n) if n >= 2 => match extras.outfit_value(n) {
+            Some(id) => MenuPick::SeasonalOutfit(id),
+            None => MenuPick::Action(a),
+        },
         _ => MenuPick::Action(a),
     }
 }
 
 /// Menu-navigation picks this window handles itself (it shows every Poses
-/// page inline instead of re-opening a popup): never sent.
+/// page and the outfit row inline instead of re-opening a popup): never
+/// sent.
 pub fn is_local(a: MenuAction) -> bool {
-    matches!(a, MenuAction::PosePage(_) | MenuAction::MenuBack)
+    matches!(
+        a,
+        MenuAction::PosePage(_) | MenuAction::MenuBack | MenuAction::OutfitPage
+    )
 }
 
 #[cfg(test)]
@@ -271,6 +329,21 @@ mod tests {
             avatar: None,
             chat: true,
             speaker: Some(true),
+            outfits: vec![
+                OutfitChoice {
+                    id: "halloween".into(),
+                    label: "Micro Witch (Halloween)".into(),
+                    available: true,
+                },
+                OutfitChoice {
+                    id: "xmas".into(),
+                    label: "Santa Bikini (Christmas)".into(),
+                    available: false,
+                },
+            ],
+            outfit: "auto".into(),
+            outfit_active: None,
+            outfit_page: false,
         }
     }
 
@@ -286,9 +359,15 @@ mod tests {
             scale: 0.55,
             extras: x.clone(),
         };
-        // Main menu and a Poses page: every leaf → the core's line.
-        for page in [None, Some(MenuPage { group: 0, page: 1 })] {
+        // Main menu, a Poses page and the Outfit page: every leaf → the
+        // core's line.
+        for (page, op) in [
+            (None, false),
+            (Some(MenuPage { group: 0, page: 1 }), false),
+            (None, true),
+        ] {
             st.extras.page = page;
+            st.extras.outfit_page = op;
             for (_, it) in build_menu(&st).leaves() {
                 if let MenuItem::Leaf { action, .. } = it {
                     let line = pick_line(&to_pick(*action, &x));
@@ -339,6 +418,83 @@ mod tests {
         assert_eq!(st2.extras.page, None);
         apply(&mut st2, MenuAction::Avatar(1));
         assert_eq!(st2.extras.avatar.as_deref(), Some("mug"));
+        // Outfits go out by id; auto / off as the action.
+        assert_eq!(
+            line(MenuAction::Outfit(2)),
+            named(wire::SEASONAL_OUTFIT, Some("halloween"))
+        );
+        assert_eq!(
+            line(MenuAction::Outfit(1)),
+            named(wire::SEASONAL_OUTFIT, Some("off"))
+        );
+        assert!(is_local(MenuAction::OutfitPage));
+    }
+
+    #[test]
+    fn outfit_picks_persist_to_seasonal_outfit() {
+        let p = std::env::temp_dir().join(format!(
+            "lillith-settings-outfit-{}.toml",
+            std::process::id()
+        ));
+        std::fs::write(&p, "scale = 0.55\n").unwrap();
+        let mut store = ConfigStore::load(&p);
+        let mut st = state_from_store(&store);
+        assert_eq!(st.extras.outfit, "auto");
+        st.extras.outfits = rich_extras().outfits;
+        // "Coming soon" can't be picked; the setting stays.
+        apply(&mut st, MenuAction::Outfit(3));
+        assert_eq!(st.extras.outfit, "auto");
+        apply(&mut st, MenuAction::Outfit(2));
+        assert_eq!(st.extras.outfit, "halloween");
+        assert_eq!(
+            persist(&mut store, &st, MenuAction::Outfit(2)),
+            Persisted::Staged
+        );
+        store.save().unwrap();
+        let core =
+            lillith_core::config::Config::from_toml_str(&std::fs::read_to_string(&p).unwrap())
+                .unwrap();
+        assert_eq!(core.seasonal_outfit, "halloween");
+        assert_eq!(
+            state_from_store(&ConfigStore::load(&p)).extras.outfit,
+            "halloween"
+        );
+        apply(&mut st, MenuAction::Outfit(1));
+        persist(&mut store, &st, MenuAction::Outfit(1));
+        store.save().unwrap();
+        assert_eq!(outfit_from_store(&ConfigStore::load(&p)), "off");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn outfits_and_seasonal_poses_match_the_overlay() {
+        let clip = |n: &str, tags: &str| {
+            format!(
+                "[clips.{n}]\npage = \"{n}.png\"\nfps = 8.0\ntags = [{tags}]\n[[clips.{n}.frames]]\nx = 0\ny = 0\nw = 400\nh = 400\nanchor = [200, 392]\n"
+            )
+        };
+        let text = clip("blow_kiss", "")
+            + &clip(
+                "halloween_hat_tip_wink",
+                "\"seasonal\", \"season:halloween\", \"outfit:halloween\"",
+            );
+        let m = Manifest::from_toml_str(&text).expect("manifest");
+        let seasons = Seasons::bundled();
+        let o = outfits_of(&m, &seasons);
+        assert_eq!(o.len(), 6);
+        assert_eq!(o[0].id, "halloween");
+        assert!(o[0].available && o[1..].iter().all(|o| !o.available));
+        let flat = |g: Vec<PoseGroup>| -> Vec<String> {
+            g.into_iter()
+                .flat_map(|g| g.clips.into_iter().map(|c| c.0))
+                .collect()
+        };
+        assert_eq!(flat(poses_of(&m)), ["blow_kiss"]);
+        let witch = flat(poses_for(&m, seasons.outfit("halloween")));
+        assert!(
+            witch.contains(&"halloween_hat_tip_wink".to_string()),
+            "{witch:?}"
+        );
     }
 
     #[test]
