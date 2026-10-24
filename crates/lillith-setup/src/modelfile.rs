@@ -409,26 +409,6 @@ pub fn with_read_aloud_rule(prompt: &str) -> String {
     }
 }
 
-/// Every prompt Lily runs with carries this rule: her replies go through
-/// text-to-speech, which skips emoji and emoticons.
-pub const READ_ALOUD_RULE: &str =
-    "Your replies are also read aloud, so say it in words; never let an emoji or emoticon carry the meaning.";
-
-/// `prompt` with [`READ_ALOUD_RULE`] appended (as a `- ` rule line) unless
-/// it already contains it. Used for user-customized prompts the wizard
-/// writes; the built-in [`LILY_SYSTEM_PROMPT`] already has it.
-pub fn with_read_aloud_rule(prompt: &str) -> String {
-    if prompt.contains(READ_ALOUD_RULE) {
-        return prompt.to_string();
-    }
-    let p = prompt.trim_end();
-    if p.is_empty() {
-        format!("- {READ_ALOUD_RULE}")
-    } else {
-        format!("{p}\n- {READ_ALOUD_RULE}")
-    }
-}
-
 /// Default sampling for Lily: lively but coherent on a 3B model, and short
 /// replies (`num_predict`) so lines fit the chat bubble.
 pub const LILY_TEMPERATURE: f32 = 0.95;
