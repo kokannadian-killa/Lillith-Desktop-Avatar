@@ -85,14 +85,73 @@ pub fn pick(lines: &'static [&'static str], salt: usize) -> &'static str {
 /// Her line when Ko says "no" to (or cancels) a pending forget.
 pub const FORGET_KEPT_LINE: &str = "Okay. I'll keep it, then.";
 
-/// Her question before "forget everything" / "forget about X" runs.
-pub fn forget_confirm_line(cmd: &lillith_memory::ForgetCmd) -> String {
-    match cmd {
-        lillith_memory::ForgetCmd::Topic(t) => format!(
-            "Forget everything about {t}? Say yes and it's gone for good. Anything else and I keep it."
-        ),
-        _ => "Forget everything I know about you? Say yes and it's gone for good. Anything else and I keep it."
-            .into(),
+/// Her question before a forget that needs a "yes" (everything, a topic,
+/// or a window longer than an hour). `preview` is what the dry run found
+/// (`None` = unknown); `history_hits` is how many chat messages would go.
+/// It names the count and up to three short examples, never a dump.
+pub fn forget_confirm_line(
+    cmd: &lillith_memory::ForgetCmd,
+    preview: Option<&lillith_memory::ForgetReport>,
+    history_hits: usize,
+) -> String {
+    const TAIL: &str = "Say yes and it's gone for good. Anything else and I keep it.";
+    let what = match cmd {
+        lillith_memory::ForgetCmd::Topic(t) => format!("Forget everything about {t}?"),
+        lillith_memory::ForgetCmd::LastSecs(_) | lillith_memory::ForgetCmd::LastTurn => {
+            format!(
+                "Forget everything from the last {}?",
+                describe_window(cmd.window_secs().unwrap_or(0))
+            )
+        }
+        lillith_memory::ForgetCmd::All => {
+            return format!("Forget everything I know about you? {TAIL}")
+        }
+    };
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(p) = preview {
+        let n = p.total() as u64;
+        let mut m = format!("{n} memor{}", if n == 1 { "y" } else { "ies" });
+        if !p.examples.is_empty() {
+            let ex: Vec<String> = p.examples.iter().map(|e| format!("\"{e}\"")).collect();
+            m.push_str(&format!(" (like {})", ex.join(", ")));
+        }
+        parts.push(m);
+    }
+    if history_hits > 0 {
+        let h = history_hits as u64;
+        parts.push(format!("{h} chat message{}", plural(h)));
+    }
+    if parts.is_empty() {
+        format!("{what} {TAIL}")
+    } else {
+        format!("{what} That's {}. {TAIL}", parts.join(" and "))
+    }
+}
+
+/// A forget window in words: "30 minutes", "2 hours", "3 days",
+/// "1000 months" (whole units when it divides evenly, else minutes).
+pub fn describe_window(secs: u64) -> String {
+    let units: [(u64, &str); 4] = [
+        (2_592_000, "month"),
+        (604_800, "week"),
+        (86_400, "day"),
+        (3600, "hour"),
+    ];
+    for (size, name) in units {
+        if secs >= size && secs % size == 0 {
+            let n = secs / size;
+            return if n == 1 {
+                name.to_string()
+            } else {
+                format!("{n} {name}s")
+            };
+        }
+    }
+    let m = (secs / 60).max(1);
+    if m == 1 {
+        "minute".into()
+    } else {
+        format!("{m} minutes")
     }
 }
 
@@ -105,11 +164,13 @@ pub fn forget_nothing_line(cmd: &lillith_memory::ForgetCmd) -> String {
         lillith_memory::ForgetCmd::All => {
             "There's nothing to wipe. I don't remember anything yet.".into()
         }
+        lillith_memory::ForgetCmd::LastTurn => {
+            "There's nothing you just said for me to forget.".into()
+        }
         lillith_memory::ForgetCmd::LastSecs(s) => {
-            let m = (*s / 60).max(1);
             format!(
-                "I didn't learn anything in the last {m} minute{} to forget.",
-                plural(m)
+                "I didn't learn anything in the last {} to forget.",
+                describe_window(*s)
             )
         }
     }
@@ -139,15 +200,25 @@ pub fn forget_line(
             lillith_memory::ForgetCmd::All => {
                 "Done. Wiped clean, every last memory of you. Start fresh with me?".into()
             }
+            lillith_memory::ForgetCmd::Topic(t) if report.total() == 0 => {
+                // Only chat lines went: say so, never "Gone".
+                let n = history_removed as u64;
+                format!(
+                    "Nothing in my memory matched {t}. I cleared {n} chat message{} that mentioned it.",
+                    plural(n)
+                )
+            }
             lillith_memory::ForgetCmd::Topic(t) => {
                 format!("Gone. I don't remember anything about {t} now.")
             }
             lillith_memory::ForgetCmd::LastSecs(s) => {
-                let m = (*s / 60).max(1);
                 format!(
-                    "Forgotten. The last {m} minute{} never happened.",
-                    plural(m)
+                    "Forgotten. The last {} never happened.",
+                    describe_window(*s)
                 )
+            }
+            lillith_memory::ForgetCmd::LastTurn => {
+                "Forgotten. That last thing you said never happened.".into()
             }
         }
     };
@@ -165,6 +236,62 @@ pub fn forget_line(
 #[cfg(test)]
 mod persona_prompt_tests {
     use super::*;
+
+    #[test]
+    fn topic_forget_with_no_memory_rows_never_says_gone() {
+        let cmd = lillith_memory::ForgetCmd::Topic("my cat".into());
+        let none = lillith_memory::ForgetReport {
+            scrubbed: true,
+            ..Default::default()
+        };
+        let l = forget_line(&cmd, &none, 2, None);
+        assert!(!l.contains("Gone"), "{l}");
+        assert!(l.contains("Nothing in my memory matched my cat"), "{l}");
+        assert!(l.contains("2 chat messages"), "{l}");
+        let l = forget_line(&cmd, &none, 1, None);
+        assert!(l.contains("1 chat message that"), "{l}");
+        let l = forget_line(&cmd, &none, 0, None);
+        assert!(l.contains("don't have anything"), "{l}");
+        let some = lillith_memory::ForgetReport {
+            nodes: 1,
+            scrubbed: true,
+            ..Default::default()
+        };
+        assert!(forget_line(&cmd, &some, 0, None).starts_with("Gone."));
+    }
+
+    #[test]
+    fn forget_windows_read_naturally() {
+        assert_eq!(describe_window(60), "minute");
+        assert_eq!(describe_window(1800), "30 minutes");
+        assert_eq!(describe_window(3600), "hour");
+        assert_eq!(describe_window(7200), "2 hours");
+        assert_eq!(describe_window(604_800), "week");
+        assert_eq!(describe_window(2_592_000_000), "1000 months");
+        assert_eq!(describe_window(5400), "90 minutes");
+    }
+
+    #[test]
+    fn forget_confirm_shows_count_and_a_few_short_examples() {
+        let r = lillith_memory::ForgetReport {
+            nodes: 2,
+            events: 3,
+            examples: vec!["Ko's job: barista".into(), "app: espresso".into()],
+            ..Default::default()
+        };
+        let cmd = lillith_memory::ForgetCmd::Topic("my job".into());
+        let l = forget_confirm_line(&cmd, Some(&r), 1);
+        assert!(l.contains("5 memories"), "{l}");
+        assert!(l.contains("\"Ko's job: barista\""), "{l}");
+        assert!(l.contains("1 chat message."), "{l}");
+        assert!(l.contains("Say yes"), "{l}");
+        let big = lillith_memory::parse_forget("forget the last 1000 months").unwrap();
+        let l = forget_confirm_line(&big, None, 0);
+        assert!(
+            l.starts_with("Forget everything from the last 1000 months?"),
+            "{l}"
+        );
+    }
 
     #[test]
     fn single_source_with_lillith_setup() {

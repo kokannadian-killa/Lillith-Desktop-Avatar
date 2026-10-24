@@ -9,6 +9,40 @@ pub enum ForgetCmd {
     Topic(String),
     /// Everything learned in the last N seconds.
     LastSecs(u64),
+    /// "Forget the last thing I said": the last user turn (and its reply)
+    /// in the chat history, plus what memory learned in the last
+    /// [`LAST_TURN_SECS`].
+    LastTurn,
+}
+
+/// The memory window "the last thing I said" clears (the chat history
+/// only loses the last turn).
+pub const LAST_TURN_SECS: u64 = 300;
+
+/// Time-window forgets longer than this need the same "yes" as
+/// "forget everything" ("forget the last 1000 months" is everything).
+pub const CONFIRM_WINDOW_SECS: u64 = 3600;
+
+impl ForgetCmd {
+    /// Whether Ko has to say "yes" before this runs: everything, a topic,
+    /// or a time window longer than [`CONFIRM_WINDOW_SECS`]. Small windows
+    /// and "the last thing I said" run at once.
+    pub fn needs_confirm(&self) -> bool {
+        match self {
+            ForgetCmd::All | ForgetCmd::Topic(_) => true,
+            ForgetCmd::LastSecs(s) => *s > CONFIRM_WINDOW_SECS,
+            ForgetCmd::LastTurn => false,
+        }
+    }
+
+    /// The memory window this clears, if it is a time-based forget.
+    pub fn window_secs(&self) -> Option<u64> {
+        match self {
+            ForgetCmd::LastSecs(s) => Some(*s),
+            ForgetCmd::LastTurn => Some(LAST_TURN_SECS),
+            _ => None,
+        }
+    }
 }
 
 const LEADS: &[&str] = &[
@@ -117,16 +151,116 @@ pub fn tokens(text: &str) -> impl Iterator<Item = String> + '_ {
         .map(|w| w.to_lowercase())
 }
 
-/// `true` when `text` contains any of `words` as a whole token, or a
-/// simple plural/singular of it ("cats" ~ "cat").
+/// Words that end in "s" but are not the plural of the word without it
+/// ("news" is not "new"s).
+const NOT_PLURALS: &[&str] = &[
+    "news",
+    "bus",
+    "gas",
+    "yes",
+    "plus",
+    "lens",
+    "series",
+    "species",
+    "always",
+    "perhaps",
+    "its",
+    "his",
+    "hers",
+    "ours",
+    "yours",
+    "theirs",
+    "was",
+    "has",
+    "does",
+    "is",
+    "this",
+    "thus",
+    "us",
+    "chaos",
+    "physics",
+    "mathematics",
+    "politics",
+    "economics",
+    "christmas",
+    "mars",
+    "texas",
+    "paris",
+    "james",
+    "jesus",
+];
+
+/// `true` when `plural` is the regular plural of `singular`: `+s`
+/// ("job"/"jobs"), `+es` after s/x/z/ch/sh ("box"/"boxes"), or y→`ies`
+/// ("hobby"/"hobbies"). The singular needs 3+ letters and must not itself
+/// end in "s"; words like "news" are never plurals.
+fn is_plural_of(plural: &str, singular: &str) -> bool {
+    if singular.chars().count() < 3 || singular.ends_with('s') || NOT_PLURALS.contains(&plural) {
+        return false;
+    }
+    if plural.strip_suffix('s') == Some(singular) {
+        return true;
+    }
+    if ["x", "z", "ch", "sh"].iter().any(|e| singular.ends_with(e))
+        && plural.strip_suffix("es") == Some(singular)
+    {
+        return true;
+    }
+    if let (Some(stem), Some(pstem)) = (singular.strip_suffix('y'), plural.strip_suffix("ies")) {
+        let consonant = stem.chars().last().is_some_and(|c| !"aeiou".contains(c));
+        return consonant && stem == pstem;
+    }
+    false
+}
+
+/// `true` when two tokens are the same word: identical, or the exact
+/// singular/plural of each other ([`is_plural_of`]).
+pub fn same_word(a: &str, b: &str) -> bool {
+    a == b || is_plural_of(a, b) || is_plural_of(b, a)
+}
+
+/// `true` when `text` contains any of `words` as a whole token (or its
+/// exact singular/plural). Prefer [`matches_topic`] for deletes.
 pub fn mentions_any(text: &str, words: &[String]) -> bool {
-    tokens(text).any(|t| {
-        words.iter().any(|w| {
-            t == *w
-                || t.strip_suffix('s') == Some(w.as_str())
-                || w.strip_suffix('s') == Some(t.as_str())
-        })
-    })
+    tokens(text).any(|t| words.iter().any(|w| same_word(&t, w)))
+}
+
+/// How many of `n` topic content words one row must contain: all of them
+/// for one or two words, else at least two thirds (rounded up).
+pub fn required_matches(n: usize) -> usize {
+    if n <= 2 {
+        n
+    } else {
+        (2 * n).div_ceil(3)
+    }
+}
+
+/// `true` when one row (all of `fields` together: key, label, detail ...)
+/// mentions enough of the topic's content `words` ([`required_matches`]),
+/// each as a whole token or its exact singular/plural. "new job" therefore
+/// never matches "new wave music" (only one of two words).
+pub fn matches_topic(fields: &[&str], words: &[String]) -> bool {
+    if words.is_empty() {
+        return false;
+    }
+    let toks: Vec<String> = fields.iter().flat_map(|f| tokens(f)).collect();
+    let hits = words
+        .iter()
+        .filter(|w| toks.iter().any(|t| same_word(t, w)))
+        .count();
+    hits >= required_matches(words.len())
+}
+
+/// `true` when `text` contains the whole `phrase` as consecutive tokens
+/// (exact words, no plural fuzz): "google engineer" is in "met a google
+/// engineer" but not in "google chrome".
+pub fn contains_phrase(text: &str, phrase: &str) -> bool {
+    let p: Vec<String> = tokens(phrase).collect();
+    if p.is_empty() {
+        return false;
+    }
+    let t: Vec<String> = tokens(text).collect();
+    t.windows(p.len()).any(|w| w == p.as_slice())
 }
 
 /// Parses a forget command at the start of `text` ("forget everything",
@@ -187,7 +321,7 @@ pub fn parse_forget(text: &str) -> Option<ForgetCmd> {
         | "everything you know"
         | "everything you know about me" => return Some(ForgetCmd::All),
         "the last thing i said" | "last thing i said" | "what i just said" => {
-            return Some(ForgetCmd::LastSecs(300))
+            return Some(ForgetCmd::LastTurn)
         }
         _ => {}
     }
@@ -279,7 +413,7 @@ mod tests {
         );
         assert_eq!(
             parse_forget("forget the last thing I said"),
-            Some(ForgetCmd::LastSecs(300))
+            Some(ForgetCmd::LastTurn)
         );
         assert_eq!(parse_forget("forget it all"), Some(ForgetCmd::All));
     }
@@ -293,6 +427,76 @@ mod tests {
         let w = vec!["cat".to_string()];
         assert!(mentions_any("Ko likes cats", &w));
         assert!(!mentions_any("Ko likes concatenate", &w), "no substrings");
+    }
+
+    #[test]
+    fn plural_rule_is_exact_singular_plural_only() {
+        assert!(same_word("job", "jobs"));
+        assert!(same_word("jobs", "job"));
+        assert!(same_word("box", "boxes"));
+        assert!(same_word("hobby", "hobbies"));
+        assert!(!same_word("new", "news"), "news is not new+s");
+        assert!(!same_word("news", "new"));
+        assert!(!same_word("ex", "exs"), "2-letter words never pluralize");
+        assert!(!same_word("bus", "bu"));
+        assert!(!same_word("boy", "boies"), "vowel+y is not y->ies");
+    }
+
+    #[test]
+    fn topic_needs_all_or_two_thirds_of_its_words_in_one_row() {
+        assert_eq!(required_matches(1), 1);
+        assert_eq!(required_matches(2), 2);
+        assert_eq!(required_matches(3), 2);
+        assert_eq!(required_matches(4), 3);
+        let new_job = content_words("my new job");
+        assert!(!matches_topic(
+            &["likes:new wave music", "new wave music"],
+            &new_job
+        ));
+        assert!(matches_topic(
+            &["attr:job", "my new job at the bakery"],
+            &new_job
+        ));
+        assert!(!matches_topic(
+            &["likes:new wave music"],
+            &content_words("the news")
+        ));
+        assert!(matches_topic(&["attr:jobs"], &content_words("my job")));
+        let three = content_words("red sports car");
+        assert!(matches_topic(&["wants a red car"], &three), "2 of 3");
+        assert!(!matches_topic(&["a red apple"], &three), "1 of 3");
+    }
+
+    #[test]
+    fn values_expand_only_as_a_whole_phrase() {
+        assert!(contains_phrase(
+            "met a Google engineer today",
+            "google engineer"
+        ));
+        assert!(!contains_phrase("google chrome", "google engineer"));
+        assert!(!contains_phrase("engineer at google", "google engineer"));
+        assert!(contains_phrase("Sarah texted", "sarah"));
+        assert!(!contains_phrase("anything", ""));
+    }
+
+    #[test]
+    fn large_windows_need_confirmation() {
+        assert!(ForgetCmd::All.needs_confirm());
+        assert!(ForgetCmd::Topic("ex".into()).needs_confirm());
+        assert!(!ForgetCmd::LastTurn.needs_confirm());
+        assert!(!parse_forget("forget the last 30 minutes")
+            .unwrap()
+            .needs_confirm());
+        assert!(!parse_forget("forget the last hour")
+            .unwrap()
+            .needs_confirm());
+        assert!(parse_forget("forget the last 2 hours")
+            .unwrap()
+            .needs_confirm());
+        assert!(parse_forget("forget the last day").unwrap().needs_confirm());
+        assert!(parse_forget("forget the last 1000 months")
+            .unwrap()
+            .needs_confirm());
     }
 
     #[test]

@@ -763,20 +763,62 @@
   "height": 400,
   "frame_count": 70,
   "fps": 12.0,
-  "bytes": 706229,
+  "bytes": 706410,
   "quality": {
-   "edge_mae": 2.375,
+   "edge_mae": 2.372,
    "edge_p99": 22.55,
-   "halo_dark": 0.046,
+   "halo_dark": 0.048,
    "halo_light": -0.139,
-   "alpha_mae": 0.0542
+   "alpha_mae": 0.0543
   },
   "tool": "tools/video-pipeline/pack_mp4.py"
  },
  "matte_clean": {
   "version": 1,
   "tool": "tools/matte-clean/matte_clean.py",
-  "sheet_sha256": "88219fa0278dfa79daeab2b069902240c55e3f19f72238ae6960e23212d01f4b",
+  "sheet_sha256": "8b2302dd41be4c3601740592ff0ab6ddd659f00cb5e6245e5715e1c0bf36f2f0",
   "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
+ },
+ "start_match": {
+  "from": "drag_held",
+  "from_frame": 0,
+  "shift_px": [
+   0,
+   152
+  ],
+  "iou": 0.0094,
+  "rgb_mae": 105.32,
+  "threshold": 0.98,
+  "matches": false
+ },
+ "tail_fix": {
+  "frames": [
+   57,
+   58,
+   59,
+   60,
+   61,
+   62,
+   63,
+   64,
+   65,
+   66,
+   67
+  ],
+  "px_changed_per_frame": [
+   54,
+   66,
+   78,
+   77,
+   82,
+   80,
+   76,
+   77,
+   78,
+   78,
+   79
+  ],
+  "what": "tail spade floated detached on f57-67: in the source take (climb_on_land_v1_b, video 119-139) the tail line itself stops ~15 px above the spade from about f59 on, and keying/matte trim thinned the line to broken dashes. Per frame: the registered raw frame restores the dark, low-saturation tail-line pixels in x228-285 y262-342 (alpha only raised, colour from the nearest opaque tail pixel), then a 2 px antialiased quadratic stroke in the tail colour continues the line from its end (256,303) along its direction to the nearest spade pixel. Detached islands on f57-67: 11 -> 0; one tail; frames 68-69 (perch_sit hand-off) unchanged.",
+  "tool": "perch_motion_work/tail_fix.py + blend_tail.py (fix/perch-motion-2)"
  }
 }

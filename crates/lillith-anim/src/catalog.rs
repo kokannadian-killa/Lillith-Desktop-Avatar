@@ -73,6 +73,12 @@ const ALLURE: &[&str] = &[
     "taskbar_lounge_lie",
     "kneel_sit_back_beckon",
     "dom_throne_lean",
+    // Bold allure set (batch 18): gaze, gesture, hair/tail play, canonical outfit.
+    "leg_cross_slow_sit",
+    "hair_twirl_lip_bite",
+    "tail_heart_wink",
+    "trace_heart_on_glass",
+    "dom_chin_tilt_summon",
     // Bold allure set (batch 19): lean/smoulder, glass play, dom order, canonical outfit.
     "lean_doorframe_smolder",
     "kiss_mark_on_glass",
@@ -194,6 +200,8 @@ mod tests {
         assert_eq!(category_of("dom_beckon_finger"), 0);
         assert_eq!(category_of("dom_throne_lean"), 0);
         assert_eq!(category_of("hip_sway_slow"), 0);
+        assert_eq!(category_of("dom_chin_tilt_summon"), 0);
+        assert_eq!(category_of("leg_cross_slow_sit"), 0);
         assert_eq!(category_of("dom_snap_kneel_order"), 0);
         assert_eq!(category_of("kiss_mark_on_glass"), 0);
         assert_eq!(category_of("body_roll_slow_long"), 0);

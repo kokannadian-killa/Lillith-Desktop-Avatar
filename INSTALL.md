@@ -12,6 +12,7 @@ yourself.
 - [Windows (build from source)](#windows-build-from-source)
 - [Android (Termux chat, experimental APK)](#android-termux-chat-experimental-apk)
 - [Configuration](#configuration)
+- [Privacy: what she keeps on your machine](#privacy-what-she-keeps-on-your-machine)
 - [The safeword (kill switch)](#the-safeword-kill-switch)
 - [Troubleshooting](#troubleshooting)
 
@@ -63,8 +64,9 @@ Lillith animates and reacts without a model. To **chat** with her you need a
 GGUF model and `llama-server`, both on your machine.
 
 1. **Get the model yourself.** Ko uses **Dolphin 3.0 Llama 3.2 3B
-   Q4_K_M**. Download the `.gguf` file from the model's Hugging Face page in
-   your browser. Lillith never downloads anything. Then put it in `~/models/`:
+   Q4_K_M** (`dolphin3.0-llama3.2-3b-q4_k_m.gguf`). Download the `.gguf` file
+   from the model's Hugging Face page in your browser. Lillith never downloads
+   anything. Then put it in `~/models/`:
 
    ```fish
    mkdir -p ~/models
@@ -88,13 +90,21 @@ GGUF model and `llama-server`, both on your machine.
 
    If you'd rather use the GUI, run `./bin/lillith-settings` and open the
    **Brain** tab. That's the setup wizard, and it can also scan your disks
-   for GGUF files. After setup, Lillith starts `llama-server` herself
-   (hidden, on 127.0.0.1) and stops it when she quits.
+   for GGUF files (`~/models`, `~/AI/models`, `~/Downloads`,
+   `~/.local/share/lillith/models`, `~/.cache/llama.cpp` and the LM Studio /
+   Ollama folders). On a low-power CPU with 8–16 GB of RAM it recommends
+   `dolphin3.0-llama3.2-3b-q4_k_m.gguf` and ranks uncensored models above
+   stock ones of the same size. A Mistral 7B GGUF still works as a fallback if
+   it's the only one you have, but it's slow there. After setup, Lillith
+   starts `llama-server` herself (hidden, on 127.0.0.1) and stops it when she
+   quits.
 
-3. **Or start llama-server by hand** on 127.0.0.1:8080:
+3. **Or start llama-server by hand** on 127.0.0.1:8080, with the same flags
+   the setup writes (`-t` = your **physical** cores, 2 on an i5-7200U; `lscpu`
+   shows "Core(s) per socket", while `nproc` counts threads):
 
    ```fish
-   llama-server -m ~/models/<model>.gguf --host 127.0.0.1 --port 8080 -c 4096 --jinja
+   llama-server -m ~/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf --host 127.0.0.1 --port 8080 -c 4096 -t 2 --jinja
    ```
 
    Then test it from the terminal with `./bin/lillith chat "hi"`.
@@ -250,7 +260,8 @@ llama-server.exe -m <model>.gguf --host 127.0.0.1 --port 8080 -c 4096 -t <physic
 
 Chat needs `--jinja` (the model's own chat template). Windows doesn't expose the
 CPU name or core count to her, so there "low-power" means 4 threads or fewer,
-and `-t` is half the thread count unless you set `[llm] threads`. Lily's sampler settings
+and `-t` is half the thread count (all of them below 4 threads) unless you set
+`[llm] threads`. Lily's sampler settings
 (temperature 0.95, top_p 0.95, min_p 0.1, repeat_penalty 1.1 over the last 256
 tokens, 160 reply tokens) are sent with every chat request, so they aren't on
 the command line. If you use Ollama instead (`backend = "ollama"`), it must be
@@ -302,11 +313,12 @@ install steps, see `source/android/INSTALL-android.md`.
 
 4. **Start llama-server on 127.0.0.1:8080** with Lily's sampler settings
    from `source/crates/lillith-setup/src/modelfile.rs`: temperature 0.95, top_p 0.95, min_p 0.1,
-   repeat_penalty 1.1 over the last 256 tokens, 160 reply tokens and a 4096 context:
+   repeat_penalty 1.1 over the last 256 tokens, 160 reply tokens and a 4096 context.
+   Set `-t` to the phone's big (performance) cores; 4 is a safe start:
 
    ```sh
    llama-server -m ~/models/<model>.gguf --host 127.0.0.1 --port 8080 --jinja \
-       -c 4096 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160
+       -c 4096 -t 4 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160
    ```
 
    **System prompt:** Lily's persona is `LILY_SYSTEM_PROMPT` in
@@ -315,7 +327,7 @@ install steps, see `source/android/INSTALL-android.md`.
    the text into the system message field in the web UI's settings.
 5. **Chat:** open `http://127.0.0.1:8080` in the phone's browser (llama-server's
    built-in web UI), or chat in the terminal with
-   `llama-cli -m ~/models/<model>.gguf --jinja -c 4096 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160`.
+   `llama-cli -m ~/models/<model>.gguf --jinja -c 4096 -t 4 --temp 0.95 --top-p 0.95 --min-p 0.1 --repeat-penalty 1.1 --repeat-last-n 256 -n 160`.
    `llama-cli --help` lists its system-prompt option.
 
 Keep `--host 127.0.0.1` so nothing else on the network can reach the server.
@@ -349,12 +361,64 @@ The keys people change most are `mode`, `scale`, `[overlay] auto_fix_kwin`
 (the KDE blur fix at start-up), `[voice] enabled` (the **Speak out loud**
 toggle), `[behavior.tease]` (the "come closer" tease) and `[mind.access]`
 (what she may do on your machine, always behind the Soul Contract).
+**Memory** is on by default (`[memory] enabled = true`). Set
+`enabled = false` to turn it off. The other `[memory]` keys (`db_path`,
+`half_life_days`, `top_k`, `max_context_tokens`, `prune_below`,
+`max_nodes`, `max_events`, `max_errors`) are in the example file; see
+*Privacy* below.
 For the voice kit, `[voice] daemon_socket`, `preset` and `[voice.stt]` (the
 push-to-talk mic) are optional; the defaults find the local daemon.
 `lillith setup` (and the setup wizard) writes `[llm]`, `[chat]` and, for
 llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--jinja"]`).
 
 ---
+
+## Privacy: what she keeps on your machine
+
+Nothing leaves your machine: no cloud, no telemetry, and the model server is
+on 127.0.0.1 only. She does keep these files locally:
+
+| what | Linux | Windows |
+|---|---|---|
+| settings | `~/.config/lillith/config.toml` | `%APPDATA%\lillith\config.toml` |
+| learning memory (SQLite) | `~/.local/share/lillith/memory.db` | `%LOCALAPPDATA%\lillith\memory.db` |
+| saved chat history | `~/.local/share/lillith/chat_history.json` | `%LOCALAPPDATA%\lillith\chat_history.json` |
+| audit log (Soul Contract + forgets) | `~/.local/share/lillith/audit.log` | `%LOCALAPPDATA%\lillith\audit.log` |
+| app log | stderr only (not saved) | `%LOCALAPPDATA%\lillith\lillith.log` when not started from a terminal |
+
+On Linux, `$XDG_DATA_HOME` (if set) replaces `~/.local/share`.
+
+**Memory.** She remembers what you tell her (people, likes, habits), which
+apps you use, and errors and their fixes. A short note from that goes into
+each chat turn, and unused memories fade over time.
+- On Linux the memory folder is owner-only (0700) and the file is 0600
+  (Windows uses the default per-user permissions). The safeword
+  is never stored.
+- **Turn it off** with `[memory] enabled = false`. Then nothing is read or
+  written, and no file is created.
+- **Forget from the chat:**
+  - "forget about <topic>" and "forget everything" ask first; answer "yes".
+  - "forget the last 30 minutes" or "the last hour" deletes right away.
+    Longer windows (days, a week, months) ask for "yes" first.
+  - "forget the last thing I said" drops only your last message and her
+    reply from the chat history (and the last 5 minutes from memory).
+  - Forgotten rows are deleted, the file is vacuumed, and the matching chat
+    history lines go too.
+- To wipe it completely, quit her and delete `memory.db` (and
+  `chat_history.json` if you want).
+- The Android app and the Termux chat don't use this memory.
+
+**Logs** never go to stdout.
+- Linux: logs go to stderr and aren't saved unless you redirect them, e.g.
+  `env RUST_LOG=info,lillith=debug ./run.fish 2> ~/lillith.log`.
+- Windows: started from a terminal, logs show in that console. Started any
+  other way (shortcut, autostart), they go to
+  `%LOCALAPPDATA%\lillith\lillith.log`, which starts over once it passes
+  4 MB.
+
+**Voice kit** (optional): it only uses a local Unix socket or named pipe. Its
+network guard blocks any connection and refuses any listening socket that
+isn't loopback.
 
 ## The safeword (kill switch)
 
@@ -367,7 +431,8 @@ Windows it also shuts down the elevated admin helper.
 
 Every file change, command and program launch is a **Soul Contract** plan
 that you approve with Yes or No. Nothing runs before you approve it, and every
-action goes into the audit log (`~/.local/share/lillith/audit.log`). To undo
+action goes into the audit log (`~/.local/share/lillith/audit.log`, Windows
+`%LOCALAPPDATA%\lillith\audit.log`). To undo
 her last file-organize batch, run `lillith undo-organize`.
 
 ## Art kit (optional)
@@ -397,4 +462,7 @@ included; get any you need yourself.
   (`--no-voice` starts her with the speakers off). Then either start the
   voice kit's daemon (`systemctl --user start lillith-voice`, check with
   `lillith-say --status`) or install `espeak-ng` or piper.
-- **Debug log:** `env RUST_LOG=info,lillith=debug ./run.fish 2>&1 | tee ~/lillith.log`
+- **Debug log:** logs go to stderr, so capture them with
+  `env RUST_LOG=info,lillith=debug ./run.fish 2>&1 | tee ~/lillith.log`.
+- **She forgot something / remembers too much.** See *Privacy* above:
+  `[memory] enabled = false`, a "forget …" message, or delete `memory.db`.

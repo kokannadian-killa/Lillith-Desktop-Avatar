@@ -823,3 +823,244 @@ fn errors_table_is_capped() {
         .count();
     assert!(error_nodes <= 3);
 }
+
+// ----- re-review regressions (reviews/memory-graph-rereview-probe.rs) ------
+
+#[test]
+fn forget_my_new_job_keeps_new_wave_music() {
+    // probe_multiword: one shared word ("new") is not enough.
+    let b = brain();
+    b.observe_interaction("I love new wave music", "", &at(MON));
+    b.observe_interaction("my job is barista", "", &at(MON));
+    let cmd = parse_forget("forget about my new job").unwrap();
+    let preview = b.forget_preview(&cmd, &at(MON + 5.0)).unwrap();
+    assert!(
+        !preview.examples.iter().any(|e| e.contains("wave")),
+        "{preview:?}"
+    );
+    b.forget(&cmd, &at(MON + 5.0)).unwrap();
+    assert!(b
+        .strength_of(Kind::Preference, "likes:new wave music", &at(MON))
+        .is_some());
+    // Same without "about": the job goes (exact attr key), the music stays.
+    let b = brain();
+    b.observe_interaction("I love new wave music", "", &at(MON));
+    b.observe_interaction("my job is barista", "", &at(MON));
+    b.forget(&parse_forget("forget my new job").unwrap(), &at(MON + 5.0))
+        .unwrap();
+    assert!(b.strength_of(Kind::Entity, "attr:job", &at(MON)).is_none());
+    assert!(b
+        .strength_of(Kind::Preference, "likes:new wave music", &at(MON))
+        .is_some());
+}
+
+#[test]
+fn forget_about_my_new_job_matches_the_job_attr_by_its_exact_key() {
+    // A topic word equal to the attr key ("job" → `attr:job`) matches that
+    // row even though "new" is not in it.
+    let b = brain();
+    b.observe_interaction("I love new wave music", "", &at(MON));
+    b.observe_interaction("my job is barista", "", &at(MON));
+    b.observe_interaction("my jobsite is downtown", "", &at(MON));
+    let cmd = parse_forget("forget about my new job").unwrap();
+    let preview = b.forget_preview(&cmd, &at(MON + 5.0)).unwrap();
+    assert!(
+        preview.examples.iter().any(|e| e.contains("barista")),
+        "{preview:?}"
+    );
+    let r = b.forget(&cmd, &at(MON + 5.0)).unwrap();
+    assert!(r.nodes >= 1, "{r:?}");
+    assert!(b.strength_of(Kind::Entity, "attr:job", &at(MON)).is_none());
+    assert!(b.strength_of(Kind::Entity, "barista", &at(MON)).is_none());
+    assert!(b
+        .strength_of(Kind::Preference, "likes:new wave music", &at(MON))
+        .is_some());
+    // The key must be the whole word: `attr:jobsite` is not "job".
+    assert!(b
+        .strength_of(Kind::Entity, "attr:jobsite", &at(MON))
+        .is_some());
+}
+
+#[test]
+fn forget_the_news_keeps_new_wave_music() {
+    // probe_plural: "news" is not the plural of "new".
+    let b = brain();
+    b.observe_interaction("I love new wave music", "", &at(MON));
+    let r = b
+        .forget(
+            &parse_forget("forget about the news").unwrap(),
+            &at(MON + 5.0),
+        )
+        .unwrap();
+    assert_eq!(r.total(), 0, "{r:?}");
+    assert!(b
+        .strength_of(Kind::Preference, "likes:new wave music", &at(MON))
+        .is_some());
+}
+
+#[test]
+fn forget_topic_matches_exact_plural_of_the_same_word() {
+    let b = brain();
+    b.observe_interaction("I love cats", "", &at(MON));
+    b.observe_interaction("I love catalog shopping", "", &at(MON));
+    let r = b
+        .forget(&parse_forget("forget about cat").unwrap(), &at(MON + 5.0))
+        .unwrap();
+    assert!(r.nodes >= 1, "{r:?}");
+    assert!(b
+        .strength_of(Kind::Preference, "likes:cats", &at(MON))
+        .is_none());
+    assert!(b
+        .strength_of(Kind::Preference, "likes:catalog shopping", &at(MON))
+        .is_some());
+}
+
+#[test]
+fn forget_job_expands_the_value_only_as_a_whole_phrase() {
+    // probe_value_expansion: job = "google engineer" must not take the
+    // "google chrome" app event with it.
+    let b = brain();
+    b.observe_interaction("my job is google engineer", "", &at(MON));
+    b.log_event("app", "google chrome", &at(MON)).unwrap();
+    b.log_event("app", "firefox", &at(MON)).unwrap();
+    b.log_event("note", "lunch with a google engineer", &at(MON))
+        .unwrap();
+    let ev0 = b.stats().events;
+    let r = b
+        .forget(
+            &parse_forget("forget about my job").unwrap(),
+            &at(MON + 5.0),
+        )
+        .unwrap();
+    assert!(r.nodes >= 1, "{r:?}");
+    // The whole-phrase event (and the chat's own "job" request event) go;
+    // the browser and firefox stay.
+    assert!(r.events >= 1, "{r:?}");
+    assert_eq!(b.stats().events, ev0 - r.events as u64);
+    let lunch = b
+        .forget_preview(&ForgetCmd::Topic("lunch".into()), &at(MON + 6.0))
+        .unwrap();
+    assert_eq!(lunch.events, 0, "{lunch:?}");
+    let ff = b
+        .forget_preview(&ForgetCmd::Topic("firefox".into()), &at(MON + 6.0))
+        .unwrap();
+    assert_eq!(ff.events, 1, "{ff:?}");
+    let chrome = b
+        .forget_preview(&ForgetCmd::Topic("google chrome".into()), &at(MON + 6.0))
+        .unwrap();
+    assert_eq!(chrome.events, 1, "google chrome survives: {chrome:?}");
+}
+
+#[test]
+fn forget_preview_carries_a_few_short_examples() {
+    let b = brain();
+    b.observe_interaction("my job is barista", "", &at(MON));
+    for i in 0..10 {
+        b.log_event("note", &format!("job shift {i}"), &at(MON))
+            .unwrap();
+    }
+    let cmd = parse_forget("forget my job").unwrap();
+    let p = b.forget_preview(&cmd, &at(MON + 5.0)).unwrap();
+    assert!(p.total() >= 11, "{p:?}");
+    assert!(!p.examples.is_empty() && p.examples.len() <= FORGET_EXAMPLES);
+    assert!(p.examples.iter().all(|e| e.chars().count() <= 60));
+    assert!(p.examples[0].contains("barista"), "{:?}", p.examples);
+    assert!(b.strength_of(Kind::Entity, "attr:job", &at(MON)).is_some());
+}
+
+#[test]
+fn huge_time_window_needs_confirmation_and_is_reported_honestly() {
+    // probe_lastsecs_huge: "the last 1000 months" is forget-everything, so
+    // it is never run without a yes (the chat layer asks first).
+    let cmd = parse_forget("forget the last 1000 months").unwrap();
+    assert_eq!(cmd, ForgetCmd::LastSecs(2_592_000_000));
+    assert!(cmd.needs_confirm());
+    assert!(!parse_forget("forget the last 30 minutes")
+        .unwrap()
+        .needs_confirm());
+    let b = brain();
+    b.observe_interaction("I love tea", "", &at(MON - 400.0 * DAY));
+    let p = b.forget_preview(&cmd, &at(MON)).unwrap();
+    assert!(p.nodes >= 1, "{p:?}");
+    assert!(b.stats().nodes > 1, "preview deletes nothing");
+}
+
+#[test]
+fn reinforcing_inside_the_window_does_not_make_an_old_memory_new() {
+    // probe_reinforce_does_not_bump_updated_at.
+    let b = brain();
+    b.observe_interaction("I love tea", "", &at(MON));
+    b.observe_interaction("I love tea", "", &at(MON + 3600.0));
+    b.forget(
+        &parse_forget("forget the last 30 minutes").unwrap(),
+        &at(MON + 3700.0),
+    )
+    .unwrap();
+    assert!(b
+        .strength_of(Kind::Preference, "likes:tea", &at(MON))
+        .is_some());
+}
+
+#[test]
+fn forget_writes_a_private_content_free_audit_line() {
+    let d = tmp("forget-audit");
+    let path = d.join("memory.db");
+    let b = Brain::open_path(&path, &cfg())
+        .unwrap()
+        .with_audit_log(Some(d.join("audit.log")));
+    assert_eq!(b.audit_log(), Some(d.join("audit.log").as_path()));
+    b.observe_interaction("My ex is Sarah", "ok", &at(MON));
+    b.forget(&parse_forget("forget about my ex").unwrap(), &at(MON + 5.0))
+        .unwrap();
+    b.forget(&ForgetCmd::LastTurn, &at(MON + 6.0)).unwrap();
+    let log = std::fs::read_to_string(d.join("audit.log")).unwrap();
+    let lines: Vec<&str> = log.lines().collect();
+    assert_eq!(lines.len(), 2, "{log}");
+    assert!(lines[0].starts_with("2026-10-19T00:00:05Z\tFORGET\tmemory:topic\tnodes="));
+    assert!(lines[1].contains("memory:last_turn"));
+    let low = log.to_lowercase();
+    assert!(!low.contains("sarah") && !low.contains(" ex"), "{log}");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(d.join("audit.log"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+    // In-memory brains have no audit file.
+    assert_eq!(brain().audit_log(), None);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn custom_db_path_still_audits_to_the_shared_data_dir_log() {
+    // Hermetic: the data dir is a temp dir. No other memory test reads
+    // XDG_DATA_HOME (only enabled `Brain::open` resolves it).
+    let data = tmp("audit-xdg");
+    let elsewhere = tmp("audit-custom-db");
+    std::env::set_var("XDG_DATA_HOME", &data);
+    let c = MemoryConfig {
+        db_path: elsewhere.join("memory.db").to_string_lossy().into_owned(),
+        ..MemoryConfig::default()
+    };
+    let b = Brain::open(&c).unwrap();
+    std::env::remove_var("XDG_DATA_HOME");
+    let shared = data.join("lillith").join("audit.log");
+    assert_eq!(b.audit_log(), Some(shared.as_path()));
+    b.observe_interaction("I love glimmerwick candles", "", &at(MON));
+    b.forget(
+        &parse_forget("forget the last 5 minutes").unwrap(),
+        &at(MON + 5.0),
+    )
+    .unwrap();
+    let log = std::fs::read_to_string(&shared).unwrap();
+    assert!(log.contains("memory:last_secs"), "{log}");
+    assert!(!elsewhere.join("audit.log").exists(), "never beside the DB");
+    // open_path alone writes no audit file at all.
+    let p = Brain::open_path(&elsewhere.join("other.db"), &cfg()).unwrap();
+    assert_eq!(p.audit_log(), None);
+    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_dir_all(&elsewhere);
+}

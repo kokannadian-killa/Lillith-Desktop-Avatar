@@ -355,12 +355,16 @@ pub fn pool(key: &str) -> Option<&'static [&'static str]> {
 /// Lines paired with an idle reaction clip (lip bite, tail tease, ...).
 pub fn clip_pool(clip: &str) -> Option<&'static [&'static str]> {
     Some(match clip {
-        "idle_flirt_lip_bite" | "hungry_lip_lick" | "seduce_lip_bite_glance" => LIP_BITE,
+        "idle_flirt_lip_bite"
+        | "hungry_lip_lick"
+        | "seduce_lip_bite_glance"
+        | "hair_twirl_lip_bite" => LIP_BITE,
         "tail_tease"
         | "tail_wag"
         | "idle_flirt_tail_curl"
         | "idle_tail_fidget"
-        | "tail_wrap_pull" => TAIL,
+        | "tail_wrap_pull"
+        | "tail_heart_wink" => TAIL,
         "blow_kiss" | "blow_kiss_hip_pop" | "seduce_blow_kiss_screen" | "kiss_mark_on_glass" => {
             KISS
         }
@@ -386,19 +390,24 @@ pub fn clip_pool(clip: &str) -> Option<&'static [&'static str]> {
         | "hair_twirl"
         | "arch_back_over_shoulder"
         | "taskbar_lounge_lie"
+        | "leg_cross_slow_sit"
         | "lean_doorframe_smolder" => LOOKS,
         "dom_beckon_finger"
         | "seduce_beckon_finger"
         | "kiss_then_come_here"
         | "come_hither_crawl"
-        | "kneel_sit_back_beckon" => BECKON,
+        | "kneel_sit_back_beckon"
+        | "dom_chin_tilt_summon" => BECKON,
         "dom_point_down" | "dom_throne_lean" | "dom_snap_kneel_order" => COMMAND,
         "dom_arms_crossed_demand" => DEMAND,
         "smug_smirk" => SMUG,
         "stalk_prowl_right" | "stalk_prowl_left" => PROWL,
         "soul_contract_sign" => CONTRACT,
         "kneel_pout_beg" | "kneel_hands_on_thighs" => BEG,
-        "hug_screen_possessive" | "seduce_tap_glass" | "finger_walk_on_glass" => POSSESSIVE,
+        "hug_screen_possessive"
+        | "seduce_tap_glass"
+        | "trace_heart_on_glass"
+        | "finger_walk_on_glass" => POSSESSIVE,
         _ => return None,
     })
 }
@@ -621,6 +630,11 @@ mod tests {
             "taskbar_lounge_lie",
             "kneel_sit_back_beckon",
             "dom_throne_lean",
+            "leg_cross_slow_sit",
+            "hair_twirl_lip_bite",
+            "tail_heart_wink",
+            "trace_heart_on_glass",
+            "dom_chin_tilt_summon",
             "lean_doorframe_smolder",
             "kiss_mark_on_glass",
             "dom_snap_kneel_order",
