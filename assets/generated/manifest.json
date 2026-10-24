@@ -4916,6 +4916,34 @@
     "variant_of:perch_sit"
    ],
    "video": "cleavage_beckon/cleavage_beckon.mp4"
+  },
+  {
+   "name": "chest_press_tease",
+   "frame_count": 84,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "front (seated on an edge, legs dangling)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "chest_press_tease/",
+   "sheet": "chest_press_tease/chest_press_tease_sheet.png",
+   "manifest": "chest_press_tease/chest_press_tease.json",
+   "preview": "chest_press_tease/chest_press_tease_preview.gif",
+   "tags": [
+    "baked_motion",
+    "variant_of:perch_sit"
+   ],
+   "video": "chest_press_tease/chest_press_tease.mp4"
   }
  ]
 }
