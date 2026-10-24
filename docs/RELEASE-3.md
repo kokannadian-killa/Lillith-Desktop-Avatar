@@ -115,7 +115,8 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   the hair/neck gap on `kneel_sit_back_beckon`, and stray white pixels on
   `hip_sway_slow`. The last pale specks in the hair/neck gaps on
   `kneel_sit_back_beckon` and the purple floor speck and faint floor haze on
-  `come_hither_crawl` are now removed too. Their names, timing and placement
+  `come_hither_crawl` are now removed too, along with the grey floor-shadow
+  slivers under her shin and boot on `come_hither_crawl`. Their names, timing and placement
   are unchanged.
 - **Five more poses:** `leg_cross_slow_sit`, `hair_twirl_lip_bite`,
   `tail_heart_wink`, `trace_heart_on_glass` and `dom_chin_tilt_summon`, in
