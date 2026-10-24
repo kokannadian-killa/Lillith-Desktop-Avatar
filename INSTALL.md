@@ -425,7 +425,7 @@ visual and a running compositing manager (soft edges); `alpha=Shaped` means
 compositing is off or suspended (KWin X11: Alt+Shift+F12, or System Settings →
 Display & Monitor → Compositor), so she is clipped to her silhouette with the
 X Shape extension instead — no box, but hard edges. She switches modes live
-within ~2 s when compositing is toggled. Include that log line in bug reports.
+the moment compositing is toggled (XFixes; else a 250 ms poll). Include that log line in bug reports.
 During the "come closer" tease her window grows once to its peak size and
 shrinks once at the end (she scales inside it), and each resize is committed
 together with a fully drawn transparent buffer, so no black or empty frame
