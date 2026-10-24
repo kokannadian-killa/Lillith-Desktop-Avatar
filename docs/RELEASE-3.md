@@ -34,6 +34,11 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   - When you resize the window, she refits, or stands up if she no longer
     fits.
   - Grabbing her mid-landing, or losing the window, cancels the blend cleanly.
+- **New poses.** Five new "bold allure" clips:
+  `hip_sway_slow`, `dom_throne_lean`, `kneel_sit_back_beckon`,
+  `taskbar_lounge_lie` and `come_hither_crawl`, in the same outfit. They're
+  wired into her idle, flirty, tease, prank and banter moves, and already
+  cleaned to the no-white-fringe rules.
 - **Art fixes:**
   - `dom_arms_crossed_demand` no longer jumps about 60 px for one frame, so
     no more double body flash during the crossfade. Only that frame was
@@ -64,8 +69,9 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
 - **Windows build:** clippy fixes in the elevated admin helper, so Windows
   is still build-from-source.
 
-All 180 clips are kept; nothing was removed. The local AI runs on 127.0.0.1
-only, with no downloads and no telemetry.
+All 180 earlier clips are kept and 5 are new (185 in total); nothing was
+removed. The local AI runs on 127.0.0.1 only, with no downloads and no
+telemetry.
 
 ## Known issues
 
@@ -90,11 +96,6 @@ only, with no downloads and no telemetry.
   - clips `g*`–`m*`, with a stricter pass that checks the frames as the
     app decodes them
   - clips `n*`–`r*`, including filling interior gaps on six of them
-- **New poses** (`art/slutty-poses`). Five new "bold allure" clips:
-  `hip_sway_slow`, `dom_throne_lean`, `kneel_sit_back_beckon`,
-  `taskbar_lounge_lie` and `come_hither_crawl`, in the same outfit. They're
-  wired into her idle, flirty, tease, prank and banter moves, and already
-  cleaned to the no-white-fringe rules.
 - **Memory** (`feat/memory-graph`). A local learning memory: one SQLite file
   (default `~/.local/share/lillith/memory.db`) with no network code.
   - She remembers what you tell her (people, preferences, habits), app use
