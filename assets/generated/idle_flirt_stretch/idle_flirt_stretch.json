@@ -426,7 +426,7 @@
     ],
     [
       93,
-      292,
+      291,
       21,
       392
     ]
@@ -441,14 +441,31 @@
     "height": 400,
     "frame_count": 47,
     "fps": 12.0,
-    "bytes": 452775,
+    "bytes": 474924,
     "quality": {
-      "edge_mae": 2.257,
-      "edge_p99": 18.33,
-      "halo_dark": 0.038,
-      "halo_light": -0.155,
-      "alpha_mae": 0.0563
+      "edge_mae": 2.349,
+      "edge_p99": 20.0,
+      "halo_dark": 0.04,
+      "halo_light": -0.143,
+      "alpha_mae": 0.0592
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_protect": {
+    "tool": "tools/matte-clean/regress.py",
+    "base": "379900d",
+    "px_restored": 28
+  },
+  "matte_clean_prev": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "fbe0d95897cc441e31bf28a061db725b1b29a6d8bda17916fade0d3def9282c7",
+    "hand_pass": "white background pockets cleared + light edge defringed to interior colour (newbot handfix.py)"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "d80143397a55c0812d024df6969e527d52b4ae3a8c0be9f4802d47bc659fbda8",
+    "source_sha256": "fbe0d95897cc441e31bf28a061db725b1b29a6d8bda17916fade0d3def9282c7"
   }
 }

@@ -84,71 +84,71 @@
     [
       101,
       289,
-      21,
-      391
+      20,
+      392
     ],
     [
       113,
-      294,
+      295,
       20,
-      391
+      392
     ],
     [
-      127,
+      126,
       292,
       20,
-      391
+      392
     ],
     [
       140,
       283,
       20,
-      391
+      392
     ],
     [
       153,
       279,
       20,
-      391
+      392
     ],
     [
       154,
       279,
       20,
-      391
+      392
     ],
     [
       146,
       280,
       20,
-      391
+      392
     ],
     [
       142,
-      281,
+      282,
       20,
-      391
+      392
     ],
     [
-      127,
+      126,
       283,
       20,
-      391
+      392
     ],
     [
       104,
       284,
       20,
-      391
+      392
     ],
     [
-      88,
+      87,
       283,
       21,
       392
     ],
     [
-      87,
+      86,
       284,
       24,
       392
@@ -170,14 +170,32 @@
     "height": 400,
     "frame_count": 13,
     "fps": 12.0,
-    "bytes": 155594,
+    "bytes": 157570,
     "quality": {
-      "edge_mae": 1.972,
-      "edge_p99": 13.33,
-      "halo_dark": 0.024,
-      "halo_light": -0.086,
-      "alpha_mae": 0.0786
+      "edge_mae": 2.009,
+      "edge_p99": 13.0,
+      "halo_dark": 0.025,
+      "halo_light": -0.083,
+      "alpha_mae": 0.0754
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_protect": {
+    "tool": "tools/matte-clean/regress.py",
+    "base": "379900d",
+    "px_restored": 3
+  },
+  "matte_clean_prev": {
+    "version": 2,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "53340ddf87f4901b5b4fd5a62e081b6fcefda88bea27ae88019a184065b8fb21",
+    "source_sha256": "a41eb2d8e9c11946f90a1e92c433535ab483a4dfccc84f3fe4d9ee6966029f52",
+    "hand_pass": "sz_polish (white-fringe s-z hand pass, see commit message)"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "b00f031abfb4b54c52b6d16f7456e96c150cbe009adfd39e3a98b3469a039374",
+    "source_sha256": "53340ddf87f4901b5b4fd5a62e081b6fcefda88bea27ae88019a184065b8fb21"
   }
 }

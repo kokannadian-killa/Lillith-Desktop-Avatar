@@ -1088,21 +1088,21 @@
     "height": 400,
     "frame_count": 72,
     "fps": 12.0,
-    "bytes": 344081,
+    "bytes": 351418,
     "quality": {
-      "edge_mae": 1.945,
-      "edge_p99": 18.93,
-      "halo_dark": 0.003,
-      "halo_light": -0.074,
-      "alpha_mae": 0.029
+      "edge_mae": 1.971,
+      "edge_p99": 18.0,
+      "halo_dark": 0.005,
+      "halo_light": -0.069,
+      "alpha_mae": 0.03
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
-    "version": 2,
+    "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "0af82e208d7ade646e56206fe12feccee37e5e9774867fed85e1c69cca59798f",
-    "source_sha256": "9dca8939b9490260a4c67f0ae163f201a3daa94dfea5ebbba931e744b857c59f",
-    "post_fix": "b7fix: backdrop grey/white cleared from hair-neck gaps (f68-70 panels + enclosed white holes, checked against per-pixel clear frequency over all frames) + gate-targeted despill of exposed edge | b9fix: removed pale-grey specks/dust in hair-neck gaps (detached islands <=20px; alpha<40 >1.5px from body; y150-262 x140-270); neck design untouched"
+    "sheet_sha256": "db98f9b82ae84410f1fe6eeebc1023e4fd033eb9d709383f8ace8512d3f03533",
+    "source_sha256": "0af82e208d7ade646e56206fe12feccee37e5e9774867fed85e1c69cca59798f",
+    "main_d93ae0c_post_fix": "b7fix: backdrop grey/white cleared from hair-neck gaps (f68-70 panels + enclosed white holes, checked against per-pixel clear frequency over all frames) + gate-targeted despill of exposed edge | b9fix: removed pale-grey specks/dust in hair-neck gaps (detached islands <=20px; alpha<40 >1.5px from body; y150-262 x140-270); neck design untouched"
   }
 }
