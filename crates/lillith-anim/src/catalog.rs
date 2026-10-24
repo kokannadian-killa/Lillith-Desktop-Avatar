@@ -84,6 +84,11 @@ const ALLURE: &[&str] = &[
     "kiss_mark_on_glass",
     "dom_snap_kneel_order",
     "finger_walk_on_glass",
+    // Bold allure set (batch 20): body roll, seated chin-rest wink, dom whisper, hip-pop beckon.
+    "body_roll_to_viewer",
+    "chin_rest_slow_wink",
+    "dom_screen_edge_whisper",
+    "hip_pop_beckon",
 ];
 const FUN: &[&str] = &[
     "dance",
@@ -204,6 +209,8 @@ mod tests {
         assert_eq!(category_of("leg_cross_slow_sit"), 0);
         assert_eq!(category_of("dom_snap_kneel_order"), 0);
         assert_eq!(category_of("kiss_mark_on_glass"), 0);
+        assert_eq!(category_of("chin_rest_slow_wink"), 0);
+        assert_eq!(category_of("dom_screen_edge_whisper"), 0);
         assert_eq!(category_of("body_roll_slow_long"), 0);
         assert_eq!(category_of("arch_back_over_shoulder_long"), 0);
         assert_eq!(category_of("bend_forward_wink_long"), 0);
