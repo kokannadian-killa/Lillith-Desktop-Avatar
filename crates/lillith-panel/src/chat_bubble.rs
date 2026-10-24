@@ -312,9 +312,6 @@ struct Bubble {
     /// What the input holds from the mic, unedited: it is never read as a
     /// typed command (`/contract yes`).
     voice_text: Option<String>,
-    /// Runs on the safeword heard by the mic (stop every running command,
-    /// drop the admin helper). Injectable for tests.
-    kill_switch: fn(),
 }
 
 /// The talk button's look and tooltip for each [`MicState`].
@@ -354,12 +351,6 @@ fn mic_button(ui: &mut egui::Ui, mic: Option<&Mic>) -> bool {
         ui.ctx().request_repaint_after(Duration::from_millis(50));
     }
     resp.clicked_by(egui::PointerButton::Primary)
-}
-
-/// The real kill switch for a spoken safeword.
-fn kill_everything() {
-    lillith_core::access::kill_switch::stop_all();
-    lillith_core::access::admin_broker::shutdown();
 }
 
 // lillith-theme's hellforge bubble look (DemonOS palette).
@@ -657,8 +648,9 @@ impl Worker {
         }
         (self.emit)("chat.contract_confirmed", Some("start_model_server"));
         self.note("✅ Starting her local model server (loading can take a minute)…".into());
-        let epoch = lillith_core::access::kill_switch::epoch();
-        let stopped = move || lillith_core::access::kill_switch::stopped_since(epoch);
+        // The safeword (hush) or a stop cancels the wait.
+        let epoch = lillith_core::access::kill_switch::hush_epoch();
+        let stopped = move || lillith_core::access::kill_switch::hushed_since(epoch);
         let ok = if self.app_server {
             // The app re-checks both against the audit log and its config.
             let detail = self
@@ -1000,18 +992,20 @@ fn serde_json_lines(s: &str) -> Option<Vec<Message>> {
     serde_json::from_str(s).ok()
 }
 
-/// What the bubble says when the safeword stops work mid-reply.
+/// What the bubble says when the safeword lands mid-reply. The safeword
+/// stops her talking only: a command already running is not killed (Ko,
+/// 2026-10-24), so the line says so instead of claiming it's dead.
 const SAFEWORD_STOPPED: &str =
-    "Stopped. Every running command is dead and the admin helper is gone.";
+    "Stopped talking. A command already running keeps going until it ends.";
 
-/// If `text` is the safeword, stops every running command and the admin
-/// helper immediately (no queue) and returns true.
-fn stop_now_if_safeword(text: &str) -> bool {
+/// If typed `text` is the safeword ("red" / "OOC: stop"), hushes right away
+/// on the UI thread (her voice, queued lines, open cards and waits stop) and
+/// returns true. It shuts nothing down: no kill switch, no admin-helper kill.
+fn hush_now_if_safeword(text: &str) -> bool {
     if !lillith_core::access::kill_switch::is_safeword(text) {
         return false;
     }
-    lillith_core::access::kill_switch::stop_all();
-    lillith_core::access::admin_broker::shutdown();
+    lillith_core::access::kill_switch::hush();
     true
 }
 
@@ -1022,9 +1016,9 @@ impl Bubble {
             return;
         }
         // The safeword works right now, on the UI thread: the chat worker
-        // may be blocked running the very command it has to stop, so a
-        // queued "red" would only land after the command ended by itself.
-        let safeword = stop_now_if_safeword(&text);
+        // may be busy (a running command, which the safeword leaves alone),
+        // so her voice and queued lines are cut here, not after the queue.
+        let safeword = hush_now_if_safeword(&text);
         if safeword {
             // Her voice stops too: the overlay cuts it on this event, and
             // the daemon is told directly in case the overlay is busy.
@@ -1212,12 +1206,13 @@ impl Bubble {
         }
     }
 
-    /// The safeword, heard by the mic: kill switch now, every popup
-    /// dropped, her voice cut, and the session told (`red`), which clears
-    /// pending actions without calling the model.
+    /// The safeword, heard by the mic: every popup dropped, her voice cut,
+    /// the mic closed, and the session told (`red`), which clears pending
+    /// actions without calling the model. Running commands and the admin
+    /// helper are left alone (no kill switch).
     fn voice_safeword(&mut self) {
-        tracing::warn!("safeword heard by the mic: stopping everything");
-        (self.kill_switch)();
+        tracing::warn!("safeword heard by the mic: she stops talking");
+        lillith_core::access::kill_switch::hush();
         self.contract = None;
         self.contract_demo = false;
         self.server_card = None;
@@ -1234,8 +1229,8 @@ impl Bubble {
             text: "red".into(),
         });
         if self.streaming.is_some() {
-            // The worker may be stuck in the command just killed: say so
-            // now; the queued "red" clears its pending state once it's free.
+            // The worker may be busy in a running command (not killed): say
+            // so now; the queued "red" clears its pending state once it's free.
             self.lines.push(Line {
                 me: false,
                 text: SAFEWORD_STOPPED.to_string(),
@@ -1730,7 +1725,6 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
                     Mic::from_config(opts.config_path.as_deref(), move || ctx.request_repaint())
                 },
                 voice_text: None,
-                kill_switch: kill_everything,
             }))
         }),
     )
@@ -1741,11 +1735,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn safeword_stops_on_the_ui_thread_without_the_worker() {
+    fn typed_safeword_hushes_on_the_ui_thread_but_kills_nothing() {
         let before = lillith_core::access::kill_switch::epoch();
-        assert!(!stop_now_if_safeword("I read a red book"));
-        assert!(stop_now_if_safeword("Red."));
-        assert!(lillith_core::access::kill_switch::stopped_since(before));
+        let hush = lillith_core::access::kill_switch::hush_epoch();
+        assert!(!hush_now_if_safeword("I read a red book"));
+        assert!(hush_now_if_safeword("Red."));
+        assert!(hush_now_if_safeword("OOC: stop"));
+        assert!(lillith_core::access::kill_switch::hushed_since(hush));
+        // Typed through the bubble: voice cut, mic hushed, but no kill switch.
+        let (mut b, req_rx) = test_bubble(None, false);
+        b.input = "red".into();
+        b.send();
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Send(t)) if t == "red"));
+        assert!(
+            !lillith_core::access::kill_switch::stopped_since(before),
+            "the safeword no longer stops running commands or the admin helper"
+        );
+        assert!(!SAFEWORD_STOPPED.contains("dead") && !SAFEWORD_STOPPED.contains("helper"));
     }
 
     #[test]
@@ -1795,7 +1801,6 @@ mod tests {
             plan_state: PlanState::default(),
             mic: None,
             voice_text: None,
-            kill_switch: || {},
         };
         (b, req_rx)
     }
@@ -2035,10 +2040,8 @@ mod tests {
         assert!(req_rx.try_recv().is_err());
     }
 
-    static KILLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
     #[test]
-    fn safeword_from_stt_kills_everything_and_clears_the_gate() {
+    fn safeword_from_stt_stops_talking_and_clears_the_gate_but_kills_nothing() {
         let events = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         let mut seen = 0;
         for (said, flagged) in [
@@ -2050,17 +2053,19 @@ mod tests {
             let (mut b, req_rx) = test_bubble(Some(demo_contract()), false);
             let ev = Arc::clone(&events);
             b.emit = Arc::new(move |n, _| ev.lock().unwrap().push(n.to_string()));
-            b.kill_switch = || {
-                KILLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            };
             b.input = "half typed".into();
             let mut t = heard(said);
             t.safeword = flagged;
-            let before = KILLS.load(std::sync::atomic::Ordering::SeqCst);
+            let before = lillith_core::access::kill_switch::epoch();
+            let hush = lillith_core::access::kill_switch::hush_epoch();
             b.on_transcript(&t);
             assert!(
-                KILLS.load(std::sync::atomic::Ordering::SeqCst) > before,
-                "{said:?}: kill switch"
+                !lillith_core::access::kill_switch::stopped_since(before),
+                "{said:?}: no kill switch"
+            );
+            assert!(
+                lillith_core::access::kill_switch::hushed_since(hush),
+                "{said:?}: hushed"
             );
             assert!(b.contract.is_none() && b.deletion.is_none() && b.plan.is_none());
             assert!(b.input.is_empty());

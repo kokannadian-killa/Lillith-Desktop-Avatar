@@ -195,7 +195,8 @@ pub fn card_text(action: &PendingAction) -> CardText {
 /// The safeword ("red" / "OOC: stop") closes it: `Cancelled`, never a Yes.
 /// `None` when the window couldn't open.
 pub fn show_card(text: &CardText) -> Option<CardChoice> {
-    use lillith_core::access::kill_switch::{epoch, stopped_since};
+    // The safeword (hush) or a stop closes the card.
+    use lillith_core::access::kill_switch::{hush_epoch as epoch, hushed_since as stopped_since};
     let exe = std::env::current_exe().ok()?;
     let start = epoch();
     let answer =

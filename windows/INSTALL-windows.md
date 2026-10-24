@@ -30,8 +30,8 @@ Settings ▸ Access ▸ **WINDOWS · ADMIN**. When she proposes an elevated
 cmd / PowerShell command, the Soul Contract card shows **ELEVATED
 (admin)** with the exact command and working folder. Your **Yes** is the
 only approval (voice never confirms). The first Yes of a session asks
-Windows for one UAC prompt; after that the helper stays until you quit,
-say the safeword (`red` / `OOC: stop`), or it idles out. Set UAC to
+Windows for one UAC prompt; after that the helper stays until you quit
+or it idles out (the safeword doesn't close it). Set UAC to
 **per-command** if you want a prompt every time.
 
 ## 2. Her brain (optional, fully local)

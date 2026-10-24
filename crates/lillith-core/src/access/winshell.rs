@@ -1,6 +1,6 @@
 //! Windows command lines: `cmd.exe` and Windows PowerShell, with captured
 //! output, an exit code and a timeout (through [`super::commands::run_child`],
-//! so the safeword kills them too).
+//! so a stop / Ctrl-C kills them too).
 //!
 //! The command text Ko approves is exactly what runs:
 //! - `cmd`: `cmd.exe /D /S /C "<command>"`. `/S` strips just the outer quotes

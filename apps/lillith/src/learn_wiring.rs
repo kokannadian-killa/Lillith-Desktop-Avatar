@@ -23,7 +23,7 @@ pub fn start(cfg: &Config, llm_allowed: bool) -> Option<Arc<LearnHandle>> {
 }
 
 /// A sender that forwards everything to `feed` and shows each event to the
-/// learner on the way (activity → pause, `chat.safeword` → stop + cooldown;
+/// learner on the way (activity → pause, `chat.safeword` → drop the step;
 /// never blocks). No learner: `feed` itself, no thread.
 pub fn tee(feed: Sender<Event>, learner: Option<&Arc<LearnHandle>>) -> Sender<Event> {
     let Some(l) = learner else {
@@ -87,10 +87,10 @@ pub fn cli(cfg: &Config, once: bool, dry_run: bool, reindex: bool) -> anyhow::Re
     let mut sum =
         LlmSummarizer::new(&cfg.chat, gate).map_err(|e| anyhow::anyhow!("model: {e:?}"))?;
     let _ = lillith_learn::hygiene::lower_current_thread();
-    let epoch = lillith_core::access::kill_switch::epoch();
+    let epoch = lillith_core::access::kill_switch::hush_epoch();
     let mut l = Learner::new(cfg, brain).dry_run(dry_run);
     let rep = l.step(&mut sum, &|| {
-        lillith_core::access::kill_switch::stopped_since(epoch)
+        lillith_core::access::kill_switch::hushed_since(epoch)
     });
     println!(
         "source: {}#{}",

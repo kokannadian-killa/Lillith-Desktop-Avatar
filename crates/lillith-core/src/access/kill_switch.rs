@@ -1,9 +1,17 @@
-//! The safeword kill switch. When Ko says the safeword ("red", or
-//! "OOC: stop"), [`stop_all`] bumps a process-wide epoch. Every command
-//! runner started before that moment sees the change and kills its child
-//! process tree, and the registered hooks run. The Windows admin broker
-//! registers one that force-kills the elevated helper out-of-band (Job /
-//! process handle — never waits on the in-flight pipe lock).
+//! The stop switches. Two process-wide epochs:
+//!
+//! - [`hush`] (the safeword: "red" or "OOC: stop"). She stops talking, her
+//!   queued lines are dropped, and anything still waiting for Ko is
+//!   cancelled (Soul Contract cards, the model-server wait, a learning step,
+//!   an online-research card). It shuts **nothing** down: running commands
+//!   and the Windows admin helper are left alone (Ko, 2026-10-24: "Only
+//!   remove the shutdown part; red still stops her talking").
+//! - [`stop_all`] (Ctrl-C / SIGTERM / app shutdown). Every command runner
+//!   started before that moment sees [`epoch`] move and kills its child
+//!   process tree, and the registered hooks run. The Windows admin broker
+//!   registers one that force-kills the elevated helper out-of-band (Job /
+//!   process handle — never waits on the in-flight pipe lock). A stop also
+//!   counts as a hush, so everything a safeword cancels is cancelled too.
 //!
 //! Nothing here approves anything: it can only stop work.
 
@@ -13,6 +21,7 @@ use std::sync::Mutex;
 use super::winjob::{stop_chat_line, HelperKill};
 
 static EPOCH: AtomicU64 = AtomicU64::new(0);
+static HUSH: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<fn() -> HelperKill>> = Mutex::new(Vec::new());
 
 /// Tests that call [`stop_all`] take the write side; every test command run
@@ -45,6 +54,26 @@ pub fn stopped_since(start: u64) -> bool {
     epoch() != start
 }
 
+/// The safeword: bumps the hush epoch only. Her talking, queued lines and
+/// anything waiting for Ko (cards, waits, learning steps) stop; running
+/// commands and the admin helper are NOT killed ([`epoch`] doesn't move).
+pub fn hush() -> u64 {
+    let e = HUSH.fetch_add(1, Ordering::SeqCst) + 1;
+    tracing::warn!("safeword: she stops talking (hush epoch {e}); nothing is killed");
+    e
+}
+
+/// The current hush epoch (moved by [`hush`] and by [`stop_all`]).
+pub fn hush_epoch() -> u64 {
+    HUSH.load(Ordering::SeqCst)
+}
+
+/// Whether the safeword ([`hush`]) or a [`stop_all`] happened since `start`
+/// (a [`hush_epoch`] value). What cards and waits that "red" cancels check.
+pub fn hushed_since(start: u64) -> bool {
+    hush_epoch() != start
+}
+
 /// Registers a hook [`stop_all`] runs (once per hook fn; duplicates ignored).
 /// The hook's [`HelperKill`] feeds the chat line.
 pub fn on_stop(hook: fn() -> HelperKill) {
@@ -65,8 +94,10 @@ pub(crate) fn clear_hooks_for_test() {
 
 /// Kills every running command child (they poll the epoch) and runs the
 /// stop hooks (the admin helper is force-killed out-of-band). Returns a
-/// report the chat layer uses for a truthful reply.
+/// report the chat layer uses for a truthful reply. Ctrl-C / SIGTERM / app
+/// shutdown only — the safeword calls [`hush`] instead. Also hushes.
 pub fn stop_all() -> StopReport {
+    HUSH.fetch_add(1, Ordering::SeqCst);
     let e = EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
     let hooks: Vec<fn() -> HelperKill> = HOOKS.lock().map(|h| h.clone()).unwrap_or_default();
     let mut helper = HelperKill::Idle;
@@ -75,7 +106,7 @@ pub fn stop_all() -> StopReport {
         // Prefer the strongest confirmed outcome across hooks.
         helper = merge_helper(helper, r);
     }
-    tracing::warn!("safeword: stopped every running command (epoch {e}, helper={helper:?})");
+    tracing::warn!("stop: stopped every running command (epoch {e}, helper={helper:?})");
     StopReport { epoch: e, helper }
 }
 
@@ -140,9 +171,30 @@ mod tests {
     fn stop_all_moves_the_epoch() {
         let _g = TEST_GATE.write().unwrap_or_else(|e| e.into_inner());
         let e = epoch();
+        let h = hush_epoch();
         assert!(!stopped_since(epoch()));
         stop_all();
         assert!(stopped_since(e));
+        assert!(hushed_since(h), "a stop cancels what the safeword cancels");
+    }
+
+    #[test]
+    fn the_safeword_hush_never_moves_the_kill_epoch_or_runs_hooks() {
+        let _g = TEST_GATE.write().unwrap_or_else(|e| e.into_inner());
+        clear_hooks_for_test();
+        static RAN: AtomicUsize = AtomicUsize::new(0);
+        fn hook() -> HelperKill {
+            RAN.fetch_add(1, AO::SeqCst);
+            HelperKill::Gone
+        }
+        on_stop(hook);
+        let e = epoch();
+        let h = hush_epoch();
+        hush();
+        assert!(hushed_since(h));
+        assert!(!stopped_since(e), "no command is killed");
+        assert_eq!(RAN.load(AO::SeqCst), 0, "the admin helper is not killed");
+        clear_hooks_for_test();
     }
 
     #[test]

@@ -516,7 +516,9 @@ class Listener:
         sp = len(seg) / RATE
         with self._lock:
             gen = self._drops
-            tracked = self._mode != "always"      # listen once (or its tail): a safeword stop drops it
+            # push-to-talk / listen once, or listen once's tail (also when always-listening is on, where
+            # _mode is already back to "always"): a safeword stop drops it
+            tracked = once_tail or self._mode != "always"
             if tracked:
                 self._stt_inflight += 1
         try:

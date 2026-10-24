@@ -9,8 +9,8 @@
 //! is the loopback `llama-server`, and only through the shared
 //! [`LlmGate`] that chat always wins.
 //!
-//! - [`scheduler`]: Off → Waiting → Running → Paused → Cooldown, duty cycle,
-//!   budgets and the safeword cooldown (pure, clock injected).
+//! - [`scheduler`]: Off → Waiting → Running → Paused, duty cycle and
+//!   budgets; the safeword drops a step but never rests her (pure, clock injected).
 //! - [`paths`] + [`readers`]: confined, denylisted, in-process doc readers.
 //! - [`store`]: the note files (0700/0600, atomic, single writer).
 //! - [`extract`], [`classify`], [`dedupe`]: one chunk → notes.

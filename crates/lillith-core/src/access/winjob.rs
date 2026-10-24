@@ -141,7 +141,7 @@ pub enum HelperKill {
 }
 
 impl HelperKill {
-    /// Full safeword reply. Never claims the helper is gone unless
+    /// Full stop (Ctrl-C / SIGTERM) reply. Never claims the helper is gone unless
     /// [`HelperKill::Gone`].
     pub fn chat_line(self) -> &'static str {
         match self {
@@ -159,7 +159,7 @@ impl HelperKill {
     }
 }
 
-/// Builds the safeword reply line from a helper-kill outcome.
+/// Builds the stop reply line from a helper-kill outcome.
 pub fn stop_chat_line(helper: HelperKill) -> String {
     helper.chat_line().to_string()
 }

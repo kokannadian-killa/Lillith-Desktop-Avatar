@@ -13,6 +13,8 @@ Yes late, a real capture process (tests/fake_mic.py behind an `arecord` shim); c
     away -> its tail is dropped
  * the real Rust button: closing while listening drops the speech; Mic::hush x10 sends the safeword stop
     before the press's listen stop drop and nothing is broadcast
+  * always-listening on: a listen once tail in flight is dropped by a safeword stop too
+  * per-run marker names, so the ps scans never count another run's processes
   * the real Rust talk button (crates/lillith-panel/examples/mic_driver) quit / drop+quit / SIGKILL while the
     card waits -> no capture process; Drop's listen stop reaches the daemon within 1 s. Set
     LILLITH_MIC_DRIVER to the built example (cargo build -p lillith-panel --example mic_driver); skipped
@@ -31,6 +33,11 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 TMP = tempfile.mkdtemp(prefix="lillith-close-")
+# Per-run marker names: the ps scans only ever see this run's fake mic / card processes, never another
+# close_test (or bot) running on the same machine at the same time.
+RUN = f"{os.getpid()}-{os.path.basename(TMP)}"
+MIC_MARK = f"close-mic-marker-{RUN}"
+CARD_MARK = f"close-card-marker-{RUN}"
 os.environ["XDG_DATA_HOME"] = os.path.join(TMP, "data")
 os.environ["XDG_CONFIG_HOME"] = os.path.join(TMP, "config")
 os.environ["LILLITH_PTT_MAX_S"] = "2"
@@ -38,13 +45,13 @@ BIN = os.path.join(TMP, "bin")
 os.makedirs(BIN)
 with open(os.path.join(BIN, "arecord"), "w") as f:
     f.write(f'#!/bin/sh\necho x >> "{TMP}/mic_opens.log"\n'
-            f'exec "{sys.executable}" "{os.path.join(HERE, "fake_mic.py")}" "{TMP}" close-mic-marker\n')
+            f'exec "{sys.executable}" "{os.path.join(HERE, "fake_mic.py")}" "{TMP}" {MIC_MARK}\n')
 MODE = os.path.join(TMP, "card_mode")
 with open(os.path.join(BIN, "card"), "w") as f:
     f.write(f"""#!/bin/sh
 cat >/dev/null
 m=$(cat "{MODE}")
-[ "$m" = delay ] && exec "{sys.executable}" -c "import time; time.sleep(3); print('yes')" close-card-marker
+[ "$m" = delay ] && exec "{sys.executable}" -c "import time; time.sleep(3); print('yes')" {CARD_MARK}
 echo "$m"
 """)
 for n in ("arecord", "card"):
@@ -74,12 +81,12 @@ def check(name, cond, detail=""):
 
 def mic_procs():
     out = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True).stdout.splitlines()
-    return [ln.strip() for ln in out if "close-mic-marker" in ln and "ps -eo" not in ln]
+    return [ln.strip() for ln in out if MIC_MARK in ln and "ps -eo" not in ln]
 
 
 def card_procs():
     out = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True).stdout.splitlines()
-    return [ln.strip() for ln in out if "close-card-marker" in ln and "ps -eo" not in ln]
+    return [ln.strip() for ln in out if CARD_MARK in ln and "ps -eo" not in ln]
 
 
 def n_mics():
@@ -457,6 +464,37 @@ settle()
 card("yes")
 r = call(cmd="listen", timeout=1)
 check("once control: an owner that stays gets the tail's text", r.get("text") == "something said", str(r))
+settle()
+
+# ---- 5e. always-listening on: a listen once tail being transcribed is dropped by a safeword stop too
+# (the tail runs after _mode went back to "always"; it is still tracked)
+L.always = True
+FakeRec.delay = 0.6
+FakeRec.busy.clear()
+EVENTS.clear()
+n_tr = len(TRANSCRIBED)
+L._once = {"done": threading.Event(), "result": None}
+L._mode = "always"
+tail = threading.Thread(target=lambda: L._segment(stt.np.full(8000, 0.1, stt.np.float32), once_tail=True))
+tail.start()
+FakeRec.busy.wait(3)
+check("always: the tail's transcription counts as in flight", L._stt_inflight == 1, str(L._stt_inflight))
+gen = L._drops
+L.cancel_pending("safeword", drop_capture=True)
+tail.join(5)
+check("always: the safeword stop drops the in-flight listen-once tail", L._drops == gen + 1
+      and L._once["result"] is None and not [e for e in EVENTS if e.get("ev") == "transcript"], str(EVENTS))
+check("always: always-listening stays on", L._mode == "always" and L.always)
+# control: the same tail with no safeword is answered and broadcast
+EVENTS.clear()
+L._once = {"done": threading.Event(), "result": None}
+L._segment(stt.np.full(8000, 0.1, stt.np.float32), once_tail=True)
+check("always control: an undisturbed tail is the answer and is broadcast",
+      (L._once["result"] or {}).get("text") == "something said"
+      and [e for e in EVENTS if e.get("ev") == "transcript"], str(EVENTS))
+check("always: nothing left in flight", L._stt_inflight == 0)
+L._once, L._mode, L.always = None, None, False
+FakeRec.delay = 0.0
 settle()
 
 # ---- 6. the real Rust talk button (examples/mic_driver)

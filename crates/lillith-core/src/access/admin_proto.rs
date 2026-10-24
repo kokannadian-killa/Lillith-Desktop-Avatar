@@ -36,7 +36,7 @@ pub enum Request {
         cap: usize,
         command: String,
     },
-    /// Exit now (safeword, app exit, per-command mode).
+    /// Exit now (stop / Ctrl-C, app exit, per-command mode).
     Stop,
 }
 

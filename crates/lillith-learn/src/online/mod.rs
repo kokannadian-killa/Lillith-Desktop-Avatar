@@ -146,9 +146,9 @@ impl CardProcessConsent {
 
 impl Consent for CardProcessConsent {
     fn ask(&self, text: &CardText, stop: &dyn Fn() -> bool) -> CardAnswer {
-        use lillith_core::access::kill_switch::{epoch, stopped_since};
-        let start = epoch();
-        let halted = || stop() || stopped_since(start);
+        use lillith_core::access::kill_switch::{hush_epoch, hushed_since};
+        let start = hush_epoch();
+        let halted = || stop() || hushed_since(start);
         let a = lillith_core::card_process::ask_until(&self.exe, text, self.timeout, halted);
         if halted() {
             CardAnswer::Cancelled
@@ -159,10 +159,10 @@ impl Consent for CardProcessConsent {
 }
 
 /// A `stop()` for [`OnlineResearch::run`] that turns true once the
-/// safeword fires (the process-wide kill switch).
+/// safeword (the process-wide hush) or a stop fires.
 pub fn safeword_stop() -> impl Fn() -> bool {
-    let start = lillith_core::access::kill_switch::epoch();
-    move || lillith_core::access::kill_switch::stopped_since(start)
+    let start = lillith_core::access::kill_switch::hush_epoch();
+    move || lillith_core::access::kill_switch::hushed_since(start)
 }
 
 /// How a trip ended.

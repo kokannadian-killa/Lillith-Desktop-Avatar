@@ -308,6 +308,10 @@ pub enum CardChoice {
     Cancelled,
 }
 
+/// What she says (out of character) to the safeword. Nothing is killed, so
+/// the line doesn't claim anything was.
+pub const SAFEWORD_LINE: &str = "Okay, stopping. You alright, Ko?";
+
 /// State of the model-server Soul Contract card (at most one).
 #[derive(Debug, Default)]
 struct ServerCard {
@@ -853,18 +857,19 @@ impl ChatSession {
     /// history (so the next try resends the same context).
     pub async fn send<F: FnMut(&str)>(&mut self, user: &str, mut on_token: F) -> Outcome {
         if lillith_core::access::kill_switch::is_safeword(user) {
-            // stop_all force-kills the admin helper out-of-band (registered
-            // hook); the report's line only says the helper is gone when
-            // that kill was confirmed.
-            let report = lillith_core::access::kill_switch::stop_all();
-            // Drop any pending plan / skill / forget so nothing is still waiting.
+            // The safeword stops her talking and drops anything still waiting
+            // for Ko (plan / skill / forget / model-server card). It no longer
+            // shuts down work: running commands and the admin helper are not
+            // killed (Ko, 2026-10-24: "Only remove the shutdown part; red
+            // still stops her talking"). The hush epoch cancels open cards
+            // and waits; the kill epoch (commands, helper) doesn't move.
+            lillith_core::access::kill_switch::hush();
             self.pending_tool = None;
             self.pending_skill = None;
             self.pending_forget = None;
             self.answer_server_card(CardChoice::Cancelled);
-            let line = report.chat_line();
-            on_token(&line);
-            return Outcome::Reply(line);
+            on_token(SAFEWORD_LINE);
+            return Outcome::Reply(SAFEWORD_LINE.to_string());
         }
 
         let user = user.trim();
@@ -2186,8 +2191,8 @@ mod tests {
 
     #[tokio::test]
     async fn safeword_never_reaches_memory() {
-        // (The bare safeword is handled by the kill switch before memory; not
-        // sent here so this test doesn't bump the global stop epoch.)
+        // (The bare safeword short-circuits before memory; see
+        // tests/memory_privacy.rs.)
         let (url, mut reqs) = fake_server(vec![sse_reply(&["Mm."])]).await;
         let mut s = ChatSession::new(&cfg(&url), false).with_brain(mem_brain());
         s.send("I love red wine and my cat is Nyx", |_| {}).await;

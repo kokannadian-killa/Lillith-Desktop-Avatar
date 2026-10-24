@@ -6,8 +6,8 @@
 //! The thread lowers its own priority ([`crate::hygiene`]), feeds the
 //! [`Scheduler`] from the desktop events it is shown ([`LearnHandle::observe`])
 //! plus load / battery readings, and runs at most one step at a time. The
-//! safeword (`kill_switch::epoch()` moving, or a `chat.safeword` event)
-//! drops a running step at once and starts the cooldown.
+//! safeword (`kill_switch::hush_epoch()` moving, or a `chat.safeword` event)
+//! drops a running step at once (nothing kept); there is no rest after it.
 
 use crate::learner::{Learner, Outcome};
 use crate::scheduler::{Decision, Inputs, Limits, Scheduler, State};
@@ -103,7 +103,6 @@ fn state_code(s: State) -> u8 {
         State::Waiting => 1,
         State::Running => 2,
         State::Paused => 3,
-        State::Cooldown => 4,
     }
 }
 
@@ -112,7 +111,6 @@ fn state_of(c: u8) -> State {
         1 => State::Waiting,
         2 => State::Running,
         3 => State::Paused,
-        4 => State::Cooldown,
         _ => State::Off,
     }
 }
@@ -251,7 +249,7 @@ fn run_loop(
             load1: sensors.load1(),
             on_battery: sensors.on_battery(),
             fullscreen: sensors.fullscreen(),
-            kill_epoch: kill_switch::epoch(),
+            kill_epoch: kill_switch::hush_epoch(),
             safeword: sh.safeword.swap(false, Ordering::SeqCst),
         };
         if sched.tick(&inputs) == Decision::Run {
@@ -261,7 +259,7 @@ fn run_loop(
             let act0 = sh.last_activity_ms.load(Ordering::SeqCst);
             let pause_on_activity = cfg.learn.pause_on_activity;
             let safeword =
-                || sh.safeword.load(Ordering::SeqCst) || kill_switch::stopped_since(epoch0);
+                || sh.safeword.load(Ordering::SeqCst) || kill_switch::hushed_since(epoch0);
             let stop = || {
                 sh.quit.load(Ordering::SeqCst)
                     || safeword()
@@ -270,10 +268,11 @@ fn run_loop(
             let rep = learner.step(sum, &stop);
             let end = sh.now_s();
             if safeword() {
-                // Dropped: nothing of the step is kept; rest for the cooldown.
+                // Dropped: nothing of the step is kept. No rest period after
+                // the safeword; she waits for the next idle window as usual.
                 sh.safeword.store(false, Ordering::SeqCst);
                 sched.abort(end, true);
-                tracing::info!("learn: safeword, step dropped; cooling down");
+                tracing::info!("learn: safeword, step dropped");
             } else {
                 match &rep.outcome {
                     Outcome::Discarded(

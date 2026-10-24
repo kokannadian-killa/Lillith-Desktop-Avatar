@@ -19,7 +19,7 @@ yourself.
 - [Android (Termux chat, experimental APK)](#android-termux-chat-experimental-apk)
 - [Configuration](#configuration)
 - [Privacy: what she keeps on your machine](#privacy-what-she-keeps-on-your-machine)
-- [The safeword (kill switch)](#the-safeword-kill-switch)
+- [The safeword](#the-safeword)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -379,8 +379,9 @@ and `-t` is half the thread count (all of them below 4 threads) unless you set
 (temperature 0.95, top_p 0.95, min_p 0.1, repeat_penalty 1.1 over the last 256
 tokens, 160 reply tokens) are sent with every chat request, so they aren't on
 the command line. If you use Ollama instead (`backend = "ollama"`), it must be
-on `http://127.0.0.1:11434`. The **kill switch** on Windows is the same safeword
-(see below), and it also shuts down the elevated `lillith-admin` helper.
+on `http://127.0.0.1:11434`. The safeword works the same on Windows
+(see below); it stops her talking and doesn't close the elevated
+`lillith-admin` helper (quitting her does).
 ### Windows: her own voice (Ko's cloned voice, offline)
 
 The installer can carry her real voice, so she doesn't sound like SAPI. Build
@@ -564,14 +565,16 @@ each chat turn, and unused memories fade over time.
 network guard blocks any connection and refuses any listening socket that
 isn't loopback.
 
-## The safeword (kill switch)
+## The safeword
 
-To stop everything she's doing, type the safeword in her chat: **`red`** on
+To make her stop talking, type the safeword in her chat: **`red`** on
 its own, or a message that starts with **`OOC: stop`**. With the voice kit's
 mic you can also say "red". It works right away, even in the middle of a
 reply. Her voice stops, and the rest of the reply it cut off is dropped: it
-isn't shown or spoken. It kills every running command's process tree, and on
-Windows it also shuts down the elevated admin helper.
+isn't shown or spoken. An open mic closes, an open Yes/No card is cancelled,
+and her explicit banter stops. It doesn't kill anything: a command that is
+already running keeps going until it ends (quit her, or press Ctrl-C in the
+console, to stop everything).
 
 Every file change, command and program launch is a **Soul Contract** plan
 that you approve with Yes or No. Nothing runs before you approve it, and every
