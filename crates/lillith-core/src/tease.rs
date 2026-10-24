@@ -71,7 +71,7 @@ impl Default for TeaseConfig {
             approach_clips: strings(&["idle_flirt_hands_behind_sway", "hip_sway"]),
             beat_clips: strings(&[
                 "tease_closeup",
-                "bend_forward_wink",
+                "predator_lean_in",
                 "lean_tease",
                 "idle_flirt_lip_bite",
                 "hip_pop_wink",

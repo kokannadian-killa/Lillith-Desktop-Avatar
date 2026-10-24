@@ -1,0 +1,256 @@
+{
+  "name": "stalk_prowl_right",
+  "placeholder": false,
+  "frame_count": 13,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "stalk_prowl_right_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "right",
+  "source_files": [
+    "../../source/video/stalk_prowl_right/stalk_prowl_right_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 51,
+    "last": 75,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "body_trend",
+  "baseline_snap": "per_frame",
+  "body_point_src_x": [
+    625.0,
+    627.0,
+    622.8,
+    626.8,
+    627.2,
+    625.0,
+    624.0,
+    624.5,
+    628.2,
+    627.5,
+    616.6,
+    621.2,
+    622.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 615,
+    "ref_hue_median": 280.1,
+    "mean_hue_shift_deg_per_frame": [
+      -0.4,
+      0.7,
+      0.5,
+      0.2,
+      -0.8,
+      -1.4,
+      0.1,
+      -0.3,
+      0.3,
+      -0.2,
+      0.2,
+      0.6,
+      0.8
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      110,
+      298,
+      21,
+      391
+    ],
+    [
+      105,
+      286,
+      20,
+      391
+    ],
+    [
+      107,
+      272,
+      20,
+      391
+    ],
+    [
+      116,
+      259,
+      20,
+      392
+    ],
+    [
+      120,
+      246,
+      20,
+      392
+    ],
+    [
+      120,
+      245,
+      20,
+      392
+    ],
+    [
+      119,
+      253,
+      20,
+      392
+    ],
+    [
+      118,
+      257,
+      20,
+      392
+    ],
+    [
+      116,
+      272,
+      20,
+      391
+    ],
+    [
+      115,
+      295,
+      20,
+      391
+    ],
+    [
+      116,
+      311,
+      21,
+      392
+    ],
+    [
+      115,
+      313,
+      24,
+      392
+    ],
+    [
+      113,
+      305,
+      23,
+      392
+    ]
+  ],
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_ab_of": "generated_v2/stalk_prowl_right/",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -138,
+        20,
+        0.0269
+      ],
+      [
+        -138,
+        20,
+        0.0223
+      ],
+      [
+        -138,
+        20,
+        0.022
+      ],
+      [
+        -138,
+        20,
+        0.0256
+      ],
+      [
+        -138,
+        20,
+        0.0226
+      ],
+      [
+        -137,
+        20,
+        0.0214
+      ],
+      [
+        -137,
+        20,
+        0.0177
+      ],
+      [
+        -137,
+        20,
+        0.0183
+      ],
+      [
+        -137,
+        20,
+        0.0184
+      ],
+      [
+        -137,
+        20,
+        0.0245
+      ],
+      [
+        -136,
+        21,
+        0.0309
+      ],
+      [
+        -136,
+        23,
+        0.0232
+      ],
+      [
+        -136,
+        21,
+        0.0248
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
+  "video": {
+    "file": "stalk_prowl_right.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 13,
+    "fps": 12.0,
+    "bytes": 155511,
+    "quality": {
+      "edge_mae": 1.973,
+      "edge_p99": 13.54,
+      "halo_dark": 0.03,
+      "halo_light": -0.08,
+      "alpha_mae": 0.0782
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
+}

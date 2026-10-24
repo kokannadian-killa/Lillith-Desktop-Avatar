@@ -1,0 +1,183 @@
+{
+  "name": "stalk_prowl_left",
+  "placeholder": false,
+  "frame_count": 13,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "stalk_prowl_left_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "left",
+  "source_files": [
+    "../../source/video/stalk_prowl_right/stalk_prowl_right_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 51,
+    "last": 75,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "body_trend",
+  "baseline_snap": "per_frame",
+  "body_point_src_x": [
+    625.0,
+    627.0,
+    622.8,
+    626.8,
+    627.2,
+    625.0,
+    624.0,
+    624.5,
+    628.2,
+    627.5,
+    616.6,
+    621.2,
+    622.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 513,
+    "ref_hue_median": 277.9,
+    "mean_hue_shift_deg_per_frame": [
+      -0.7,
+      -0.3,
+      -0.7,
+      -1.2,
+      -1.9,
+      -3.0,
+      -2.8,
+      -2.8,
+      -1.4,
+      -2.7,
+      -1.8,
+      0.2,
+      -0.1
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Horizontal mirror of stalk_prowl_right (x' = 399 - x). Tattoo/ribbon asymmetry is mirrored. ",
+  "mirrored_from": "stalk_prowl_right",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      101,
+      289,
+      21,
+      391
+    ],
+    [
+      113,
+      294,
+      20,
+      391
+    ],
+    [
+      127,
+      292,
+      20,
+      391
+    ],
+    [
+      140,
+      283,
+      20,
+      391
+    ],
+    [
+      153,
+      279,
+      20,
+      391
+    ],
+    [
+      154,
+      279,
+      20,
+      391
+    ],
+    [
+      146,
+      280,
+      20,
+      391
+    ],
+    [
+      142,
+      281,
+      20,
+      391
+    ],
+    [
+      127,
+      283,
+      20,
+      391
+    ],
+    [
+      104,
+      284,
+      20,
+      391
+    ],
+    [
+      88,
+      283,
+      21,
+      392
+    ],
+    [
+      87,
+      284,
+      24,
+      392
+    ],
+    [
+      94,
+      286,
+      23,
+      392
+    ]
+  ],
+  "video": {
+    "file": "stalk_prowl_left.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 13,
+    "fps": 12.0,
+    "bytes": 155594,
+    "quality": {
+      "edge_mae": 1.972,
+      "edge_p99": 13.33,
+      "halo_dark": 0.024,
+      "halo_light": -0.086,
+      "alpha_mae": 0.0786
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  }
+}

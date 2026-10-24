@@ -157,19 +157,21 @@ PNG sheet stays the fallback and the bounds-check reference.
   - On-screen frame timing (x11grab at 30 fps, matched to decoded frames) follows the JSON durations
     within the 33 ms capture step, including holds, and is the same as the PNG path.
 - **New pose in one command:** `tools/video-pipeline/new_pose.py`. See `tools/video-pipeline/README_MP4.md`.
-- **Bold allure poses:** 8 poses come from `generated_v2` (approved), each 36 frames, 12 fps, loop, and
-  are listed in `catalog.rs` *Flirty / Allure*: `body_roll_slow`, `arch_back_over_shoulder`,
-  `kneel_hands_on_thighs`, `wall_lean_invisible`, `blow_kiss_hip_pop`, `hair_lift_stretch`,
-  `slow_turn_spin_tease` and `bend_forward_wink`. They ship as sheet + JSON + MP4, without a preview GIF or a
+- **Bold allure poses:** 5 poses come from `generated_v2` (approved), each 36 frames, 12 fps, loop, and
+  are listed in `catalog.rs` *Flirty / Allure*: `body_roll_slow`, `kneel_hands_on_thighs`,
+  `wall_lean_invisible`, `blow_kiss_hip_pop` and `hair_lift_stretch`. Three earlier takes
+  (`arch_back_over_shoulder`, `bend_forward_wink`, `slow_turn_spin_tease`, plus their `_long`
+  variants) were removed in batch 15 review: their framing focused on the chest or butt, which
+  breaks the content rule (her outfit and art stay canonical; allure comes from expression, gaze
+  and gesture). They ship as sheet + JSON + MP4, without a preview GIF or a
   `frames/` dir.
 - **`*_long` variants:**
   - Each `_long` variant is a 15 s take with a ~10 s living peak hold: 180 frames at 12 fps, loop,
     with chest, pigtail and hip jiggle baked into the pixels. The importer tags these
     `disable_springs`, so the engine springs stay off.
-  - All eight are registered and appear in *Flirty / Allure*: `body_roll_slow_long`,
-    `arch_back_over_shoulder_long`, `kneel_hands_on_thighs_long`, `wall_lean_invisible_long`,
-    `blow_kiss_hip_pop_long`, `hair_lift_stretch_long`, `slow_turn_spin_tease_long` and
-    `bend_forward_wink_long`. They are tagged `baked_motion` + `jiggle_exaggerated` (exaggerated cartoon
+  - Five are registered and appear in *Flirty / Allure*: `body_roll_slow_long`,
+    `kneel_hands_on_thighs_long`, `wall_lean_invisible_long`, `blow_kiss_hip_pop_long` and
+    `hair_lift_stretch_long`. They are tagged `baked_motion` + `jiggle_exaggerated` (exaggerated cartoon
     chest bounce with overshoot, baked in post by `generated_v2/_tools/bake_jiggle_v2.py`). Each MP4 is
     about 1.3–1.9 MiB and each sheet 11–14 MiB.
   - Decoded, a 180-frame clip takes about 110 MB of the 192 MB video cache. Two long clips playing
@@ -177,3 +179,22 @@ PNG sheet stays the fallback and the bounds-check reference.
     frames with the first frame after about 65 ms, so playback does not stall.
   - New `_long` takes from `generated_v2` are registered once their matte, finalize and jiggle steps
     are done: `new_pose.py <clip>_long --from copy --allure --tag baked_motion`.
+
+## Dominant-persona set (batch 16)
+
+Image-to-video from the v3 design still (`_stills/v3_design/idle_v3.png`, white BG, first frame =
+last frame), then the standard `new_pose.py ... --allure --tag dom --to pack` flow. Every clip is
+tagged `baked_motion`, `allure`, `dom` and uses the canonical outfit. The dominance is carried by
+expression, gaze, gestures and body language toward the viewer. There is no added skin and no
+chest-, crotch- or butt-focused framing. Takes that zoomed in, bent toward the camera or glitched
+were retaken (see `generated_v2/STATUS.md`).
+
+- Gestures: `dom_beckon_finger`, `dom_point_down`, `dom_arms_crossed_demand`, `smug_smirk`,
+  `hungry_lip_lick`, `predator_lean_in`, `tail_wrap_pull`, `kiss_then_come_here`,
+  `hug_screen_possessive`, `kneel_pout_beg` (6 s), `soul_contract_sign` (6 s, neon-red DemonOS
+  contract), and the `seduce_*` set (`seduce_beckon_finger`, `seduce_lip_bite_glance`,
+  `seduce_lean_to_screen_whisper`, `seduce_blow_kiss_screen`, `seduce_tap_glass`).
+- Locomotion: `stalk_prowl_right` / `stalk_prowl_left` (mirror), tagged
+  `variant_of:walk_right` / `variant_of:walk_left`. They are kept out of the pose menu.
+- `knife_tap_neon` with `blend_idle_to_knife_tap_neon` / `blend_knife_tap_neon_to_idle`
+  (neon blood splat FX, see `tools/video-pipeline/neon_blood_overlay.py`).
