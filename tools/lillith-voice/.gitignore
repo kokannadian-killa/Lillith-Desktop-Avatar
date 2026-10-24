@@ -1,0 +1,21 @@
+# Model weights, voice samples and wheels are shipped in the full kit tarball, never in git.
+models/
+wheels/
+*.onnx
+*.ort
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.gguf
+*.bin
+*.npy
+*.npz
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.whl
+*.tar.gz
+__pycache__/
+*.pyc

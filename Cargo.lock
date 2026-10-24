@@ -2450,11 +2450,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "lillith-memory"
+version = "0.0.1"
+dependencies = [
+ "lillith-core",
+ "regex",
+ "rusqlite",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
 name = "lillith-mind"
 version = "0.0.1"
 dependencies = [
  "futures-util",
  "lillith-core",
+ "lillith-memory",
  "lillith-setup",
  "regex",
  "reqwest",
@@ -2498,6 +2510,7 @@ dependencies = [
  "lillith-core",
  "lillith-mind",
  "lillith-theme",
+ "lillith-voice",
  "serde_json",
  "tiny-skia",
  "tokio",
@@ -2573,6 +2586,7 @@ dependencies = [
  "lillith-core",
  "rodio",
  "serde",
+ "serde_json",
  "thiserror 2.0.21",
  "tokio",
  "toml",

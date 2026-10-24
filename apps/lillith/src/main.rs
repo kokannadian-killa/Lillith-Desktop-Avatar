@@ -291,16 +291,18 @@ async fn main() -> Result<()> {
         tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| "lillith=info".into()),
     );
+    // Logs never go to stdout: `chat-bubble` and `settings` use stdout as
+    // their JSON event pipe to the overlay, and CLI output is println!.
     #[cfg(windows)]
     match windows_log_file() {
         Some(f) => log
             .with_ansi(false)
             .with_writer(std::sync::Mutex::new(f))
             .init(),
-        None => log.init(),
+        None => log.with_writer(std::io::stderr).init(),
     }
     #[cfg(not(windows))]
-    log.init();
+    log.with_writer(std::io::stderr).init();
 
     let cli = Cli::parse();
     let rules = RuleSet::bundled();
@@ -378,6 +380,7 @@ async fn main() -> Result<()> {
             chat::cli_chat(
                 cfg,
                 full.mind,
+                full.memory,
                 config_path,
                 message.clone(),
                 spawn_server,
@@ -482,6 +485,7 @@ async fn main() -> Result<()> {
             chat::bubble_main(
                 full.chat,
                 full.mind,
+                full.memory,
                 config_path,
                 pos,
                 offline || cli.no_llm,
@@ -795,6 +799,34 @@ struct VoiceSink {
     voice: lillith_voice::Voice,
     /// Where `[voice] enabled` is persisted (`None`: runtime only).
     config: Option<std::path::PathBuf>,
+    /// The local voice daemon (`None`: no socket configured / resolvable).
+    daemon: Option<lillith_voice::daemon::DaemonClient>,
+    /// Its `subscribe lipsync` stream (audio-driven mouth).
+    lipsync: Option<lillith_voice::daemon::LipsyncReader>,
+}
+
+impl VoiceSink {
+    fn new(voice: lillith_voice::Voice, config: Option<std::path::PathBuf>) -> Self {
+        let daemon = lillith_voice::daemon::DaemonClient::from_config(voice.config());
+        // Only subscribe when the daemon is the engine: espeak/piper have no
+        // lip-sync stream (the text lip-flap stays).
+        let lipsync = daemon
+            .clone()
+            .filter(|_| voice.engine_name() == "voiced")
+            .and_then(|d| match lillith_voice::daemon::LipsyncReader::spawn(d) {
+                Ok(r) => Some(r),
+                Err(e) => {
+                    tracing::warn!("voice daemon lip-sync reader: {e}");
+                    None
+                }
+            });
+        Self {
+            voice,
+            config,
+            daemon,
+            lipsync,
+        }
+    }
 }
 
 impl lillith_overlay::ActionSink for VoiceSink {
@@ -835,6 +867,48 @@ impl lillith_overlay::ActionSink for VoiceSink {
             }
             Ok(_) => {}
             Err(e) => tracing::warn!("[voice]: {e}"),
+        }
+    }
+
+    fn lipsync_lines(&mut self, out: &mut Vec<String>) -> bool {
+        use lillith_voice::daemon::LipsyncMsg;
+        let Some(r) = &self.lipsync else {
+            return false;
+        };
+        // Speakers off / muted: nothing of hers is playing, so her mouth
+        // stays still. The events are still read and thrown away (the
+        // reader's queue must not grow) and any audio mouth is dropped.
+        if !self.voice.enabled() || self.voice.muted() {
+            r.discard();
+            return true;
+        }
+        let mut gone = false;
+        for m in r.drain() {
+            match m {
+                LipsyncMsg::Line(l) => out.push(l),
+                LipsyncMsg::Disconnected => {
+                    out.clear();
+                    gone = true;
+                }
+            }
+        }
+        gone
+    }
+
+    fn interrupt(&mut self, reason: &str) {
+        tracing::info!(reason, "voice interrupted");
+        self.voice.stop();
+        // Best effort, off the overlay thread: the daemon also stops
+        // whatever it is playing (its own barge-in already did on listen).
+        if let Some(d) = self.daemon.clone().filter(|d| d.present()) {
+            let reason = reason.to_string();
+            let _ = std::thread::Builder::new()
+                .name("lillith-voiced-stop".into())
+                .spawn(move || {
+                    if let Err(e) = d.stop(Some(&reason)) {
+                        tracing::debug!("voice daemon stop: {e}");
+                    }
+                });
         }
     }
 }
@@ -999,10 +1073,10 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         chat: launcher.as_ref().map(chat::Launcher::hook),
         // `[voice] mute` also mutes SFX (one flag, like the menu toggle).
         muted: opts.muted || voice.muted(),
-        sink: Some(lillith_overlay::SinkHandle::new(VoiceSink {
+        sink: Some(lillith_overlay::SinkHandle::new(VoiceSink::new(
             voice,
-            config: config_path.clone(),
-        })),
+            config_path.clone(),
+        ))),
         ..opts
     };
     drop(tx);

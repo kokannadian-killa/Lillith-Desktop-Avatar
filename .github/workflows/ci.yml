@@ -29,7 +29,8 @@ jobs:
         with:
           lfs: false
       - name: List Git LFS objects
-        run: git lfs ls-files --long | cut -d' ' -f1 | sort > .lfs-assets-id
+        # master.zip (585 MB asset pack for downloads) is not needed by CI.
+        run: git lfs ls-files --long --exclude=master.zip | cut -d' ' -f1 | sort > .lfs-assets-id
       - name: Restore Git LFS cache
         id: lfs-cache
         uses: actions/cache/restore@v6
@@ -38,7 +39,7 @@ jobs:
           key: lfs-${{ hashFiles('.lfs-assets-id') }}
           restore-keys: lfs-
       - name: Fetch Git LFS art
-        run: git lfs pull
+        run: git lfs pull --exclude=master.zip
       # Save right away (not in a post step) so a later test failure doesn't
       # throw away the ~460 MB download.
       - name: Save Git LFS cache

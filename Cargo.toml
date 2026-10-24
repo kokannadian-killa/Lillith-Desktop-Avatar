@@ -17,6 +17,7 @@ members = [
     "crates/lillith-settings-gui",
     "crates/lillith-admin",
     "android/rust",
+    "crates/lillith-memory",
 ]
 default-members = [
     "crates/lillith-core",
@@ -35,6 +36,7 @@ default-members = [
     "crates/lillith-settings-gui",
     "crates/lillith-admin",
     "android/rust",
+    "crates/lillith-memory",
 ]
 
 [workspace.package]
@@ -60,6 +62,7 @@ lillith-theme = { path = "crates/lillith-theme" }
 lillith-settings-gui = { path = "crates/lillith-settings-gui" }
 lillith-setup = { path = "crates/lillith-setup" }
 lillith-admin = { path = "crates/lillith-admin" }
+lillith-memory = { path = "crates/lillith-memory" }
 lillith-android = { path = "android/rust" }
 
 # Common

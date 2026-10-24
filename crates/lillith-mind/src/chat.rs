@@ -10,10 +10,13 @@ use crate::knowledge::{parse_skill_proposal, KnowledgeBase, SkillDraft};
 use crate::llm::{ChatOptions, Flavor, LlmClient, LlmError, Message};
 use crate::persona;
 use lillith_core::access::plan::PlanRequest;
-use lillith_core::config::{ChatConfig, MindConfig};
+use lillith_core::config::{ChatConfig, MemoryConfig, MindConfig};
 use lillith_core::soul_contract::{PendingAction, SoulContract};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+/// An edit applied to both the in-memory and on-disk chat history.
+type HistoryRewrite<'a> = dyn Fn(&mut Vec<Message>) + 'a;
 
 /// How a turn ended.
 #[derive(Debug, Clone, PartialEq)]
@@ -68,6 +71,15 @@ pub struct ChatSession {
     last_tool_output: Option<String>,
     /// Which tool produced `last_tool_output`.
     last_tool_op: Option<&'static str>,
+    /// The learning memory graph (`[memory]`). `None` = off: nothing is
+    /// read or written. Attached by [`ChatSession::with_memory`].
+    memory: Option<lillith_memory::Brain>,
+    /// A "forget everything" / "forget about X" waiting for Ko's "yes".
+    /// Anything else (the safeword included) cancels it.
+    pending_forget: Option<lillith_memory::ForgetCmd>,
+    /// How many leading `history` messages are already on disk; only the
+    /// rest is appended on save (merged with what other windows wrote).
+    persisted: usize,
 }
 
 /// Most tool calls chained after one message of Ko's (each tool result is fed
@@ -126,6 +138,98 @@ impl ChatSession {
             pending_tool: None,
             last_tool_output: None,
             last_tool_op: None,
+            memory: None,
+            pending_forget: None,
+            persisted: 0,
+        }
+    }
+
+    /// Attaches the learning memory (`[memory]`). Disabled config, or a DB
+    /// that fails to open, leaves memory off (logged, chat unaffected).
+    pub fn with_memory(mut self, cfg: &MemoryConfig) -> Self {
+        self.memory = None;
+        if cfg.enabled {
+            match lillith_memory::Brain::open(cfg) {
+                Ok(b) if b.is_enabled() => self.memory = Some(b),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("[memory] could not open the memory db: {e}"),
+            }
+        }
+        self
+    }
+
+    /// Attaches an already-open brain (tests, custom paths).
+    pub fn with_brain(mut self, brain: lillith_memory::Brain) -> Self {
+        self.memory = brain.is_enabled().then_some(brain);
+        self
+    }
+
+    /// The memory graph, if on (e.g. to feed desktop events into it with
+    /// [`lillith_memory::Brain::observe_event`]).
+    pub fn memory(&self) -> Option<&lillith_memory::Brain> {
+        self.memory.as_ref()
+    }
+
+    /// The forget command awaiting Ko's "yes", if any.
+    pub fn pending_forget(&self) -> Option<&lillith_memory::ForgetCmd> {
+        self.pending_forget.as_ref()
+    }
+
+    /// Handles "forget ..." locally (no model call). "forget everything" and
+    /// "forget about X" only ask first; Ko's next message must be "yes" to
+    /// run it, and anything else cancels. "forget the last N minutes" runs
+    /// at once. Returns the in-character line, or `None` when `user` is not
+    /// part of a forget exchange (or memory is off).
+    fn handle_forget(&mut self, user: &str) -> Option<String> {
+        if let Some(cmd) = self.pending_forget.take() {
+            if is_yes(user) {
+                return Some(self.run_forget(&cmd));
+            }
+            if is_no(user) {
+                return Some(persona::FORGET_KEPT_LINE.into());
+            }
+            // Anything else: cancelled, and the message is handled normally.
+        }
+        let brain = self.memory.as_ref()?;
+        let cmd = lillith_memory::parse_forget(user)?;
+        if matches!(cmd, lillith_memory::ForgetCmd::LastSecs(_)) {
+            return Some(self.run_forget(&cmd));
+        }
+        let found = brain
+            .forget_preview(&cmd, &lillith_memory::Ctx::now())
+            .map(|r| r.total())
+            .unwrap_or(1);
+        let mut in_history = self.history.clone();
+        forget_in_history(&cmd, &mut in_history);
+        if found == 0 && in_history.len() == self.history.len() {
+            return Some(persona::forget_nothing_line(&cmd));
+        }
+        let line = persona::forget_confirm_line(&cmd);
+        self.pending_forget = Some(cmd);
+        Some(line)
+    }
+
+    /// Runs a (confirmed) forget: the memory DB first; the chat history only
+    /// when that succeeded.
+    fn run_forget(&mut self, cmd: &lillith_memory::ForgetCmd) -> String {
+        let Some(brain) = self.memory.as_ref() else {
+            return persona::FORGET_KEPT_LINE.into();
+        };
+        match brain.forget(cmd, &lillith_memory::Ctx::now()) {
+            Ok(report) => {
+                // Chat history holds the same things in plain text.
+                let before = self.history.len();
+                let saved = self.persist(Some(&|h: &mut Vec<Message>| forget_in_history(cmd, h)));
+                let removed = before.saturating_sub(self.history.len());
+                if let Err(e) = &saved {
+                    tracing::warn!("[memory] forget: chat history not rewritten: {e}");
+                }
+                persona::forget_line(cmd, &report, removed, saved.err().map(|e| e.to_string()))
+            }
+            Err(e) => {
+                tracing::warn!("[memory] forget failed: {e}");
+                "I tried to let that go, but something stuck, so I changed nothing. Check the log, love.".into()
+            }
         }
     }
 
@@ -159,6 +263,14 @@ impl ChatSession {
         if let Some(ctx) = self.knowledge.as_ref().and_then(|kb| kb.context_for(user)) {
             s.push_str("\n\n");
             s.push_str(&ctx);
+        }
+        if let Some(block) = self
+            .memory
+            .as_ref()
+            .and_then(|b| b.context_block(user, &lillith_memory::Ctx::now()))
+        {
+            s.push_str("\n\n");
+            s.push_str(&block);
         }
         s
     }
@@ -328,6 +440,7 @@ impl ChatSession {
                 Err(e) => tracing::warn!("{}: {e}; starting a fresh chat", path.display()),
             }
         }
+        self.persisted = self.history.len();
         self.save_path = Some(path);
         self
     }
@@ -337,8 +450,9 @@ impl ChatSession {
     }
 
     pub fn clear(&mut self) {
-        self.history.clear();
-        self.save();
+        if let Err(e) = self.persist(Some(&|h: &mut Vec<Message>| h.clear())) {
+            tracing::warn!("could not clear the saved chat history: {e}");
+        }
     }
 
     pub fn system_prompt(&self) -> &str {
@@ -370,15 +484,20 @@ impl ChatSession {
             // hook); the report's line only says the helper is gone when
             // that kill was confirmed.
             let report = lillith_core::access::kill_switch::stop_all();
-            // Drop any pending plan / skill so nothing is still waiting.
+            // Drop any pending plan / skill / forget so nothing is still waiting.
             self.pending_tool = None;
             self.pending_skill = None;
+            self.pending_forget = None;
             let line = report.chat_line();
             on_token(&line);
             return Outcome::Reply(line);
         }
 
         let user = user.trim();
+        if let Some(line) = self.handle_forget(user) {
+            on_token(&line);
+            return Outcome::Reply(line);
+        }
         let messages = self.request_messages(user);
         self.salt = self.salt.wrapping_add(1);
         let result = match &self.client {
@@ -396,7 +515,12 @@ impl ChatSession {
                 let reply = reply.trim().to_string();
                 self.history.push(Message::user(user));
                 self.history.push(Message::assistant(reply.clone()));
-                self.save();
+                if let Err(e) = self.save() {
+                    tracing::warn!("could not save chat history: {e}");
+                }
+                if let Some(b) = &self.memory {
+                    b.observe_interaction(user, &reply, &lillith_memory::Ctx::now());
+                }
                 // A reply may propose a skill; hold it for the Soul Contract
                 // gate (never written here).
                 self.pending_skill = parse_skill_proposal(&reply);
@@ -487,12 +611,125 @@ impl ChatSession {
         }
     }
 
-    fn save(&self) {
-        let Some(path) = &self.save_path else { return };
-        let start = self.history.len().saturating_sub(MAX_SAVED);
-        if let Err(e) = write_json(path, &self.history[start..]) {
-            tracing::warn!("could not save chat history to {}: {e}", path.display());
+    /// Appends the unsaved messages to the history file.
+    fn save(&mut self) -> std::io::Result<()> {
+        self.persist(None)
+    }
+
+    /// Writes the history file under a lock file: re-reads what is on disk
+    /// (another window may have written since), appends this session's
+    /// unsaved messages, and, with `rewrite`, applies it to both the disk
+    /// copy and the in-memory history (forget / clear). A stale session
+    /// therefore never re-adds messages that were forgotten elsewhere.
+    fn persist(&mut self, rewrite: Option<&HistoryRewrite<'_>>) -> std::io::Result<()> {
+        let fresh: Vec<Message> = self.history[self.persisted.min(self.history.len())..].to_vec();
+        if let Some(f) = rewrite {
+            f(&mut self.history);
         }
+        let Some(path) = self.save_path.clone() else {
+            self.persisted = self.history.len();
+            return Ok(());
+        };
+        let _lock = HistoryLock::acquire(&path)?;
+        let mut all = read_history(&path);
+        all.extend(fresh);
+        if let Some(f) = rewrite {
+            f(&mut all);
+        }
+        let start = all.len().saturating_sub(MAX_SAVED);
+        write_json(&path, &all[start..])?;
+        self.persisted = self.history.len();
+        Ok(())
+    }
+}
+
+/// Applies a forget command to chat messages: everything, messages that
+/// mention the topic's content words (whole words), or the last turns
+/// (history has no timestamps; ~1 turn a minute is a generous bound).
+pub fn forget_in_history(cmd: &lillith_memory::ForgetCmd, h: &mut Vec<Message>) {
+    match cmd {
+        lillith_memory::ForgetCmd::All => h.clear(),
+        lillith_memory::ForgetCmd::Topic(t) => {
+            let words = lillith_memory::content_words(t);
+            if !words.is_empty() {
+                h.retain(|m| !lillith_memory::mentions_any(&m.content, &words));
+            }
+        }
+        lillith_memory::ForgetCmd::LastSecs(secs) => {
+            let turns = (*secs / 60).max(1) as usize;
+            let keep = h.len().saturating_sub(turns.saturating_mul(2));
+            h.truncate(keep);
+        }
+    }
+}
+
+/// "yes" (and close variants) confirms a pending forget.
+fn is_yes(t: &str) -> bool {
+    let t = t.trim().trim_end_matches(['.', '!', ' ']).to_lowercase();
+    matches!(
+        t.as_str(),
+        "yes" | "y" | "yes please" | "yes, forget it" | "yes forget it" | "confirm" | "do it"
+    )
+}
+
+/// A plain "no" to a pending forget (answered locally).
+fn is_no(t: &str) -> bool {
+    let t = t.trim().trim_end_matches(['.', '!', ' ']).to_lowercase();
+    matches!(
+        t.as_str(),
+        "no" | "n" | "nope" | "cancel" | "never mind" | "nevermind" | "keep it" | "don't"
+    )
+}
+
+fn read_history(path: &Path) -> Vec<Message> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// `chat_history.json.lock`, created exclusively; removed on drop. A lock
+/// older than 30 s is treated as left behind by a crash.
+struct HistoryLock(PathBuf);
+
+impl HistoryLock {
+    fn acquire(path: &Path) -> std::io::Result<Self> {
+        if let Some(d) = path.parent() {
+            std::fs::create_dir_all(d)?;
+        }
+        let lock = path.with_extension("json.lock");
+        for _ in 0..150 {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&lock)
+            {
+                Ok(_) => return Ok(Self(lock)),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    let stale = std::fs::metadata(&lock)
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .and_then(|t| t.elapsed().ok())
+                        .is_some_and(|age| age > Duration::from_secs(30));
+                    if stale {
+                        let _ = std::fs::remove_file(&lock);
+                    } else {
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!("{} is held by another window", lock.display()),
+        ))
+    }
+}
+
+impl Drop for HistoryLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
     }
 }
 
@@ -592,6 +829,178 @@ mod tests {
             history_turns: 1,
             ..ChatConfig::default()
         }
+    }
+
+    fn mem_brain() -> lillith_memory::Brain {
+        lillith_memory::Brain::open_in_memory(&MemoryConfig::default()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn memory_learns_and_injects_into_the_next_prompt() {
+        let (url, mut reqs) = fake_server(vec![
+            sse_reply(&["Noted, pet."]),
+            sse_reply(&["Synthwave it is."]),
+        ])
+        .await;
+        let mut s = ChatSession::new(&cfg(&url), false).with_brain(mem_brain());
+        s.send("I love dark synthwave", |_| {}).await;
+        let _ = reqs.recv().await.unwrap();
+        s.send("put on some synthwave", |_| {}).await;
+        let r2 = reqs.recv().await.unwrap();
+        assert!(r2.contains("[Memory"), "memory block injected");
+        assert!(r2.contains("Ko likes dark synthwave"));
+        // Memory off: no block, nothing learned.
+        let off = ChatSession::new(&cfg(&url), true).with_memory(&MemoryConfig::disabled());
+        assert!(off.memory().is_none());
+        assert!(!off.full_system_prompt("synthwave").contains("[Memory"));
+    }
+
+    #[tokio::test]
+    async fn forget_command_is_answered_locally_and_deletes() {
+        let mut s = ChatSession::new(&ChatConfig::default(), true).with_brain(mem_brain());
+        let b = s.memory().unwrap();
+        b.observe_interaction("I hate pineapple", "", &lillith_memory::Ctx::now());
+        assert!(s.full_system_prompt("pineapple").contains("pineapple"));
+        let mut shown = String::new();
+        let out = s
+            .send("forget about pineapple", |t| shown.push_str(t))
+            .await;
+        assert!(matches!(out, Outcome::Reply(_)), "no model call (offline)");
+        assert!(
+            shown.contains("pineapple") && shown.contains("yes"),
+            "{shown}"
+        );
+        assert!(
+            s.full_system_prompt("pineapple")
+                .contains("dislikes pineapple"),
+            "nothing deleted before the yes"
+        );
+        assert!(s.pending_forget().is_some());
+        let out = s.send("yes", |_| {}).await;
+        assert!(out.text().contains("pineapple"), "{}", out.text());
+        assert!(s.pending_forget().is_none());
+        assert!(!s
+            .full_system_prompt("pineapple")
+            .contains("dislikes pineapple"));
+        // Nothing left about it: said honestly, no question asked.
+        let out = s.send("forget about pineapple", |_| {}).await;
+        assert!(out.text().contains("don't have anything"), "{}", out.text());
+        assert!(s.pending_forget().is_none());
+        // "forget everything" + "no" keeps it; + "yes" wipes.
+        s.memory().unwrap().observe_interaction(
+            "I love dark synthwave",
+            "",
+            &lillith_memory::Ctx::now(),
+        );
+        let n = s.memory().unwrap().stats().nodes;
+        s.send("forget everything", |_| {}).await;
+        let out = s.send("no", |_| {}).await;
+        assert!(out.text().contains("keep"), "{}", out.text());
+        assert_eq!(s.memory().unwrap().stats().nodes, n);
+        s.send("forget everything", |_| {}).await;
+        let out = s.send("yes", |_| {}).await;
+        assert!(out.text().contains("Wiped"), "{}", out.text());
+        assert_eq!(s.memory().unwrap().stats().nodes, 0);
+    }
+
+    #[tokio::test]
+    async fn anything_but_yes_cancels_a_pending_forget() {
+        let (url, mut reqs) = fake_server(vec![sse_reply(&["Here's one."])]).await;
+        let mut s = ChatSession::new(&cfg(&url), false).with_brain(mem_brain());
+        s.memory().unwrap().observe_interaction(
+            "I love dark synthwave",
+            "",
+            &lillith_memory::Ctx::now(),
+        );
+        let n = s.memory().unwrap().stats().nodes;
+        s.send("forget everything", |_| {}).await;
+        assert!(s.pending_forget().is_some());
+        // A normal message cancels and goes to the model as usual.
+        let out = s.send("tell me a joke", |_| {}).await;
+        assert_eq!(out.text(), "Here's one.");
+        let _ = reqs.recv().await.unwrap();
+        assert!(s.pending_forget().is_none());
+        // A late "yes" no longer wipes anything.
+        let _ = s.send("yes", |_| {}).await;
+        assert_eq!(s.memory().unwrap().stats().nodes, n);
+    }
+
+    #[test]
+    fn forget_parser_ignores_casual_phrases() {
+        for t in ["forget about it, let's go", "forget it", "forget about it"] {
+            assert_eq!(lillith_memory::parse_forget(t), None, "{t}");
+        }
+    }
+
+    fn hist_dir(tag: &str) -> PathBuf {
+        let d =
+            std::env::temp_dir().join(format!("lillith-chat-hist-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[tokio::test]
+    async fn forget_rewrites_history_on_disk_and_other_windows_cannot_resurrect_it() {
+        let d = hist_dir("merge");
+        let path = d.join("chat_history.json");
+        let (url, _reqs) = fake_server(vec![sse_reply(&["Mm."]), sse_reply(&["Sure."])]).await;
+        let mut a = ChatSession::new(&cfg(&url), false)
+            .with_brain(mem_brain())
+            .with_history_file(&path);
+        a.send("my ex is Sarah", |_| {}).await;
+        // A second window opened now sees the same history.
+        let mut b = ChatSession::new(&cfg(&url), false).with_history_file(&path);
+        assert_eq!(b.history().len(), 2);
+        a.send("forget about my ex", |_| {}).await;
+        let out = a.send("yes", |_| {}).await;
+        assert!(!out.text().contains("couldn't"), "{}", out.text());
+        let disk = std::fs::read_to_string(&path).unwrap().to_lowercase();
+        assert!(!disk.contains("sarah"), "{disk}");
+        // The stale window saves a new turn: it is appended, Sarah stays gone.
+        b.send("hello there", |_| {}).await;
+        let disk = std::fs::read_to_string(&path).unwrap().to_lowercase();
+        assert!(!disk.contains("sarah"), "{disk}");
+        assert!(disk.contains("hello there"));
+        assert!(!path.with_extension("json.lock").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[tokio::test]
+    async fn history_save_failure_is_reported_in_the_forget_reply() {
+        let d = hist_dir("savefail");
+        // The history "file" is a directory: every write fails.
+        let path = d.join("chat_history.json");
+        std::fs::create_dir_all(&path).unwrap();
+        let mut s = ChatSession::new(&ChatConfig::default(), true)
+            .with_brain(mem_brain())
+            .with_history_file(&path);
+        s.memory().unwrap().observe_interaction(
+            "I love dark synthwave",
+            "",
+            &lillith_memory::Ctx::now(),
+        );
+        let out = s.send("forget the last 5 minutes", |_| {}).await;
+        assert!(out.text().contains("chat log"), "{}", out.text());
+        assert_eq!(
+            s.memory().unwrap().stats().nodes,
+            1,
+            "only Ko's node is left"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[tokio::test]
+    async fn safeword_never_reaches_memory() {
+        // (The bare safeword is handled by the kill switch before memory; not
+        // sent here so this test doesn't bump the global stop epoch.)
+        let (url, mut reqs) = fake_server(vec![sse_reply(&["Mm."])]).await;
+        let mut s = ChatSession::new(&cfg(&url), false).with_brain(mem_brain());
+        s.send("I love red wine and my cat is Nyx", |_| {}).await;
+        let r = reqs.recv().await.unwrap();
+        assert!(!r.contains("[Memory"));
+        assert_eq!(s.memory().unwrap().stats().nodes, 0, "nothing stored");
+        assert!(!s.full_system_prompt("red").contains("[Memory"));
     }
 
     #[tokio::test]

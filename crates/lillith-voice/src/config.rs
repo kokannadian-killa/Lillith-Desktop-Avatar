@@ -3,7 +3,7 @@
 //! ```toml
 //! [voice]
 //! enabled = true            # master switch (legacy top-level `voice_enabled` is the fallback)
-//! engine = "auto"           # auto | piper | espeak-ng | spd-say | none
+//! engine = "auto"           # auto | daemon | piper | espeak-ng | spd-say | none
 //! model = "~/.local/share/lillith/piper/en_US-amy-medium.onnx"   # piper voice model (.onnx)
 //! voice = "female1"         # spd-say voice type / espeak-ng voice (optional)
 //! rate = 1.0                # 0.5 .. 2.0, 1.0 = engine default speed
@@ -14,7 +14,18 @@
 //! queue = 3                 # lines waiting at most (oldest dropped when full)
 //! max_chars = 240           # longer lines are cut at a word boundary
 //! player = "auto"           # piper playback: auto | aplay | paplay
+//! daemon_socket = "/run/user/1000/lillith-voice/voiced.sock"  # local voice daemon (optional)
+//! preset = "lillith"        # daemon voice preset (falls back to "p1")
+//!
+//! [voice.stt]
+//! enabled = true            # bubble mic button (push-to-talk via the daemon)
+//! timeout_s = 20.0          # longest wait for a transcript
 //! ```
+//!
+//! `engine = "daemon"` (alias `voiced`) uses the local voice daemon
+//! (`lillith-voice-kit/PROTOCOL.md`); `auto` also tries it first. Either
+//! way, when the socket is missing or does not answer `ping`, the
+//! subprocess chain below is used instead.
 //!
 //! lillith-core's `Config` ignores unknown tables, so this table lives here
 //! and is parsed from the same file text with [`VoiceConfig::from_config_toml`].
@@ -26,9 +37,14 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum EngineChoice {
-    /// First installed of piper (needs `model`) → espeak-ng → spd-say → none.
+    /// The local voice daemon if it answers `ping`, else the first installed
+    /// of piper (needs `model`) → espeak-ng → spd-say → none.
     #[default]
     Auto,
+    /// The local voice daemon (`voiced`, Unix socket / named pipe only);
+    /// falls back like `auto` when it is not running.
+    #[serde(alias = "voiced")]
+    Daemon,
     Piper,
     #[serde(alias = "espeak", alias = "espeak_ng")]
     EspeakNg,
@@ -47,6 +63,30 @@ pub enum PlayerChoice {
     Auto,
     Aplay,
     Paplay,
+}
+
+/// Default daemon voice preset (Ko's cloned voice).
+pub const DEFAULT_PRESET: &str = "lillith";
+/// Preset used when the daemon has no [`DEFAULT_PRESET`].
+pub const FALLBACK_PRESET: &str = "p1";
+
+/// `[voice.stt]`: the chat bubble's push-to-talk mic (through the daemon).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SttConfig {
+    /// Show the mic button (only when the daemon answers).
+    pub enabled: bool,
+    /// Longest wait for a transcript after the button is released (s).
+    pub timeout_s: f32,
+}
+
+impl Default for SttConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            timeout_s: 20.0,
+        }
+    }
 }
 
 /// The `[voice]` table. Every key is optional.
@@ -71,6 +111,13 @@ pub struct VoiceConfig {
     pub queue: usize,
     pub max_chars: usize,
     pub player: PlayerChoice,
+    /// Voice daemon socket (Unix) / pipe (Windows). `None`:
+    /// `$LILLITH_VOICE_SOCKET`, else `$XDG_RUNTIME_DIR/lillith-voice/voiced.sock`
+    /// (Windows: `$LILLITH_VOICE_PIPE`, else `\\.\pipe\lillith-voice`).
+    pub daemon_socket: Option<PathBuf>,
+    /// Daemon voice preset ([`DEFAULT_PRESET`], else [`FALLBACK_PRESET`]).
+    pub preset: Option<String>,
+    pub stt: SttConfig,
 }
 
 impl Default for VoiceConfig {
@@ -88,6 +135,9 @@ impl Default for VoiceConfig {
             queue: 3,
             max_chars: 240,
             player: PlayerChoice::Auto,
+            daemon_socket: None,
+            preset: None,
+            stt: SttConfig::default(),
         }
     }
 }
@@ -138,6 +188,19 @@ impl VoiceConfig {
         if let Some(m) = &self.model {
             self.model = Some(expand_home(m));
         }
+        if let Some(m) = &self.daemon_socket {
+            self.daemon_socket = Some(expand_home(m));
+        }
+        self.stt.timeout_s = fin(self.stt.timeout_s, 20.0).clamp(1.0, 120.0);
+    }
+
+    /// The daemon preset to ask for first.
+    pub fn preset(&self) -> &str {
+        self.preset
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .unwrap_or(DEFAULT_PRESET)
     }
 }
 
@@ -206,6 +269,8 @@ mod tests {
             ("espeak", EngineChoice::EspeakNg),
             ("spd-say", EngineChoice::SpdSay),
             ("none", EngineChoice::None),
+            ("daemon", EngineChoice::Daemon),
+            ("voiced", EngineChoice::Daemon),
         ] {
             let c = VoiceConfig::from_config_toml(&format!("[voice]\nengine = \"{s}\"\n")).unwrap();
             assert_eq!(c.engine, e, "{s}");
@@ -247,6 +312,26 @@ mod tests {
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("scale = 0.6"), "{text}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn daemon_socket_preset_and_stt_parse() {
+        let c = VoiceConfig::default();
+        assert_eq!(c.preset(), "lillith");
+        assert!(c.daemon_socket.is_none() && c.stt.enabled);
+        let c = VoiceConfig::from_config_toml(
+            "[voice]\nengine = \"daemon\"\ndaemon_socket = \"/run/user/1000/v.sock\"\n\
+             preset = \"p1\"\n[voice.stt]\nenabled = false\ntimeout_s = 500.0\n",
+        )
+        .unwrap();
+        assert_eq!(c.engine, EngineChoice::Daemon);
+        assert_eq!(
+            c.daemon_socket.as_deref(),
+            Some(Path::new("/run/user/1000/v.sock"))
+        );
+        assert_eq!(c.preset(), "p1");
+        assert!(!c.stt.enabled);
+        assert_eq!(c.stt.timeout_s, 120.0, "clamped");
     }
 
     #[test]

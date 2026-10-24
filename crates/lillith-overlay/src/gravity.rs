@@ -8,8 +8,12 @@
 //! the usable area above the panel (bridge work area, else
 //! `[behavior] floor_offset_px`). On a window she wanders along its top,
 //! clamped to its x-span ([`perch_span`]), sits on the edge now and then
-//! (`sit_swing` and its variants, seat line from the clip's `seat_y`), and
-//! falls again when the window moves, minimizes or closes ([`check_perch`]).
+//! (`sit_swing`, `sit_base` clips and their variants, seat line from the
+//! clip's `seat_y`) or lounges along it (`lounge_base` clips that fit the
+//! window, [`lounge_shift`]), and falls again when the window moves,
+//! minimizes or closes ([`check_perch`]). Landing on a window from a drag or
+//! fall plays the manifest's `drag_held -> <sit>` blend first when there is
+//! one ([`LandBlend`]).
 //!
 //! Everything here works in her `(left, bottom)` [`Placement`] space plus
 //! a [`Frame`] that maps it to KWin's global coordinates (+y down).
@@ -193,17 +197,68 @@ pub struct Sit {
     pub seat_cell: i32,
     /// A sit-down blend is playing: the drop follows it.
     pub sink: Option<Ease>,
+    /// She is landing on the window through a landing blend
+    /// (`blend_drag_held_to_<clip>`): until it hands over to `clip` the
+    /// blend's own seat line rests on the edge.
+    pub landing: Option<LandBlend>,
+}
+
+/// A landing blend in progress (see [`Sit::landing`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LandBlend {
+    /// The blend clip playing over the seated base.
+    pub clip: String,
+    /// The blend's seat line above its feet anchor in cell px.
+    pub seat_cell: i32,
 }
 
 impl Sit {
     /// Px her window is lowered at `scale` right now.
     pub fn lowered_px(&self, scale: f32) -> i32 {
+        if let Some(l) = &self.landing {
+            // The blend drops her in from above onto its seat line: the
+            // window sits at that line from the first frame.
+            return scaled_px(l.seat_cell, scale, 1.0);
+        }
         scaled_px(
             self.seat_cell,
             scale,
             self.sink.map_or(1.0, |e| e.fraction()),
         )
     }
+}
+
+/// Horizontal fit of a lounge (a clip lying along the window top) on a
+/// window: the span her body rests on (`seat_x_range`, widened to include her
+/// feet anchor so the perch check still finds her over the window), scaled to
+/// screen px around her feet column `feet_x`, has to lie within `[x0, x1)`
+/// shrunk by `edge` px on both sides. Returns the shift (screen px, +right)
+/// that puts it there (0 if it already fits), `None` without a
+/// `seat_x_range` or if the window is too narrow for the span.
+pub fn lounge_shift(
+    seat_x_range: Option<(i32, i32)>,
+    anchor_x: i32,
+    scale: f32,
+    feet_x: i32,
+    (x0, x1): (i32, i32),
+    edge: i32,
+) -> Option<i32> {
+    let (a, b) = seat_x_range?;
+    let lo = (a.min(b).min(anchor_x) - anchor_x) as f32 * scale;
+    let hi = (a.max(b).max(anchor_x) - anchor_x) as f32 * scale;
+    let (lo, hi) = (lo.floor() as i32, hi.ceil() as i32);
+    let (wl, wr) = (x0 + edge, x1 - edge);
+    if hi - lo > wr - wl {
+        return None;
+    }
+    let (left, right) = (feet_x + lo, feet_x + hi);
+    Some(if left < wl {
+        wl - left
+    } else if right > wr {
+        wr - right
+    } else {
+        0
+    })
 }
 
 /// Standing back up through a blend: the rest of a sit's drop going away.
@@ -563,6 +618,7 @@ mod tests {
             left_s: 5.0,
             seat_cell: 162,
             sink: None,
+            landing: None,
         };
         assert_eq!(sit.lowered_px(0.55), 89);
         assert_eq!(sit.lowered_px(1.0), 162);
@@ -600,6 +656,82 @@ mod tests {
             },
         });
         assert_eq!(p.lowered_px(1.0), 41);
+    }
+
+    #[test]
+    fn landing_blend_rests_on_its_own_seat_line_until_it_hands_over() {
+        // Blend seat 152 cell px above the feet (392 - 240), the base's 142.
+        let mut sit = Sit {
+            clip: "perch_sit".into(),
+            left_s: 10.0,
+            seat_cell: 142,
+            sink: None,
+            landing: Some(LandBlend {
+                clip: "blend_drag_held_to_perch_sit".into(),
+                seat_cell: 152,
+            }),
+        };
+        // From the first frame at any scale (no sink: she drops in from
+        // above onto the line).
+        assert_eq!(sit.lowered_px(0.5), 76);
+        assert_eq!(sit.lowered_px(0.559), 85);
+        assert_eq!(sit.lowered_px(1.0), 152);
+        // A sink, if any, does not apply while landing.
+        sit.sink = Some(Ease::new(1.0));
+        assert_eq!(sit.lowered_px(1.0), 152);
+        // Handed over: the base's seat line.
+        sit.sink = None;
+        sit.landing = None;
+        assert_eq!(sit.lowered_px(0.5), 71);
+        assert_eq!(sit.lowered_px(1.0), 142);
+        // On a window top at y 300 (standing bottom 496, as above).
+        let frame = Frame {
+            origin: (0, 0),
+            screen_h: 800,
+            feet: (20, 4),
+        };
+        let p = Perch {
+            id: "a".into(),
+            rect: Rect::new(0, 300, 600, 400),
+            sit: Some(Sit {
+                landing: Some(LandBlend {
+                    clip: "b".into(),
+                    seat_cell: 152,
+                }),
+                ..sit
+            }),
+            next_sit_s: 1.0,
+            rise: None,
+        };
+        assert_eq!(p.bottom(&frame, 0.5), 496 - 76);
+        assert_eq!(p.bottom(&frame, 1.0), 496 - 152);
+    }
+
+    #[test]
+    fn lounge_shift_fits_the_window_or_refuses() {
+        // perch_lounge: rests on x 197..372 of a 400 px cell, anchor x 200.
+        let r = Some((197, 372));
+        let win = (100, 900);
+        // At scale 1: span -3..172 around the feet; fits mid-window.
+        assert_eq!(lounge_shift(r, 200, 1.0, 400, win, 8), Some(0));
+        // Too far right: moved left so the span ends 8 px inside.
+        assert_eq!(lounge_shift(r, 200, 1.0, 800, win, 8), Some(892 - 972));
+        // Too far left (the span widened to her feet): moved right.
+        assert_eq!(lounge_shift(r, 200, 1.0, 100, win, 8), Some(108 - 97));
+        // Scale shrinks the span: 0.559 -> -2..97 (floor/ceil).
+        assert_eq!(lounge_shift(r, 200, 0.559, 790, win, 8), Some(0));
+        assert_eq!(lounge_shift(r, 200, 0.559, 850, win, 8), Some(892 - 947));
+        // Window narrower than the span (+ edges): no lounge.
+        assert_eq!(lounge_shift(r, 200, 1.0, 400, (300, 480), 8), None);
+        assert_eq!(lounge_shift(r, 200, 0.5, 400, (300, 400), 8), None);
+        // Exactly fits: 175 px span in a 191 px top.
+        assert_eq!(lounge_shift(r, 200, 1.0, 300, (300, 491), 8), Some(11));
+        // A reversed range counts the same; no range: no lounge.
+        assert_eq!(
+            lounge_shift(Some((372, 197)), 200, 1.0, 800, win, 8),
+            Some(-80)
+        );
+        assert_eq!(lounge_shift(None, 200, 1.0, 400, win, 8), None);
     }
 
     #[test]

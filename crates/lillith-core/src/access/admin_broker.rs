@@ -87,7 +87,6 @@ mod imp {
     use crate::access::admin_proto::{
         pipe_sddl, random_hex, read_frame, write_frame, HelperArgs, Reply, Request, PIPE_PREFIX,
     };
-    use std::io::{Read, Write};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
@@ -103,9 +102,10 @@ mod imp {
     use windows_sys::Win32::Security::{
         GetTokenInformation, TokenUser, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
     };
+    use windows_sys::Win32::Storage::FileSystem::PIPE_ACCESS_DUPLEX;
     use windows_sys::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE,
-        PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
+        PIPE_TYPE_BYTE, PIPE_WAIT,
     };
     use windows_sys::Win32::System::Threading::{
         GetCurrentProcess, OpenProcessToken, TerminateProcess, WaitForSingleObject,
@@ -226,7 +226,8 @@ mod imp {
             g.take()
                 .ok_or_else(|| std::io::Error::other("admin helper session gone"))?
         };
-        let write_res = write_frame(&mut session.pipe, &frame.encode(&session.token));
+        let write_res = write_frame(&mut session.pipe, &frame.encode(&session.token))
+            .map_err(|e| std::io::Error::other(format!("admin helper: {e}")));
         let read_res = write_res.and_then(|()| {
             read_frame(&mut session.pipe)
                 .map_err(|e| std::io::Error::other(format!("admin helper: {e}")))
@@ -251,6 +252,9 @@ mod imp {
         // Put the session back only if the helper process is still tracked
         // (force_kill may have cleared PROC mid-read).
         let helper_alive = PROC.lock().unwrap_or_else(|e| e.into_inner()).is_some();
+        // A helper launched per-command is never reused, even if the
+        // setting changed since it was started.
+        let per_command = per_command || session.per_command;
         if helper_alive && !per_command {
             let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
             *g = Some(session);
@@ -335,14 +339,14 @@ mod imp {
             let mut psd: *mut std::ffi::c_void = std::ptr::null_mut();
             if ConvertStringSecurityDescriptorToSecurityDescriptorW(
                 sddl.as_ptr(),
-                SDDL_REVISION_1 as u32,
+                SDDL_REVISION_1,
                 &mut psd,
                 std::ptr::null_mut(),
             ) == 0
             {
                 return Err(std::io::Error::last_os_error());
             }
-            let mut sa = SECURITY_ATTRIBUTES {
+            let sa = SECURITY_ATTRIBUTES {
                 nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
                 lpSecurityDescriptor: psd,
                 bInheritHandle: 0,
@@ -355,7 +359,7 @@ mod imp {
                 super::super::admin_proto::MAX_FRAME as u32,
                 super::super::admin_proto::MAX_FRAME as u32,
                 0,
-                &mut sa,
+                &sa,
             );
             windows_sys::Win32::Foundation::LocalFree(psd);
             if h == INVALID_HANDLE_VALUE {
@@ -368,17 +372,18 @@ mod imp {
     fn connect_server(server: PipeServer) -> std::io::Result<std::fs::File> {
         use std::os::windows::io::FromRawHandle;
         unsafe {
-            let ok = ConnectNamedPipe(server.0, std::ptr::null_mut());
+            // `PipeServer` is a bare handle (no Drop): take it out and hand
+            // ownership to the File (closed on error).
+            let PipeServer(h) = server;
+            let ok = ConnectNamedPipe(h, std::ptr::null_mut());
             if ok == 0 {
                 let err = std::io::Error::last_os_error();
                 if err.raw_os_error() != Some(535) {
-                    CloseHandle(server.0);
+                    CloseHandle(h);
                     return Err(err);
                 }
             }
-            let f = std::fs::File::from_raw_handle(server.0 as *mut _);
-            std::mem::forget(server);
-            Ok(f)
+            Ok(std::fs::File::from_raw_handle(h as *mut _))
         }
     }
 
@@ -394,7 +399,7 @@ mod imp {
             info.lpVerb = verb.as_ptr();
             info.lpFile = file.as_ptr();
             info.lpParameters = params.as_ptr();
-            info.nShow = SW_HIDE as i32;
+            info.nShow = SW_HIDE;
             if ShellExecuteExW(&mut info) == 0 {
                 return Err(std::io::Error::last_os_error());
             }
@@ -408,7 +413,9 @@ mod imp {
     }
 
     #[allow(dead_code)]
-    fn _link(_: Instant, _: Duration, _: GENERIC_READ, _: GENERIC_WRITE) {}
+    fn _link(_: Instant, _: Duration) -> u32 {
+        GENERIC_READ | GENERIC_WRITE
+    }
 }
 
 #[cfg(test)]
