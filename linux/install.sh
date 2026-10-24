@@ -43,7 +43,7 @@ MARK="X-Lillith-Installer=linux/install.sh"
 
 # ── options ─────────────────────────────────────────────────────────
 YES=0 UNINSTALL=0 SKIP_DEPS=0 SKIP_BUILD=0 PURGE=0 LIST_ICONS=0
-ASSETS="" GGUF="" LLAMA="" CTX=""
+ASSETS="" GGUF="" LLAMA="" CTX="" PREBUILT="" VOICE=""
 AUTOSTART="" DESKTOP_SHORTCUT="" KWIN="" START="" ICON=""
 
 usage() {
@@ -59,6 +59,10 @@ Usage: ./linux/install.sh [options]
   Install steps:
       --skip-deps        don't run pacman (packages already installed, or not Arch)
       --skip-build       reuse the last release build in the Cargo target dir
+      --prebuilt DIR     install the ready-made programs in DIR (lillith,
+                         lillith-settings) instead of building; no Rust needed.
+                         The all-in-one Lillith-main-linux.zip passes its bin/.
+      --no-voice         don't set up her voice from the bundled offline kit
       --assets PATH      animation set to install: a folder with manifest.toml,
                          or a .zip containing assets/generated (e.g. the release's
                          Lillith-<ver>-windows-x64.zip). Default: ./assets/generated
@@ -87,6 +91,9 @@ while [[ $# -gt 0 ]]; do
     --purge) PURGE=1 ;;
     --skip-deps) SKIP_DEPS=1 ;;
     --skip-build) SKIP_BUILD=1 ;;
+    --prebuilt) PREBUILT="${2:?--prebuilt needs a folder}"; shift ;;
+    --prebuilt=*) PREBUILT="${1#*=}" ;;
+    --no-voice) VOICE=0 ;;
     --assets) ASSETS="${2:?--assets needs a path}"; shift ;;
     --assets=*) ASSETS="${1#*=}" ;;
     --gguf) GGUF="${2:?--gguf needs a file}"; shift ;;
@@ -341,13 +348,15 @@ fi
 step "2/8  System packages"
 # ffmpeg plays her MP4 poses; the X11/GL libraries are for the Settings
 # window and the X11 fallback (a normal Plasma desktop already has them).
-PKGS=(base-devel git pkgconf libxkbcommon wayland dbus libpulse systemd-libs alsa-lib python ffmpeg
+PKGS=(libxkbcommon wayland dbus libpulse systemd-libs alsa-lib python ffmpeg
       libx11 libxcb libxcursor libxi libxrender libglvnd mesa)
+# Building needs the toolchain too; the prebuilt programs don't.
+[[ -n $PREBUILT ]] || PKGS=(base-devel git pkgconf "${PKGS[@]}")
 if [[ $SKIP_DEPS == 1 ]]; then
   warn "skipped (--skip-deps); needed on Arch: ${PKGS[*]} + rust"
 else
   have pacman || die "pacman not found: this installer is for Arch-based systems (use --skip-deps if the libraries are already there; see INSTALL.md for apt/dnf)"
-  have cargo || PKGS+=(rust)
+  [[ -n $PREBUILT ]] || have cargo || PKGS+=(rust)
   missing="$(pacman -T "${PKGS[@]}" 2>/dev/null || true)"
   if [[ -z $missing ]]; then
     ok "all present: ${PKGS[*]}"
@@ -363,6 +372,9 @@ else
     fi
   fi
 fi
+if [[ -n $PREBUILT ]]; then
+  ok "ready-made programs in $PREBUILT: no Rust or build tools needed"
+else
 # rustup present but no default toolchain → cargo exists but fails.
 if have rustup && ! cargo --version >/dev/null 2>&1; then
   if ask "rustup has no default toolchain. Run 'rustup default stable'?" y; then rustup default stable; fi
@@ -373,6 +385,7 @@ if [[ "$(printf '%s\n1.85.0\n' "$RUSTV" | sort -V | head -n1)" != 1.85.0 ]]; the
   die "Rust $RUSTV is too old, need 1.85+ (sudo pacman -Syu rust, or rustup update stable)"
 fi
 ok "rust $RUSTV"
+fi
 
 # ── 3. build ────────────────────────────────────────────────────────
 TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
@@ -381,7 +394,10 @@ step "3/8  Building (release; first build takes a few minutes)"
 BUILD_PKGS=(-p lillith)
 HAS_SETTINGS=0
 if [[ -f $ROOT/crates/lillith-settings-gui/Cargo.toml ]]; then BUILD_PKGS+=(-p lillith-settings-gui); HAS_SETTINGS=1; fi
-if [[ $SKIP_BUILD == 1 ]]; then
+if [[ -n $PREBUILT ]]; then
+  REL="$(cd "$PREBUILT" && pwd)"
+  ok "skipped: using the ready-made programs in $REL"
+elif [[ $SKIP_BUILD == 1 ]]; then
   warn "skipped (--skip-build), using $REL"
 else
   (cd "$ROOT" && cargo build --release --locked "${BUILD_PKGS[@]}")
@@ -578,6 +594,14 @@ else
       warn "and run: lillith setup --gguf /path/to/model.gguf --llama-server /usr/bin/llama-server"
     fi
   fi
+  # The all-in-one zip may carry its own llama-server (bundle/llama-server/):
+  # copy it next to her data and use it; otherwise use the system one.
+  if [[ -z $LLAMA && -x $ROOT/bundle/llama-server/llama-server ]]; then
+    mkdir -p "$DATA_DIR/llama-server"
+    cp -a "$ROOT/bundle/llama-server/." "$DATA_DIR/llama-server/"
+    LLAMA="$DATA_DIR/llama-server/llama-server"
+    ok "using the bundled llama-server ($LLAMA)"
+  fi
   if [[ -z $LLAMA ]]; then
     mapfile -t servers < <(find_llama)
     if ((${#servers[@]})); then
@@ -638,6 +662,39 @@ if [[ -n $skills_src ]]; then
     fi
   else
     ok "found $skills_src; she'll show you the import plan when you chat (or run: lillith import-skills)"
+  fi
+fi
+
+# ── 7b. voice (offline, from the bundled kit) ───────────────────────
+# The all-in-one zip ships the voice kit's models/ and wheels/ inside
+# tools/lillith-voice/. Its own installer makes a venv and pip-installs
+# from those wheels only (--no-index); nothing is downloaded.
+VKIT="$ROOT/tools/lillith-voice"
+if [[ $VOICE != 0 && -f $VKIT/install.sh && -f $VKIT/models/kokoro-v1.0.onnx && -d $VKIT/wheels ]]; then
+  step "7b/8 Her voice (offline kit bundled in this zip; nothing is downloaded)"
+  VPY=""
+  # The bundled wheels are for CPython 3.13 and 3.14.
+  for c in python3 python3.14 python3.13; do
+    have "$c" || continue
+    v="$("$c" -c 'import sys;print(f"{sys.version_info[0]}{sys.version_info[1]}")' 2>/dev/null || true)"
+    if [[ $v == 313 || $v == 314 ]] && compgen -G "$VKIT/wheels/*-cp$v-*.whl" >/dev/null; then
+      VPY="$(command -v "$c")"; break
+    fi
+  done
+  if [[ -z $VPY ]]; then
+    warn "her voice needs Python 3.13 or 3.14 (the bundled wheels are cp313/cp314);"
+    warn "found: $(python3 --version 2>&1 || echo none). Continuing without voice."
+    warn "Later: sudo pacman -S python, then: bash $VKIT/install.sh --python python3"
+  elif ask "Set up her voice now (offline; about 1 GB in ~/.local/share/lillith-voice)?" y; then
+    if bash "$VKIT/install.sh" --wheels "$VKIT/wheels" --python "$VPY" --systemd 2>&1 | sed 's/^/  /'; [[ ${PIPESTATUS[0]} == 0 ]]; then
+      ok "voice installed (models: ${XDG_DATA_HOME:-$HOME/.local/share}/lillith-voice/models)"
+      if [[ -f $CONFIG_FILE ]] && ! grep -q '^\[voice\]' "$CONFIG_FILE"; then
+        printf '\n[voice]\nengine = "daemon"   # the offline voice kit (lillith-voice.service)\npreset = "lillith"\n' >> "$CONFIG_FILE"
+        ok "[voice] engine = \"daemon\" saved to $CONFIG_FILE"
+      fi
+    else
+      warn "voice setup failed (see above); Lillith still runs without voice. Retry: bash $VKIT/install.sh"
+    fi
   fi
 fi
 

@@ -11,11 +11,12 @@
 # └──────────────────────────────────────────────────────────────────┘
 #
 # What it does (asks before anything big):
-#   1. If this is GitHub's "Download ZIP" (main.zip), her art is only Git LFS
-#      placeholders: it downloads the real files from your GitHub repo
-#      (about 530 MB, needs `gh auth login` once; the repo is private).
-#   2. Installs the build tools and libraries with pacman (sudo).
-#   3. Builds Lillith (first time: about 10-20 minutes on a laptop).
+#   1. The all-in-one Lillith-main-linux.zip from the release already has
+#      her art, the programs and the offline voice kit: nothing to download.
+#      (GitHub's "Download ZIP" has only Git LFS placeholders: then it
+#      downloads the art from your GitHub repo, about 530 MB, `gh auth login`.)
+#   2. Installs the libraries with pacman (sudo); the list is shown first.
+#   3. Uses the bundled programs (bin/), else builds Lillith (10-20 min).
 #   4. Installs her for your user: ~/.local/bin/lillith, her animations,
 #      an app-menu entry, a desktop icon, the KWin bridge, the blur fix.
 #   5. Points her at your local model (default
@@ -58,17 +59,29 @@ if ! command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
-# Default model: the one Ko already uses, if it's on disk. (Otherwise
-# linux/install.sh searches your home folder and lets you pick.)
+# Default model: the one Ko already uses, then any .gguf in ~/models.
+# (Otherwise linux/install.sh searches your home folder and lets you pick.)
+# Never downloaded: the zip has no model (bundle/models/README.txt).
 if ! has --gguf; then
+  found=""
   for m in "${LILLITH_GGUF:-}" \
            "$HOME/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf" \
-           "$HOME/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf"; do
-    if [[ -n $m && -f $m ]]; then
-      echo "Using your model: $m   (other one: bash install.sh --gguf /path/to/model.gguf)"
-      args+=(--gguf "$m"); break
-    fi
+           "$HOME"/models/*.gguf; do
+    [[ -n $m && -f $m && ${m,,} != *mmproj* ]] || continue
+    found="$m"; break
   done
+  if [[ -n $found ]]; then
+    echo "Using your model: $found   (other one: bash install.sh --gguf /path/to/model.gguf)"
+    args+=(--gguf "$found")
+  else
+    echo "No model at ~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf or ~/models/*.gguf (nothing is downloaded); the installer will search your home folder."
+  fi
+fi
+
+# The all-in-one zip: ready-made programs in bin/ (skip the Rust build).
+if ! has --prebuilt && ! has --skip-build && [[ -x $ROOT/bin/lillith ]] && "$ROOT/bin/lillith" --help >/dev/null 2>&1; then
+  echo "Using the ready-made programs in $ROOT/bin (no build needed)"
+  args+=(--prebuilt "$ROOT/bin")
 fi
 
 # Build in this folder's target/ unless told otherwise.

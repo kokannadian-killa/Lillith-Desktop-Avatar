@@ -12,6 +12,7 @@ Everything runs on your own machine. Lillith only talks to `127.0.0.1`
 (loopback), and nothing is downloaded while she runs. You get the model file
 yourself.
 
+- [From the all-in-one zip (recommended)](#from-the-all-in-one-zip-recommended)
 - [From the main zip (GitHub "Download ZIP")](#from-the-main-zip-github-download-zip)
 - [Linux (Garuda / Arch, KDE Plasma 6 Wayland)](#linux-garuda--arch-kde-plasma-6-wayland)
 - [Windows (build from source)](#windows-build-from-source)
@@ -22,6 +23,30 @@ yourself.
 - [Troubleshooting](#troubleshooting)
 
 ---
+
+## From the all-in-one zip (recommended)
+
+Download **`Lillith-main-linux.zip`** from the latest GitHub release. It has
+the ready-made programs (`bin/`), all her art and pose videos, the art kit and
+the offline voice kit (models and Python wheels), so nothing is downloaded or
+built:
+
+```fish
+cd ~/Downloads
+unzip -o Lillith-main-linux.zip
+bash ~/Downloads/Lillith-main-linux/install.sh
+```
+
+1. **Packages:** it lists the missing runtime libraries (ffmpeg, Wayland/X11,
+   audio) and asks before `sudo pacman -S --needed`. No Rust or build tools.
+2. **Install:** the bundled programs and art, as below (steps 4 and 5).
+3. **Brain:** `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf`, else
+   `~/models/*.gguf`, else it searches your home folder. The model is never
+   in the zip and never downloaded (`bundle/models/README.txt`). A bundled
+   `bundle/llama-server/` is used if present, else your system `llama-server`.
+4. **Voice:** a venv in `~/.local/share/lillith-voice` installed offline from
+   the bundled wheels (`pip --no-index`, Python 3.13 or 3.14). With another
+   Python it says so and carries on without voice.
 
 ## From the main zip (GitHub "Download ZIP")
 

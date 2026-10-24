@@ -14,19 +14,27 @@
 
 ---
 
-## Quick install (from the GitHub zip)
+## Quick install (the all-in-one zip)
 
-**Linux (Garuda / Arch, any shell including fish).** Download the zip
-(**Code ▸ Download ZIP**), then paste these three lines (only the lines, not a
-prompt like `❯` or `✗`):
+**Linux (Garuda / Arch, any shell including fish).** Download
+**`Lillith-main-linux.zip`** from the latest
+[GitHub release](https://github.com/kokannadian-killa/Lillith-Desktop-Avatar/releases/latest).
+It has everything: the ready-made programs, all her art and pose videos, and
+the offline voice kit, so the install needs no downloads and no build (only
+the missing pacman libraries, which it lists and asks about). Then paste
+these three lines (only the lines, not a prompt like `❯` or `✗`):
 
 ```fish
 cd ~/Downloads
-unzip -o Lillith-Desktop-Avatar-main.zip
-bash ~/Downloads/Lillith-Desktop-Avatar-main/install.sh
+unzip -o Lillith-main-linux.zip
+bash ~/Downloads/Lillith-main-linux/install.sh
 ```
 
-The installer works from any folder. It downloads her art if the zip only has
+It finds your model at `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf`, then
+`~/models/*.gguf` (the model is never in the zip and never downloaded).
+
+**From GitHub's Code ▸ Download ZIP instead** (source only): the same
+`bash …/install.sh` works from any folder. It downloads her art if the zip only has
 Git LFS placeholders (it asks first and uses your GitHub login, `gh auth login`,
 because the repo is private), installs packages with pacman, builds her,
 adds her to the app menu and desktop, and points her at your local model
@@ -54,10 +62,12 @@ Python/Tk prototypes). Everything runs locally.
 > (M4) is in progress; window awareness, tray, chat, memory and voice are
 > planned. See [Status / Roadmap](#status--roadmap).
 
-## Asset pack: master.zip
+## Asset pack
 
-You don't need this to install her: `install.sh` uses `assets/` directly.
-[**master.zip**](master.zip) (about 585 MB, Git LFS) is a snapshot from 2026-10-23, older than the current art, and holds everything under `assets/`: 176 PNGs (sprite sheets and stills), 272 mp4 clips (generated and source video), the manifest, and the config files, built from main on 2026-10-23.
+Use the release's all-in-one **`Lillith-main-linux.zip`**: it carries the
+current art (all 194 clips). The old `master.zip` in the repo is an outdated
+2026-10-23 snapshot (Git LFS); you don't need it, and the installer never
+uses it.
 
 ## Contents
 
