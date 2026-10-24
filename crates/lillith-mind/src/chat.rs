@@ -252,11 +252,14 @@ impl ChatSession {
         self.pending_forget.as_ref()
     }
 
-    /// Handles "forget ..." locally (no model call). "forget everything" and
-    /// "forget about X" only ask first; Ko's next message must be "yes" to
-    /// run it, and anything else cancels. "forget the last N minutes" runs
-    /// at once. Returns the in-character line, or `None` when `user` is not
-    /// part of a forget exchange (or memory is off).
+    /// Handles "forget ..." locally (no model call). "forget everything",
+    /// "forget about X" and windows longer than an hour ("forget the last
+    /// 1000 months") only ask first, naming how many memories match and a
+    /// few examples; Ko's next message must be "yes" to run it, and
+    /// anything else cancels. "forget the last N minutes" (up to an hour)
+    /// and "forget the last thing I said" run at once. Returns the
+    /// in-character line, or `None` when `user` is not part of a forget
+    /// exchange (or memory is off).
     fn handle_forget(&mut self, user: &str) -> Option<String> {
         if let Some(cmd) = self.pending_forget.take() {
             if is_yes(user) {
@@ -269,19 +272,22 @@ impl ChatSession {
         }
         let brain = self.memory.as_ref()?;
         let cmd = lillith_memory::parse_forget(user)?;
-        if matches!(cmd, lillith_memory::ForgetCmd::LastSecs(_)) {
+        if !cmd.needs_confirm() {
             return Some(self.run_forget(&cmd));
         }
-        let found = brain
+        // A failed dry run still asks (unknown count), never skips the yes.
+        let preview = brain
             .forget_preview(&cmd, &lillith_memory::Ctx::now())
-            .map(|r| r.total())
-            .unwrap_or(1);
+            .map_err(|e| tracing::warn!("[memory] forget preview failed: {e}"))
+            .ok();
+        let found = preview.as_ref().map_or(1, |r| r.total());
         let mut in_history = self.history.clone();
         forget_in_history(&cmd, &mut in_history);
-        if found == 0 && in_history.len() == self.history.len() {
+        let history_hits = self.history.len().saturating_sub(in_history.len());
+        if found == 0 && history_hits == 0 {
             return Some(persona::forget_nothing_line(&cmd));
         }
-        let line = persona::forget_confirm_line(&cmd);
+        let line = persona::forget_confirm_line(&cmd, preview.as_ref(), history_hits);
         self.pending_forget = Some(cmd);
         Some(line)
     }
@@ -511,11 +517,9 @@ impl ChatSession {
     /// Loads (if present) and keeps saving the history at `path`.
     pub fn with_history_file(mut self, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        if let Ok(s) = std::fs::read_to_string(&path) {
-            match serde_json::from_str::<Vec<Message>>(&s) {
-                Ok(h) => self.history = h,
-                Err(e) => tracing::warn!("{}: {e}; starting a fresh chat", path.display()),
-            }
+        match read_history(&path) {
+            Ok(h) => self.history = h,
+            Err(e) => tracing::warn!("{}: {e}; starting a fresh chat", path.display()),
         }
         self.persisted = self.history.len();
         self.save_path = Some(path);
@@ -987,7 +991,9 @@ impl ChatSession {
             return Ok(());
         };
         let _lock = HistoryLock::acquire(&path)?;
-        let mut all = read_history(&path);
+        // An unreadable file refuses the save (never overwritten); a corrupt
+        // one has been moved aside to `.corrupt` first.
+        let mut all = read_history(&path)?;
         all.extend(fresh);
         if let Some(f) = rewrite {
             f(&mut all);
@@ -1000,15 +1006,22 @@ impl ChatSession {
 }
 
 /// Applies a forget command to chat messages: everything, messages that
-/// mention the topic's content words (whole words), or the last turns
-/// (history has no timestamps; ~1 turn a minute is a generous bound).
+/// hold the topic (the same rule as the memory DB: all content words for
+/// 1-2 words, else two thirds, whole words), the last user turn and its
+/// reply, or the last turns (history has no timestamps; ~1 turn a minute
+/// is a generous bound).
 pub fn forget_in_history(cmd: &lillith_memory::ForgetCmd, h: &mut Vec<Message>) {
     match cmd {
         lillith_memory::ForgetCmd::All => h.clear(),
         lillith_memory::ForgetCmd::Topic(t) => {
             let words = lillith_memory::content_words(t);
             if !words.is_empty() {
-                h.retain(|m| !lillith_memory::mentions_any(&m.content, &words));
+                h.retain(|m| !lillith_memory::matches_topic(&[&m.content], &words));
+            }
+        }
+        lillith_memory::ForgetCmd::LastTurn => {
+            if let Some(i) = h.iter().rposition(|m| m.role == "user") {
+                h.truncate(i);
             }
         }
         lillith_memory::ForgetCmd::LastSecs(secs) => {
@@ -1037,11 +1050,34 @@ fn is_no(t: &str) -> bool {
     )
 }
 
-fn read_history(path: &Path) -> Vec<Message> {
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+/// Reads the history file: a missing file is empty; a file that does not
+/// parse is renamed to `chat_history.json.corrupt` (never overwritten) and
+/// reads as empty; any other read error is returned, so the caller does
+/// not replace a file it could not read.
+fn read_history(path: &Path) -> std::io::Result<Vec<Message>> {
+    let s = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    };
+    match serde_json::from_str(&s) {
+        Ok(h) => Ok(h),
+        Err(e) => {
+            let mut aside = path.with_extension("json.corrupt");
+            let mut n = 1;
+            while aside.exists() {
+                aside = path.with_extension(format!("json.corrupt.{n}"));
+                n += 1;
+            }
+            std::fs::rename(path, &aside)?;
+            tracing::warn!(
+                "{}: {e}; moved it to {} and started a fresh chat log",
+                path.display(),
+                aside.display()
+            );
+            Ok(Vec::new())
+        }
+    }
 }
 
 /// `chat_history.json.lock`, created exclusively; removed on drop. A lock
@@ -1355,6 +1391,153 @@ mod tests {
             s.memory().unwrap().stats().nodes,
             1,
             "only Ko's node is left"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    fn seed_history(path: &Path, msgs: &[(&str, &str)]) {
+        let h: Vec<Message> = msgs
+            .iter()
+            .map(|(r, c)| {
+                if *r == "user" {
+                    Message::user(*c)
+                } else {
+                    Message::assistant(c.to_string())
+                }
+            })
+            .collect();
+        write_json(path, &h).unwrap();
+    }
+
+    #[tokio::test]
+    async fn forget_my_new_job_keeps_new_wave_music_in_memory_and_history() {
+        let d = hist_dir("newjob");
+        let path = d.join("chat_history.json");
+        seed_history(
+            &path,
+            &[
+                ("user", "I love new wave music"),
+                ("assistant", "Mm, synths."),
+                ("user", "my new job starts monday"),
+                ("assistant", "Proud of you."),
+            ],
+        );
+        let mut s = ChatSession::new(&ChatConfig::default(), true)
+            .with_brain(mem_brain())
+            .with_history_file(&path);
+        let now = lillith_memory::Ctx::now();
+        s.memory()
+            .unwrap()
+            .observe_interaction("I love new wave music", "", &now);
+        s.memory()
+            .unwrap()
+            .observe_interaction("my job is barista", "", &now);
+        let out = s.send("forget about my new job", |_| {}).await;
+        // The question names how much matches and shows an example.
+        assert!(out.text().contains("1 chat message"), "{}", out.text());
+        assert!(!out.text().contains("wave"), "{}", out.text());
+        let out = s.send("yes", |_| {}).await;
+        assert!(out.text().contains("Gone"), "{}", out.text());
+        assert!(s
+            .history()
+            .iter()
+            .any(|m| m.content == "I love new wave music"));
+        assert!(!s.history().iter().any(|m| m.content.contains("new job")));
+        assert!(s
+            .memory()
+            .unwrap()
+            .strength_of(
+                lillith_memory::Kind::Preference,
+                "likes:new wave music",
+                &now
+            )
+            .is_some());
+        // "the news" matches nothing at all: said honestly, nothing asked.
+        let out = s.send("forget the news", |_| {}).await;
+        assert!(out.text().contains("don't have anything"), "{}", out.text());
+        assert!(s.pending_forget().is_none());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[tokio::test]
+    async fn big_time_windows_ask_first_small_ones_run_at_once() {
+        let mut s = ChatSession::new(&ChatConfig::default(), true).with_brain(mem_brain());
+        let now = lillith_memory::Ctx::now();
+        s.memory()
+            .unwrap()
+            .observe_interaction("I love dark synthwave", "", &now);
+        let n = s.memory().unwrap().stats().nodes;
+        for cmd in ["forget the last 1000 months", "forget the last 2 hours"] {
+            let out = s.send(cmd, |_| {}).await;
+            assert!(out.text().contains("Say yes"), "{cmd}: {}", out.text());
+            assert!(out.text().contains("memor"), "{cmd}: {}", out.text());
+            assert_eq!(s.memory().unwrap().stats().nodes, n, "{cmd}: nothing yet");
+            let out = s.send("no", |_| {}).await;
+            assert!(out.text().contains("keep"), "{}", out.text());
+            assert_eq!(s.memory().unwrap().stats().nodes, n);
+        }
+        let out = s.send("forget the last 1000 months", |_| {}).await;
+        assert!(out.text().contains("1000 months"), "{}", out.text());
+        let out = s.send("yes", |_| {}).await;
+        assert!(out.text().contains("never happened"), "{}", out.text());
+        assert_eq!(s.memory().unwrap().stats().nodes, 1, "only Ko's node");
+        // Up to an hour runs immediately (no pending question).
+        s.memory()
+            .unwrap()
+            .observe_interaction("I love dark synthwave", "", &now);
+        let out = s.send("forget the last hour", |_| {}).await;
+        assert!(s.pending_forget().is_none());
+        assert!(out.text().contains("never happened"), "{}", out.text());
+        assert_eq!(s.memory().unwrap().stats().nodes, 1);
+    }
+
+    #[tokio::test]
+    async fn forget_the_last_thing_i_said_drops_only_the_last_turn() {
+        let d = hist_dir("lastturn");
+        let path = d.join("chat_history.json");
+        let mut msgs = Vec::new();
+        for i in 0..6 {
+            msgs.push(("user", format!("message {i}")));
+            msgs.push(("assistant", format!("reply {i}")));
+        }
+        let borrowed: Vec<(&str, &str)> = msgs.iter().map(|(r, c)| (*r, c.as_str())).collect();
+        seed_history(&path, &borrowed);
+        let mut s = ChatSession::new(&ChatConfig::default(), true)
+            .with_brain(mem_brain())
+            .with_history_file(&path);
+        let out = s.send("forget the last thing I said", |_| {}).await;
+        assert!(s.pending_forget().is_none(), "runs at once");
+        assert!(out.text().contains("last thing"), "{}", out.text());
+        assert_eq!(s.history().len(), 10, "one turn (2 messages) gone");
+        assert_eq!(s.history().last().unwrap().content, "reply 4");
+        let disk: Vec<Message> =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(disk.len(), 10);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn corrupt_history_is_moved_aside_never_overwritten() {
+        let d = hist_dir("corrupt");
+        let path = d.join("chat_history.json");
+        std::fs::write(&path, "{ not json").unwrap();
+        let mut s = ChatSession::new(&ChatConfig::default(), true).with_history_file(&path);
+        assert!(s.history().is_empty());
+        let aside = path.with_extension("json.corrupt");
+        assert_eq!(std::fs::read_to_string(&aside).unwrap(), "{ not json");
+        s.history.push(Message::user("hi"));
+        s.save().unwrap();
+        let disk: Vec<Message> =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(disk.len(), 1);
+        // A second corrupt file gets its own name; the first backup stays.
+        std::fs::write(&path, "garbage").unwrap();
+        s.history.push(Message::user("again"));
+        s.save().unwrap();
+        assert_eq!(std::fs::read_to_string(&aside).unwrap(), "{ not json");
+        assert_eq!(
+            std::fs::read_to_string(path.with_extension("json.corrupt.1")).unwrap(),
+            "garbage"
         );
         let _ = std::fs::remove_dir_all(&d);
     }

@@ -3821,7 +3821,7 @@
    "video": "tada_celebrate/tada_celebrate.mp4"
   },
   {
-   "frame_count": 23,
+   "frame_count": 24,
    "frame_width": 400,
    "frame_height": 400,
    "fps": 12.0,
@@ -3831,7 +3831,7 @@
     200,
     392
    ],
-   "scale": 0.528,
+   "scale": 0.54,
    "body_anchor_x": 200,
    "facing": "front",
    "canvas_compliant": true,
@@ -4872,7 +4872,7 @@
   },
   {
    "name": "perch_sit",
-   "frame_count": 96,
+   "frame_count": 102,
    "frame_width": 400,
    "frame_height": 400,
    "fps": 12.0,
@@ -5833,6 +5833,162 @@
    ],
    "allure": true,
    "video": "come_hither_crawl/come_hither_crawl.mp4"
+  },
+  {
+   "name": "hair_twirl_lip_bite",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "hair_twirl_lip_bite/",
+   "sheet": "hair_twirl_lip_bite/hair_twirl_lip_bite_sheet.png",
+   "manifest": "hair_twirl_lip_bite/hair_twirl_lip_bite.json",
+   "preview": "hair_twirl_lip_bite/hair_twirl_lip_bite_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "idle_variant",
+    "variant_of:idle"
+   ],
+   "allure": true,
+   "video": "hair_twirl_lip_bite/hair_twirl_lip_bite.mp4",
+   "idle_variant": true
+  },
+  {
+   "name": "dom_chin_tilt_summon",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "dom_chin_tilt_summon/",
+   "sheet": "dom_chin_tilt_summon/dom_chin_tilt_summon_sheet.png",
+   "manifest": "dom_chin_tilt_summon/dom_chin_tilt_summon.json",
+   "preview": "dom_chin_tilt_summon/dom_chin_tilt_summon_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "dom"
+   ],
+   "allure": true,
+   "video": "dom_chin_tilt_summon/dom_chin_tilt_summon.mp4"
+  },
+  {
+   "name": "tail_heart_wink",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "tail_heart_wink/",
+   "sheet": "tail_heart_wink/tail_heart_wink_sheet.png",
+   "manifest": "tail_heart_wink/tail_heart_wink.json",
+   "preview": "tail_heart_wink/tail_heart_wink_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "tail_heart_wink/tail_heart_wink.mp4"
+  },
+  {
+   "name": "trace_heart_on_glass",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "trace_heart_on_glass/",
+   "sheet": "trace_heart_on_glass/trace_heart_on_glass_sheet.png",
+   "manifest": "trace_heart_on_glass/trace_heart_on_glass.json",
+   "preview": "trace_heart_on_glass/trace_heart_on_glass_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "trace_heart_on_glass/trace_heart_on_glass.mp4"
+  },
+  {
+   "name": "leg_cross_slow_sit",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front (seated on an edge, legs crossed)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "leg_cross_slow_sit/",
+   "sheet": "leg_cross_slow_sit/leg_cross_slow_sit_sheet.png",
+   "manifest": "leg_cross_slow_sit/leg_cross_slow_sit.json",
+   "preview": "leg_cross_slow_sit/leg_cross_slow_sit_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "sit_base"
+   ],
+   "allure": true,
+   "video": "leg_cross_slow_sit/leg_cross_slow_sit.mp4",
+   "seat_y": 226,
+   "seat_x_range": [
+    156,
+    240
+   ],
+   "feet_lowest_y": 392
   }
  ]
 }

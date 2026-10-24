@@ -27,11 +27,14 @@ pub mod schema;
 
 mod brain;
 
-pub use brain::{Brain, Ctx, ForgetReport, Memory, Observed, Stats};
+pub use brain::{Brain, Ctx, ForgetReport, Memory, Observed, Stats, FORGET_EXAMPLES};
 pub use bridge::{EventFilter, MemoryBridge, Proactive};
 pub use errors::{ErrorRecord, FixOutcome, KnownFix};
 pub use extract::{Extractor, Fact, Polarity, RuleExtractor};
-pub use forget::{content_words, mentions_any, parse_forget, ForgetCmd};
+pub use forget::{
+    contains_phrase, content_words, matches_topic, mentions_any, parse_forget, ForgetCmd,
+    CONFIRM_WINDOW_SECS, LAST_TURN_SECS,
+};
 pub use habits::Prediction;
 pub use lillith_core::config::MemoryConfig;
 pub use recovery::SafeFix;

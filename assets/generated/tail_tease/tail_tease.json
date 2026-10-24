@@ -1,7 +1,7 @@
 {
   "name": "tail_tease",
   "placeholder": false,
-  "frame_count": 23,
+  "frame_count": 24,
   "frame_width": 400,
   "frame_height": 400,
   "canvas_w": 400,
@@ -18,16 +18,16 @@
   ],
   "style": "canonical_ko (thigh-highs + shorts)",
   "source": "grok-imagine-video",
-  "scale": 0.528,
+  "scale": 0.54,
   "body_anchor_x": 200,
   "facing": "front",
   "source_files": [
-    "../../source/video/tail_tease/tail_tease_v3_a.mp4"
+    "../../source/video/tail_tease/tail_tease_v3_c.mp4"
   ],
   "source_frame_range": {
     "first": 1,
-    "last": 45,
-    "step": 2,
+    "last": 70,
+    "step": 3,
     "video_fps": 24,
     "note": "1-based ffmpeg frame numbers"
   },
@@ -36,57 +36,59 @@
   "centering": "fixed",
   "baseline_snap": "global (video ground line)",
   "body_point_src_x": [
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5,
-    609.5
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0,
+    645.0
   ],
   "horn_fix": {
-    "ref_horn_px": 521,
-    "ref_hue_median": 267.6,
+    "ref_horn_px": 707,
+    "ref_hue_median": 274.8,
     "mean_hue_shift_deg_per_frame": [
-      0.0,
-      -0.6,
-      1.0,
-      0.3,
-      0.1,
-      1.1,
-      -0.5,
-      0.4,
-      -0.6,
-      -0.6,
-      -0.6,
-      0.2,
-      -0.6,
-      0.8,
-      -0.2,
-      0.3,
-      0.4,
-      0.5,
+      -0.3,
+      -1.0,
+      -1.0,
       -0.9,
-      -1.3,
-      0.1,
-      -0.5,
-      -0.1
+      -1.8,
+      -1.2,
+      -1.8,
+      -3.7,
+      -4.4,
+      -3.8,
+      -3.9,
+      -2.8,
+      -3.1,
+      -2.2,
+      -3.9,
+      -2.6,
+      -2.6,
+      -2.8,
+      -4.2,
+      -2.8,
+      -2.9,
+      -1.9,
+      -2.7,
+      -2.9
     ]
   },
   "baked_secondary_motion": [
@@ -97,148 +99,283 @@
     "chest_follow"
   ],
   "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
-  "notes": "",
+  "notes": "v3_c regen: exactly one tail (replaces v3_a, which baked in a second static tail); starts/ends on idle_a still",
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
-      151,
-      279,
+      132,
+      270,
+      21,
+      392
+    ],
+    [
+      132,
+      270,
+      21,
+      392
+    ],
+    [
+      132,
+      270,
+      21,
+      392
+    ],
+    [
+      133,
+      270,
+      21,
+      392
+    ],
+    [
+      131,
+      270,
       22,
       392
     ],
     [
-      151,
-      288,
+      115,
+      258,
+      22,
+      392
+    ],
+    [
+      98,
+      257,
       23,
       392
     ],
     [
-      145,
-      279,
-      24,
+      114,
+      259,
+      22,
       392
     ],
     [
-      120,
-      279,
-      24,
+      92,
+      261,
+      21,
       392
     ],
     [
-      103,
-      279,
-      25,
+      89,
+      265,
+      21,
       392
     ],
     [
-      95,
-      279,
-      24,
+      99,
+      269,
+      22,
+      392
+    ],
+    [
+      93,
+      271,
+      23,
       392
     ],
     [
       106,
-      280,
-      23,
-      392
-    ],
-    [
-      151,
-      280,
+      271,
       22,
       392
     ],
     [
-      151,
-      292,
-      22,
+      138,
+      268,
+      21,
       392
     ],
     [
-      151,
-      316,
-      23,
+      140,
+      263,
+      21,
       392
     ],
     [
-      151,
-      319,
-      23,
+      139,
+      272,
+      21,
       392
     ],
     [
-      151,
-      279,
-      23,
+      138,
+      281,
+      21,
       392
     ],
     [
-      151,
-      280,
+      138,
+      290,
+      21,
+      392
+    ],
+    [
+      140,
+      287,
       22,
       392
     ],
     [
       136,
-      280,
-      22,
+      286,
+      20,
       392
     ],
     [
-      107,
-      279,
-      23,
+      121,
+      281,
+      20,
       392
     ],
     [
-      94,
-      279,
-      24,
+      102,
+      275,
+      21,
       392
     ],
     [
-      101,
-      279,
-      25,
+      105,
+      271,
+      21,
       392
     ],
     [
-      140,
-      279,
-      24,
-      392
-    ],
-    [
-      151,
-      282,
-      23,
-      392
-    ],
-    [
-      151,
-      310,
-      22,
-      392
-    ],
-    [
-      151,
-      324,
-      22,
-      392
-    ],
-    [
-      151,
-      323,
-      22,
-      392
-    ],
-    [
-      151,
-      307,
-      23,
+      121,
+      270,
+      21,
       392
     ]
   ],
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_ab_of": "generated_v2/tail_tease/",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -148,
+        17,
+        0.0242
+      ],
+      [
+        -148,
+        17,
+        0.0273
+      ],
+      [
+        -148,
+        17,
+        0.0275
+      ],
+      [
+        -148,
+        17,
+        0.0252
+      ],
+      [
+        -148,
+        17,
+        0.0255
+      ],
+      [
+        -148,
+        17,
+        0.027
+      ],
+      [
+        -148,
+        17,
+        0.0298
+      ],
+      [
+        -148,
+        17,
+        0.0281
+      ],
+      [
+        -148,
+        17,
+        0.0261
+      ],
+      [
+        -148,
+        17,
+        0.0183
+      ],
+      [
+        -148,
+        17,
+        0.0211
+      ],
+      [
+        -148,
+        17,
+        0.0194
+      ],
+      [
+        -148,
+        17,
+        0.0247
+      ],
+      [
+        -148,
+        17,
+        0.021
+      ],
+      [
+        -148,
+        17,
+        0.0212
+      ],
+      [
+        -148,
+        17,
+        0.0195
+      ],
+      [
+        -148,
+        17,
+        0.0253
+      ],
+      [
+        -148,
+        17,
+        0.025
+      ],
+      [
+        -148,
+        17,
+        0.0244
+      ],
+      [
+        -148,
+        17,
+        0.0259
+      ],
+      [
+        -148,
+        17,
+        0.0272
+      ],
+      [
+        -148,
+        17,
+        0.0273
+      ],
+      [
+        -148,
+        17,
+        0.0268
+      ],
+      [
+        -148,
+        17,
+        0.0274
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
   "video": {
     "file": "tail_tease.mp4",
     "layout": "alpha_side_by_side",
@@ -247,16 +384,21 @@
     "edge_bleed_px": 0,
     "width": 800,
     "height": 400,
-    "frame_count": 23,
+    "frame_count": 24,
     "fps": 12.0,
-    "bytes": 256862,
+    "bytes": 278670,
     "quality": {
-      "edge_mae": 2.302,
-      "edge_p99": 18.0,
-      "halo_dark": 0.036,
-      "halo_light": -0.161,
-      "alpha_mae": 0.0752
+      "edge_mae": 2.118,
+      "edge_p99": 15.4,
+      "halo_dark": 0.013,
+      "halo_light": -0.099,
+      "alpha_mae": 0.0725
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "2a342816040a3181ce6d8c1edb2e6a75b559a4fb4a60858b5bee624c7311ac2b"
   }
 }

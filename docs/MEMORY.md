@@ -174,28 +174,51 @@ To forget from chat (handled locally, no model call):
 
 - "forget everything" / "wipe your memory": deletes every memory, event and
   error record (and clears the chat history).
-- "forget about <topic>": deletes memories whose key/label/detail contain one
-  of the topic's *content words* as a whole word (stopwords like
-  my/your/the/about/it are stripped; "forget about my ex" matches `ex`, never
-  "next" or "text"), the preferences hanging off a matched entity, the value
-  of a matched attribute ("my ex is Sarah" → also events/entities `sarah`),
-  matching events/errors, and chat-history messages containing those words.
-  If nothing matches she says so ("I don't have anything about X").
-- "forget the last 30 minutes" / "the last hour" / "the last week" / "the
-  last thing I said" (= 5 minutes): deletes rows created **or rewritten**
-  (`updated_at`, schema v2) in that window (and the most recent chat turns).
+- "forget about <topic>": deletes memories where **one row** (key + label +
+  detail together) holds the whole topic: every *content word* for a 1-2
+  word topic, at least two thirds of them for longer ones (stopwords like
+  my/your/the/about/it are stripped; "forget about my ex" matches `ex`).
+  Words match whole, plus only the exact singular/plural of the same word
+  ("job"/"jobs", "box"/"boxes", "hobby"/"hobbies"; never "new"/"news", never
+  "next"/"text" for `ex`). So "forget my new job" or "forget the news" never
+  touches "likes new wave music". Also deleted: the preferences hanging off a
+  matched entity, and the value of a matched attribute **as one whole
+  phrase** ("my ex is Sarah" → events/entity `sarah`; job = "google
+  engineer" → events containing "google engineer", never "google chrome"),
+  matching events/errors (same rule), and chat-history messages that match
+  the same rule. If nothing matches she says so ("I don't have anything
+  about X").
+- "forget the last 30 minutes" / "the last hour": deletes
+  rows created **or rewritten** (`updated_at`, schema v2) in that window
+  (and the most recent chat turns, ~1 turn a minute).
+- "forget the last thing I said" / "what I just said": removes only the last
+  user message and her reply from the chat history, and what memory learned
+  in the last 5 minutes. Runs at once.
 
-"forget everything" and "forget about X" only *ask* first; Ko's next message
-must be "yes" (y / yes please / confirm / do it) to run it. Anything else
-cancels (the safeword too); "no" is answered locally. "Forget the last N
-minutes" runs at once. Casual sentences are not commands: "forget it",
-"forget about it, let's go", anything with a comma, more than six words, or a
-topic without content words. Every forget logs one audit line
-(`target: lillith_memory::audit`, kind + counts, never content). The chat
-history is only rewritten after the DB forget succeeded, under
-`chat_history.json.lock`, merged with what other windows wrote (a stale window
-only appends its new turns, so it cannot bring forgotten messages back);
-a failure to rewrite it is said in the reply.
+"forget everything", "forget about X" and any time window **longer than one
+hour** ("forget the last 2 hours", "the last week", "the last 1000 months",
+which is everything) only *ask* first. The question says how much matched
+and shows up to three short examples, e.g. *"Forget everything about my job? That's 4
+memories (like "Ko's job: barista", "request: job") and 2 chat messages."*
+Ko's next message must be "yes" (y / yes please / confirm / do it) to run
+it. Anything else cancels (the safeword too); "no" is answered locally.
+Windows up to an hour and "the last thing I said" run at once. Casual
+sentences are not commands: "forget it", "forget about it, let's go",
+anything with a comma, more than six words, or a topic without content
+words.
+
+Every forget logs one audit line (`target: lillith_memory::audit`) **and**
+appends it to `audit.log` next to the DB (the data dir by default; created
+0600 on unix): `<UTC time>\tFORGET\tmemory:<all|topic|last_secs|last_turn>\t
+nodes=N edges=N events=N errors=N scrubbed=bool`. Kind and counts only,
+never the topic or any memory text. The chat history is only rewritten after
+the DB forget succeeded, under `chat_history.json.lock`, merged with what
+other windows wrote (a stale window only appends its new turns, so it cannot
+bring forgotten messages back); a failure to rewrite it is said in the reply.
+A history file that does not parse is moved aside to
+`chat_history.json.corrupt` (then `.corrupt.1`, ...) before a fresh log is
+started; one that cannot be read is never overwritten (the save fails and
+says so).
 
 ## Privacy and safety
 
@@ -212,7 +235,9 @@ a failure to rewrite it is said in the reply.
   `busy_timeout`, so two processes serialize instead of failing half-way.
 - The DB folder is created 0700 and the file 0600 *before* SQLite opens it
   (unix); errors propagate. Windows: default path is
-  `%LOCALAPPDATA%\lillith\memory.db` (then `%APPDATA%`), default ACLs.
+  `%LOCALAPPDATA%\lillith\memory.db` (order: `$XDG_DATA_HOME` if set,
+  then `%LOCALAPPDATA%`, then `HOME`), default ACLs. Roaming `%APPDATA%` is
+  never used for data, since it can sync to a server.
 - Caps: `max_nodes`, `max_events`, `max_errors` (least recently seen first).
 - No network code, no telemetry. The crate has no HTTP dependency.
 
