@@ -1,24 +1,167 @@
-# Example ~/.config/lillith/config.toml. Every key is optional; missing keys
-# use the defaults. "Open settings" in her right-click menu creates the file
-# from a template (with this [voice] block, commented) if it doesn't exist.
+# Example ~/.config/lillith/config.toml (Windows: %APPDATA%\lillith\config.toml).
+# Every key is optional; a missing key uses the default shown here. Remove the
+# leading "# " from a line to change it. Top-level keys must come before the
+# first [table]. CLI flags override the file. "Open settings" in her
+# right-click menu creates the file from a template if it doesn't exist.
+#
+# The values below are the real defaults from the code. A test
+# (apps/lillith/tests/config_example.rs) fails if a table or key the app reads
+# is missing here, if a key here doesn't exist, or if a value isn't the default.
 
-# mode = "wander"        # wander (default) | stay | follow
-# scale = 0.55           # Small 0.45 / Normal 0.55 / Large 0.75 (the menu saves this)
-# muted = false          # mutes SFX and voice
+# ── Top level ────────────────────────────────────────────────────────────────
+# mode = "wander"        # wander (default) | stay | follow   (G toggles while she has focus)
+# scale = 0.55           # ~220 px; Small 0.45 / Normal 0.55 / Large 0.75 (the menu saves this; an old 1.0 also means 0.55)
+# opacity = 1.0          # whole-sprite opacity 0..1
+# physics_hz = 120.0
+# render_hz = 30.0       # redraw cap (--fps)
+# sprite_fps = 12.0
+# baked_jiggle = false   # true: draw the baked <clip>_jiggle variants when present (--baked-jiggle)
+# jiggle_mode = "springs"  # baked | springs | off; unset = from baked_jiggle (Settings ▸ Motion saves this)
+# always_on_top = true
+# click_through = false  # true: clicks pass through her body; only her head stays clickable
+# autostart = false      # true: writes ~/.config/autostart/lillith.desktop
+# muted = false          # mutes SFX and voice (legacy fallback for [voice] mute)
+# voice_enabled = true   # legacy fallback for [voice] enabled
 # icon = "phantomcore-red"  # app icon: menu entry + desktop / Start-menu shortcuts.
 #                         # Settings > Icon, right-click > Icon…, or `lillith icon ID`.
 #                         # ids: neon-portrait wink-chibi phantomcore-red demonos-green-chibi
 #                         #   neon-sign demonos-emblem hooded-phantom green-hologram chibi-perched
 #                         #   kiss-skullframe winged-sigil pixel-chibi glitch chibi-terminal classic
 
-# Voice (text-to-speech, offline). Needs piper, espeak-ng or spd-say on PATH;
-# with none installed she stays silent. See INSTALL.md / HANDOFF for engines.
+# ── Where she sits ([overlay]; rewritten when you drag her, other keys kept) ─
+# [overlay]
+# margin_left = 80       # px from the left edge of the output
+# margin_bottom = 48     # px from the bottom edge
+# output = "eDP-1"       # monitor name; unset = the compositor's choice
+# auto_fix_kwin = true   # KDE: before her first frame, exclude `lillith` from blur-everything
+#                        # effects (Better Blur DX "blur all", Force Blur…) so she never shows up
+#                        # as a black box. Undo with `lillith fix-kwin --revert`.
+
+# ── Animation pacing ─────────────────────────────────────────────────────────
+# [anim]
+# playback_speed = 0.7   # 1.0 = as authored
+# talk_speed = 0.62      # lip-flap pace while she talks (1.0 = the old fast pace)
+# smooth_frames = true   # cross-fade into the next sprite frame
+# crossfade = 0.5        # fraction of each frame spent cross-fading
+
+# Custom single-image avatars (Settings ▸ Avatar)
+# [avatar]
+# pace = 0.8
+# render_hz = 60.0
+
+# ── Springs (chest / pigtails / root / angle / scale) ────────────────────────
+# [springs]
+# jiggle_gain = 0.6
+# chest_bounce_gain = 1.0
+# pigtail_sway_gain = 0.9
+# [springs.chest]
+# stiffness = 65.0
+# damping = 9.5
+# [springs.pig]
+# stiffness = 32.0
+# damping = 6.5
+# [springs.root]
+# stiffness = 48.0
+# damping = 10.0
+# [springs.angle]
+# stiffness = 42.0
+# damping = 9.0
+# [springs.scale]
+# stiffness = 55.0
+# damping = 11.0
+# [springs.bounce]       # Settings ▸ Motion ▸ Chest bounce (default preset "Extra")
+# intensity = 1.0        # 0 … 3 (1 = 100 %)
+# softness = 0.85        # 0 = firm … 1 = softest
+
+# ── Behaviour ────────────────────────────────────────────────────────────────
+# [behavior]
+# mood_tau_s = 45.0
+# sleepy_after_s = 300.0       # no interaction this long → drowsy (--sleepy-after)
+# asleep_after_s = 900.0       # → asleep (--asleep-after)
+# pose_cycle_s = 45.0          # automatic pose change while idle
+# left_repeat_s = 4.0          # second left click within this → wave
+# wander_every_s = [20.0, 45.0]  # pause between walks in wander mode
+# wander_speed_px_s = 45.0     # glide speed for walk clips without root motion
+# walk_root_motion = true      # move by the walk clip's root motion (planted feet)
+# wander_min_step_px = 120.0
+# wander_pose_chance = 0.35    # chance of an idle pose right after a walk
+# wander_pose_delay_s = 1.5
+# event_wake_priority = 80     # events at/above this priority wake her
+# floor_offset_px = 48         # floor (window-bottom margin) without the KWin bridge's work area
+# [behavior.gestures]
+# double_click_s = 0.35
+# secret_window_s = 3.0
+# hover_long_s = 1.2
+# [behavior.mischief]
+# poke = 0.15
+# decay_tau_s = 60.0
+# high = 0.7
+# boredom_s = 150.0
+# [behavior.idle]
+# breath_period_s = [3.5, 4.5]
+# blink_every_s = [4.0, 6.0]
+# transition_every_s = [8.0, 15.0]   # hip sway / lean / shoulder roll …
+# transition_len_s = [1.2, 2.0]
+# reaction_every_s = [15.0, 30.0]    # unprompted gestures (tail wag, think, nod …)
+# variant_hold_s = 12.0              # time on the clean base between two variant takes
+# variant_play_once = true
+# walk_variant_hold_s = 1.0          # plain walk this long before a sultry take
+# flirt_weight = 3                   # flirty clips come up ~3× as often as neutral ones (1 = equal)
+# [behavior.gravity]
+# g_px_s2 = 2600.0             # 0 = no falling: she stays where dropped
+# max_fall_speed = 2200.0
+# bounce = 0.22                # rebound fraction of the impact speed (max 0.9)
+# perch_enabled = true         # land on window tops (needs the KWin bridge script)
+# sit_every_s = [8.0, 20.0]
+# sit_for_s = [20.0, 45.0]
+# [behavior.tease]             # "come closer": every few minutes of calm idle she grows toward you
+# enabled = true
+# every_s = [180.0, 360.0]
+# grow_s = 3.0
+# beat_s = 3.0
+# pause_s = 2.0
+# shrink_s = 3.0
+# peak_scale = 1.6             # lowered automatically if she wouldn't fit on screen
+# approach_clips = ["idle_flirt_hands_behind_sway", "hip_sway"]
+# beat_clips = ["tease_closeup", "bend_forward_wink", "predator_lean_in", "lean_tease", "idle_flirt_lip_bite", "hip_pop_wink"]
+# pause_clips = ["blink_wink"]
+
+# ── System monitor (lillith --no-monitor turns it off) ───────────────────────
+# [monitor]
+# enabled = true
+# poll_s = 2.0
+# event_cooldown_s = 20.0
+# cpu_high_percent = 72.0
+# cpu_high_sustain_s = 10.0
+# cpu_rearm_percent = 62.0
+# cpu_rearm_sustain_s = 10.0
+# ram_high_percent = 85.0
+# ram_high_sustain_s = 10.0
+# ram_rearm_percent = 80.0
+# battery_low_percent = 15.0
+# battery_rearm_percent = 20.0
+# net_debounce_s = 4.0
+# brightness_min_delta_percent = 2.0
+# usb = true
+# vpn = true
+# idle = true
+# activity_window_s = 10.0
+# activity_every_s = 30.0
+# away_after_s = 120.0
+# files = true                 # Trash / Screenshots / Downloads
+# notifications = true
+# kwin_bridge = true           # serve org.lillith.Bridge for kwin/lillith-bridge
+
+# ── Voice (text-to-speech, offline; read by lillith-voice) ───────────────────
+# Needs piper, espeak-ng or spd-say on PATH; with none installed she stays
+# silent. "Speak out loud (speakers)" in the right-click menu / Settings ▸
+# Companion is `enabled` here (applies live; --no-voice starts with it off).
 # [voice]
 # enabled = true
 # engine = "auto"        # auto | piper | espeak-ng | spd-say | none   (auto: piper → espeak-ng → spd-say → silent)
-# model = "~/.local/share/lillith/piper/en_US-amy-medium.onnx"
+# model = "~/.local/share/lillith/piper/en_US-amy-medium.onnx"   # piper .onnx; unset = none
 # model = "~/.local/share/lillith-voice/lillith.onnx"   # Ko's cloned voice (lillith-voice kit, install.sh --piper-shim; engine = "piper")
-# voice = "female1"      # optional (spd-say -t / espeak-ng -v)
+# voice = "female1"      # optional (spd-say -t / espeak-ng -v); unset = engine default
 # rate = 1.0             # 0.5..2.0
 # volume = 0.8           # 0..1
 # mute = false
@@ -27,3 +170,74 @@
 # queue = 3
 # max_chars = 240
 # player = "auto"        # auto | aplay | paplay  (piper only)
+
+# ── Lily's brain ([llm], written by `lillith setup` / the setup wizard) ──────
+# Loopback only: a non-127.0.0.1/localhost server_url or ollama_host is an error.
+# [llm]
+# backend = "llama-server"     # llama-server | ollama
+# gguf_path = ""               # the .gguf model file (empty = not chosen yet)
+# server_url = "http://127.0.0.1:8080"
+# ollama_host = "http://127.0.0.1:11434"
+# ollama_model = "lily"
+# temperature = 0.95
+# ctx_size = 4096
+# chat_template = "chatml"
+# llama_server_bin = ""        # empty = find llama-server on PATH
+# modelfile_path = ""          # empty = default path
+# system_prompt = ""           # empty = Lily's built-in persona
+# scan_paths = []              # extra folders for the GGUF scanner
+# threads = 0                  # llama-server -t (0 = auto)
+
+# ── Click-to-chat bubble ─────────────────────────────────────────────────────
+# [chat]
+# enabled = true
+# open_on_click = true
+# endpoint = "http://127.0.0.1:8080"   # OpenAI-compatible; /v1/chat/completions is appended
+# model = "local"
+# system_prompt = ""           # empty = [llm] system_prompt, else the built-in persona
+# temperature = 0.95
+# max_tokens = 320
+# history_turns = 12
+# timeout_s = 120.0
+# save_history = true          # ~/.local/share/lillith/chat_history.json
+# api_key = ""
+# overlay_speech = true        # her replies in a speech bubble over her head
+# talk_jiggle = true
+# [chat.server]                # optional self-spawned llama-server (needs binary AND model_path)
+# binary = ""
+# model_path = ""
+# ctx_size = 4096
+# threads = 0
+# gpu_layers = 99              # -ngl; unset = llama-server's default
+# extra_args = []
+# startup_timeout_s = 90.0
+
+# ── Knowledge, skills and file access (everything gated by the Soul Contract) ─
+# [mind]
+# enabled = true
+# knowledge_dir = ""           # empty = ~/.local/share/lillith/knowledge
+# skills_dir = ""              # empty = ~/.local/share/lillith/skills
+# max_context_tokens = 800
+# allow_paths = []             # extra roots, e.g. ["~/Projects"]
+# allow_shell = false
+# max_read_bytes = 65536
+# unlock_paths = []            # re-open the built-in deny list (use sparingly)
+# [mind.access]                # every change / program run is one Soul Contract plan Ko approves
+# files = true                 # list / read / search under roots
+# organize = true              # move / rename / copy / mkdir (never overwrites; `lillith undo-organize`)
+# programs = true              # list / check / open installed apps
+# commands = true              # run CLI commands (each one needs a Yes)
+# skills = true
+# import_desktop_skills = true # copy a desktop `skills` / `lillith-skills` folder in at startup
+# roots = ["~", "/mnt", "/media", "/run/media"]
+# command_timeout_s = 30
+# [mind.access.windows]        # Windows only
+# admin = true                 # elevated runs via lillith-admin (ELEVATED badge on the card)
+# admin_prompt = "per-session" # per-session | per-command
+# admin_idle_timeout_min = 15
+
+# ── Build tab (local project scaffolding, Soul Contract gated) ───────────────
+# [build]
+# enabled = true
+# projects_dir = ""            # empty = ~/Projects/lillith-builds
+# default_language = "rust"    # rust | python | fish
