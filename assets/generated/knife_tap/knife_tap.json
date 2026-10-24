@@ -177,14 +177,21 @@
     "height": 400,
     "frame_count": 14,
     "fps": 10.5,
-    "bytes": 192487,
+    "bytes": 194419,
     "quality": {
-      "edge_mae": 2.272,
-      "edge_p99": 16.25,
-      "halo_dark": 0.041,
-      "halo_light": -0.158,
+      "edge_mae": 2.264,
+      "edge_p99": 16.34,
+      "halo_dark": 0.048,
+      "halo_light": -0.137,
       "alpha_mae": 0.0746
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "a862f1d60916b73ee6433e55f26577ed886e349b5399ad267dae9faa38423c8c",
+    "hand_pass": "white background pockets cleared (newbot handfix.py)",
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior; knife blade edge glint restored"
   }
 }

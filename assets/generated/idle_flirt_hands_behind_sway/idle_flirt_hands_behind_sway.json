@@ -179,13 +179,13 @@
       392
     ],
     [
-      143,
+      146,
       268,
       21,
       392
     ],
     [
-      144,
+      145,
       257,
       21,
       392
@@ -204,7 +204,7 @@
     ],
     [
       96,
-      242,
+      240,
       23,
       392
     ],
@@ -276,7 +276,7 @@
     ],
     [
       95,
-      238,
+      237,
       22,
       392
     ],
@@ -287,13 +287,13 @@
       392
     ],
     [
-      142,
+      143,
       241,
       20,
       392
     ],
     [
-      141,
+      142,
       280,
       22,
       392
@@ -311,7 +311,7 @@
       392
     ],
     [
-      143,
+      145,
       273,
       21,
       392
@@ -324,7 +324,7 @@
     ],
     [
       126,
-      242,
+      241,
       22,
       392
     ],
@@ -377,7 +377,7 @@
       392
     ],
     [
-      142,
+      144,
       264,
       20,
       392
@@ -409,7 +409,7 @@
     [
       143,
       256,
-      21,
+      22,
       392
     ],
     [
@@ -425,7 +425,7 @@
       392
     ],
     [
-      143,
+      146,
       270,
       21,
       392
@@ -441,14 +441,21 @@
     "height": 400,
     "frame_count": 47,
     "fps": 10.5,
-    "bytes": 536882,
+    "bytes": 545553,
     "quality": {
-      "edge_mae": 2.382,
-      "edge_p99": 19.0,
-      "halo_dark": 0.048,
-      "halo_light": -0.153,
-      "alpha_mae": 0.0606
+      "edge_mae": 2.406,
+      "edge_p99": 20.0,
+      "halo_dark": 0.045,
+      "halo_light": -0.154,
+      "alpha_mae": 0.0611
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "852f63d8d0a9af72e263de64802202c90359a930d0a84ff4c0dcdbcfd0582c0e",
+    "hand_pass": "white background pockets cleared (newbot handfix.py)",
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
   }
 }

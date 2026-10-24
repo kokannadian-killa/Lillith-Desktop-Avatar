@@ -173,7 +173,7 @@
       392
     ],
     [
-      110,
+      111,
       271,
       21,
       392
@@ -245,7 +245,7 @@
       392
     ],
     [
-      144,
+      146,
       270,
       22,
       392
@@ -441,14 +441,21 @@
     "height": 400,
     "frame_count": 47,
     "fps": 12.0,
-    "bytes": 460459,
+    "bytes": 469124,
     "quality": {
-      "edge_mae": 2.309,
-      "edge_p99": 18.75,
-      "halo_dark": 0.037,
-      "halo_light": -0.133,
-      "alpha_mae": 0.0582
+      "edge_mae": 2.327,
+      "edge_p99": 19.23,
+      "halo_dark": 0.036,
+      "halo_light": -0.135,
+      "alpha_mae": 0.0589
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "9c5697c28194d92e542c73b0c644d5f91294f90cec2f567159cd611f9e163771",
+    "hand_pass": "white background pockets cleared (newbot handfix.py)",
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
   }
 }

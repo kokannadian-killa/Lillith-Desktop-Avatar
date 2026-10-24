@@ -155,7 +155,7 @@
       392
     ],
     [
-      145,
+      146,
       321,
       32,
       392
@@ -180,13 +180,13 @@
     ],
     [
       125,
-      247,
+      245,
       24,
       392
     ],
     [
       119,
-      247,
+      245,
       27,
       392
     ],
@@ -249,14 +249,21 @@
     "height": 400,
     "frame_count": 23,
     "fps": 9.5,
-    "bytes": 334804,
+    "bytes": 338826,
     "quality": {
-      "edge_mae": 2.427,
-      "edge_p99": 19.33,
-      "halo_dark": 0.048,
-      "halo_light": -0.152,
-      "alpha_mae": 0.0701
+      "edge_mae": 2.456,
+      "edge_p99": 19.46,
+      "halo_dark": 0.051,
+      "halo_light": -0.147,
+      "alpha_mae": 0.0723
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "a3a216196f0dcde1fbb2bc81ce93958a3eb2f3ea4bc529aa2cdc4f2b603544cc",
+    "hand_pass": "white background pockets cleared (newbot handfix.py)",
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
   }
 }
