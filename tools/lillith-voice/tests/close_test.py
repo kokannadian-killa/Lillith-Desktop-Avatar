@@ -8,6 +8,11 @@ Yes late, a real capture process (tests/fake_mic.py behind an `arecord` shim); c
   * a start whose reply can't be written -> the mic is closed again
   * a press with no owning connection is closed after LILLITH_PTT_MAX_S (orphan cap)
   * N1: {cmd:stop, reason:safeword} while the mic is open -> capture ends, nothing transcribed or broadcast
+ * the hush race (B2): listen stop first, safeword stop while its transcription is in flight (and either
+    order) -> no text in the reply, nothing broadcast; listen stop drop:true; listen once whose owner goes
+    away -> its tail is dropped
+ * the real Rust button: closing while listening drops the speech; Mic::hush x10 sends the safeword stop
+    before the press's listen stop drop and nothing is broadcast
   * the real Rust talk button (crates/lillith-panel/examples/mic_driver) quit / drop+quit / SIGKILL while the
     card waits -> no capture process; Drop's listen stop reaches the daemon within 1 s. Set
     LILLITH_MIC_DRIVER to the built example (cargo build -p lillith-panel --example mic_driver); skipped
@@ -137,23 +142,52 @@ L = object.__new__(stt.Listener)
 L.speaker, L.emit, L.always, L._mode, L._ptt, L._once = core.speaker, hub.emit, False, None, [], None
 L._lock = threading.Lock()
 L._press_lock, L._press, L._press_seq = threading.Lock(), None, 0
-L._drops, L._once_dropped = 0, False
+L._drops, L._once_dropped, L._stt_inflight = 0, False, 0
 L.device = None
 L.mic = stt.Mic(L._on_audio, None)
 L.gate = core.gate
-L.vad = type("V", (), {"reset": lambda self: None})()
 
 
-def fake_transcribe(audio, gen=None):
-    if gen is not None and gen != L._drops:
-        return {"ok": True, "text": "", "cancelled": True, "dropped": True}
-    TRANSCRIBED.append(len(audio))
-    info = {"ok": True, "text": "something said", "safeword": False}
-    hub.emit({"ev": "transcript", "text": info["text"]})
-    return info
+class OnceVad:
+    """listen once: nothing ends on its own; whatever was heard is the tail."""
+    speaking = False
+
+    def reset(self):
+        pass
+
+    def feed(self, a):
+        return []
+
+    def flush(self):
+        return [stt.np.full(8000, 0.1, stt.np.float32)]
 
 
-L.transcribe = fake_transcribe
+L.vad = OnceVad()
+
+
+class FakeVad:
+    """The real Listener.transcribe runs; only the models are fakes (all of it is speech)."""
+
+    def feed(self, a):
+        return [a] if len(a) else []
+
+    def flush(self):
+        return []
+
+
+class FakeRec:
+    delay = 0.0          # seconds a transcription takes (the in-flight window)
+    busy = threading.Event()
+
+    def transcribe(self, speech, voiced_s):
+        FakeRec.busy.set()
+        time.sleep(FakeRec.delay)
+        TRANSCRIBED.append(len(speech))
+        return "something said"
+
+
+stt.Vad = FakeVad
+L.rec = FakeRec()
 core._listener = L
 server = T.UnixServer(SOCK, core)
 threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -341,6 +375,90 @@ L._mode = "ptt"
 L.cancel_pending("safeword", drop_capture=True)
 check("safeword: a safeword stop bumps the drop counter", L._drops == gen + 1 and L._mode is None)
 
+# ---- 5b. B2 / the hush race: the press's listen stop first, the safeword stop a moment later (while
+# that stop's transcription is in flight), and the other way round: nothing is returned or broadcast
+FakeRec.delay = 0.6
+for i, lag in enumerate((0.03, 0.0, 0.01, 0.03, 0.1, 0.03, 0.0, 0.2, 0.03, 0.05)):
+    card("yes")
+    a0, n_tr = len(audit()), len(TRANSCRIBED)
+    EVENTS.clear()
+    FakeRec.busy.clear()
+    s, f = connect()
+    f.write(b'{"cmd":"listen","action":"start","hold":true}\n')
+    json.loads(f.readline())
+    wait(lambda: mic_procs(), 5)
+    time.sleep(0.3)
+    got = {}
+    th = threading.Thread(target=lambda: got.update(call(cmd="listen", action="stop")))
+    th.start()
+    if i % 2 == 0:
+        FakeRec.busy.wait(3)               # the stop's transcription is running now
+    time.sleep(lag)
+    call(cmd="stop", reason="safeword")
+    th.join(10)
+    trs = [e for e in EVENTS if e.get("ev") == "transcript"]
+    check(f"race{i} ({'in flight' if i % 2 == 0 else 'any order'}, +{lag * 1000:.0f} ms): listen stop then "
+          "safeword -> no text in the reply, nothing broadcast",
+          not got.get("text") and got.get("cancelled") is True and not trs, f"reply={got} broadcast={trs}")
+    check(f"race{i}: audited CANCELLED", wait(lambda: "CANCELLED" in tags_since(a0), 2), str(tags_since(a0)))
+    s.close()
+    settle()
+FakeRec.delay = 0.0
+
+# control: a plain listen stop still transcribes and broadcasts
+card("yes")
+EVENTS.clear()
+s, f = connect()
+f.write(b'{"cmd":"listen","action":"start","hold":true}\n')
+json.loads(f.readline())
+wait(lambda: mic_procs(), 5)
+time.sleep(0.3)
+r = call(cmd="listen", action="stop")
+check("control: a listen stop without a safeword returns and broadcasts the text",
+      r.get("text") == "something said" and [e for e in EVENTS if e.get("ev") == "transcript"], str(r))
+s.close()
+settle()
+
+# ---- 5c. listen stop with drop (the bubble closing): the audio is dropped, the mic stops
+card("yes")
+a0, n_tr = len(audit()), len(TRANSCRIBED)
+EVENTS.clear()
+s, f = connect()
+f.write(b'{"cmd":"listen","action":"start","hold":true}\n')
+json.loads(f.readline())
+wait(lambda: mic_procs(), 5)
+time.sleep(0.3)
+r = call(cmd="listen", action="stop", drop=True)
+check("drop: listen stop drop:true replies cancelled + dropped, no text",
+      r.get("cancelled") is True and r.get("dropped") is True and not r.get("text"), str(r))
+check("drop: the capture process stops", wait(lambda: not mic_procs(), 2), str(mic_procs()))
+check("drop: nothing transcribed or broadcast", len(TRANSCRIBED) == n_tr
+      and not [e for e in EVENTS if e.get("ev") == "transcript"], str(EVENTS))
+check("drop: audited CANCELLED", wait(lambda: "CANCELLED" in tags_since(a0), 2), str(tags_since(a0)))
+s.close()
+settle()
+
+# ---- 5d. listen once whose owner goes away: the tail is dropped, not transcribed or broadcast
+card("yes")
+a0, n_tr = len(audit()), len(TRANSCRIBED)
+EVENTS.clear()
+s, f = connect()
+f.write(b'{"cmd":"listen","timeout":20}\n')
+check("once: the mic opens (Yes)", wait(lambda: mic_procs(), 5))
+time.sleep(0.3)
+s.close()
+check("once: the owner goes away -> the capture process stops", wait(lambda: not mic_procs(), 2), str(mic_procs()))
+time.sleep(0.5)
+check("once: its tail is not transcribed or broadcast", len(TRANSCRIBED) == n_tr
+      and not [e for e in EVENTS if e.get("ev") == "transcript"], str(EVENTS))
+check("once: audited CANCELLED", wait(lambda: "CANCELLED" in tags_since(a0), 2), str(tags_since(a0)))
+settle()
+# control: listen once with its owner still there returns the tail
+card("yes")
+r = call(cmd="listen", timeout=1)
+check("once control: an owner that stays gets the tail's text", r.get("text") == "something said", str(r))
+settle()
+
 # ---- 6. the real Rust talk button (examples/mic_driver)
 DRV = os.environ.get("LILLITH_MIC_DRIVER")
 if not DRV or not os.access(DRV, os.X_OK):
@@ -370,9 +488,14 @@ else:
     STOPS = []
     _d = core.dispatch
 
+    SEEN = []
+
     def spy(r, owner=None):
         if r.get("cmd") == "listen" and r.get("action") == "stop":
             STOPS.append(time.monotonic())
+        if r.get("cmd") in ("listen", "stop"):
+            SEEN.append(" ".join(str(x) for x in (r.get("cmd"), r.get("action") or r.get("reason") or "",
+                                                  "drop" if r.get("drop") else "")).strip())
         return _d(r, owner=owner)
     core.dispatch = spy
     for how in ("quit", "drop+quit", "kill"):
@@ -406,6 +529,7 @@ else:
     # listening, then the bubble exits -> the mic stops
     for how in ("quit", "kill"):
         card("yes")
+        EVENTS.clear()
         d = Drv()
         d.cmd("toggle")
         check(f"button.listen.{how}: Yes opens the mic", wait(lambda: mic_procs(), 5))
@@ -417,7 +541,37 @@ else:
         d.p.wait(5)
         check(f"button.listen.{how}: the bubble exits while listening -> the capture process stops",
               wait(lambda: not mic_procs(), 2), str(mic_procs()))
+        time.sleep(0.5)
+        check(f"button.listen.{how}: what it heard is dropped (nothing broadcast)",
+              not [e for e in EVENTS if e.get("ev") == "transcript"], str(EVENTS))
         settle()
+    # the safeword mid press (Mic::hush), x10, with a slow transcription: nothing is broadcast, and the
+    # safeword stop reaches the daemon before the press's listen stop
+    FakeRec.delay = 0.5
+    for i in range(10):
+        card("yes")
+        a0 = len(audit())
+        EVENTS.clear()
+        SEEN.clear()
+        d = Drv()
+        d.cmd("toggle")
+        wait(lambda: mic_procs(), 5)
+        time.sleep(0.4)
+        d.cmd("hush")
+        stopped = wait(lambda: not mic_procs(), 3)
+        time.sleep(1.0)
+        trs = [e for e in EVENTS if e.get("ev") == "transcript"]
+        heard = [ln for _, ln in d.out if "Heard" in ln]
+        check(f"button.hush{i}: the safeword mid press -> mic closed, nothing broadcast or shown",
+              stopped and not trs and not heard, f"broadcast={trs} bubble={heard} audit={tags_since(a0)}")
+        sw = SEEN.index("stop safeword") if "stop safeword" in SEEN else None
+        ls = SEEN.index("listen stop drop") if "listen stop drop" in SEEN else None
+        check(f"button.hush{i}: safeword stop first, then listen stop drop", sw is not None and ls is not None
+              and sw < ls and "listen stop" not in SEEN, str(SEEN))
+        d.cmd("quit")
+        d.p.wait(5)
+        settle()
+    FakeRec.delay = 0.0
 
 server.shutdown()
 L.mic.stop()

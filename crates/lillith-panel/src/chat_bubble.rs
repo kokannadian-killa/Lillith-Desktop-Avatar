@@ -2139,9 +2139,9 @@ mod tests {
         b.send();
         assert_eq!(
             cmds.try_recv(),
-            Ok(crate::voice_mic::MicCmd::Hush("safeword".into()))
+            Ok(crate::voice_mic::MicCmd::HushStop("safeword".into()))
         );
-        assert_eq!(cmds.try_recv(), Ok(crate::voice_mic::MicCmd::Stop));
+        assert!(cmds.try_recv().is_err());
     }
 
     #[test]

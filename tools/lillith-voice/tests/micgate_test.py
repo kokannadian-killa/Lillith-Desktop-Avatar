@@ -71,7 +71,7 @@ def listener(answers, clock=None):
     L.speaker, L.emit, L.always, L._mode, L._ptt, L._once = None, (lambda ev: None), False, None, [], None
     L._lock = threading.Lock()
     L._press_lock, L._press, L._press_seq = threading.Lock(), None, 0
-    L._drops, L._once_dropped = 0, False
+    L._drops, L._once_dropped, L._stt_inflight = 0, False, 0
     L.mic = FakeMic()
     L.gate = M.MicGate(mic_argv=lambda: ["/usr/bin/arecord", "-q", "-t", "raw"], ask=ask,
                        clock=clock or time_clock())

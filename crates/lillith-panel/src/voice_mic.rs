@@ -43,16 +43,23 @@ fn release_held(held: &HeldSlot) {
     drop(h);
 }
 
-/// `listen stop`, tried up to [`STOP_TRIES`] times while it fails to reach
-/// the daemon. A reply from the daemon (even `ok:false`) is final.
+/// `listen stop` (with `drop`: the audio is dropped daemon-side), tried up
+/// to [`STOP_TRIES`] times while it fails to reach the daemon. A reply from
+/// the daemon (even `ok:false`) is final.
 fn stop_with_retry(
     c: &DaemonClient,
     timeout: Duration,
+    drop: bool,
     sleep: impl Fn(Duration),
 ) -> Result<Transcript, DaemonError> {
     let mut last = None;
     for i in 0..STOP_TRIES {
-        match c.listen_stop(timeout) {
+        let r = if drop {
+            c.listen_drop(timeout)
+        } else {
+            c.listen_stop(timeout)
+        };
+        match r {
             Ok(t) => return Ok(t),
             Err(e @ DaemonError::Daemon(_)) => return Err(e),
             Err(e) => {
@@ -99,6 +106,10 @@ pub(crate) enum MicCmd {
     Stop,
     /// Stop her voice (`stop` with this reason).
     Hush(String),
+    /// The safeword mid press: `stop` with this reason first, then (in
+    /// that order, on the same thread) `listen stop` with `drop`, so the
+    /// daemon never transcribes the press.
+    HushStop(String),
 }
 
 /// The talk button's state.
@@ -170,7 +181,9 @@ impl Drop for Mic {
     fn drop(&mut self) {
         // Bubble closed mid press: cancel the card / close the mic now, on
         // this thread and its own connection (the worker threads may never
-        // run again once the process exits), waiting about a second.
+        // run again once the process exits), waiting about a second. What
+        // the mic heard is dropped (nobody is left to read it), the same
+        // as when the process is killed.
         let mid_press = self.active()
             || matches!(self.state, MicState::Busy | MicState::Stuck)
             || self.start_inflight;
@@ -179,7 +192,7 @@ impl Drop for Mic {
         }
         match &self.client {
             Some(c) => {
-                if let Err(e) = c.listen_stop(DROP_STOP_TIMEOUT) {
+                if let Err(e) = c.listen_drop(DROP_STOP_TIMEOUT) {
                     tracing::debug!("listen stop on close: {e}");
                 }
             }
@@ -266,7 +279,7 @@ impl Mic {
                 }
                 let (start_tx, start_rx) = channel::<()>();
                 let (stop_tx, stop_rx) = channel::<()>();
-                let (hush_tx, hush_rx) = channel::<String>();
+                let (hush_tx, hush_rx) = channel::<(String, bool)>();
                 let c = client.clone();
                 worker("lillith-mic-start", start_rx, move |()| {
                     match c.listen_start_held() {
@@ -279,9 +292,10 @@ impl Mic {
                         Err(e) => send_a(MicEvent::StartFailed(format!("mic: {e}"))),
                     }
                 });
-                let c = client.clone();
-                worker("lillith-mic-stop", stop_rx, move |()| {
-                    let r = stop_with_retry(&c, timeout, std::thread::sleep);
+                // One listen stop (plain or dropping the audio), then the
+                // press's connection is closed and the outcome reported.
+                let end_press = std::sync::Arc::new(move |c: &DaemonClient, drop: bool| {
+                    let r = stop_with_retry(c, timeout, drop, std::thread::sleep);
                     // The press is over either way: close its connection
                     // (a release for the daemon even when the stop never
                     // got through).
@@ -294,21 +308,37 @@ impl Mic {
                         Err(e) => send_o(MicEvent::StopFailed(format!("mic: {e}"))),
                     }
                 });
-                let c = client;
-                worker("lillith-mic-hush", hush_rx, move |reason: String| {
-                    if let Err(e) = c.stop(Some(&reason)) {
-                        tracing::debug!("voice daemon stop: {e}");
-                    }
-                });
+                let (c, end) = (client.clone(), std::sync::Arc::clone(&end_press));
+                worker("lillith-mic-stop", stop_rx, move |()| end(&c, false));
+                let (c, end) = (client, end_press);
+                worker(
+                    "lillith-mic-hush",
+                    hush_rx,
+                    move |(reason, then_stop): (String, bool)| {
+                        // The safeword stop first: the daemon drops the open
+                        // capture (and any transcription in flight) ...
+                        if let Err(e) = c.stop(Some(&reason)) {
+                            tracing::debug!("voice daemon stop: {e}");
+                        }
+                        // ... and only then the press's own listen stop,
+                        // which drops whatever is left as well.
+                        if then_stop {
+                            end(&c, true);
+                        }
+                    },
+                );
                 // Forwarding never blocks, so a stop overtakes a start that
                 // is still waiting for the card.
                 while let Ok(m) = cmd_rx.recv() {
                     let _ = match m {
                         MicCmd::Start => start_tx.send(()),
                         MicCmd::Stop => stop_tx.send(()),
-                        MicCmd::Hush(r) => {
-                            hush_tx.send(r).map_err(|_| std::sync::mpsc::SendError(()))
-                        }
+                        MicCmd::Hush(r) => hush_tx
+                            .send((r, false))
+                            .map_err(|_| std::sync::mpsc::SendError(())),
+                        MicCmd::HushStop(r) => hush_tx
+                            .send((r, true))
+                            .map_err(|_| std::sync::mpsc::SendError(())),
                     };
                 }
             });
@@ -374,29 +404,36 @@ impl Mic {
     /// Ends the press now: `listen stop` (a waiting card is cancelled, an
     /// open mic closes). Never queued behind a pending start.
     pub fn stop(&mut self) {
-        self.stop_as(false);
-    }
-
-    fn stop_as(&mut self, discard: bool) {
         if self.active() || self.state == MicState::Stuck {
             self.state = MicState::Busy;
-            self.send_stop(discard);
+            self.stops.push_back(false);
+            let _ = self.cmd.send(MicCmd::Stop);
+        }
+    }
+
+    /// The safeword: her voice stops (`stop` with `reason`, which also makes
+    /// the daemon close any mic card and drop unused mic tokens), and an
+    /// open mic or waiting card is closed too; what it heard is dropped.
+    ///
+    /// Mid press, the safeword `stop` and the press's `listen stop` (with
+    /// `drop`) go out in that order on one thread: a listen stop that won
+    /// the race would otherwise have the daemon transcribe and broadcast
+    /// the speech from before the safeword.
+    pub fn hush(&mut self, reason: &str) {
+        // A transcript already on its way is dropped as well.
+        self.stops.iter_mut().for_each(|d| *d = true);
+        if self.active() || self.state == MicState::Stuck {
+            self.state = MicState::Busy;
+            self.stops.push_back(true);
+            let _ = self.cmd.send(MicCmd::HushStop(reason.to_string()));
+        } else {
+            let _ = self.cmd.send(MicCmd::Hush(reason.to_string()));
         }
     }
 
     fn send_stop(&mut self, discard: bool) {
         self.stops.push_back(discard);
         let _ = self.cmd.send(MicCmd::Stop);
-    }
-
-    /// The safeword: her voice stops (`stop` with `reason`, which also makes
-    /// the daemon close any mic card and drop unused mic tokens), and an
-    /// open mic or waiting card is closed too; what it heard is dropped.
-    pub fn hush(&mut self, reason: &str) {
-        let _ = self.cmd.send(MicCmd::Hush(reason.to_string()));
-        // A transcript already on its way is dropped as well.
-        self.stops.iter_mut().for_each(|d| *d = true);
-        self.stop_as(true);
     }
 
     /// Events since the last frame (never blocks). A transcript dropped by
@@ -543,8 +580,10 @@ mod tests {
                 m.poll();
             }
             m.hush("safeword");
-            assert_eq!(cmds.try_recv(), Ok(MicCmd::Hush("safeword".into())));
-            assert_eq!(cmds.try_recv(), Ok(MicCmd::Stop), "open={open}");
+            // One command: the safeword stop, then the press's dropping
+            // listen stop, in that order on one thread.
+            assert_eq!(cmds.try_recv(), Ok(MicCmd::HushStop("safeword".into())));
+            assert!(cmds.try_recv().is_err(), "open={open}");
             ev.send(MicEvent::Heard(Transcript {
                 text: "secret".into(),
                 ..Default::default()
@@ -685,10 +724,18 @@ mod tests {
                         let act = v.get("action").and_then(|c| c.as_str()).unwrap_or("");
                         let what = format!("{cmd} {act}").trim().to_string();
                         let hold = v.get("hold").and_then(|h| h.as_bool()) == Some(true);
+                        // Logged as e.g. "listen stop drop" / "stop safeword".
+                        let mut tag = what.clone();
+                        if v.get("drop").and_then(|d| d.as_bool()) == Some(true) {
+                            tag.push_str(" drop");
+                        }
+                        if let Some(r) = v.get("reason").and_then(|r| r.as_str()) {
+                            tag = format!("{tag} {r}");
+                        }
                         let (m, cv) = &*l;
                         {
                             let mut g = m.lock().unwrap();
-                            g.seen.push((what.clone(), Instant::now()));
+                            g.seen.push((tag, Instant::now()));
                             if what == "listen start" && !hold {
                                 g.all_held = false;
                             }
@@ -807,7 +854,7 @@ mod tests {
         drop(m);
         let took = t0.elapsed();
         assert!(took < Duration::from_millis(1500), "drop took {took:?}");
-        let n = count(&f, "listen stop");
+        let n = count(&f, "listen stop drop");
         assert_eq!(
             n, 1,
             "the stop went out synchronously, before drop returned"
@@ -834,11 +881,65 @@ mod tests {
         let t0 = std::time::Instant::now();
         drop(m);
         assert!(t0.elapsed() < Duration::from_millis(1500));
-        assert_eq!(count(&f, "listen stop"), 1);
+        // What it heard is dropped (nobody is left to read it).
+        assert_eq!(count(&f, "listen stop drop"), 1);
+        assert_eq!(count(&f, "listen stop"), 0);
         assert!(
             wait_held_closed(&f).is_some(),
             "the press's connection closed"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_safeword_mid_press_stops_first_then_drops_the_press_in_order() {
+        use fake_daemon::*;
+        for (i, open) in [true, false, true, false, true, true]
+            .into_iter()
+            .enumerate()
+        {
+            let (f, client) = start(&format!("hushorder{i}"), open);
+            let mut m = Mic::spawn(client, Duration::from_secs(5), || {});
+            poll_until(&mut m, |m| m.ready);
+            m.toggle();
+            if open {
+                poll_until(&mut m, |m| m.state == MicState::Listening);
+            } else {
+                wait_for(&f, "listen start");
+            }
+            m.hush("safeword");
+            let evs = poll_until(&mut m, |m| m.state == MicState::Idle && m.can_start());
+            assert!(
+                !evs.iter().any(|e| matches!(e, MicEvent::Heard(_))),
+                "nothing heard is shown: {evs:?}"
+            );
+            let seen: Vec<String> = f
+                .log
+                .0
+                .lock()
+                .unwrap()
+                .seen
+                .iter()
+                .map(|(w, _)| w.clone())
+                .collect();
+            let at = |w: &str| seen.iter().position(|s| s == w);
+            let (hush, stop) = (at("stop safeword"), at("listen stop drop"));
+            assert!(
+                hush.is_some() && stop.is_some() && hush < stop,
+                "the safeword stop goes out before the press's listen stop: {seen:?}"
+            );
+            assert_eq!(
+                at("listen stop"),
+                None,
+                "never a plain listen stop: {seen:?}"
+            );
+            if open {
+                assert!(
+                    wait_held_closed(&f).is_some(),
+                    "the press's connection closed"
+                );
+            }
+        }
     }
 
     #[cfg(unix)]
@@ -908,8 +1009,8 @@ mod tests {
         ev.send(MicEvent::StopFailed("x".into())).unwrap();
         m.poll();
         m.hush("safeword");
-        assert_eq!(cmds.try_recv(), Ok(MicCmd::Hush("safeword".into())));
-        assert_eq!(cmds.try_recv(), Ok(MicCmd::Stop));
+        assert_eq!(cmds.try_recv(), Ok(MicCmd::HushStop("safeword".into())));
+        assert!(cmds.try_recv().is_err());
     }
 
     #[cfg(unix)]

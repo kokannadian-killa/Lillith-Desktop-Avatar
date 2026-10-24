@@ -26,6 +26,7 @@ One JSON object per line, one JSON reply per line. "cmd" and "op" are synonyms.
   {"cmd":"file","text":"...","out":"/abs/path.wav"}
   {"cmd":"stop"}            (works from a second connection while a say is waiting)
   {"cmd":"listen","action":"start"|"stop"}   push-to-talk -> {"ok":true,"text":"...","safeword":false,...}
+                            ("stop" with "drop":true: the audio is dropped, nothing transcribed or broadcast)
       start with "hold":true: this connection owns the press; closing it releases (card closed, mic off)
   {"cmd":"listen"}          one utterance, ends on silence (VAD)
   {"cmd":"listen_mode","on":true|false}      always-listening; transcripts arrive as events
@@ -128,7 +129,7 @@ class Core:
         if act == "start":
             return L.ptt_start(token=r.get("token"), owner=owner, hold=bool(r.get("hold")))
         if act == "stop":
-            return L.ptt_stop()
+            return L.ptt_stop(drop=bool(r.get("drop")))
         return L.listen_once(float(r.get("timeout", 15)), token=r.get("token"), owner=owner)
 
 

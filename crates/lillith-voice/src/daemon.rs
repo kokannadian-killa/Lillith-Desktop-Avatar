@@ -108,6 +108,9 @@ pub enum Request {
     ListenStartHeld,
     /// Push-to-talk: close the mic and transcribe.
     ListenStop,
+    /// Push-to-talk: close the mic and drop what it heard (nothing is
+    /// transcribed or broadcast).
+    ListenDrop,
     /// Transcribe a WAV file (absolute path).
     Stt {
         wav: PathBuf,
@@ -125,7 +128,10 @@ impl Request {
             Request::Ping => "ping",
             Request::Say { .. } => "say",
             Request::Stop { .. } => "stop",
-            Request::ListenStart | Request::ListenStartHeld | Request::ListenStop => "listen",
+            Request::ListenStart
+            | Request::ListenStartHeld
+            | Request::ListenStop
+            | Request::ListenDrop => "listen",
             Request::Stt { .. } => "stt",
             Request::Subscribe { .. } => "subscribe",
         }
@@ -158,6 +164,7 @@ impl Request {
             Request::ListenStart => json!({ "action": "start" }),
             Request::ListenStartHeld => json!({ "action": "start", "hold": true }),
             Request::ListenStop => json!({ "action": "stop" }),
+            Request::ListenDrop => json!({ "action": "stop", "drop": true }),
             Request::Stt { wav } => json!({ "wav": wav.to_string_lossy() }),
             Request::Subscribe { topics } => json!({ "topics": topics }),
         };
@@ -795,6 +802,14 @@ impl DaemonClient {
         Ok(Transcript::from_value(&v))
     }
 
+    /// Push-to-talk: closes the mic (or cancels a waiting card) and drops
+    /// the audio: nothing is transcribed or broadcast. An older daemon that
+    /// doesn't know `drop` treats it as a plain `listen stop`.
+    pub fn listen_drop(&self, timeout: Duration) -> Result<Transcript, DaemonError> {
+        let v = self.request(&Request::ListenDrop, Some(timeout))?;
+        Ok(Transcript::from_value(&v))
+    }
+
     /// Transcribes a WAV file.
     pub fn stt_file(&self, wav: &Path, timeout: Duration) -> Result<Transcript, DaemonError> {
         let v = self.request(
@@ -1145,6 +1160,10 @@ mod tests {
             Request::ListenStop.to_value(),
             json!({"cmd":"listen","action":"stop"})
         );
+        assert_eq!(
+            Request::ListenDrop.to_value(),
+            json!({"cmd":"listen","action":"stop","drop":true})
+        );
         let sub = Request::Subscribe {
             topics: vec!["lipsync".into()],
         };
@@ -1167,6 +1186,7 @@ mod tests {
             Request::Ping,
             Request::ListenStart,
             Request::ListenStartHeld,
+            Request::ListenDrop,
             Request::Subscribe { topics: vec![] },
             Request::Stop { reason: None },
         ] {

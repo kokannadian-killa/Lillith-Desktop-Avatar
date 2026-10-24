@@ -112,6 +112,9 @@ The reply includes `audio_s`, `rtf`, `out` and `rate`. `out` must be absolute. T
   {"ok":true,"text":"hey lillith what's up","audio_s":3.1,"speech_s":2.2,"stt_s":0.4,
    "safeword":false,"affirmation":false,"voice":true,"consent_ok":false}
   ```
+- `{"cmd":"listen","action":"stop","drop":true}`: the same release, but what the mic heard is **dropped**:
+  nothing is transcribed or broadcast, the reply is `{"ok":true,"text":"","cancelled":true,"dropped":true,...}`
+  and the audit log gets `CANCELLED`. (An older daemon ignores `drop` and transcribes as usual.)
 - `{"cmd":"listen","timeout":15}` (no action): one utterance. It ends automatically about 0.6 s after you stop
   talking (silero VAD) and returns the same shape. If nothing was said, it returns `"timeout":true` with empty `text`.
 - `{"cmd":"stt","wav":"/abs/file.wav"}`: transcribe a file (any rate, mono or stereo, 16-bit). Same shape.
@@ -166,15 +169,22 @@ target, then detail lines; stdout: `yes` / `no` / `timeout` / `cancelled` / `no_
     is dropped: nothing transcribed or broadcast). A press without `hold` (one request per connection) has
     no owner once the mic is open, so the daemon closes it itself after `LILLITH_PTT_MAX_S` seconds (default
     300; `CANCELLED`, audio dropped).
+  - `listen` once whose connection closes before it ends drops what it heard: the tail is not transcribed
+    or broadcast (`CANCELLED`).
   - The chat bubble's talk button uses `hold:true`. When the bubble closes or crashes during a press it
-    sends `listen stop` on its own connection (waiting at most about 1 s) and closes the held connection,
-    so the daemon releases the press either way. A `listen stop` that errors or times out is retried (3
+    sends `listen stop` with `drop:true` on its own connection (waiting at most about 1 s) and closes the
+    held connection, so the daemon releases the press either way and what the mic heard is dropped (a
+    normal close and a kill behave the same). A `listen stop` that errors or times out is retried (3
     tries, with backoff); if it still doesn't get through, the button shows ⚠ ("the mic may still be open",
     click to try again), never the idle 🎤.
   - `{"cmd":"stop","reason":"safeword"}` while the mic is open (push-to-talk or listen once) ends the
-    capture and **drops** its audio daemon-side: nothing is transcribed or broadcast, and a transcription
-    already in flight is discarded. The pending `listen stop` / `listen` reply is
+    capture and **drops** its audio daemon-side: nothing is transcribed or broadcast. This includes a
+    capture that was already released and is **being transcribed** right now (a `listen stop` that got
+    there first): the daemon tracks transcriptions in flight, and their result is dropped too, whatever
+    order the two requests arrive in. The pending `listen stop` / `listen` reply is
     `{"ok":true,"text":"","cancelled":true,"dropped":true,...}`.
+  - The talk button's safeword (`Mic::hush`) sends, in this order on one thread, the safeword `stop` and
+    then the press's `listen stop` with `drop:true`.
 - **Always listening** (`kind:"always"`): every switch-on needs its own Yes (inline card or token). Turning it
   off (`"on":false`) is never gated.
 - Refusals: No, timeout, a closed card, no card UI (no display, or no `lillith` binary), or a bad, used,

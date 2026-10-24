@@ -469,6 +469,7 @@ class Listener:
         self._press_seq = 0
         self._drops = 0            # bumped when the safeword drops a capture: in-flight STT is not used
         self._once_dropped = False
+        self._stt_inflight = 0     # push-to-talk / listen-once transcriptions running now (under _lock)
 
     # ---------------------------------------------------------------- audio path
     def _playing(self):
@@ -509,13 +510,25 @@ class Listener:
             self.speaker.stop(reason="barge_in")
         self.emit({"ev": "barge_in", "by": why})
 
-    def _segment(self, seg):
+    def _segment(self, seg, once_tail=False):
         self._barged = False
         t0 = time.time()
         sp = len(seg) / RATE
-        gen = self._drops
+        with self._lock:
+            gen = self._drops
+            tracked = self._mode != "always"      # listen once (or its tail): a safeword stop drops it
+            if tracked:
+                self._stt_inflight += 1
+        try:
+            return self._segment_text(seg, sp, t0, gen, tracked, once_tail)
+        finally:
+            if tracked:
+                with self._lock:
+                    self._stt_inflight -= 1
+
+    def _segment_text(self, seg, sp, t0, gen, tracked, once_tail=False):
         text = self.rec.transcribe(seg, sp)
-        if gen != self._drops and self._mode != "always":
+        if tracked and gen != self._drops:
             return                    # the safeword dropped this capture meanwhile: not used, not broadcast
         if DEBUG:
             print(f"lillith-voice: segment {len(seg) / RATE:.2f}s mode={self._mode} t={time.monotonic():.1f} -> {text!r}",
@@ -529,10 +542,13 @@ class Listener:
         if info["safeword"] and self.speaker:
             self.speaker.stop(reason="safeword")
             self.emit({"ev": "safeword", "text": text})
-        if self._mode == "once" and self._once is not None:
-            self._once["result"] = info
-            self._once["done"].set()
-        self.emit(info)
+        with self._lock:              # checked and broadcast atomically with cancel_pending's drop
+            if tracked and gen != self._drops:
+                return
+            if (self._mode == "once" or once_tail) and self._once is not None:
+                self._once["result"] = info
+                self._once["done"].set()
+            self.emit(info)
 
     # ---------------------------------------------------------------- API
     def ptt_start(self, token=None, owner=None, hold=False):
@@ -614,25 +630,38 @@ class Listener:
                   flush=True)
         return True
 
-    def ptt_stop(self):
+    def ptt_stop(self, drop=False):
         """Release: the press ends now. A card still open for it is closed (CANCELLED); the mic always stops
-        (unless always-listening owns it)."""
+        (unless always-listening owns it). `drop` (the bubble closing, or the safeword's follow-up stop):
+        the audio is dropped, not transcribed or broadcast (audited CANCELLED)."""
         with self._press_lock:
             press, self._press = self._press, None
-            gen = self._drops
             with self._lock:
+                gen = self._drops
                 opened = self._mode == "ptt"
                 audio = np.concatenate(self._ptt) if (opened and self._ptt) else np.zeros(0, np.float32)
                 self._ptt = []
                 if opened:
                     self._mode = "always" if self.always else None
+                    if drop:
+                        self._drops += 1
+                    else:
+                        # in flight from here on: a safeword stop meanwhile drops the result (cancel_pending)
+                        self._stt_inflight += 1
             if not self.always:
                 self.mic.stop()
         if press is not None:
             self.gate.cancel(owner=press)
         if not opened:
             return {"ok": True, "text": "", "cancelled": True, **classify("")}
-        return self.transcribe(audio, gen=gen)
+        if drop:
+            G.audit("CANCELLED", "mic_listen", self.gate.mic_argv(), self.gate.last_card, self.gate.log)
+            return {"ok": True, "text": "", "cancelled": True, "dropped": True, **classify("")}
+        try:
+            return self.transcribe(audio, gen=gen)
+        finally:
+            with self._lock:
+                self._stt_inflight -= 1
 
     def cancel_pending(self, why="safeword", drop_capture=False):
         """The safeword (or a stop with reason safeword): close any open mic card (CANCELLED) and forget a
@@ -645,13 +674,16 @@ class Listener:
         with self._press_lock:
             if drop_capture:
                 with self._lock:
-                    if self._mode in ("ptt", "once"):
+                    if self._mode in ("ptt", "once") or self._stt_inflight > 0:
+                        # an open capture, or one already released and being transcribed now (whatever
+                        # _mode says): its result is dropped, never returned or broadcast
                         dropped = True
                         self._drops += 1
-                        if self._mode == "once":
+                        if self._mode == "once" or self._once is not None:
                             self._once_dropped = True
                         self._ptt = []
-                        self._mode = "always" if self.always else None
+                        if self._mode in ("ptt", "once"):
+                            self._mode = "always" if self.always else None
                 if dropped:
                     self._press = None
                     if not self.always:
@@ -682,16 +714,19 @@ class Listener:
         if gen is not None and gen != self._drops:
             return {"ok": True, "text": "", "cancelled": True, "dropped": True, **classify("")}
         text = self.rec.transcribe(speech, voiced_s) if len(speech) else ""
-        if gen is not None and gen != self._drops:
-            return {"ok": True, "text": "", "cancelled": True, "dropped": True, **classify("")}
         info = {"ok": True, "text": text, "audio_s": round(len(audio) / RATE, 2), "speech_s": round(len(speech) / RATE, 2),
                 "stt_s": round(time.time() - t0, 2), **classify(text, voiced_s)}
+        if gen is not None and gen != self._drops:
+            return {"ok": True, "text": "", "cancelled": True, "dropped": True, **classify("")}
         if info["safeword"]:
             self.cancel_pending("safeword")      # a mic card still waiting for its Yes closes too
         if info["safeword"] and self.speaker:
             self.speaker.stop(reason="safeword")
             self.emit({"ev": "safeword", "text": text})
-        self.emit({"ev": "transcript", **{k: v for k, v in info.items() if k != "ok"}})
+        with self._lock:              # checked and broadcast atomically with cancel_pending's drop
+            if gen is not None and gen != self._drops:
+                return {"ok": True, "text": "", "cancelled": True, "dropped": True, **classify("")}
+            self.emit({"ev": "transcript", **{k: v for k, v in info.items() if k != "ok"}})
         return info
 
     def listen_once(self, timeout=15.0, token=None, owner=None):
@@ -707,6 +742,7 @@ class Listener:
         with self._lock:
             self.vad.reset()
             self._once_dropped = False
+            gen = self._drops
             self._mode = "once"
         self.mic.start(card=self.gate.last_card)
         self.emit({"ev": "listening", "mode": "once"})
@@ -714,10 +750,18 @@ class Listener:
         while not done.wait(0.05):
             if time.time() > t_end or not self.mic.running or (owner is not None and not owner.alive()):
                 break
+        gone = owner is not None and not owner.alive()
         with self._lock:
             dropped = self._once_dropped
-            if self._mode == "once":
+            opened = self._mode == "once"
+            if opened:
                 self._mode = "always" if self.always else None
+            if gone and not done.is_set() and not dropped:
+                # nobody to answer: what it heard is dropped (a segment being transcribed now too)
+                self._drops += 1
+                dropped = True
+                if opened:
+                    G.audit("CANCELLED", "mic_listen", self.gate.mic_argv(), self.gate.last_card, self.gate.log)
             tail = [] if (done.is_set() or dropped) else self.vad.flush()
         if not self.always:
             self.mic.stop()
@@ -725,9 +769,11 @@ class Listener:
             self._once = None
             return {"ok": True, "text": "", "cancelled": True, "dropped": True, **classify("")}
         if not done.is_set() and tail:
-            self._segment(np.concatenate(tail))
+            self._segment(np.concatenate(tail), once_tail=True)   # its result is listen once's answer
         r = self._once["result"] if self._once else None
         self._once = None
+        if self._drops != gen or self._once_dropped:
+            return {"ok": True, "text": "", "cancelled": True, "dropped": True, **classify("")}
         if r is None:
             return {"ok": True, "text": "", "timeout": True, **classify("")}
         return {"ok": True, **{k: v for k, v in r.items() if k != "ev"}}
