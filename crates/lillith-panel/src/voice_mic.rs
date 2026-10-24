@@ -26,7 +26,8 @@ pub enum MicEvent {
     Failed(String),
 }
 
-enum MicCmd {
+#[derive(Debug, PartialEq)]
+pub(crate) enum MicCmd {
     Start,
     Stop,
     /// Stop her voice (`stop` with this reason).
@@ -44,6 +45,9 @@ pub struct Mic {
     pub listening: bool,
     /// Waiting for a transcript.
     pub busy: bool,
+    /// Opening the mic failed while the button was held: no retry (and no
+    /// repeated note / barge-in) until it is released.
+    pub held_failed: bool,
 }
 
 impl std::fmt::Debug for Mic {
@@ -156,12 +160,34 @@ impl Mic {
             ready: false,
             listening: false,
             busy: false,
+            held_failed: false,
         }
+    }
+
+    /// Mic handle wired to channels instead of a daemon thread (tests).
+    #[cfg(test)]
+    pub(crate) fn for_test() -> (Self, Receiver<MicCmd>, Sender<MicEvent>) {
+        let (cmd, cmd_rx) = std::sync::mpsc::channel();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let m = Self {
+            cmd,
+            rx,
+            ready: false,
+            listening: false,
+            busy: false,
+            held_failed: false,
+        };
+        (m, cmd_rx, tx)
+    }
+
+    /// The button counts as held (open, opening, or failed while held).
+    pub fn held(&self) -> bool {
+        self.listening || self.held_failed
     }
 
     /// Button pressed: open the mic (the daemon stops her voice).
     pub fn press(&mut self) {
-        if self.ready && !self.listening && !self.busy {
+        if self.ready && !self.listening && !self.busy && !self.held_failed {
             self.listening = true;
             let _ = self.cmd.send(MicCmd::Start);
         }
@@ -169,6 +195,10 @@ impl Mic {
 
     /// Button released: close the mic and wait for the transcript.
     pub fn release(&mut self) {
+        if self.held_failed {
+            self.held_failed = false;
+            return;
+        }
         if self.listening {
             self.listening = false;
             self.busy = true;
@@ -195,6 +225,8 @@ impl Mic {
                 MicEvent::Listening => {}
                 MicEvent::Heard(_) => self.busy = false,
                 MicEvent::Failed(_) => {
+                    // `listen start` failed with the button still down.
+                    self.held_failed |= self.listening;
                     self.listening = false;
                     self.busy = false;
                 }
@@ -207,6 +239,29 @@ impl Mic {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_mic_is_latched_until_the_button_is_released() {
+        let (mut m, cmds, ev) = Mic::for_test();
+        ev.send(MicEvent::Ready).unwrap();
+        m.poll();
+        m.press();
+        assert_eq!(cmds.try_recv(), Ok(MicCmd::Start));
+        ev.send(MicEvent::Failed("mic: no device".into())).unwrap();
+        m.poll();
+        assert!(m.held() && !m.listening);
+        // Still held: every frame's press is ignored (no retry spam).
+        for _ in 0..5 {
+            m.press();
+        }
+        assert!(cmds.try_recv().is_err());
+        // Release clears the latch without a `listen stop`.
+        m.release();
+        assert!(!m.held());
+        assert!(cmds.try_recv().is_err());
+        m.press();
+        assert_eq!(cmds.try_recv(), Ok(MicCmd::Start));
+    }
 
     #[test]
     fn the_config_the_app_runs_with_is_used() {

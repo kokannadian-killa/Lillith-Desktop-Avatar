@@ -224,6 +224,8 @@ pub struct Controller {
     screen: Option<(u32, u32)>,
     quit: bool,
     feed: Option<EventFeed>,
+    /// Feed events read but not applied yet (spread over frames).
+    feed_backlog: std::collections::VecDeque<Event>,
     sink: Option<SinkHandle>,
     /// Menu "Pause system monitor": feed events are dropped while set.
     pub monitor_paused: bool,
@@ -350,6 +352,7 @@ impl Controller {
             screen: None,
             quit: false,
             feed: opts.events.clone(),
+            feed_backlog: std::collections::VecDeque::new(),
             sink: opts.sink.clone(),
             monitor_paused: false,
             menu: None,
@@ -1517,25 +1520,35 @@ impl Controller {
     }
 
     /// Applies pending [`EventFeed`] events (at most [`MAX_EVENTS_PER_TICK`]).
+    ///
+    /// The safeword and barge-in ([`CHAT_SAFEWORD`], [`CHAT_BARGE_IN`])
+    /// share this feed with the chat bubble but are applied first, every
+    /// frame: never dropped while the system monitor is paused and never
+    /// queued behind a token burst.
     fn drain_feed(&mut self) {
         let Some(feed) = &self.feed else { return };
-        let mut batch = Vec::new();
         if let Ok(rx) = feed.lock() {
-            while batch.len() < MAX_EVENTS_PER_TICK {
-                match rx.try_recv() {
-                    Ok(ev) => batch.push(ev),
-                    Err(_) => break,
-                }
-            }
+            self.feed_backlog.extend(rx.try_iter());
+        }
+        let (urgent, rest): (Vec<Event>, std::collections::VecDeque<Event>) =
+            std::mem::take(&mut self.feed_backlog)
+                .into_iter()
+                .partition(|ev| ev.name == CHAT_SAFEWORD || ev.name == CHAT_BARGE_IN);
+        self.feed_backlog = rest;
+        for ev in &urgent {
+            self.event(ev);
         }
         if self.monitor_paused {
-            if !batch.is_empty() {
-                tracing::debug!(dropped = batch.len(), "system monitor paused");
+            if !self.feed_backlog.is_empty() {
+                tracing::debug!(dropped = self.feed_backlog.len(), "system monitor paused");
+                self.feed_backlog.clear();
             }
             return;
         }
-        for ev in batch {
-            self.event(&ev);
+        let n = self.feed_backlog.len().min(MAX_EVENTS_PER_TICK);
+        let batch: Vec<Event> = self.feed_backlog.drain(..n).collect();
+        for ev in &batch {
+            self.event(ev);
         }
     }
 
@@ -2892,10 +2905,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
             tx.send(Event::new("user.activity")).unwrap();
         }
         c.tick(0.05).unwrap();
-        assert_eq!(
-            c.feed.as_ref().unwrap().lock().unwrap().try_iter().count(),
-            4
-        );
+        assert_eq!(c.feed_backlog.len(), 4, "rest waits for the next frame");
         drop(tx);
         c.tick(0.05).unwrap(); // disconnected feed is harmless
         let _ = std::fs::remove_dir_all(dir);
@@ -3002,6 +3012,41 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         c.event(&Event::new(CHAT_SAFEWORD));
         assert!(lillith_core::access::kill_switch::stopped_since(before));
         assert_eq!(*sink.interrupts.lock().unwrap(), ["barge_in", "safeword"]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn safeword_beats_a_paused_monitor_and_a_token_burst() {
+        let (dir, mut c) = m3_controller("safeword-feed", MoveMode::Stay);
+        let sink = LipSink::default();
+        c.sink = Some(SinkHandle::new(sink.clone()));
+        let (tx, rx) = std::sync::mpsc::channel();
+        c.feed = Some(Arc::new(Mutex::new(rx)));
+        // System monitor paused: other events are dropped, the safeword not.
+        c.monitor_paused = true;
+        tx.send(Event::new("user.activity")).unwrap();
+        tx.send(Event::new(CHAT_SAFEWORD)).unwrap();
+        let before = lillith_core::access::kill_switch::epoch();
+        c.tick(0.016).unwrap();
+        assert!(lillith_core::access::kill_switch::stopped_since(before));
+        assert_eq!(*sink.interrupts.lock().unwrap(), ["safeword"]);
+        assert!(c.feed_backlog.is_empty());
+        // Unpaused: a burst of tokens doesn't delay it past this frame.
+        c.monitor_paused = false;
+        tx.send(Event::new(crate::chat::CHAT_START)).unwrap();
+        for _ in 0..(MAX_EVENTS_PER_TICK * 2) {
+            tx.send(Event::with_detail(crate::chat::CHAT_TOKEN, "la "))
+                .unwrap();
+        }
+        tx.send(Event::new(CHAT_BARGE_IN)).unwrap();
+        tx.send(Event::new(CHAT_SAFEWORD)).unwrap();
+        let before = lillith_core::access::kill_switch::epoch();
+        c.tick(0.016).unwrap();
+        assert!(lillith_core::access::kill_switch::stopped_since(before));
+        assert_eq!(
+            *sink.interrupts.lock().unwrap(),
+            ["safeword", "barge_in", "safeword"]
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
