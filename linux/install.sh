@@ -646,7 +646,7 @@ step "8/8  Checking the install"
 "$LILLITH" --help >/dev/null || die "$LILLITH --help failed"
 ok "lillith --help runs"
 if [[ $ASSET_STATE != lfs ]]; then
-  n="$(cd "$DATA_DIR" && "$LILLITH" preview --list 2>/dev/null | tail -n +2 | wc -l)"
+  n="$(cd "$DATA_DIR" && "$LILLITH" preview --list 2>/dev/null | tail -n +2 | wc -l)" || n=0
   if [[ $n -gt 0 ]]; then ok "her animation set loads ($n clips)"; else warn "lillith preview --list found no clips"; fi
 fi
 case ":$PATH:" in
@@ -676,5 +676,5 @@ cat <<DONE
   Model:      lillith setup --gguf FILE.gguf --llama-server /usr/bin/llama-server
   Skills:     drop a 'skills' folder on your desktop; she copies it in at start
               (or: lillith import-skills). Undo her tidying: lillith undo-organize
-  Uninstall:  ./linux/uninstall.sh   (keeps GGUF models; asks about settings)
+  Uninstall:  bash install.sh --uninstall   (keeps GGUF models; asks about settings)
 DONE

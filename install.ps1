@@ -100,12 +100,12 @@ if ($pointers.Count -eq 0) {
     }
     if (-not $tok) { Die "needs your GitHub login: install the GitHub CLI, run 'gh auth login --web', then run install.bat again" }
     $auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$tok"))
-    $items = foreach ($f in $pointers) {
+    $items = @(foreach ($f in $pointers) {
         $t = Get-Content $f.FullName
         [pscustomobject]@{ Path = $f.FullName
             Oid = (($t | Where-Object { $_ -like "oid sha256:*" }) -replace "oid sha256:", "").Trim()
             Size = [long](($t | Where-Object { $_ -like "size *" }) -replace "size ", "") }
-    }
+    })
     $done = 0
     for ($i = 0; $i -lt $items.Count; $i += 100) {
         $chunk = $items[$i..([math]::Min($i + 99, $items.Count - 1))]
