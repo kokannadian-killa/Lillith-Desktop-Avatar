@@ -580,7 +580,7 @@
       392
     ],
     [
-      18,
+      20,
       378,
       228,
       392
@@ -730,7 +730,7 @@
       392
     ],
     [
-      19,
+      20,
       378,
       228,
       392
@@ -838,7 +838,7 @@
       392
     ],
     [
-      16,
+      18,
       380,
       230,
       392
@@ -920,26 +920,32 @@
     "height": 400,
     "frame_count": 60,
     "fps": 12.0,
-    "bytes": 384429,
+    "bytes": 389089,
     "quality": {
-      "edge_mae": 2.116,
-      "edge_p99": 18.17,
-      "halo_dark": 0.008,
-      "halo_light": -0.064,
-      "alpha_mae": 0.0377
+      "edge_mae": 2.122,
+      "edge_p99": 18.0,
+      "halo_dark": 0.004,
+      "halo_light": -0.065,
+      "alpha_mae": 0.038
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
-  },
-  "matte_clean": {
-    "version": 2,
-    "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "807430db8fd62594eb6f37e844b9ea8294febbd4b2775250a082f7d3b8995bad",
-    "source_sha256": "49d1fb0ca2c19bde1bee4d306b59bf4b4671a694208f6d3b8c07f5ccfc9101b6"
   },
   "seat_y": 391,
   "seat_x_range": [
     180,
     377
   ],
-  "feet_lowest_y": 391
+  "feet_lowest_y": 391,
+  "matte_clean_prev": {
+    "version": 2,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "807430db8fd62594eb6f37e844b9ea8294febbd4b2775250a082f7d3b8995bad",
+    "source_sha256": "49d1fb0ca2c19bde1bee4d306b59bf4b4671a694208f6d3b8c07f5ccfc9101b6"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "21f0c87c7cba354401da4302fffa88fe42abf5f9f92430671ea31ae4e3279103",
+    "source_sha256": "807430db8fd62594eb6f37e844b9ea8294febbd4b2775250a082f7d3b8995bad"
+  }
 }

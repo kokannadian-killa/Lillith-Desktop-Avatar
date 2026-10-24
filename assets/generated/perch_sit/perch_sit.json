@@ -387,7 +387,7 @@
     [
       126,
       276,
-      46,
+      47,
       389
     ],
     [
@@ -465,7 +465,7 @@
     [
       113,
       280,
-      45,
+      46,
       385
     ],
     [
@@ -951,25 +951,31 @@
     "height": 400,
     "frame_count": 96,
     "fps": 12.0,
-    "bytes": 969171,
+    "bytes": 981547,
     "quality": {
-      "edge_mae": 2.903,
-      "edge_p99": 25.23,
+      "edge_mae": 2.9,
+      "edge_p99": 25.0,
       "halo_dark": 0.045,
-      "halo_light": -0.141,
-      "alpha_mae": 0.048
+      "halo_light": -0.14,
+      "alpha_mae": 0.0489
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
-  },
-  "matte_clean": {
-    "version": 1,
-    "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "29e5c2ba6c85916e4d9d80b8e19308e5c92f30700741323d6a237b4d5fa26c27",
-    "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
   },
   "matte_protect": {
     "tool": "tools/matte-clean/regress.py",
     "base": "b0b7424",
     "px_restored": 11
+  },
+  "matte_clean_prev": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "29e5c2ba6c85916e4d9d80b8e19308e5c92f30700741323d6a237b4d5fa26c27",
+    "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "80ec643d22b32d873e9beb5779ed722f61fa2eda44fecb1975c5cd33b754cdd0",
+    "source_sha256": "29e5c2ba6c85916e4d9d80b8e19308e5c92f30700741323d6a237b4d5fa26c27"
   }
 }

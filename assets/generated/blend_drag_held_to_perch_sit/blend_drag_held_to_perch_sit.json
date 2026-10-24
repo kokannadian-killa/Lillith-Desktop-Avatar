@@ -333,20 +333,20 @@
   "bbox_per_frame": [
     [
       177,
-      230,
-      23,
+      196,
+      30,
       50
     ],
     [
       177,
       230,
-      27,
+      38,
       83
     ],
     [
-      172,
-      233,
-      22,
+      175,
+      231,
+      56,
       125
     ],
     [
@@ -362,7 +362,7 @@
       192
     ],
     [
-      91,
+      92,
       316,
       21,
       225
@@ -398,7 +398,7 @@
       353
     ],
     [
-      119,
+      120,
       322,
       43,
       366
@@ -434,20 +434,20 @@
       363
     ],
     [
-      120,
+      121,
       283,
       59,
       364
     ],
     [
       122,
-      281,
+      280,
       56,
       364
     ],
     [
       124,
-      278,
+      277,
       54,
       365
     ],
@@ -520,7 +520,7 @@
     [
       129,
       289,
-      44,
+      45,
       372
     ],
     [
@@ -586,7 +586,7 @@
     [
       127,
       297,
-      43,
+      45,
       388
     ],
     [
@@ -610,7 +610,7 @@
     [
       127,
       303,
-      46,
+      47,
       388
     ],
     [
@@ -646,7 +646,7 @@
     [
       127,
       274,
-      48,
+      49,
       387
     ],
     [
@@ -664,7 +664,7 @@
     [
       127,
       273,
-      47,
+      48,
       387
     ],
     [
@@ -763,25 +763,31 @@
     "height": 400,
     "frame_count": 70,
     "fps": 12.0,
-    "bytes": 706334,
+    "bytes": 710506,
     "quality": {
-      "edge_mae": 2.371,
-      "edge_p99": 22.55,
+      "edge_mae": 2.412,
+      "edge_p99": 22.98,
       "halo_dark": 0.045,
-      "halo_light": -0.143,
-      "alpha_mae": 0.054
+      "halo_light": -0.129,
+      "alpha_mae": 0.055
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
-  },
-  "matte_clean": {
-    "version": 1,
-    "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "5350f0a573a7184742d7f8ec605d4ec2fcb76211913e57f351fad8c13f45c2f8",
-    "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
   },
   "matte_protect": {
     "tool": "tools/matte-clean/regress.py",
     "base": "b0b7424",
     "px_restored": 0
+  },
+  "matte_clean_prev": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "5350f0a573a7184742d7f8ec605d4ec2fcb76211913e57f351fad8c13f45c2f8",
+    "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "d6e4b0b7ef1418681f4b25c4b056a9d8f1965ae4d8dd4a49ba5715c2cbe86269",
+    "source_sha256": "5350f0a573a7184742d7f8ec605d4ec2fcb76211913e57f351fad8c13f45c2f8"
   }
 }

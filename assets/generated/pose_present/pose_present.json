@@ -194,7 +194,7 @@
     ],
     [
       103,
-      308,
+      306,
       26,
       392
     ],
@@ -257,25 +257,31 @@
     "height": 400,
     "frame_count": 24,
     "fps": 10.0,
-    "bytes": 341272,
+    "bytes": 345273,
     "quality": {
-      "edge_mae": 2.27,
-      "edge_p99": 17.0,
-      "halo_dark": 0.04,
-      "halo_light": -0.152,
-      "alpha_mae": 0.0713
+      "edge_mae": 2.283,
+      "edge_p99": 17.35,
+      "halo_dark": 0.034,
+      "halo_light": -0.159,
+      "alpha_mae": 0.0714
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
-  },
-  "matte_clean": {
-    "version": 1,
-    "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "9e6f3aac0eda88a2220b8290a6fca811907e3e223616e0f979a3c3b7e6592e50",
-    "hand_fix": "scratch nrcheck/handfix: white background pockets, light edge px, white pinholes (fix/no-white-fringe-nr)"
   },
   "matte_protect": {
     "tool": "tools/matte-clean/regress.py",
     "base": "379900d",
     "px_restored": 1
+  },
+  "matte_clean_prev": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "9e6f3aac0eda88a2220b8290a6fca811907e3e223616e0f979a3c3b7e6592e50",
+    "hand_fix": "scratch nrcheck/handfix: white background pockets, light edge px, white pinholes (fix/no-white-fringe-nr)"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "445d11582cd15947cd35abf350cccc37b65a14c197e9388ce4e99057fb200bc2",
+    "source_sha256": "9e6f3aac0eda88a2220b8290a6fca811907e3e223616e0f979a3c3b7e6592e50"
   }
 }

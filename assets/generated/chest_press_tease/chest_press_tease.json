@@ -423,7 +423,7 @@
       388
     ],
     [
-      150,
+      152,
       261,
       55,
       388
@@ -503,7 +503,7 @@
     [
       146,
       255,
-      60,
+      61,
       388
     ],
     [
@@ -526,6 +526,24 @@
     ],
     [
       148,
+      255,
+      60,
+      388
+    ],
+    [
+      148,
+      255,
+      60,
+      388
+    ],
+    [
+      145,
+      255,
+      60,
+      388
+    ],
+    [
+      147,
       255,
       60,
       388
@@ -533,29 +551,11 @@
     [
       146,
       255,
-      60,
-      388
-    ],
-    [
-      145,
-      255,
-      60,
-      388
-    ],
-    [
-      145,
-      255,
-      60,
-      388
-    ],
-    [
-      145,
-      255,
       61,
       388
     ],
     [
-      145,
+      147,
       255,
       60,
       388
@@ -567,7 +567,7 @@
       388
     ],
     [
-      145,
+      147,
       255,
       61,
       388
@@ -591,7 +591,7 @@
       388
     ],
     [
-      146,
+      148,
       256,
       60,
       388
@@ -599,7 +599,7 @@
     [
       145,
       256,
-      60,
+      61,
       388
     ],
     [
@@ -645,7 +645,7 @@
       388
     ],
     [
-      146,
+      148,
       258,
       60,
       388
@@ -663,97 +663,97 @@
       388
     ],
     [
-      145,
-      258,
-      60,
-      388
-    ],
-    [
-      145,
-      258,
-      60,
-      388
-    ],
-    [
-      146,
-      258,
-      60,
-      388
-    ],
-    [
-      145,
-      257,
-      60,
-      388
-    ],
-    [
-      145,
-      257,
-      60,
-      388
-    ],
-    [
-      145,
-      256,
-      61,
-      388
-    ],
-    [
-      145,
-      256,
-      61,
-      388
-    ],
-    [
-      146,
-      256,
-      60,
-      388
-    ],
-    [
-      146,
-      255,
-      60,
-      388
-    ],
-    [
-      148,
-      255,
-      60,
-      388
-    ],
-    [
-      146,
-      255,
-      60,
-      388
-    ],
-    [
-      148,
-      255,
-      60,
-      388
-    ],
-    [
-      148,
-      255,
-      60,
-      388
-    ],
-    [
-      148,
-      256,
-      61,
-      388
-    ],
-    [
       147,
+      258,
+      60,
+      388
+    ],
+    [
+      145,
+      258,
+      60,
+      388
+    ],
+    [
+      146,
+      258,
+      60,
+      388
+    ],
+    [
+      145,
+      257,
+      60,
+      388
+    ],
+    [
+      148,
+      257,
+      60,
+      388
+    ],
+    [
+      148,
+      256,
+      61,
+      388
+    ],
+    [
+      145,
+      256,
+      61,
+      388
+    ],
+    [
+      146,
+      256,
+      61,
+      388
+    ],
+    [
+      146,
+      255,
+      60,
+      388
+    ],
+    [
+      148,
+      255,
+      60,
+      388
+    ],
+    [
+      146,
+      255,
+      60,
+      388
+    ],
+    [
+      148,
+      255,
+      60,
+      388
+    ],
+    [
+      148,
+      255,
+      60,
+      388
+    ],
+    [
+      148,
+      256,
+      61,
+      388
+    ],
+    [
+      150,
       257,
       61,
       388
     ],
     [
-      148,
+      149,
       257,
       61,
       388
@@ -773,7 +773,7 @@
     [
       149,
       260,
-      59,
+      60,
       388
     ],
     [
@@ -791,7 +791,7 @@
     [
       153,
       261,
-      56,
+      57,
       388
     ],
     [
@@ -872,25 +872,31 @@
     "height": 400,
     "frame_count": 84,
     "fps": 12.0,
-    "bytes": 803776,
+    "bytes": 810327,
     "quality": {
-      "edge_mae": 2.595,
+      "edge_mae": 2.616,
       "edge_p99": 22.0,
       "halo_dark": 0.051,
       "halo_light": -0.141,
-      "alpha_mae": 0.045
+      "alpha_mae": 0.0453
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
-  },
-  "matte_clean": {
-    "version": 1,
-    "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "218ca93eb3a88895f41b7e06822b5e4e6d90924727bf38f1e6932139123ea0b7",
-    "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
   },
   "matte_protect": {
     "tool": "tools/matte-clean/regress.py",
     "base": "b0b7424",
     "px_restored": 4
+  },
+  "matte_clean_prev": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "218ca93eb3a88895f41b7e06822b5e4e6d90924727bf38f1e6932139123ea0b7",
+    "extra_passes": "after matte_clean --include-locked: residual edge un-mix; enclosed near-white neutral backdrop pockets (hair/neck, limb gaps) set transparent; body parts and skin/tattoo holes removed by the clean restored from the pre-clean sheet; fringeqa white/halo and white_edge light-edge px recoloured to nearest interior colour (alpha kept)"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "b39b66fd971cc299de9cdbc1614179e131800ef32e02ba4b85a98fe7d6e65a32",
+    "source_sha256": "218ca93eb3a88895f41b7e06822b5e4e6d90924727bf38f1e6932139123ea0b7"
   }
 }

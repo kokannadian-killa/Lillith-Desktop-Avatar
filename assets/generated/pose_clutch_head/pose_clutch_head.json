@@ -257,20 +257,26 @@
     "height": 400,
     "frame_count": 24,
     "fps": 8.0,
-    "bytes": 352845,
+    "bytes": 359656,
     "quality": {
-      "edge_mae": 2.449,
-      "edge_p99": 27.67,
-      "halo_dark": 0.034,
-      "halo_light": -0.156,
-      "alpha_mae": 0.0605
+      "edge_mae": 2.48,
+      "edge_p99": 28.0,
+      "halo_dark": 0.026,
+      "halo_light": -0.139,
+      "alpha_mae": 0.0619
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
-  "matte_clean": {
+  "matte_clean_prev": {
     "version": 1,
     "tool": "tools/matte-clean/matte_clean.py",
     "sheet_sha256": "df7f8f934a5912a2eafbc6aee5cd9b9e3323ad1b3b1084d2f16adb78ffb0d470",
     "hand_fix": "scratch nrcheck/handfix: white background pockets, light edge px, white pinholes (fix/no-white-fringe-nr)"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "c8de1e4249ab2ad416e9d92ee62002a641cf5d1196e4f231a06558b20d2bd046",
+    "source_sha256": "df7f8f934a5912a2eafbc6aee5cd9b9e3323ad1b3b1084d2f16adb78ffb0d470"
   }
 }
