@@ -121,5 +121,5 @@ id = "newyear"
 name = "New Year Sparkle"
 season = "newyear"
 thumbnail = "assets/generated/outfits/newyear.png"
-clips = ["newyear_champagne_rim_lick", "newyear_strawberry_bite"]
+clips = ["newyear_champagne_rim_lick", "newyear_strawberry_bite", "newyear_midnight_kiss_squeeze"]
 hidden = false

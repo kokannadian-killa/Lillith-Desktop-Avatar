@@ -7010,6 +7010,41 @@
    "video": "newyear_strawberry_bite/newyear_strawberry_bite.mp4",
    "season": "newyear",
    "outfit": "newyear"
+  },
+  {
+   "name": "newyear_midnight_kiss_squeeze",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "newyear_midnight_kiss_squeeze/",
+   "sheet": "newyear_midnight_kiss_squeeze/newyear_midnight_kiss_squeeze_sheet.png",
+   "manifest": "newyear_midnight_kiss_squeeze/newyear_midnight_kiss_squeeze.json",
+   "preview": "newyear_midnight_kiss_squeeze/newyear_midnight_kiss_squeeze_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:newyear",
+    "outfit:newyear"
+   ],
+   "allure": true,
+   "video": "newyear_midnight_kiss_squeeze/newyear_midnight_kiss_squeeze.mp4",
+   "season": "newyear",
+   "outfit": "newyear"
   }
  ]
 }
