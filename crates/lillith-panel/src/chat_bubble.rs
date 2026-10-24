@@ -13,8 +13,12 @@
 //! [`lillith_core::soul_contract::SoulContract::confirm`] (audited `CONFIRM`),
 //! **No** or `Esc` discards it (audited `DENY`). While it is up the chat
 //! input is disabled and the bubble stays open on focus loss, so the answer
-//! is never skipped by accident. `/contract yes|no` still works as a typed
-//! alias.
+//! is never skipped by accident. Approving is a mouse click only: a typed
+//! `/contract yes` (or `/skill yes`) NEVER approves; it brings the pending
+//! card back up with "Click Yes on the card, darling." and leaves a
+//! `TYPED_APPROVE_REFUSED` audit line (with nothing pending it does
+//! nothing). A typed `/contract no` still refuses (refusing is safe), and a
+//! voice transcript is never read as either.
 //!
 //! Every change, launch and command she proposes arrives as ONE Soul
 //! Contract **plan** ([`lillith_theme::egui_plan`]): every numbered item in
@@ -143,8 +147,16 @@ enum Req {
     Send(String),
     Clear,
     /// Answer the pending Soul Contract (skill, file write, or shell): Yes
-    /// (run it) or No (discard).
+    /// (run it) or No (discard). `Confirm(true)` only ever comes from a
+    /// mouse click on the popup's Yes plate, never from typed text.
     Confirm(bool),
+    /// Ko typed `/contract yes`: never an approval. The worker audits
+    /// `TYPED_APPROVE_REFUSED` and points him at the card (raising it again
+    /// unless the bubble already `showing` it); with nothing pending it
+    /// does nothing.
+    TypedYes {
+        showing: bool,
+    },
     /// Sign the pending deletion with the typed phrase.
     SignDeletion {
         typed: String,
@@ -230,9 +242,17 @@ enum Ui {
     ServerCard(ContractPrompt),
 }
 
-/// Parses the bubble's Soul Contract answer: `/contract yes` (or `y`) →
-/// `Some(true)`, `/contract no` (or `n`) → `Some(false)`, anything else →
-/// `None`. `/skill yes|no` is kept as an alias (Phase 1 muscle memory).
+/// Audit decision for a typed `/contract yes` (refused: only a click approves).
+pub const TYPED_APPROVE_REFUSED: &str = "TYPED_APPROVE_REFUSED";
+
+/// Her line when Ko types yes instead of clicking.
+const CLICK_THE_CARD: &str = "Click Yes on the card, darling.";
+
+/// Parses the bubble's typed Soul Contract command: `/contract yes` (or
+/// `y`) → `Some(true)`, `/contract no` (or `n`) → `Some(false)`, anything
+/// else → `None`. `/skill yes|no` is kept as an alias (Phase 1 muscle
+/// memory). A typed yes is never an approval ([`Req::TypedYes`]); a typed no
+/// refuses.
 fn parse_confirm_command(text: &str) -> Option<bool> {
     let mut parts = text.split_whitespace();
     let cmd = parts.next()?;
@@ -461,6 +481,7 @@ fn spawn_worker(
                     }
                     Req::ServerCard(choice) => w.server_card(choice),
                     Req::Confirm(yes) => w.confirm(yes),
+                    Req::TypedYes { showing } => w.typed_yes(showing),
                     Req::SignDeletion { typed, permanent } => w.sign(&typed, permanent),
                     Req::ApprovePlan {
                         items,
@@ -569,7 +590,7 @@ impl Worker {
                 self.ui(Ui::Deletion(prompt));
             } else {
                 self.note(format!(
-                    "📜 Soul Contract: she wants to {summary}. Sign or refuse it (or type /contract yes|no)."
+                    "📜 Soul Contract: she wants to {summary}. Click Yes or No on the card (typing or saying yes doesn't count; /contract no refuses)."
                 ));
                 self.ui(Ui::Contract(action.prompt()));
                 self.pending = Some(action);
@@ -817,6 +838,47 @@ impl Worker {
         self.chain(Some(fb));
     }
 
+    /// Ko typed `/contract yes`. That never approves anything: audit
+    /// `TYPED_APPROVE_REFUSED`, say so in character and bring the pending
+    /// card back up (unless the bubble already `showing` it). With nothing
+    /// pending it does nothing at all. Nothing is confirmed, denied or
+    /// dequeued here.
+    fn typed_yes(&mut self, showing: bool) {
+        if let Some((sc, id)) = &self.plan {
+            if let Some((_, a)) = sc.pending().iter().find(|(i, _)| i == id) {
+                sc.record(TYPED_APPROVE_REFUSED, a);
+            }
+            self.note(format!(
+                "✍️ {CLICK_THE_CARD} Tick what you allow and click APPROVE."
+            ));
+            if !showing {
+                if let Some(p) = self.plan_prompt(None) {
+                    self.ui(Ui::Plan(p));
+                }
+            }
+        } else if let Some((sc, id)) = &self.deletion {
+            if let Some((_, a)) = sc.pending().iter().find(|(i, _)| i == id) {
+                sc.record(TYPED_APPROVE_REFUSED, a);
+            }
+            self.note(format!(
+                "✍️ {CLICK_THE_CARD} Type the phrase there and click SIGN."
+            ));
+            if !showing {
+                if let Some(p) = self.deletion_prompt(None) {
+                    self.ui(Ui::Deletion(p));
+                }
+            }
+        } else if let Some(action) = &self.pending {
+            self.session
+                .soul_contract()
+                .record(TYPED_APPROVE_REFUSED, action);
+            self.note(CLICK_THE_CARD.into());
+            if !showing {
+                self.ui(Ui::Contract(action.prompt()));
+            }
+        }
+    }
+
     fn deletion_prompt(&self, note: Option<&str>) -> Option<DeletionPrompt> {
         let (sc, id) = self.deletion.as_ref()?;
         sc.pending()
@@ -989,9 +1051,15 @@ impl Bubble {
                     text: "Click Yes or No on the model-server card; typing doesn't answer it."
                         .into(),
                 });
+            } else if yes {
+                // A typed yes NEVER approves: the worker audits it and
+                // brings the pending card back (nothing pending: nothing).
+                let showing =
+                    self.contract.is_some() || self.deletion.is_some() || self.plan.is_some();
+                let _ = self.tx.send(Req::TypedYes { showing });
             } else {
-                // Soul Contract answer: nothing runs unless this is a yes.
-                self.answer_contract(yes);
+                // A typed no refuses (refusing is always safe).
+                self.answer_contract(false);
             }
         } else {
             self.lines.push(Line {
@@ -1038,7 +1106,7 @@ impl Bubble {
         }
     }
 
-    /// Answers the Soul Contract (popup or typed alias) and takes the popup
+    /// Answers the Soul Contract (popup click, or a typed no) and takes the popup
     /// down. The worker does the gating: Yes → `confirm` (`CONFIRM`), No →
     /// `deny` (`DENY`); with nothing pending it only says so.
     fn answer_contract(&mut self, yes: bool) {
@@ -1096,7 +1164,7 @@ impl Bubble {
 
     /// Routes a push-to-talk transcript. Voice can fill the input or say
     /// the safeword; it can NEVER answer a Soul Contract, a deletion or a
-    /// plan (only a click or a typed key press can).
+    /// plan (only a mouse click approves; a typed `/contract no` refuses).
     fn on_transcript(&mut self, t: &Transcript) {
         match route_transcript(t, self.gate_pending()) {
             VoiceRoute::Safeword => self.voice_safeword(),
@@ -1929,11 +1997,16 @@ mod tests {
         b.send();
         assert!(b.contract.is_some(), "voice text never confirms");
         assert!(matches!(req_rx.try_recv(), Ok(Req::Send(t)) if t == "/contract yes"));
-        // Typed by hand (not from the mic) the alias still works.
+        // Typed by hand (not from the mic) it still never approves.
         b.streaming = None;
         b.input = "/contract yes".into();
         b.send();
-        assert!(matches!(req_rx.try_recv(), Ok(Req::Confirm(true))));
+        assert!(b.contract.is_some());
+        assert!(matches!(
+            req_rx.try_recv(),
+            Ok(Req::TypedYes { showing: true })
+        ));
+        assert!(req_rx.try_recv().is_err());
     }
 
     static KILLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -2002,12 +2075,36 @@ mod tests {
     }
 
     #[test]
-    fn typed_alias_answers_and_drops_the_popup() {
+    fn typed_yes_never_approves_and_typed_no_still_refuses() {
         let (mut b, req_rx) = test_bubble(Some(demo_contract()), false);
-        b.input = "/contract yes".into();
+        for typed in ["/contract yes", "/contract Y", " /skill y ", "/skill YES"] {
+            b.input = typed.into();
+            b.send();
+            assert!(b.contract.is_some(), "{typed:?} took the card down");
+            assert!(b.input.is_empty());
+            match req_rx.try_recv() {
+                Ok(Req::TypedYes { showing: true }) => {}
+                Ok(Req::Confirm(_)) => panic!("{typed:?} answered the contract"),
+                _ => panic!("{typed:?}: expected TypedYes"),
+            }
+            assert!(req_rx.try_recv().is_err(), "{typed:?}: nothing else sent");
+        }
+        // Not even shown in the chat as Ko's message, and never sent to her.
+        assert!(b.lines.iter().all(|l| !l.text.contains("contract")));
+        // Refusing by typing is still allowed.
+        b.input = "/contract no".into();
         b.send();
         assert!(b.contract.is_none());
-        assert!(matches!(req_rx.try_recv(), Ok(Req::Confirm(true))));
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Confirm(false))));
+        // With no card up the bubble only asks the worker (which does
+        // nothing if nothing is pending); it never confirms.
+        b.input = "/contract yes".into();
+        b.send();
+        assert!(matches!(
+            req_rx.try_recv(),
+            Ok(Req::TypedYes { showing: false })
+        ));
+        assert!(req_rx.try_recv().is_err());
     }
 
     #[test]
@@ -2072,7 +2169,11 @@ mod tests {
         // A typed "/contract yes" is not a signature: the popup stays up.
         b.input = "/contract yes".into();
         b.send();
-        assert!(matches!(req_rx.try_recv(), Ok(Req::Confirm(true))));
+        assert!(b.deletion.is_some());
+        assert!(matches!(
+            req_rx.try_recv(),
+            Ok(Req::TypedYes { showing: true })
+        ));
         // Esc refuses.
         run(&mut b, vec![esc()]);
         assert!(b.deletion.is_none());
@@ -2291,6 +2392,85 @@ mod tests {
             .collect();
         assert!(notes.iter().any(|n| n.contains("Declined")), "{notes:?}");
         assert!(notes.iter().any(|n| n.contains("✅ Plan")), "{notes:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn bare_worker() -> (Worker, Receiver<Ui>) {
+        let (ui_tx, ui_rx) = channel();
+        let w = Worker {
+            session: ChatSession::new(&ChatConfig::default(), true),
+            rt: tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap(),
+            ui_tx,
+            emit: Arc::new(|_, _| {}),
+            ctx: egui::Context::default(),
+            pending: None,
+            deletion: None,
+            plan: None,
+            app_server: false,
+            last_sent: None,
+        };
+        (w, ui_rx)
+    }
+
+    #[test]
+    fn worker_typed_yes_never_runs_audits_and_raises_the_card_again() {
+        let dir = std::env::temp_dir().join(format!("lillith-bubble-typed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+
+        // Nothing pending: nothing at all (no note, no card, no audit).
+        let (mut w, ui_rx) = bare_worker();
+        w.typed_yes(false);
+        assert!(ui_rx.try_recv().is_err());
+
+        // A plan: never approved, audited, raised again (unless showing).
+        let (plan, _) = plan_prompt_for(&dir);
+        let mut sc = SoulContract::new(Some(log.clone()));
+        let id = sc.request(PendingAction::Plan { plan });
+        w.plan = Some((sc, id));
+        w.typed_yes(false);
+        assert!(w.plan.is_some(), "the plan is still waiting");
+        assert!(!dir.join("A").exists() && !dir.join("B").exists() && !dir.join("ran").exists());
+        let got: Vec<Ui> = ui_rx.try_iter().collect();
+        assert!(got.iter().any(|m| matches!(m, Ui::Plan(_))), "raised again");
+        assert!(got
+            .iter()
+            .any(|m| matches!(m, Ui::Note(t) if t.contains(CLICK_THE_CARD))));
+        w.typed_yes(true);
+        let got: Vec<Ui> = ui_rx.try_iter().collect();
+        assert!(!got.iter().any(|m| matches!(m, Ui::Plan(_))), "already up");
+        assert!(got.iter().any(|m| matches!(m, Ui::Note(_))));
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(
+            text.lines()
+                .filter(|l| l.contains(&format!("\t{TYPED_APPROVE_REFUSED}\t")))
+                .count(),
+            2,
+            "{text}"
+        );
+        assert!(!text.contains("\tCONFIRM"), "{text}");
+        assert!(!text.contains("\tAPPROVED"), "{text}");
+        w.plan = None;
+
+        // A plain gated action (file write): never written, still pending,
+        // its card raised again.
+        let target = dir.join("note.txt");
+        w.pending = Some(PendingAction::WriteFile {
+            path: target.clone(),
+            body: "hi".into(),
+        });
+        w.typed_yes(false);
+        assert!(!target.exists(), "a typed yes wrote the file");
+        assert!(w.pending.is_some(), "still waiting for a click");
+        let got: Vec<Ui> = ui_rx.try_iter().collect();
+        assert!(got.iter().any(|m| matches!(m, Ui::Contract(_))));
+        assert!(got
+            .iter()
+            .any(|m| matches!(m, Ui::Note(t) if t == CLICK_THE_CARD)));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
