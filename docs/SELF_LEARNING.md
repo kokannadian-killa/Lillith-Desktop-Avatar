@@ -572,13 +572,17 @@ option and she can even use the task bots to do the reasearching for her"*.
 4. **Light on the i5-7200U.** One fetch at a time (`fetch_interval_s`),
    per-hour page and per-session byte caps, nice 19 / ionice idle, disk
    budget (`max_disk_mb`) and the session time limit.
-5. **Helper workers.** She may split research into sub-tasks run by her own
-   **local helper task workers** (bounded, `max_workers` 1–2), each under the
-   same sandbox and Tor rules and the lifespan/capture rules in §12. Each job
-   is logged in the D8 job log (`~/.local/share/lillith/bots/<job-id>.jsonl`).
-   **Open question (D12):** we assume "task bots" means these local helper
-   workers. If Ko meant his other Grok assistants, that would send research
-   off the machine, so it is not in this local design unless Ko confirms.
+5. **Research backends (D12, decided by Ko 03:30 MDT).** Ko: by "task
+   bots" he means *"my own task completionbots"*, his TaskCompletion bots
+   (his other Grok assistants, running in the cloud, off his laptop). The
+   design therefore has two backends; see §11.1.
+   - **Default: local helper workers.** She splits research into sub-tasks
+     run by her own local helper task workers (bounded, `max_workers` 1–2),
+     fully local and anonymous over Tor, under the sandbox, lifespan,
+     capture and zero-fingerprint rules in §12. Each job is logged in the D8
+     job log (`~/.local/share/lillith/bots/<job-id>.jsonl`).
+   - **Optional, off by default: Ko's TaskCompletion bots** (§11.1). This
+     path **leaves the machine** and is **not local or anonymous**.
 6. **Live log + dream report.** While dreaming the panel shows a live log of
    where she is going (each planned URL before the GET, each visited URL
    after). When it ends she gives a **dream report** (chat + panel + audit):
@@ -588,6 +592,46 @@ option and she can even use the task bots to do the reasearching for her"*.
    `strength = dream_strength` (0.2) and tag `source=dream` (plus
    `dream_id`), so they decay unless reinforced by use or Ko, and are easy to
    review and forget (forget "dream <date>" removes the whole session).
+
+### 11.1 Optional backend: Ko's TaskCompletion bots (external) — decided by Ko
+
+> **Warning: this path leaves Ko's machine. It is NOT local and NOT
+> anonymous.** It breaks the fully-local guarantee (constraint 1) and the
+> zero-fingerprint / Tor rules (§12) for anything routed through it: the
+> research is done by cloud assistants on Ko's own accounts, and the sites
+> they visit see their traffic, not Tor.
+
+- **Off by default.** `[learn.dream] external_bots = false`. Ko enables it
+  himself in the Knowledge panel (a Soul Contract mouse click, audited
+  `CONFIRM\tdream_external_enable`), per the user-gated rule. Even when
+  enabled, each dream session's card has a separate, unticked
+  **"Also use my TaskCompletion bots (leaves this laptop, not anonymous)"**
+  option; only Ko's click on that session's card turns it on for that
+  session. Typed or spoken yes never counts. The safeword disables it for
+  the rest of the session.
+- **What is sent (minimal):** a topic (short words from her curiosity
+  queue), the budget (max time, max sources, max result size) and the
+  session's deadline. **Never** chat text, memory contents, notes, file
+  paths, hostnames or anything identifying beyond what the bot's own account
+  already implies. Outgoing payloads go through the same identifier
+  denylist as §12 queries and are shown in the live log before sending.
+- **Coordination (high level):** Lillith hands topic + budget to a
+  TaskCompletion bot through Ko's sanctioned agent-messaging channel; the
+  bot does the research and returns summarized results (text + source URLs).
+  End early, the deadline, or the safeword sends a cancel; anything arriving
+  after the session ended is discarded unread.
+- **Results are untrusted input.** They go through the same parent-side
+  validation as local workers (ingest filter §7, schema, size, injection
+  and canary checks); anything suspicious is quarantined, never saved.
+  Accepted items are saved as low-strength `source=dream` memories with an
+  extra tag `backend=external`.
+- **Labelling:** the live log, the dream report and every audit line
+  (`DREAM\texternal\t<job-id>\t…`) label items sourced this way as
+  **"external (TaskCompletion bot)"**, so Ko can tell them apart and forget
+  them separately (per-item, or "forget everything external from dream
+  <date>").
+- **Job log:** each delegated job is also recorded in the D8 job log with
+  `bot = taskcompletion:<bot id>` and `backend = external`.
 
 ## 12. Helper workers: lifespans, capture handling, errors — decided by Ko
 
@@ -734,7 +778,8 @@ practice = true                   # P4; each run still needs a card (D2 = A)
 [learn.dream]                     # §11, decided by Ko; only when Ko starts it
 min_minutes = 30
 max_minutes = 480
-max_workers = 2                   # helper workers (§12)
+max_workers = 2                   # local helper workers (§12), the default backend
+external_bots = false             # §11.1: Ko's TaskCompletion bots; LEAVES the machine, not anonymous; Ko opt-in + per-session tick
 fetch_interval_s = 20             # one fetch at a time, ≥ 20 s apart
 max_pages_per_hour = 60
 max_bytes_per_session = 52428800  # 50 MiB fetched
@@ -770,7 +815,7 @@ lru_cache_mb = 8
 | **P4** Sandbox practice (card per run) | generator, static check, bwrap wrapper, `SandboxRun` card, skills write, proposal queue | argv golden test; network denied; write outside `/work` fails; limits kill fork bomb / 1 GiB / infinite loop; no card → no launch; spoken yes rejected | ≤ 6 proposals/day; rustc single file ≤ 15 s | bwrap / userns missing |
 | **P5** Online research (Tor) + gated install path + Bots/Pose API | `OnlineResearch` card, Tor SOCKS client, trip reporting, `Install`/`Download` cards, pkexec, installs ledger, `KnowledgeApi`, bots JSONL layout | Tor missing → online off; non-listed redirect refused; caps; no cookies/POST; circuit isolation; fetched text fenced untrusted; install refused without a Ko-asked task; learner never proposes install; pkexec cancel = DENY; uninstall card | trip ≤ 60 s wall; install card → agent ≤ 30 s to show | Tor/arti absent; exit-node HTTP risk; polkit UX |
 | **P6** Shared pages | share socket, native-messaging host + extension, KDE share action, block list | peer-uid check; blocked/denylisted host refused; no browser-profile reads (denylist test); URL stored; injection text dropped | share → queued ≤ 50 ms | extension packaging per browser |
-| **P7** Helper workers + dream learning | supervisor, worker sandbox, TTL/heartbeat, breakers, quarantine; `DreamSession` card, curiosity queue, live log, End early (menu/tray), dream report, `source=dream` memories | duration outside 30–480 min rejected; one click covers only that session's trips; deadline hard stop; safeword/End early/battery/thermal stop ≤ 1 s; chat preempts; worker killed on TTL/missed heartbeat/anomaly; quarantine never reaches memory; scratch wiped; breaker opens; Tor down → offline only; per-item forget | 1 fetch at a time; dream CPU outside model calls < 5 % one core | injection via pages; 3B summary quality; "task bots" meaning (D12) |
+| **P7** Helper workers + dream learning | supervisor, worker sandbox, TTL/heartbeat, breakers, quarantine; `DreamSession` card, curiosity queue, live log, End early (menu/tray), dream report, `source=dream` memories | duration outside 30–480 min rejected; one click covers only that session's trips; deadline hard stop; safeword/End early/battery/thermal stop ≤ 1 s; chat preempts; worker killed on TTL/missed heartbeat/anomaly; quarantine never reaches memory; scratch wiped; breaker opens; Tor down → offline only; per-item forget | 1 fetch at a time; dream CPU outside model calls < 5 % one core | injection via pages; 3B summary quality; external backend (D12) leaks topics off-machine, so off by default, labelled and audited |
 | **P8** Memory compaction | digests, prune-after-summarise, zstd blobs + dictionary, LRU, vacuum/optimize/checkpoint, size budget, forget rebuilds digests | digest keeps entity/habit links (retrieval golden test); forget topic scrubs + rebuilds digests; budget prunes oldest-weakest first, never `origin: ko`; resumable after kill; safeword aborts; audit line per run | chunk ≤ 2 s CPU; lookup p95 unchanged (≤ 20 ms on 5k notes) | dictionary drift; summary loses detail |
 
 ## Decisions
@@ -785,6 +830,7 @@ lru_cache_mb = 8
 | **Sources** | Exactly: installed docs (man/info/`/usr/share/doc`/Rust/Python), saved chat + memory + habits, and **pages Ko shares** via an explicit "Share this page with Lillith" action. Nothing else. No allow-listed folders, no Bots job results. |
 | **D9 Dream learning** | Ko-started sessions of 30 min–8 h, one session-scoped click, her own topic choice, Tor/read-only rules, End early + safeword + deadline stops, light budgets, local helper workers, live log + dream report with per-item forget, `source=dream` low-strength memories (§11). |
 | **D10 Workers** | Anonymity hard rule for workers (plain GET via Tor `socks5h`, generic headers, stream isolation, jitter, no identifiers, tmpfs scratch, smart early stopping); hard TTLs + heartbeats enforced by the supervisor, least privilege, quarantine on anomalies, fresh worker per task, restart limits/backoff, circuit breakers, error memory, resumable job log, graceful degradation (§12). |
+| **D12 Research backends** | "Task bots" = Ko's own TaskCompletion bots (cloud). Default backend stays local helper workers over Tor; delegating to TaskCompletion bots is optional, off by default, Ko opt-in per session, leaves the machine and is not anonymous, results validated/quarantined and labelled "external (TaskCompletion bot)" (§11.1). |
 | **D11 Compaction** | Self-compression of memory: digests, zstd blobs, vacuum/optimize, size budget, fast lookup, idle/AC only, audited (§13). |
 | **Online** | User-gated online research: click per trip, announce where going / went / what saved, audited, through Tor, anonymous, read-only GET. Replaces local-only for this feature only. Idle loop never goes online alone. |
 | **Installs** | User-gated downloads/installs, **only when Ko asked her to complete a task and it is needed for that task**. Learner never proposes installs. Click + audit; root via pkexec/polkit (she never handles the password); verified downloads; panel list + gated uninstall; no auto-updates. Tor not installed by the learner; if Tor is missing, online stays off unless Ko asks for a task that needs it. |
@@ -803,9 +849,6 @@ lru_cache_mb = 8
 
 ### Still open
 
-- **D12 (Ko):** does "task bots" in dream learning mean her local helper
-  workers (assumed, §11.5) or Ko's other Grok assistants? The latter would
-  leave the machine, so it is not designed in unless Ko confirms.
 - Lead confirms the D8 log path when `feat/bots-tab` lands.
 
 None block P1. Ko can flip any New Bot default in the panel or config.
