@@ -2001,7 +2001,7 @@ mod tests {
         assert!(p.summary.contains("local model server?"), "{}", p.summary);
         let detail = p.detail.unwrap();
         assert!(
-            detail.contains("    --api-key\n    ***\n") && !detail.contains("sekrit"),
+            !detail.contains("--api-key") && !detail.contains("sekrit"),
             "{detail}"
         );
         assert!(s.answer_server_card(CardChoice::Clicked(Answer::Yes)));

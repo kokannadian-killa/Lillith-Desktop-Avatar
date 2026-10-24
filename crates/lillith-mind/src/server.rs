@@ -27,7 +27,92 @@ pub enum ServerError {
     Exited(String),
     #[error("llama-server not ready after {0:?}")]
     NotReady(Duration),
+    #[error("refusing llama-server extra arg {0:?}: it would change the host, port, model, key or download source")]
+    ForbiddenArg(String),
+    #[error(
+        "refusing to bind llama-server to {0:?}: only 127.0.0.1 / localhost / ::1 are allowed"
+    )]
+    BindHost(String),
 }
+
+/// `extra_args` that could rebind the server, swap the model, pull a model
+/// from the network, change the API key or serve files. These are fixed by
+/// the app; a matching extra arg (`--host`, `--host=…`, …) is refused.
+pub const FORBIDDEN_EXTRA_ARGS: &[&str] = &[
+    "--host",
+    "--port",
+    "-m",
+    "--model",
+    "-mu",
+    "--model-url",
+    "-hf",
+    "-hfr",
+    "--hf-repo",
+    "-hff",
+    "--hf-file",
+    "-hft",
+    "--hf-token",
+    "-dr",
+    "--docker-repo",
+    "--rpc",
+    "--api-key",
+    "--api-key-file",
+    "--path",
+];
+
+/// Errors on the first forbidden extra arg: a flag from
+/// [`FORBIDDEN_EXTRA_ARGS`] (bare or `flag=value`), or any other Hugging
+/// Face / URL download flag (`-hf…`, `--hf-…`, `…-url…`, e.g. the draft,
+/// vocoder and mmproj variants).
+pub fn check_extra_args(extra: &[String]) -> Result<(), ServerError> {
+    for a in extra {
+        let t = a.trim();
+        let flag = t.split_once('=').map_or(t, |(f, _)| f);
+        let forbidden = FORBIDDEN_EXTRA_ARGS.contains(&flag)
+            || (flag.starts_with('-') && !flag.starts_with("--") && flag.starts_with("-hf"))
+            || flag == "-mmu"
+            || flag.starts_with("--hf-")
+            || (flag.starts_with('-') && flag.contains("-url"));
+        if forbidden {
+            return Err(ServerError::ForbiddenArg(a.clone()));
+        }
+    }
+    Ok(())
+}
+
+/// The literal address llama-server binds to: always `127.0.0.1`, for an
+/// endpoint host of `127.0.0.1`, `localhost` or `::1`; anything else errors.
+pub fn bind_host(endpoint_host: &str) -> Result<&'static str, ServerError> {
+    match endpoint_host.trim().to_ascii_lowercase().as_str() {
+        "127.0.0.1" | "localhost" | "::1" => Ok("127.0.0.1"),
+        other => Err(ServerError::BindHost(other.to_string())),
+    }
+}
+
+/// `args` with every value after `--api-key` masked, for logs.
+pub fn masked_args(args: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut hide_next = false;
+    for a in args {
+        if hide_next {
+            out.push("***".to_string());
+            hide_next = false;
+        } else if let Some((flag, _)) = a
+            .split_once('=')
+            .filter(|(f, _)| f.starts_with("--api-key"))
+        {
+            out.push(format!("{flag}=***"));
+        } else {
+            hide_next = a == "--api-key" || a == "--api-key-file";
+            out.push(a.clone());
+        }
+    }
+    out
+}
+
+/// Env var llama-server reads the API key from (`--api-key`'s env form), so
+/// the key never appears in the process's argv (`ps`, /proc/<pid>/cmdline).
+pub const API_KEY_ENV: &str = "LLAMA_API_KEY";
 
 /// `(host, port)` from an `http://host:port[/…]` endpoint (port defaults
 /// to 80; llama-server itself defaults to 8080).
@@ -45,13 +130,10 @@ pub fn host_port(endpoint: &str) -> Option<(String, u16)> {
     Some((host.to_string(), port))
 }
 
-/// The command line for `cfg` (exposed for tests and logging).
-pub fn command_args(
-    server: &LlamaServerConfig,
-    host: &str,
-    port: u16,
-    api_key: &str,
-) -> Vec<String> {
+/// The command line for `cfg` (exposed for tests and logging). The API key
+/// is not on it: [`LlamaServer::spawn`] passes it in [`API_KEY_ENV`].
+/// Callers must run [`check_extra_args`] and [`bind_host`] first.
+pub fn command_args(server: &LlamaServerConfig, host: &str, port: u16) -> Vec<String> {
     let mut a = vec![
         "-m".to_string(),
         server.model_path.clone(),
@@ -68,25 +150,22 @@ pub fn command_args(
     if let Some(n) = server.gpu_layers {
         a.extend(["-ngl".into(), n.to_string()]);
     }
-    if !api_key.is_empty() {
-        a.extend(["--api-key".into(), api_key.to_string()]);
-    }
     a.extend(server.extra_args.iter().cloned());
     a
 }
 
 /// The full command line [`LlamaServer::spawn`] would run for `cfg`, for the
-/// Soul Contract card and its audit log (`--api-key` masked). `None` when the
-/// endpoint has no host/port.
+/// Soul Contract card and its audit log: the resolved binary, then every
+/// arg (the API key is never on it, see [`API_KEY_ENV`]). `None` when the
+/// endpoint has no host/port or is not loopback.
 pub fn display_argv(cfg: &ChatConfig) -> Option<Vec<String>> {
     let (host, port) = host_port(&cfg.endpoint)?;
+    // What `spawn` binds (always 127.0.0.1); a non-loopback host has no card.
+    let host = bind_host(&host).ok()?;
     let bin = lillith_setup::launch::resolve_program(&cfg.server.binary);
     let mut argv = vec![bin.display().to_string()];
-    let mut mask = false;
-    for a in command_args(&cfg.server, &host, port, &cfg.api_key) {
-        argv.push(if mask { "***".into() } else { a.clone() });
-        mask = a == "--api-key";
-    }
+    // The key itself goes in the environment, never on the command line.
+    argv.extend(masked_args(&command_args(&cfg.server, host, port)));
     Some(argv)
 }
 
@@ -105,6 +184,10 @@ impl LlamaServer {
         // Loopback only: never bind the model to a network interface.
         lillith_setup::local::ensure_local(&cfg.endpoint, 80)?;
         let s = &cfg.server;
+        let (host, port) = host_port(&cfg.endpoint)
+            .ok_or_else(|| ServerError::BadEndpoint(cfg.endpoint.clone()))?;
+        let host = bind_host(&host)?.to_string();
+        check_extra_args(&s.extra_args)?;
         // The same absolute path the card showed (`display_argv`).
         let bin = lillith_setup::launch::resolve_program(&s.binary);
         let model = PathBuf::from(s.model_path.trim());
@@ -114,11 +197,21 @@ impl LlamaServer {
         if !model.exists() {
             return Err(ServerError::MissingModel(model));
         }
-        let (host, port) = host_port(&cfg.endpoint)
-            .ok_or_else(|| ServerError::BadEndpoint(cfg.endpoint.clone()))?;
-        let args = command_args(s, &host, port, &cfg.api_key);
-        tracing::info!(bin = %bin.display(), ?args, "starting llama-server");
+        let args = command_args(s, &host, port);
+        let shown = masked_args(&args);
+        tracing::info!(bin = %bin.display(), args = ?shown, api_key = !cfg.api_key.is_empty(), "starting llama-server");
         let mut cmd = Command::new(&bin);
+        // Nothing from our environment may steer the server (llama.cpp reads
+        // LLAMA_ARG_* for every flag, e.g. a model URL or HF repo to fetch).
+        for (k, _) in std::env::vars_os() {
+            let k = k.to_string_lossy();
+            if k.starts_with("LLAMA_ARG_") || k == API_KEY_ENV || k == "HF_TOKEN" {
+                cmd.env_remove(&*k);
+            }
+        }
+        if !cfg.api_key.is_empty() {
+            cmd.env(API_KEY_ENV, &cfg.api_key);
+        }
         cmd.args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -262,7 +355,7 @@ mod tests {
             extra_args: vec!["--jinja".into()],
             ..LlamaServerConfig::default()
         };
-        let a = command_args(&s, "127.0.0.1", 8080, "");
+        let a = command_args(&s, "127.0.0.1", 8080);
         assert_eq!(
             a,
             [
@@ -289,6 +382,128 @@ mod tests {
             LlamaServer::spawn(&cfg),
             Err(ServerError::MissingBinary(_))
         ));
+    }
+
+    #[test]
+    fn api_key_never_in_argv_and_masked_in_logs() {
+        let s = LlamaServerConfig {
+            model_path: "/m/q.gguf".into(),
+            ..LlamaServerConfig::default()
+        };
+        let a = command_args(&s, "127.0.0.1", 8080);
+        assert!(!a.iter().any(|x| x.contains("--api-key")), "{a:?}");
+        let raw: Vec<String> = [
+            "-m",
+            "x",
+            "--api-key",
+            "s3cret",
+            "--api-key=s3cret2",
+            "--jinja",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let m = masked_args(&raw);
+        assert_eq!(
+            m,
+            ["-m", "x", "--api-key", "***", "--api-key=***", "--jinja"]
+        );
+        assert!(!format!("{m:?}").contains("s3cret"));
+    }
+
+    #[test]
+    fn extra_args_cannot_override_host_model_key_or_fetch() {
+        for bad in [
+            "--host",
+            "--host=0.0.0.0",
+            "--port",
+            "--port=1",
+            "-m",
+            "--model",
+            "-mu",
+            "--model-url",
+            "-hf",
+            "-hfr",
+            "--hf-repo",
+            "-hff",
+            "--hf-file",
+            "-hft",
+            "--hf-token",
+            "-dr",
+            "--docker-repo",
+            "--rpc",
+            "--api-key",
+            "--api-key-file",
+            "--path",
+            " --host",
+            "--hf-repo-draft",
+            "-hfd",
+            "--mmproj-url",
+            "-mmu",
+            "--model-url=http://x",
+        ] {
+            assert!(
+                matches!(
+                    check_extra_args(&["--jinja".into(), bad.into()]),
+                    Err(ServerError::ForbiddenArg(_))
+                ),
+                "{bad}"
+            );
+        }
+        let ok: Vec<String> = [
+            "--jinja",
+            "-ngl",
+            "99",
+            "-t",
+            "8",
+            "-c",
+            "8192",
+            "--flash-attn",
+            "--no-mmap",
+            "--mlock",
+            "-b",
+            "512",
+            "-ub",
+            "256",
+            "--temp",
+            "0.7",
+            "--chat-template",
+            "llama3",
+            "-np",
+            "1",
+            "--cont-batching",
+            "-mg",
+            "0",
+            "--mlock",
+            "--min-p",
+            "0.05",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert!(check_extra_args(&ok).is_ok());
+        // And spawn refuses before touching the binary.
+        let cfg = ChatConfig {
+            server: LlamaServerConfig {
+                extra_args: vec!["--host".into(), "0.0.0.0".into()],
+                ..LlamaServerConfig::default()
+            },
+            ..ChatConfig::default()
+        };
+        assert!(matches!(
+            LlamaServer::spawn(&cfg),
+            Err(ServerError::ForbiddenArg(_))
+        ));
+    }
+
+    #[test]
+    fn bind_host_is_always_literal_loopback() {
+        for h in ["127.0.0.1", "localhost", "LOCALHOST", "::1"] {
+            assert_eq!(bind_host(h).unwrap(), "127.0.0.1", "{h}");
+        }
+        for h in ["0.0.0.0", "127.0.0.2", "::", "box", "192.168.1.5", ""] {
+            assert!(matches!(bind_host(h), Err(ServerError::BindHost(_))), "{h}");
+        }
     }
 
     #[test]

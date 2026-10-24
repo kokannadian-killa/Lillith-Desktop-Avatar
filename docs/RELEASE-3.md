@@ -1,15 +1,40 @@
-# Release #3 notes (draft, `ci/batch11`)
+# Release #3 notes (draft, `ci/batch12`)
 
 Draft notes for the next test build. They cover what changed since release #2
 (`test-build-d88ed30`). There's no release zip for this build yet, so the
 **Assets** line is left for whoever publishes it. Same format as the release #2
 notes on GitHub.
 
-**Assets:** _to be filled in when the build is published_ (Linux x86_64 zip,
-its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
+**Assets:** `Lillith-main-linux.zip` (one all-in-one download: programs,
+all art, art kit, offline voice kit), its `.sha256`, and `INSTALL.md`;
+sizes and checksums are filled in when the build is published. **INSTALL.md** covers Linux, Windows
 (build from source) and Android/Termux.
 
 ## New in release #3
+
+- **Security: only a mouse click signs a Soul Contract.** Before, Tab then
+  Enter (or Space) could press the focused **YES** plate, because egui counts
+  a keyboard press on a focused button as a click. Now the Yes plate can't
+  take keyboard focus and only a real primary mouse click on it counts. Tab,
+  Enter, Space, voice and typed text never say yes. **No** still works from
+  the keyboard, and `Esc` still means No.
+- **Security: the self-started llama-server is locked to this computer.**
+  - It always listens on `127.0.0.1` (the endpoint must be `127.0.0.1`,
+    `localhost` or `::1`).
+  - `[chat.server] extra_args` can no longer change the host, port, model or
+    API key, download a model (`-hf…`, `--model-url`, `--docker-repo`, any
+    `…-url` flag), reach other machines (`--rpc`) or serve files (`--path`).
+    Such an arg stops the start with an error. `--jinja` and the normal
+    tuning flags still work.
+  - The API key is handed over in the `LLAMA_API_KEY` environment variable,
+    not on the command line, and the startup log masks it. Stray `LLAMA_ARG_*`
+    variables are cleared so nothing outside the config can steer the server.
+- **One all-in-one download.** `Lillith-main-linux.zip` has the ready-made
+  programs, all her art and pose videos, the art kit and the offline voice
+  kit. `bash install.sh` installs with no downloads and no build: it only
+  lists missing pacman libraries and asks. It finds your model at
+  `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf`, then `~/models/*.gguf`.
+  The model itself is never in the zip and never downloaded.
 
 - **The safeword now drops the queued reply.** Typing `red` or `OOC: stop`
   in her chat (or saying "red" into the mic) already stopped her voice and any
@@ -141,6 +166,18 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   - The tail tip on `perch_sit` and the drag-to-perch blend no longer floats
     loose; it's joined back to the tail.
   - `tail_tease` was regenerated with a single tail.
+- **No more white fringe.** Her clips were re-matted to remove the thin
+  white edge and the white backdrop showing through gaps (between hair,
+  neck, arms and legs). That covers 177 of the 194 clip folders, including
+  the `event_*` clips, whose icons, panels and effects are kept. A final
+  pass re-cleaned about 91 clips on top of the earlier ones, with a guard so
+  no body part, outline or hole was eaten. Frame counts, timing and
+  placement are unchanged. The perch clips and `come_hither_crawl` keep
+  their own fixes from above.
+  - `dom_beckon_finger` and `smug_smirk` lost the white blobs at the neck.
+  - Some light pixels are part of the art and stay: skin highlights, the
+    collar, eye whites, `tail_tease`, the `soul_contract_sign` effects and
+    `event_screenshot`'s deliberate flash.
 - **Offline voice kit (source).** The Python source of the voice kit is now
   in the repo under `tools/lillith-voice/`. That covers the `lillith-voiced`
   daemon, `lillith-say` / `lillith-listen` / `lillith-chat`, fish shortcuts,
@@ -150,16 +187,17 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
     Installing system packages (`--pacman`) and fetching from PyPI
     (`--online-pip`) are both opt-in.
   - There are **no model weights, voice samples or wheels in the repo**.
-    They come in the separate full kit tarball (`lillith-voice-kit.tar.gz`,
-    about 731 MiB), which isn't published as a release asset yet.
+    The all-in-one `Lillith-main-linux.zip` carries them (voice models and
+    Python wheels for 3.13 and 3.14), and `install.sh` sets the voice up from
+    them offline.
   - At runtime the kit uses only a local socket or named pipe. Its network
     guard blocks everything that isn't loopback.
   - See INSTALL.md › *Optional: her cloned voice and the mic*.
-- **Asset pack in the repo:** `master.zip` (about 585 MB, Git LFS) holds
-  everything under `assets/` (sheets, mp4 clips, manifest, configs). CI
-  skips it.
+- **Asset pack:** use the all-in-one zip. The old `master.zip` in the repo
+  (Git LFS) is an outdated snapshot; CI skips it and no release zip has it.
 - **For artists:** `tools/matte-clean` re-mattes a clip folder in place to
-  remove white fringe, and `qa_all.py --white-edge` checks for it.
+  remove white fringe (with a protect guard and `regress.py` to catch
+  anything it eats), and `qa_all.py --white-edge [--mp4]` checks for it.
 - **Windows build:** clippy fixes in the elevated admin helper, so Windows
   is still build-from-source.
 
@@ -175,28 +213,22 @@ telemetry.
   `memory.db` now live. Files from release #2 under
   `%HOME%\.local\share\lillith` aren't moved, so an organize batch made
   with release #2 can't be undone from release #3.
-- The white-fringe cleanup is done for the six perch clips and the first five
-  new poses only. Other clips can still show a thin light edge (see *Coming
-  next*).
+- `qa_all.py --white-edge` still flags some clips. Most of what it finds is
+  the keep-as-art light pixels listed above (highlights, collar, eye whites,
+  effects), not backdrop fringe.
 - Voice kit:
-  - The models aren't in any release yet (see above).
+  - Voice needs Python 3.13 or 3.14 (the bundled wheels). With another
+    Python the installer says so and carries on without voice.
+  - Voice is Linux-only in release #3: Windows and Android voice aren't in
+    scope (no Windows or Android build bundles the kit).
   - On Windows, only the named-pipe transport has been tested, and only
     under wine. Audio, the mic and the full daemon haven't run on real
     Windows, and no Windows installer bundles the kit.
   - On Android, voice is documented as a plan only.
-- Windows is build-from-source (see INSTALL.md). The Android APK was not
+- Windows is build-from-source (see INSTALL.md); there's no Windows
+  all-in-one zip in this release. The Android APK was not
   rebuilt; the older, untested one is on `test-build-f8cd236`.
 - Muting from the right-click menu isn't remembered after a restart.
-
-## Coming next (pending branches, not in this build)
-
-- **No white fringe** (`fix/no-white-fringe-ev`, `fix/no-white-fringe-gm`,
-  `fix/no-white-fringe-nr`). These re-matte the rest of her clips to remove
-  white edges:
-  - the `event_*` clips (keeping their icons, panels and effects)
-  - clips `g*`–`m*`, with a stricter pass that checks the frames as the
-    app decodes them
-  - clips `n*`–`r*`, including filling interior gaps on six of them
 
 ## Gate
 

@@ -17,7 +17,9 @@
 //! `SoulContract::answer` (Yes → run + audit `CONFIRM`, No → discard + audit
 //! `DENY`). `Esc` counts as **No**; a click on the dimmed backdrop does
 //! nothing (a stray click must neither run nor silently drop the action);
-//! there is no keyboard shortcut for Yes.
+//! there is no keyboard shortcut for Yes. Yes is mouse-only: it is not
+//! focusable (Tab skips it) and only a primary-pointer click counts, never
+//! Enter/Space or an accessibility "fake" click.
 //!
 //! The text is plain strings ([`ContractView`]) so this crate stays free of
 //! `lillith-core`; `ContractPrompt` maps onto it field by field.
@@ -627,13 +629,16 @@ fn plate(
     let no_r = Rect::from_min_size(Pos2::new(lx, y), Vec2::new(no_w, btn_h));
     let yes_r = Rect::from_min_size(Pos2::new(lx + no_w + gap, y), Vec2::new(yes_w, btn_h));
     let no = ui.interact(no_r, id.with("no"), Sense::click());
+    // Yes is mouse-only: it senses clicks but is never focusable, so Tab
+    // can't reach it, and only a real primary-pointer click counts (egui's
+    // `clicked()` also fires for Enter/Space on a focused widget).
     let yes = ui.interact(
         yes_r,
         id.with("yes"),
         if view.busy {
             Sense::hover()
         } else {
-            Sense::click()
+            Sense::CLICK
         },
     );
     let (no_txt, yes_txt) = if narrow {
@@ -671,11 +676,19 @@ fn plate(
 
     if no.clicked() {
         Some(ContractChoice::No)
-    } else if yes.clicked() && !view.busy {
+    } else if yes_pointer_clicked(&yes) && !view.busy {
         Some(ContractChoice::Yes)
     } else {
         None
     }
+}
+
+/// Yes counts only for a primary mouse/pointer click on the plate, never for
+/// keyboard activation (Enter/Space), accessibility "fake" clicks or touch
+/// long-press. `clicked_by` needs egui's pointer CLICKED flag, which keyboard
+/// activation never sets.
+fn yes_pointer_clicked(yes: &egui::Response) -> bool {
+    yes.clicked_by(egui::PointerButton::Primary)
 }
 
 /// "Write skill …" → "write skill …" so it reads after "She wants to" /
@@ -1068,6 +1081,62 @@ mod tests {
     fn plate_rect(ctx: &Context, which: &str) -> Rect {
         let id = Id::new("contract-test").with(which);
         ctx.read_response(id).expect("plate laid out").rect
+    }
+
+    fn key(k: egui::Key, pressed: bool) -> egui::Event {
+        egui::Event::Key {
+            key: k,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// Presses and releases `k` over two frames and returns any choice.
+    fn tap(
+        ctx: &Context,
+        size: Vec2,
+        v: &ContractView<'_>,
+        k: egui::Key,
+    ) -> Option<ContractChoice> {
+        let a = frame(ctx, raw(size, vec![key(k, true)]), v);
+        let b = frame(ctx, raw(size, vec![key(k, false)]), v);
+        a.or(b)
+    }
+
+    #[test]
+    fn keyboard_never_signs_yes() {
+        let size = Vec2::new(900.0, 700.0);
+        let v = view();
+        for activate in [egui::Key::Enter, egui::Key::Space] {
+            // Tab through every focus stop (and wrap around), pressing the
+            // activation key at each one: never Yes.
+            let ctx = Context::default();
+            warm(&ctx, size, &v);
+            for _ in 0..6 {
+                let t = tap(&ctx, size, &v, egui::Key::Tab);
+                assert_ne!(t, Some(ContractChoice::Yes));
+                let r = tap(&ctx, size, &v, activate);
+                assert_ne!(r, Some(ContractChoice::Yes), "Tab+{activate:?} signed");
+                if r == Some(ContractChoice::No) {
+                    break;
+                }
+            }
+            // Tab can't land on Yes at all.
+            let yes_id = Id::new("contract-test").with("yes");
+            assert!(!ctx.memory(|m| m.has_focus(yes_id)));
+            // Even with focus forced onto Yes, the key does nothing.
+            let ctx = Context::default();
+            warm(&ctx, size, &v);
+            ctx.memory_mut(|m| m.request_focus(yes_id));
+            let _ = frame(&ctx, raw(size, vec![]), &v);
+            assert_ne!(
+                tap(&ctx, size, &v, activate),
+                Some(ContractChoice::Yes),
+                "focused Yes + {activate:?} signed"
+            );
+        }
     }
 
     #[test]

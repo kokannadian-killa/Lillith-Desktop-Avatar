@@ -1,5 +1,9 @@
 # Installing Lillith
 
+**Downloaded the main zip** (GitHub's **Code ▸ Download ZIP**,
+`Lillith-Desktop-Avatar-main.zip`)? Use the one-step installer. See
+[From the main zip](#from-the-main-zip-github-download-zip) right below.
+
 How to install and start Lillith from the release zip. The zip ships **Linux
 binaries only**. On Windows you build from source with Rust 1.85. On Android you chat
 with her model in Termux (plus an experimental APK, see below).
@@ -8,6 +12,8 @@ Everything runs on your own machine. Lillith only talks to `127.0.0.1`
 (loopback), and nothing is downloaded while she runs. You get the model file
 yourself.
 
+- [From the all-in-one zip (recommended)](#from-the-all-in-one-zip-recommended)
+- [From the main zip (GitHub "Download ZIP")](#from-the-main-zip-github-download-zip)
 - [Linux (Garuda / Arch, KDE Plasma 6 Wayland)](#linux-garuda--arch-kde-plasma-6-wayland)
 - [Windows (build from source)](#windows-build-from-source)
 - [Android (Termux chat, experimental APK)](#android-termux-chat-experimental-apk)
@@ -15,6 +21,81 @@ yourself.
 - [Privacy: what she keeps on your machine](#privacy-what-she-keeps-on-your-machine)
 - [The safeword (kill switch)](#the-safeword-kill-switch)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## From the all-in-one zip (recommended)
+
+Download **`Lillith-main-linux.zip`** from the latest GitHub release. It has
+the ready-made programs (`bin/`), all her art and pose videos, the art kit and
+the offline voice kit (models and Python wheels), so nothing is downloaded or
+built:
+
+```fish
+cd ~/Downloads
+unzip -o Lillith-main-linux.zip
+bash ~/Downloads/Lillith-main-linux/install.sh
+```
+
+1. **Packages:** it lists the missing runtime libraries (ffmpeg, Wayland/X11,
+   audio) and asks before `sudo pacman -S --needed`. No Rust or build tools.
+2. **Install:** the bundled programs and art, as below (steps 4 and 5).
+3. **Brain:** `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf`, else
+   `~/models/*.gguf`, else it searches your home folder. The model is never
+   in the zip and never downloaded (`bundle/models/README.txt`). A bundled
+   `bundle/llama-server/` is used if present, else your system `llama-server`.
+4. **Voice:** a venv in `~/.local/share/lillith-voice` installed offline from
+   the bundled wheels (`pip --no-index`, Python 3.13 or 3.14). With another
+   Python it says so and carries on without voice.
+
+## From the main zip (GitHub "Download ZIP")
+
+The main zip is the source code. It has no ready-made program, and on GitHub
+its art (PNG sheets, MP4 poses) is only small **Git LFS placeholders** unless
+the repo setting *Settings ▸ General ▸ Archives ▸ Include Git LFS objects in
+archives* is on. The installer handles both cases.
+
+**Linux (fish, bash or zsh):** paste only these lines, not the prompt in front of them:
+
+```fish
+cd ~/Downloads
+unzip -o Lillith-Desktop-Avatar-main.zip
+bash ~/Downloads/Lillith-Desktop-Avatar-main/install.sh
+```
+
+Run it with `bash` (it isn't a fish script), from any folder. Steps:
+
+1. **Art.** If the art is placeholders, it asks, then downloads about
+   530 MB from your GitHub repo and checks every file's sha256. The repo is
+   private, so it needs your GitHub login once. It offers to install
+   `github-cli` and run `gh auth login --web` (a browser window; log in and
+   type the code it shows). No token is saved by the installer.
+2. **Packages** with `sudo pacman -S --needed` (Rust, build tools, ffmpeg,
+   Wayland/X11 libraries). It asks first.
+3. **Build** (first time about 10–20 minutes on an i5 laptop).
+4. **Install** for your user: `~/.local/bin/lillith`, her animations in
+   `~/.local/share/lillith/generated/`, the app-menu entry, a desktop icon,
+   the KWin bridge and the KDE blur fix.
+5. **Brain.** It uses `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf` if it's
+   there (else it searches your home folder), finds `llama-server`, and writes
+   `~/.config/lillith/config.toml` (127.0.0.1:8080, `-c 4096`, `--jinja`).
+   Lillith then starts llama-server herself. If you already have it running
+   on 127.0.0.1:8080 she uses that one.
+
+Other model: `bash install.sh --gguf /path/to/model.gguf`. All options:
+`bash install.sh --help`. Remove her: `bash install.sh --uninstall`.
+
+**Windows:** double-click `install.bat` in the unzipped folder. It downloads
+the art the same way (GitHub CLI login), offers to install Rust and the C++
+Build Tools with `winget`, builds her, installs to
+`%LOCALAPPDATA%\Programs\Lillith` with Start-menu and desktop shortcuts, and
+runs `lillith setup` with the `.gguf` it finds in `%USERPROFILE%\AI\models`,
+`%USERPROFILE%\models` or `Downloads`. It hasn't been run on a real Windows PC yet.
+
+**Android:** the main zip has no APK. See [Android](#android-termux-chat-experimental-apk).
+
+**Not in any zip:** the `.gguf` model and llama.cpp (you install those
+yourself), and the voice kit's models (`lillith-voice-kit.tar.gz`, see below).
 
 ---
 
@@ -146,18 +227,20 @@ local daemon (`lillith-voiced`) that she finds on her own (`[voice] engine =
 "auto"` tries the daemon first). It talks only over a Unix socket, and its
 network guard blocks everything that isn't loopback.
 
-The kit's source is in the repo at `tools/lillith-voice/`. The **models and
-Python wheels are not in the repo or the app zip**. They come in the separate
-full kit tarball `lillith-voice-kit.tar.gz` (about 731 MiB). That tarball
-isn't published as a release asset yet, so get it from Ko. With it, in a git
-checkout of the repo:
+The kit's source is in the repo at `tools/lillith-voice/`. The models and
+Python wheels aren't in the git repo, but **the release's
+`Lillith-main-linux.zip` already contains them** (in
+`tools/lillith-voice/models/` and `wheels/`), so `bash install.sh` sets the
+voice up for you, offline. To (re)run only the voice part from the unzipped
+folder:
 
 ```fish
-tar xzf lillith-voice-kit.tar.gz lillith-voice-kit/models lillith-voice-kit/wheels
-mv lillith-voice-kit/models lillith-voice-kit/wheels tools/lillith-voice/
-cd tools/lillith-voice
+cd ~/Downloads/Lillith-main-linux/tools/lillith-voice
 bash install.sh --systemd      # offline: ./models + ./wheels only, no sudo; --systemd also starts the daemon
 ```
+
+Voice is Linux-only in release #3 (the bundled wheels are for Python 3.13
+and 3.14 on x86_64).
 
 What the installer does:
 - It never downloads anything by default. Without the wheels it stops. You

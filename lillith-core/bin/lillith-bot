@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+"""lillith-bot wrapper: runs from the install dir, no pip needed."""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+from lillith_core.bots.cli import main  # noqa: E402
+
+sys.exit(main())

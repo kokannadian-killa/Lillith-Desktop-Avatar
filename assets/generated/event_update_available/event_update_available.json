@@ -270,14 +270,21 @@
     "height": 400,
     "frame_count": 10,
     "fps": 10.0,
-    "bytes": 56944,
+    "bytes": 57266,
     "quality": {
-      "edge_mae": 2.35,
+      "edge_mae": 2.36,
       "edge_p99": 18.0,
-      "halo_dark": 0.033,
-      "halo_light": -0.163,
-      "alpha_mae": 0.0517
+      "halo_dark": 0.042,
+      "halo_light": -0.175,
+      "alpha_mae": 0.0519
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 4,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "61c2cc37f2d482bc04ec77bf7dc7126ab8ea457b130e6f7a4fd551e2a3913228",
+    "source_sha256": "8cdf379044ad839679fbb62f47ae4b70fe23e538e3e0f0c155ae7ca8fce6d085",
+    "event_pass": "fix/no-white-fringe-ev: base-matched body swap + residual edge/pocket pass, icons/panels/FX kept"
   }
 }

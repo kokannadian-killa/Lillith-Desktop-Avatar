@@ -134,11 +134,16 @@ def qa(d, fix):
         P['loop_seam_ratio'] = round(float(seam / (np.median(g) + 1e-6)), 2)
         if P['loop_seam_ratio'] > 2.5: P['issues'].append(f"loop seam {P['loop_seam_ratio']}x typical step")
     return P
+def nd_dilate(m):
+    return ndimage.binary_dilation(m, iterations=2)
+
+
 def white_edge_check(argv):
     """qa_all.py --white-edge [--mp4] [--max N] <clip dirs or globs>: the light-edge-pixel check.
     Fails (exit 1) any frame with more than white_edge.FRAME_MAX light-coloured boundary pixels
     (alpha > 0, within 2.5 px of clear, min(RGB) >= 200, sat <= 28, lighter than the interior).
-    event_* / overlay clips are checked on the main body only (their icons/panels/fades are intentional)."""
+    event_* / overlay clips are checked on the main body only, and code-drawn events (base_clip) skip every pixel
+    within 2 px of where the original event differs from its original base frame (icons/panels/fades are intentional)."""
     import white_edge
     use_mp4 = '--mp4' in argv
     mx = white_edge.FRAME_MAX
@@ -155,11 +160,33 @@ def white_edge_check(argv):
         if use_mp4 and os.path.exists(f'{d}/{name}.mp4'):
             import pack_mp4
             srcs.append(('mp4', pack_mp4.decode(f'{d}/{name}.mp4', 400, 400)))
+        # code-drawn events: icons / panels / fades are the pixels where the ORIGINAL event differs from its
+        # ORIGINAL base frame; only the rest (her body) is checked
+        fx = None
+        if name.startswith('event_'):
+            import mc_orig
+            js = json.load(open(f'{d}/{name}.json')); b = (js.get('base_clip') or '').split('/')[-1]; bfr = js.get('base_frames')
+            bd = os.path.join(os.path.dirname(os.path.abspath(d)), b)
+            if b and bfr and os.path.exists(f'{bd}/{b}_sheet.png'):
+                eo, _, _ = mc_orig.original_sheet(d); bo, _, _ = mc_orig.original_sheet(bd)
+                if eo and bo:
+                    E = np.asarray(Image.open(eo).convert('RGBA')); B = np.asarray(Image.open(bo).convert('RGBA'))
+                    fx = [np.abs(E[:400, i*400:(i+1)*400].astype(int) - B[:400, k*400:(k+1)*400].astype(int)).max(-1) > 2
+                          if i < len(bfr) else np.ones((400, 400), bool) for i, k in enumerate(bfr + [0] * (N - len(bfr)))]
+                    fx = [nd_dilate(f) for f in fx]
         msg = []
         for src, cells in srcs:
-            per = [white_edge.count(c, body_only=ov) for c in cells]; tot += sum(per)
-            bad = [i for i, n in enumerate(per) if n > mx]
-            msg.append(f'{src} light_edge {sum(per)} max {max(per)}@f{int(np.argmax(per))} bad_frames {len(bad)}/{len(cells)}')
+            keep = [(~fx[i] if fx is not None else True) for i in range(len(cells))]
+            per = [int((white_edge.light_edge_mask(c, body_only=ov) & keep[i]).sum()) for i, c in enumerate(cells)]
+            tot += sum(per)
+            # enclosed backdrop pockets fail too (sheet only: the MP4 is packed from it and H.264 noise pushes light
+            # highlights over the near-white threshold; not on overlay clips, whose FX may be white by design)
+            pk = [0 if (ov or src != 'png') else int((white_edge.pocket_mask(c) & keep[i]).sum()) for i, c in enumerate(cells)]
+            # soft-edge lift (whitened soft edge incl. the alpha 251-254 band): reported, not gated
+            sl = [int((white_edge.soft_lift_mask(c, body_only=ov) & keep[i]).sum()) for i, c in enumerate(cells)]
+            bad = [i for i, n in enumerate(per) if n > mx or pk[i] > 0]
+            msg.append(f'{src} light_edge {sum(per)} max {max(per)}@f{int(np.argmax(per))} pockets {sum(pk)} '
+                       f'soft {sum(sl)} max {max(sl)} bad_frames {len(bad)}/{len(cells)}')
             if bad: fails += 1
         failed = any(' bad_frames 0/' not in m for m in msg)
         print(f"{name:<36} {'FAIL' if failed else 'OK  '} white-edge  " + ' | '.join(msg), flush=True)

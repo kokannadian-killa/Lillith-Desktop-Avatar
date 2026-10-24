@@ -1,0 +1,14 @@
+# Alternative to the timer: a long-running Python loop. Enable ONE of the two.
+[Unit]
+Description=Lillith bot routine scheduler (loop)
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/lillith-bot scheduler --interval 30
+Restart=on-failure
+IPAddressDeny=any
+IPAddressAllow=localhost
+Nice=10
+
+[Install]
+WantedBy=default.target
