@@ -14,6 +14,31 @@
 
 ---
 
+## Quick install (from the GitHub zip)
+
+**Linux (Garuda / Arch, any shell including fish).** Download the zip
+(**Code ▸ Download ZIP**), then paste these three lines (only the lines, not a
+prompt like `❯` or `✗`):
+
+```fish
+cd ~/Downloads
+unzip -o Lillith-Desktop-Avatar-main.zip
+bash ~/Downloads/Lillith-Desktop-Avatar-main/install.sh
+```
+
+The installer works from any folder. It downloads her art if the zip only has
+Git LFS placeholders (it asks first and uses your GitHub login, `gh auth login`,
+because the repo is private), installs packages with pacman, builds her,
+adds her to the app menu and desktop, and points her at your local model
+(`~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf` if it's there). Then start
+**Lillith** from the app menu. Remove her with `bash install.sh --uninstall`.
+
+**Windows:** double-click `install.bat` in the unzipped folder (untested on
+real Windows so far). **Android:** see [INSTALL.md](INSTALL.md#android-termux-chat-experimental-apk).
+The model file (`.gguf`) is never in the zip: you keep your own copy.
+
+---
+
 **Lillith** is a transparent, always-on-top, click-through animated desktop
 companion for **Linux** — built for **KDE Plasma 6 on Wayland** (layer-shell
 overlay) with an **X11/XWayland fallback**. She idles, breathes, blinks,
@@ -31,7 +56,8 @@ Python/Tk prototypes). Everything runs locally.
 
 ## Asset pack: master.zip
 
-[**master.zip**](master.zip) (about 585 MB, Git LFS) holds everything under `assets/`: 176 PNGs (sprite sheets and stills), 272 mp4 clips (generated and source video), the manifest, and the config files, built from main on 2026-10-23.
+You don't need this to install her: `install.sh` uses `assets/` directly.
+[**master.zip**](master.zip) (about 585 MB, Git LFS) is a snapshot from 2026-10-23, older than the current art, and holds everything under `assets/`: 176 PNGs (sprite sheets and stills), 272 mp4 clips (generated and source video), the manifest, and the config files, built from main on 2026-10-23.
 
 ## Contents
 
@@ -131,7 +157,7 @@ Authoritative milestone list and acceptance criteria: [`docs/PLAN.md` §5](docs/
 
 ## Quick start
 
-**Installers:** [`linux/`](linux/README.md) (Arch/Garuda: `./linux/install.sh`),
+**Installers:** `bash install.sh` at the top of the folder (see [Quick install](#quick-install-from-the-github-zip)), [`linux/`](linux/README.md) (Arch/Garuda: `./linux/install.sh`),
 [`windows/`](windows/README.md) (setup.exe / portable zip) and
 [`android/`](android/INSTALL-android.md) (APK). Building by hand:
 
