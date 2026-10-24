@@ -4899,6 +4899,34 @@
    "video": "perch_sit/perch_sit.mp4"
   },
   {
+   "name": "cleavage_beckon",
+   "frame_count": 84,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "front (seated on an edge, legs dangling)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "cleavage_beckon/",
+   "sheet": "cleavage_beckon/cleavage_beckon_sheet.png",
+   "manifest": "cleavage_beckon/cleavage_beckon.json",
+   "preview": "cleavage_beckon/cleavage_beckon_preview.gif",
+   "tags": [
+    "baked_motion",
+    "variant_of:perch_sit"
+   ],
+   "video": "cleavage_beckon/cleavage_beckon.mp4"
+  },
+  {
    "name": "seduce_beckon_finger",
    "frame_count": 60,
    "frame_width": 400,
