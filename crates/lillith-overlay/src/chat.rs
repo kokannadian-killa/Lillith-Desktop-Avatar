@@ -470,6 +470,10 @@ impl Talk {
         }
         self.mouth_now = mouth;
         let on_talk_base = self.clip.as_deref().is_some_and(|c| anim.base() == c);
+        // The audio mouth can end on a last closing shape: finish next tick.
+        if mouth.is_some() && was && !self.mouth.active() {
+            self.audio_ended = true;
+        }
         match mouth {
             Some(m) if on_talk_base => {
                 if self.patches {
