@@ -34,8 +34,8 @@ Everything Android-specific lives in this `android/` folder:
    4. **Size**: 100% = the desktop default (0.55 × the 400 px clips, in dp, so the same apparent size).
    5. **Icon**: tap one of the 15 launcher icons (default *Phantomcore Red*). The home screen may reload
       for a moment while the launcher picks it up; some launchers only update after a restart of the launcher.
-   6. **Start Lillith**. The first start unpacks her clips (~450 MB) and her voice models (~480 MB), checking
-      each voice file's SHA-256; it needs about 1 GB free and takes a little while. If a voice file is missing
+   6. **Start Lillith**. The first start unpacks her clips (~450 MB) and her voice models (~400 MB), checking
+      each voice file's SHA-256; it needs about 0.9 GB free and takes a little while. If a voice file is missing
       or corrupt, setup says which one and stops.
 3. Using her:
    - **Tap** her: the same reactions as a desktop click (double tap etc. go through the same brain).
@@ -97,12 +97,13 @@ The build fails if the models aren't found (set `LILLITH_VOICE_MODELS`); `LILLIT
 | `LILLITH_VOICE_KOKORO` | `0` | also ship the Kokoro p1 fallback (+353 MB). Off by default: Android has no Kokoro runtime or espeak-ng G2P yet, so the planned fallback is Android `TextToSpeech` |
 | `STAGE_ONLY=1` | | stage clips + voice into `$OUT/stage/assets`, list them, stop (no SDK/NDK/cargo needed) |
 
-`assets/voice/` (quality, with STT): `pocket/{text_conditioner,flow_lm_main,flow_lm_flow,mimi_decoder}.onnx`,
-`pocket/{tokenizer.model,bundle.json,bos_before_voice.npy,voices/lillith.npy}`,
-`stt/{silero_vad,tiny.en-encoder.int8,tiny.en-decoder.int8}.onnx`, `stt/tiny.en-tokens.txt`: 12 files, 481 MiB.
+`assets/voice/` (quality, default, speaking only): `pocket/{text_conditioner,flow_lm_main,flow_lm_flow,mimi_decoder}.onnx`,
+`pocket/{tokenizer.model,bundle.json,bos_before_voice.npy,voices/lillith.npy}`: 8 files, 382 MiB.
+With `LILLITH_VOICE_STT=1` add `stt/{silero_vad,tiny.en-encoder.int8,tiny.en-decoder.int8}.onnx`,
+`stt/tiny.en-tokens.txt`: 12 files, 481 MiB.
 
-Size: the APK is about **0.95–1.0 GB** (clips 447 MiB + voice 481 MiB + native libs; +25–40 MB once the ONNX
-Runtime libs are added), and the phone needs about the same again for the unpacked copy. Fine for sideloading
+Size: the APK is about **0.85–0.9 GB** (clips 447 MiB + voice 382 MiB + native libs; +25–40 MB once the ONNX
+Runtime libs are added; about 0.1 GB more with `LILLITH_VOICE_STT=1`), and the phone needs about the same again for the unpacked copy. Fine for sideloading
 (well under the 4 GB zip limit). Google Play would need Play Asset Delivery (150 MB base limit).
 
 The Linux gate is unaffected: `lillith-android` is a workspace member whose JNI module only compiles for

@@ -131,6 +131,7 @@ echo "==> 4/7 voice (assets/voice: cloned 'lillith' Pocket TTS$([ "$VOICE_STT" =
 local stt_flag=""; [ "$VOICE_STT" = 1 ] || stt_flag="--no-stt"
 LILLITH_VOICE_MODELS="$VOICE_MODELS" LINK_KOKORO="$VOICE_KOKORO" \
   bash "$LINK_ASSETS" "$STAGE/assets" "$VOICE_FLAVOR" $stt_flag
+[ "$VOICE_STT" = 1 ] || rmdir "$STAGE/assets/voice/stt" 2>/dev/null || true   # no empty stt/ in the APK
 # link_assets.sh makes symlinks; turn them into hard links (no extra disk) or
 # copies, so aapt2 packages real files whatever it does with links.
 find "$STAGE/assets/voice" -type l | while read -r l; do
