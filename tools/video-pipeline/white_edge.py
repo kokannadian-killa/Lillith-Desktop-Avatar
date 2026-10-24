@@ -98,10 +98,15 @@ def soft_count(c, body_only=False):
 POCKET_MIN, POCKET_MAX = 12, 4000
 
 
+HILITE_RING_MIN = 170
+HILITE_RING_MED = 180
+
+
 def pocket_mask(c):
     """near-white neutral regions (min >= 232, sat <= 14, mean min >= 238, POCKET_MIN..POCKET_MAX px) with
     alpha >= 8 that do NOT touch the outside: white keying backdrop seen through an interior gap (hair/neck,
-    arm/torso, thigh/tail). Smaller specks (eye glints, teeth) are not pockets."""
+    arm/torso, thigh/tail). Smaller specks (eye glints, teeth) are not pockets, nor are skin highlights (blobs
+    whose surrounding ring is light skin, mean min >= HILITE_RING_MIN)."""
     rgb = c[..., :3].astype(np.int32); a = c[..., 3]
     mn = rgb.min(-1); sat = rgb.max(-1) - mn
     w = (a >= 8) & (mn >= 232) & (sat <= 14)
@@ -112,5 +117,19 @@ def pocket_mask(c):
     lab, n = nd.label(w, np.ones((3, 3), bool))
     ids = np.arange(1, n + 1)
     area = nd.sum(w, lab, ids); pure = nd.mean(mn, lab, ids); touch = nd.maximum(near, lab, ids) > 0
-    keep = ids[(~touch) & (area >= POCKET_MIN) & (area <= POCKET_MAX) & (pure >= 238)]
+    cand = (~touch) & (area >= POCKET_MIN) & (area <= POCKET_MAX) & (pure >= 238)
+    if cand.any():
+        # skin / latex highlights are near-white blobs too, but sit inside LIGHT skin: their 1-3 px ring has a
+        # mean min(RGB) >= HILITE_RING_MIN, while real backdrop gaps are ringed by hair / outfit / shadow
+        # (measured 48-161). Same rule as tools/matte-clean/protect.py, so the two checks agree.
+        S8 = np.ones((3, 3), bool)
+        ring = nd.binary_dilation(w, S8, iterations=3) & ~nd.binary_dilation(w, S8) & (a > 128) & ~w
+        _, (ry, rx) = nd.distance_transform_edt(lab == 0, return_indices=True)
+        rl = np.where(ring, lab[ry, rx], 0)
+        cnt = nd.sum(ring, rl, ids); rmn = nd.sum(np.where(ring, mn, 0), rl, ids) / np.maximum(cnt, 1)
+        med = np.array([np.median(mn[rl == i]) if c_ else 0 for i, c_ in zip(ids, cnt)]) if n <= 400 else rmn
+        # a highlight touching a dark seam (bikini edge, hair strand) has a lower ring mean but a light
+        # median: real gaps measured median <= 177 (99 % <= 159), highlights >= 185
+        cand &= ~((cnt > 0) & ((rmn >= HILITE_RING_MIN) | (med >= HILITE_RING_MED)))
+    keep = ids[cand]
     return np.isin(lab, keep) if len(keep) else out

@@ -61,7 +61,8 @@ def _backdrop(o):
     _, (ry, rx) = nd.distance_transform_edt(lab == 0, return_indices=True)
     rl = np.where(ring, lab[ry, rx], 0)
     cnt = nd.sum(ring, rl, ids); rmn = nd.sum(np.where(ring, mn, 0), rl, ids) / np.maximum(cnt, 1)
-    hil = (~touch) & (cnt > 0) & (rmn >= HILITE_RING_MIN)
+    med = np.array([np.median(mn[rl == i]) if c_ else 0 for i, c_ in zip(ids, cnt)]) if n <= 400 else rmn
+    hil = (~touch) & (cnt > 0) & ((rmn >= HILITE_RING_MIN) | (med >= 180))
     if hil.any():
         W &= ~np.isin(lab, ids[hil])
     return W
