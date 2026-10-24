@@ -213,6 +213,7 @@ fn v2_db_migrates_to_v3_and_reindex_rebuilds_from_disk() {
             links: vec!["n-aaa".into()],
             origin: "learned".into(),
             body: format!("{title}: use pacman"),
+            web: None,
         };
         store.write(&lock, &n).unwrap();
     }

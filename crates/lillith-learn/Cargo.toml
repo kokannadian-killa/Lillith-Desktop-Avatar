@@ -1,6 +1,6 @@
 [package]
 name = "lillith-learn"
-description = "Lillith's idle self-learning (P1): reads installed docs while the desktop is idle and writes small private notes. Fully local; no network but the loopback model server."
+description = "Lillith's idle self-learning (P1): reads installed docs while the desktop is idle and writes small private notes. Fully local; no network but the loopback model server, except user-approved online research through a local Tor."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,6 +18,11 @@ tokio.workspace = true
 tracing.workspace = true
 # man/info pages are gzip (already in the lock through the image stack).
 flate2 = "1"
+# https for gated online research (P5), over the Tor SOCKS stream: pure
+# Rust, blocking, ring provider (already in the lock through reqwest), no
+# OpenSSL; the Mozilla roots are compiled in (nothing downloaded at run time).
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
 
 [target.'cfg(unix)'.dependencies]
 # setpriority / ioprio_set for the learner thread.

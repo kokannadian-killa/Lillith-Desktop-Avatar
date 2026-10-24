@@ -16,6 +16,8 @@
 //! - [`extract`], [`classify`], [`dedupe`]: one chunk → notes.
 //! - [`learner`]: one step (pick, read, summarize, dedupe, write, link).
 //! - [`runner`]: the background thread the overlay starts.
+//! - [`online`]: user-gated, Tor-only online research trips (P5, off by
+//!   default; only ever started by Ko, never by the idle loop).
 
 pub mod audit;
 pub mod classify;
@@ -23,6 +25,7 @@ pub mod dedupe;
 pub mod extract;
 pub mod hygiene;
 pub mod learner;
+pub mod online;
 pub mod paths;
 pub mod readers;
 pub mod runner;
@@ -35,7 +38,7 @@ pub use lillith_core::config::LearnConfig;
 pub use lillith_core::llm_gate::{GateGuard, LlmGate};
 pub use runner::{LearnHandle, Sensors};
 pub use scheduler::{Decision, Limits, Scheduler, State, WaitReason};
-pub use store::{Note, NoteStore};
+pub use store::{Note, NoteStore, WebSource};
 pub use summarize::{FakeSummarizer, LlmSummarizer, SumError, Summarizer, Summary};
 
 /// Learner requests never ask for more than this (§1).

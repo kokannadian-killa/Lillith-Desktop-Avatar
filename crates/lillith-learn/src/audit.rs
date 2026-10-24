@@ -43,28 +43,73 @@ pub fn line(t: f64, op: &str, topic: &str, note_id: &str) -> String {
     )
 }
 
+/// An online research trip line (§5.1, §5.3):
+/// `<ts>\t<STATE>\tonline_research\tcard=<id>\t<field>\t…`. Each field is
+/// one column (tabs and newlines flattened), cut to 2048 chars so a long URL
+/// list can't swamp the log.
+pub fn online_line(t: f64, state: &str, card: &str, fields: &[String]) -> String {
+    let mut l = format!(
+        "{}\t{}\t{}\tcard={}",
+        utc(t),
+        col(state),
+        lillith_core::soul_contract::ONLINE_RESEARCH_KIND,
+        col(card)
+    );
+    for f in fields {
+        l.push('\t');
+        l.extend(lillith_core::launch_audit::one_column(f).chars().take(2048));
+    }
+    l.push('\n');
+    l
+}
+
+/// Appends an online research trip line to `log` (0600 when created).
+/// Fail-closed: no log, or a failed write, is an error the trip engine acts
+/// on (a trip whose `PROPOSED` line can't be written never starts).
+pub fn record_online(
+    log: Option<&Path>,
+    state: &str,
+    card: &str,
+    fields: &[String],
+) -> std::io::Result<()> {
+    let Some(log) = log else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no audit log path",
+        ));
+    };
+    write_line(log, &online_line(crate::now_s(), state, card, fields))
+}
+
 /// Appends a `LEARN` line to `log` (file 0600 when created). Failures are
 /// logged, never fatal.
 pub fn record(log: Option<&Path>, op: &str, topic: &str, note_id: &str) {
+    append(log, &line(crate::now_s(), op, topic, note_id));
+}
+
+fn append(log: Option<&Path>, l: &str) {
     let Some(log) = log else { return };
-    let l = line(crate::now_s(), op, topic, note_id);
-    let res = (|| -> std::io::Result<()> {
-        use std::io::Write;
-        if let Some(d) = log.parent() {
-            std::fs::create_dir_all(d)?;
-        }
-        let mut o = std::fs::OpenOptions::new();
-        o.create(true).append(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            o.mode(0o600);
-        }
-        o.open(log)?.write_all(l.as_bytes())
-    })();
-    if let Err(e) = res {
+    if let Err(e) = write_line(log, l) {
         tracing::warn!("learn audit: {e}");
     }
+}
+
+/// Appends `l` to `log` (created 0600, parents made), synced to disk.
+fn write_line(log: &Path, l: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(d) = log.parent() {
+        std::fs::create_dir_all(d)?;
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    let mut f = o.open(log)?;
+    f.write_all(l.as_bytes())?;
+    f.sync_data()
 }
 
 #[cfg(test)]
@@ -78,6 +123,15 @@ mod tests {
         assert_eq!(
             line(0.0, "write", "rust\tx", "n-1"),
             "1970-01-01T00:00:00Z\tLEARN\twrite\trust x\tnote=n-1\n"
+        );
+        assert_eq!(
+            online_line(
+                0.0,
+                "PROPOSED",
+                "c-1",
+                &["pages=5".into(), "a\tb\nc".into()]
+            ),
+            "1970-01-01T00:00:00Z\tPROPOSED\tonline_research\tcard=c-1\tpages=5\ta b c\n"
         );
     }
 }

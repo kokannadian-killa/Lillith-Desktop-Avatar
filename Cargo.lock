@@ -2462,9 +2462,11 @@ dependencies = [
  "lillith-memory",
  "lillith-mind",
  "rusqlite",
+ "rustls",
  "serde_json",
  "tokio",
  "tracing",
+ "webpki-roots",
  "windows-sys 0.59.0",
 ]
 

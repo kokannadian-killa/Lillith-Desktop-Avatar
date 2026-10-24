@@ -50,6 +50,18 @@ pub struct Note {
     /// `learned` | `ko`.
     pub origin: String,
     pub body: String,
+    /// Where a `web` note came from (§2: `url`, `fetched_via: tor`,
+    /// `trip_id`); `None` for every other note.
+    pub web: Option<WebSource>,
+}
+
+/// The origin of a note fetched on a gated online trip (§5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WebSource {
+    /// The exact URL the text was fetched from (tracking params stripped).
+    pub url: String,
+    /// The trip (and its Tor circuit) that fetched it.
+    pub trip_id: String,
 }
 
 fn q(s: &str) -> String {
@@ -134,9 +146,17 @@ impl Note {
             .map(|l| q(l))
             .collect::<Vec<_>>()
             .join(", ");
+        let web = match &self.web {
+            Some(w) => format!(
+                "url: {}\nfetched_via: tor\ntrip_id: {}\n",
+                q(&w.url),
+                q(&w.trip_id)
+            ),
+            None => String::new(),
+        };
         format!(
             "---\nid: {}\ntitle: {}\ntopic: {}\nkind: {}\nsource: {{ type: {}, ref: {}, hash: {} }}\n\
-             created: {}\nupdated: {}\nconfidence: {:.2}\nquiz: {{ asked: {}, passed: {}, last: null }}\n\
+             {}created: {}\nupdated: {}\nconfidence: {:.2}\nquiz: {{ asked: {}, passed: {}, last: null }}\n\
              links: [{}]\norigin: {}\n---\n{}\n",
             self.id,
             q(&self.title),
@@ -145,6 +165,7 @@ impl Note {
             self.source_type,
             q(&self.source_ref),
             q(&self.source_hash),
+            web,
             utc(self.created),
             utc(self.updated),
             self.confidence,
@@ -177,7 +198,9 @@ impl Note {
             links: Vec::new(),
             origin: "learned".into(),
             body: body.trim_end().to_string(),
+            web: None,
         };
+        let (mut url, mut trip) = (None, None);
         for line in head.lines() {
             let Some((k, v)) = line.split_once(':') else {
                 continue;
@@ -192,6 +215,8 @@ impl Note {
                 "updated" => n.updated = parse_utc(v),
                 "confidence" => n.confidence = v.parse().unwrap_or(0.5),
                 "origin" => n.origin = unq(v),
+                "url" => url = Some(unq(v)),
+                "trip_id" => trip = Some(unq(v)),
                 "source" => {
                     for (k, v) in inline_map(v) {
                         match k.as_str() {
@@ -216,6 +241,12 @@ impl Note {
                 }
                 _ => {}
             }
+        }
+        if let Some(url) = url {
+            n.web = Some(WebSource {
+                url,
+                trip_id: trip.unwrap_or_default(),
+            });
         }
         (!n.id.is_empty()).then_some(n)
     }
@@ -492,6 +523,7 @@ pub(crate) mod tests {
             links: vec!["entity:pacman".into()],
             origin: "learned".into(),
             body: "Use `pacman -Rns $(pacman -Qtdq)`.\n\n\"quoted\" body".into(),
+            web: None,
         }
     }
 

@@ -450,6 +450,7 @@ impl Learner {
                     links: it.links.clone(),
                     origin: "learned".into(),
                     body: it.body.clone(),
+                    web: None,
                 },
             ),
         };

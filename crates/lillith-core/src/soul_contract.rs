@@ -136,7 +136,25 @@ pub enum PendingAction {
         restart: bool,
         card: String,
     },
+    /// A user-gated, Tor-only online research trip (docs/SELF_LEARNING.md
+    /// §5): read-only GETs of exactly `urls` (no globs that widen after the
+    /// click), at most `max_pages` requests and `max_bytes` in total. Only a
+    /// mouse click on the card's Yes approves; confirming only records the
+    /// approval and the learner's trip engine (`lillith_learn::online`)
+    /// does the fetching, so nothing is fetched by the contract. `card`
+    /// correlates the trip's `PROPOSED` and after lines (`card=<id>`).
+    OnlineResearch {
+        trip_id: String,
+        purpose: String,
+        urls: Vec<String>,
+        max_pages: u32,
+        max_bytes: u64,
+        card: String,
+    },
 }
+
+/// The `kind` column of an online research trip in the audit log.
+pub const ONLINE_RESEARCH_KIND: &str = "online_research";
 
 /// The `kind` column of model-server card lines in the audit log.
 pub const MODEL_SERVER_KIND: &str = "start_model_server";
@@ -210,7 +228,8 @@ impl PendingAction {
     /// The card id of a model-server card.
     pub fn card_id(&self) -> Option<&str> {
         match self {
-            PendingAction::StartModelServer { card, .. } => Some(card),
+            PendingAction::StartModelServer { card, .. }
+            | PendingAction::OnlineResearch { card, .. } => Some(card),
             _ => None,
         }
     }
@@ -232,6 +251,7 @@ impl PendingAction {
             PendingAction::Launch { .. } => "launch",
             PendingAction::StartModelServer { .. } => MODEL_SERVER_KIND,
             PendingAction::Plan { .. } => "plan",
+            PendingAction::OnlineResearch { .. } => ONLINE_RESEARCH_KIND,
         }
     }
 
@@ -251,6 +271,7 @@ impl PendingAction {
             PendingAction::RunShell { .. }
             | PendingAction::Organize { .. }
             | PendingAction::Plan { .. }
+            | PendingAction::OnlineResearch { .. }
             | PendingAction::Launch { .. } => None,
             // The binary, so the audit line names what would run.
             PendingAction::StartModelServer { argv, .. } => argv.first().map(Path::new),
@@ -272,7 +293,8 @@ impl PendingAction {
             | PendingAction::Plan { .. }
             | PendingAction::RunCommand { .. }
             | PendingAction::Launch { .. }
-            | PendingAction::StartModelServer { .. } => true,
+            | PendingAction::StartModelServer { .. }
+            | PendingAction::OnlineResearch { .. } => true,
             PendingAction::ListDir { .. }
             | PendingAction::ReadFile { .. }
             | PendingAction::SearchFiles { .. } => false,
@@ -325,6 +347,20 @@ impl PendingAction {
             PendingAction::StartModelServer { restart: false, .. } => {
                 "Start local model server? (llama-server, loopback only)".into()
             }
+            PendingAction::OnlineResearch {
+                purpose,
+                urls,
+                max_pages,
+                max_bytes,
+                ..
+            } => format!(
+                "Go online (Tor only) to research: {} ({} address{}, at most {max_pages} page{}, {})",
+                one_line_cap(purpose, 120),
+                urls.len(),
+                if urls.len() == 1 { "" } else { "es" },
+                if *max_pages == 1 { "" } else { "s" },
+                human_bytes(*max_bytes)
+            ),
         }
     }
 
@@ -346,6 +382,7 @@ impl PendingAction {
             PendingAction::Launch { .. } => "OPEN PROGRAM",
             PendingAction::StartModelServer { .. } => "LOCAL MODEL SERVER",
             PendingAction::Plan { .. } => "REVIEW THE PLAN",
+            PendingAction::OnlineResearch { .. } => "GO ONLINE (TOR)",
         }
     }
 
@@ -384,6 +421,16 @@ impl PendingAction {
             // The full listing: every file and folder, never elided.
             PendingAction::DeletePaths { manifest } => Some(manifest.listing()),
             PendingAction::Plan { plan } => Some(plan.listing()),
+            PendingAction::OnlineResearch {
+                trip_id,
+                purpose,
+                urls,
+                max_pages,
+                max_bytes,
+                ..
+            } => Some(online_research_detail(
+                trip_id, purpose, urls, *max_pages, *max_bytes,
+            )),
             _ => None,
         };
         ContractPrompt {
@@ -449,6 +496,11 @@ impl PendingAction {
                     Some(format!("started {} (pid {pid})", argv.join(" "))),
                 ))
             }
+            // The approval itself: the learner's trip engine fetches.
+            PendingAction::OnlineResearch { .. } => Ok((
+                None,
+                Some("approved: the trip engine fetches through Tor".into()),
+            )),
             // The approval itself: the app spawns (and owns) the server.
             PendingAction::StartModelServer { .. } => Ok((
                 None,
@@ -490,6 +542,64 @@ impl PendingAction {
             )),
         }
     }
+}
+
+/// `s` on one line, cut to `max` chars (with an ellipsis).
+fn one_line_cap(s: &str, max: usize) -> String {
+    let flat = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if flat.chars().count() <= max {
+        flat
+    } else {
+        let mut t: String = flat.chars().take(max).collect();
+        t.push('…');
+        t
+    }
+}
+
+/// `2 MiB`, `512 KiB`, `300 B`.
+fn human_bytes(b: u64) -> String {
+    if b >= 1024 * 1024 && b % (1024 * 1024) == 0 {
+        format!("{} MiB", b / (1024 * 1024))
+    } else if b >= 1024 {
+        format!("{} KiB", b / 1024)
+    } else {
+        format!("{b} B")
+    }
+}
+
+/// The online research card's detail: purpose, every exact address, the
+/// hard caps, how it stays anonymous and its honest limits (§5.1, §5.2).
+fn online_research_detail(
+    trip_id: &str,
+    purpose: &str,
+    urls: &[String],
+    max_pages: u32,
+    max_bytes: u64,
+) -> String {
+    let mut out = format!(
+        "purpose: {}\n\nI will visit only these addresses:\n",
+        one_line_cap(purpose, 200)
+    );
+    for u in urls {
+        out.push_str(&format!("  {}\n", one_line_cap(u, 300)));
+    }
+    out.push_str(&format!(
+        "\ncaps for this trip: at most {max_pages} page request{} and {} in total\n\
+         trip: {trip_id} (its own Tor circuit)\n\n\
+         How: read-only GETs through the local Tor SOCKS proxy only (DNS inside Tor), \
+         https verified against built-in roots (plain http only if allow_http is on), \
+         no cookies, cache, Referer, logins or forms, fixed generic headers. \
+         A redirect to a site (host) not listed above stops the trip; a redirect \
+         to another page or port on a listed site is followed; a redirect from \
+         https down to plain http always stops it. \
+         Pages are kept as untrusted notes under knowledge/web/, never as instructions.\n\n\
+         Honest limits: anonymity is never perfect; what is fetched and when can \
+         fingerprint; a site sees a Tor exit and what was asked for.\n\n\
+         Only a click on Yes starts it; typing or saying yes doesn't.",
+        if max_pages == 1 { "" } else { "s" },
+        human_bytes(max_bytes)
+    ));
+    out
 }
 
 /// Most bytes of command output kept.
