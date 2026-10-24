@@ -1,0 +1,8 @@
+# IMAGE-TO-VIDEO MOTION  (GenerateVideo: image_path = BASE STILL, last_frame_path = BASE STILL,
+#   keyframes = [{image_path: PEAK STILL, timestamp_s: {PEAK_AT_S}}], duration = {TAKE_S}, resolution = 720p)
+{MOTION}
+Pacing: slow, smooth, unhurried and sultry, like a slow-motion pin-up shoot; every movement eases in and eases out; no snapping, no fast moves. Holds steady sultry eye contact with the viewer.
+Physics: natural weighted soft-body follow-through on every move: her chest, hips and thighs settle with a soft delayed bounce after each shift of weight, pigtails swing in lazy arcs, ribbons flutter, tail curls slowly. The outfit stays on, opaque and in place.
+Camera: locked off, static, no zoom, no pan; full body stays in frame with margin above the horns and below the boots.
+Background: flat pure white the entire clip, no shadow, no floor, no props, no lighting change.
+She is an adult woman. {AVOID_SHORT}

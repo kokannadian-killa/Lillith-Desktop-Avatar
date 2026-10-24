@@ -1,0 +1,19 @@
+{
+ "mode": "loop",
+ "take_s": 6,
+ "video_fps": 24,
+ "start": 1,
+ "stop": 143,
+ "step": 2,
+ "fps": 12,
+ "scale": 0.54,
+ "anchor_x": 200,
+ "center": "fixed",
+ "finalize": "keyframed",
+ "seated": false,
+ "peak_at_s": 3.0,
+ "peak_pose": "standing facing the viewer, weight on one hip, back arched and chest pushed forward, one hand resting on her hip, the other fingertips slowly tracing her collarbone along the neckline of her top, chin slightly lowered",
+ "expression": "heavy-lidded bedroom eyes locked on the viewer, slow knowing smirk",
+ "motion": "She slowly shifts her weight onto one hip, arches her back and rolls her chest forward toward the viewer, fingertips gliding along her collarbone; her chest and pigtails give a soft, weighty settle-bounce as she lands in the arch; holds the look for a breath with a slow lip bite, then eases back to the start pose.",
+ "name": "standing_tease"
+}

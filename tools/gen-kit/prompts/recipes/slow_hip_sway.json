@@ -1,0 +1,19 @@
+{
+ "mode": "loop",
+ "take_s": 6,
+ "video_fps": 24,
+ "start": 1,
+ "stop": 143,
+ "step": 2,
+ "fps": 12,
+ "scale": 0.54,
+ "anchor_x": 200,
+ "center": "fixed",
+ "finalize": "keyframed",
+ "seated": false,
+ "peak_at_s": 3.0,
+ "peak_pose": "standing facing the viewer, hips swung to one side, back arched, chest forward, hands sliding down her sides over her outfit to her hips",
+ "expression": "heavy-lidded eyes on the viewer, slow lip bite",
+ "motion": "She sways her hips slowly side to side, one full slow figure-eight, her hands gliding down her sides over her outfit; every change of direction sends a soft, weighty jiggle up through her chest and hips with a gentle settle; pigtails and tail swing in lazy delayed arcs; returns exactly to the start pose.",
+ "name": "slow_hip_sway"
+}
