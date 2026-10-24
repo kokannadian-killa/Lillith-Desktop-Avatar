@@ -397,6 +397,33 @@ fn my_uid() -> Option<u32> {
     None
 }
 
+/// Windows `ERROR_PIPE_BUSY`: every pipe instance is taken right now.
+pub const ERROR_PIPE_BUSY: i32 = 231;
+/// Windows `ERROR_FILE_NOT_FOUND`: no daemon (fall back to the local engine).
+pub const ERROR_FILE_NOT_FOUND: i32 = 2;
+/// How long a busy pipe is retried (PROTOCOL.md: about 1 s).
+pub const PIPE_BUSY_RETRY: Duration = Duration::from_millis(1000);
+const PIPE_BUSY_STEP: Duration = Duration::from_millis(50);
+
+/// Calls `open` until it stops failing with `ERROR_PIPE_BUSY`, for about
+/// [`PIPE_BUSY_RETRY`] (`sleep` between tries). Any other error, e.g.
+/// `ERROR_FILE_NOT_FOUND` (no daemon), returns at once.
+pub fn open_retrying_busy<T>(
+    mut open: impl FnMut() -> std::io::Result<T>,
+    mut sleep: impl FnMut(Duration),
+) -> std::io::Result<T> {
+    let mut waited = Duration::ZERO;
+    loop {
+        match open() {
+            Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) && waited < PIPE_BUSY_RETRY => {
+                sleep(PIPE_BUSY_STEP);
+                waited += PIPE_BUSY_STEP;
+            }
+            r => return r,
+        }
+    }
+}
+
 /// Opens a connection to `ep` (local only, see [`is_local_endpoint`]). On
 /// Unix the socket must belong to the current user.
 pub fn connect(ep: &Path) -> Result<Box<dyn Conn>, DaemonError> {
@@ -430,24 +457,17 @@ pub fn connect(ep: &Path) -> Result<Box<dyn Conn>, DaemonError> {
         // The daemon's pipe ACL admits the current user only. We also
         // forbid it from impersonating us (identification level only).
         const SECURITY_IDENTIFICATION: u32 = 1 << 16;
-        const ERROR_PIPE_BUSY: i32 = 231;
-        let mut tries = 0;
-        loop {
-            match std::fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .security_qos_flags(SECURITY_IDENTIFICATION)
-                .open(ep)
-            {
-                Ok(f) => return Ok(Box::new(f)),
-                // Every pipe instance busy: the daemon creates another.
-                Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) && tries < 20 => {
-                    tries += 1;
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-                Err(e) => return Err(e.into()),
-            }
-        }
+        let f = open_retrying_busy(
+            || {
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .security_qos_flags(SECURITY_IDENTIFICATION)
+                    .open(ep)
+            },
+            std::thread::sleep,
+        )?;
+        Ok(Box::new(f))
     }
     #[cfg(not(any(unix, windows)))]
     {
@@ -507,6 +527,12 @@ impl DaemonClient {
         let mut c = connect(&self.endpoint)?;
         c.set_timeout(timeout)?;
         let mut line = req.encode();
+        if line.len() >= MAX_LINE {
+            return Err(DaemonError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "request line over 1 MiB",
+            )));
+        }
         line.push('\n');
         c.write_all(line.as_bytes())?;
         c.flush()?;
@@ -995,6 +1021,62 @@ mod tests {
             route_transcript(&t("  ", false, false), false),
             VoiceRoute::Nothing
         );
+    }
+
+    #[test]
+    fn busy_pipe_is_retried_about_a_second_and_missing_daemon_is_not() {
+        use std::io::{Error, ErrorKind};
+        // Busy twice, then free.
+        let mut n = 0;
+        let mut slept = Duration::ZERO;
+        let r = open_retrying_busy(
+            || {
+                n += 1;
+                if n < 3 {
+                    Err(Error::from_raw_os_error(ERROR_PIPE_BUSY))
+                } else {
+                    Ok(n)
+                }
+            },
+            |d| slept += d,
+        );
+        assert_eq!(r.unwrap(), 3);
+        assert_eq!(slept, Duration::from_millis(100));
+        // Busy forever: gives up after ~1 s.
+        let mut slept = Duration::ZERO;
+        let r: std::io::Result<()> = open_retrying_busy(
+            || Err(Error::from_raw_os_error(ERROR_PIPE_BUSY)),
+            |d| slept += d,
+        );
+        assert_eq!(r.unwrap_err().raw_os_error(), Some(ERROR_PIPE_BUSY));
+        assert_eq!(slept, PIPE_BUSY_RETRY);
+        // No daemon: no retry, a plain error (callers fall back).
+        let mut tries = 0;
+        let r: std::io::Result<()> = open_retrying_busy(
+            || {
+                tries += 1;
+                Err(Error::from_raw_os_error(ERROR_FILE_NOT_FOUND))
+            },
+            |_| panic!("must not wait"),
+        );
+        assert_eq!(tries, 1);
+        assert!(r.is_err());
+        let r: std::io::Result<()> =
+            open_retrying_busy(|| Err(Error::from(ErrorKind::NotFound)), |_| unreachable!());
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn oversized_request_is_refused_before_sending() {
+        let c = DaemonClient::new(std::env::temp_dir().join("lillith-no-such.sock")).unwrap();
+        let big = Request::Say {
+            text: "a".repeat(MAX_LINE + 10),
+            wait: false,
+            preset: None,
+            speed: None,
+        };
+        let e = c.send(&big, None).err().expect("refused");
+        assert!(e.to_string().contains("1 MiB"), "{e}");
     }
 
     #[test]
