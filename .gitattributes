@@ -22,3 +22,7 @@ master.zip filter=lfs diff=lfs merge=lfs -text
 # Windows scripts
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+
+# Python sidecar (attachments + bots backend) is dev/source only: keep it out of
+# release/source archives (git archive, GitHub "Download ZIP").
+tools/lillith-py export-ignore

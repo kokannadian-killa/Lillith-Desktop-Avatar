@@ -1,0 +1,41 @@
+name: lillith-py
+
+# Python sidecar (tools/lillith-py): attachments + bots backend for the Bots tab.
+# Runs only when its files change. Tests run OFFLINE: inside a network
+# namespace that has only loopback, and tests/netguard.py also fails the run
+# on any non-loopback socket attempt.
+
+on:
+  push:
+    paths:
+      - "tools/lillith-py/**"
+      - ".github/workflows/lillith-py.yml"
+  pull_request:
+    paths:
+      - "tools/lillith-py/**"
+      - ".github/workflows/lillith-py.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (offline)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tools/lillith-py
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+          sparse-checkout: tools/lillith-py
+      - name: Install test dependencies (Python 3.12 has tomllib)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-pytest python3-pil poppler-utils
+      - name: Run pytest with no network (loopback only)
+        run: |
+          U=$(id -u); G=$(id -g)
+          sudo unshare --net -- bash -c "ip link set lo up && exec setpriv --reuid=$U --regid=$G --clear-groups env HOME=$HOME PATH=$PATH python3 -m pytest -q -p no:cacheprovider"
