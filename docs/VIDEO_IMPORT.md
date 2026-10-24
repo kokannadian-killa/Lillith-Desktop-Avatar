@@ -1,0 +1,160 @@
+# Video import: user videos → Lillith pose candidates
+
+`tools/video-pipeline/user_import.py` is the engine behind "add my own video". The GUI spawns it, reads JSON
+lines from stdout, shows the candidates, and copies the ones the user keeps into the clip library. The engine
+does **no** library writes, no network access, no downloads, and writes nothing outside `--out`.
+
+```
+python3 tools/video-pipeline/user_import.py --input <file> --out <staging_dir> --json-progress [--max-ram-mb 1500]
+```
+
+## Flags
+
+| flag | default | meaning |
+|---|---|---|
+| `--input` | required | `.mp4 .m4v .gif .webm .mov`, any size or length (streamed, never loaded whole) |
+| `--out` | required | staging dir, created if missing. Everything goes here. |
+| `--json-progress` | off | JSON lines on stdout (the GUI contract). Without it, stdout gets human-readable progress lines instead. |
+| `--max-ram-mb` | 1500 | cap for the importer **plus** its ffmpeg child (150 MB of it is reserved for ffmpeg) |
+| `--ffmpeg` | `LILLITH_FFMPEG`, then PATH | ffmpeg binary **or its folder**, e.g. `C:\Lillith\bin\ffmpeg.exe` or `C:\Lillith\bin` |
+| `--ffprobe` | `LILLITH_FFPROBE`, then next to ffmpeg, then PATH | ffprobe binary or its folder |
+| `--matte` | `auto` | `auto`, `alpha` (use the file's own alpha), `isnet` (local model), `key` (plain-backdrop key) |
+| `--model` | `$U2NET_HOME/isnet-anime.onnx` (`~/.rembg/models/isnet-anime/`) | isnet model path; never downloaded |
+| `--zmax` | 1.8 | peak cleavage zoom; `1` turns the zoom off |
+| `--min-seconds` / `--max-seconds` | 1.5 / 8 | movement length limits |
+| `--max-candidates` | 0 (no limit) | stop after N candidates (useful for long videos) |
+| `--threads` | 2 | onnxruntime threads for isnet |
+
+**ffmpeg lookup order:** flag → env (`LILLITH_FFMPEG` / `LILLITH_FFPROBE`) → for ffprobe, `ffprobe(.exe)` beside
+the chosen ffmpeg → PATH. A folder argument looks for `ffmpeg.exe` then `ffmpeg` inside it. Each binary is
+checked with `-version`. The Windows zip ships `bin\ffmpeg.exe` (and `bin\ffprobe.exe`), so the GUI should pass
+`--ffmpeg <install>\bin\ffmpeg.exe` and can leave `--ffprobe` unset. Paths with spaces are fine: every
+subprocess uses an argument list, never a shell.
+
+## stdout: JSON lines (one object per line, nothing else)
+
+```json
+{"event":"progress","stage":"matte","pct":37,"msg":"movement 2/4: frame 31/58"}
+{"event":"candidate","id":"user_dance_02","mp4":"/abs/staging/user_dance_02/user_dance_02.mp4",
+ "preview_png":"/abs/staging/user_dance_02/user_dance_02_preview.png","frames":58,"fps":12,
+ "qa":{"pass":true,"white_edge":"OK","fringe":"PASS"},"suggested_name":"user_dance_02"}
+{"event":"done","candidates":4,"peak_rss_mb":612}
+{"event":"error","msg":"ffmpeg not found. Install FFmpeg ... or pass --ffmpeg/--ffprobe ..."}
+```
+
+* `stage` ∈ `probe decode split matte clean zoom encode qa`. `pct` is an int 0–100 for the **whole job** and
+  never goes backwards (stages interleave per movement, so the stage can go back from `qa` to `matte`).
+  Progress lines are throttled to about two per second.
+* A `candidate` is emitted as soon as its movement is finished, before the rest of the video is done.
+  `id == suggested_name ==` the candidate's folder name (`user_<input-slug>_<NN>`, bumped if it already exists).
+* `qa.pass` = `qa_all.py --white-edge --mp4` printed OK **and** fringeqa gave PASS or WARN. `white_edge` is
+  `OK`/`FAIL`, and `fringe` is `PASS`/`WARN`/`FAIL`. A failing candidate is still produced; the GUI decides
+  whether to show it.
+* `done` carries an extra field, `peak_rss_mb`: the importer's peak RSS, not counting ffmpeg.
+* Exactly one terminal line: `done` or `error`. On cancel there is none.
+
+## Exit codes and cancel
+
+| code | meaning |
+|---|---|
+| 0 | success (`done` printed) |
+| 1 | error (`error` printed): missing ffmpeg, unreadable or unsupported input, RAM cap too low or exceeded, … |
+| 130 | cancelled |
+
+Cancel with **SIGTERM** (or SIGINT) on Linux/macOS. On Windows, spawn the importer with
+`CREATE_NEW_PROCESS_GROUP` and send `CTRL_BREAK_EVENT` to it (`TerminateProcess` cannot run cleanup). The
+importer kills its ffmpeg children and exits within about 1 s:
+
+* if `--out` did not exist before the run, it is removed entirely;
+* otherwise only what this run created inside it (its candidate folders and `.user_import_work`) is removed,
+  and other files in `--out` are left alone.
+
+On an error exit, candidates already announced are kept; only the work dir and the half-finished movement are removed.
+
+## Candidate folder
+
+```
+<out>/user_<slug>_<NN>/
+  user_<slug>_<NN>.json         same schema as shipped clips (frame_count, fps 12, anchor [200,392], baseline_y 392,
+                                cleavage_zoom block, video block, bbox_per_frame, …) plus a "user_import" block;
+                                loop: false; tags include baked_motion, user_import (+ cleavage_zoom when zoomed)
+  user_<slug>_<NN>.mp4          alpha-packed H.264, 800x400 (colour | alpha as grey), exactly like pack_mp4.py
+  user_<slug>_<NN>_sheet.png    RGBA strip, 400 px per frame
+  user_<slug>_<NN>_preview.png  one frame on grey, for the picker
+  qa/                           only if a QA tool wrote images (fringe crops)
+```
+
+To keep a candidate, the GUI copies the folder into the clip library under the user's chosen name, renaming the
+three `<name>.*` files and updating `name`, `sheet` and `video.file` in the JSON. A shipped clip folder holds
+only `json`, `mp4` and `_sheet.png`, so drop `_preview.png` and `qa/`.
+
+## What it does
+
+1. **probe**: ffprobe (file/pipe protocols only). Handles rotation metadata. Detects alpha (`yuva*`, `rgba`, GIF
+   palettes, WebM `alpha_mode`; VP8/VP9 alpha is decoded with libvpx).
+2. **decode/split**: first streaming pass at 12 fps and 64 px wide grey. Cuts on scene changes (frame difference
+   far above the recent median, or a histogram jump), then in the middle of motion holds of ≥ 0.4 s
+   (pose changes) when both sides stay ≥ `--min-seconds`. Pieces longer than `--max-seconds` are cut at the
+   calmest frame; short leftovers are merged and anything under 0.5 s is dropped.
+3. **matte**: second streaming pass at 720 px high (540 px if `--max-ram-mb` < 700), about 1.85× the
+   on-canvas scale, i.e. the "matte at 2×" step.
+   * `alpha`: the file's own alpha. Opaque frames from GIF/WebM/MOV fall back to the next mode.
+   * `isnet`: `matte_v2.py` functions (isnet-anime ONNX on onnxruntime, then `raw_alpha`, `colour`,
+     `drop_specks`). Used by `auto` only when the model file exists, onnxruntime imports, and the cap is ≥ 1100 MB.
+     If RAM runs over the cap mid-run it downgrades to `key`.
+   * `key`: white backdrops (border median ≥ 242) use `key_white` fed into matte_v2's `raw_alpha`/`colour`.
+     Other plain backdrops are flood-filled from the border colour and un-mixed against it.
+   Each matted frame is cropped and spilled to `<out>/.user_import_work/` as a PNG, so RAM does not grow with
+   video length.
+4. **zoom**: `zoom_tease.py` math (ported; that script is a CLI with side effects at import). Uses
+   one sampling grid per movement, `S = 0.54 × 720 / H` (reduced if the figure would be taller than 386 px),
+   x from `build_clip.body_x` of the first frame, the lowest point of the movement on baseline 392, and a
+   premultiplied INTER_AREA downscale. The slow cleavage zoom has keyframes at 15/40/60/85 % of the movement
+   (smoothstep ease-in, hold, ease-out), peaks at `--zmax`, and brings the focus point (estimated chest, 30 %
+   down the figure) toward (200,195). Movements under 12 frames are not zoomed.
+5. **clean**: `tools/matte-clean/matte_clean.clean_cell` (v6), then `cellfix.post` (in-memory port of the
+   seasonal holefill → edgefix → holefill). **holefill is the last image step.** Rows below 392 are zeroed.
+6. **encode**: sheet, JSON and mp4 with pack_mp4's settings (libx264 veryslow, tune animation, crf 16,
+   high@4.0, full-range bt709, no B-frames, faststart). The mp4 is decoded back and checked.
+7. **qa**: `qa_all.py --white-edge --mp4 <candidate>` and `tools/video-pipeline/fringeqa.py` (FQA_ALL=1, output
+   in `<candidate>/qa`).
+
+## RAM
+
+The importer holds one frame at a time, plus one movement's metadata and a few canvases. ffmpeg runs with one
+thread and one filter thread. RSS is checked every frame (`/proc/self/status` on Linux,
+`GetProcessMemoryInfo` on Windows). If RSS goes over `--max-ram-mb − 150`, isnet downgrades to the key and,
+if that is still over, the run ends with `error: memory cap exceeded`. A cap smaller than the importer's start-up RSS + 150 MB (about 250 MB) is refused at start. The measured
+peak in key mode is about 160 MB. isnet needs the cap to be ≥ 1100 MB to be picked by `auto`.
+
+## Model
+
+The isnet-anime model is **not** in the repo and is never fetched. The default is
+`~/.rembg/models/isnet-anime/isnet-anime.onnx` (176 MB) via `U2NET_HOME`, or pass `--model`. Without it,
+`auto` uses the backdrop key, which only works for plain or solid backdrops.
+
+## Known limits (v1)
+
+* Without the isnet model, busy backgrounds give poor mattes. Ship or ask for the model for real-world videos.
+* isnet is slow on a laptop i5 (about 1–3 s per frame at 720 px), so a 30 s video takes minutes. Progress keeps
+  moving, and `--max-candidates` bounds the work.
+* There is no temporal median smoothing of the matte (skipped to keep memory flat), so mattes may flicker
+  slightly more than on hand-made clips.
+* The zoom focus is a heuristic (30 % down the figure), not a body-part detector.
+* Segmentation is motion-based. A long continuous dance becomes several `--max-seconds` pieces cut at the calmest frame.
+* Candidates are one-shot (`loop: false`). Loop closing is not attempted.
+* Audio is ignored.
+
+## Tests
+
+```
+python3 -m pytest -q -p no:cacheprovider tools/video-pipeline/tests
+```
+
+The tests synthesise tiny 160×120 videos (a crude figure that waves, holds, bounces, then a hard cut to a
+second scene) and run the real importer at `--work-height 160` (a hidden test flag). They cover the JSON schema
+and monotonic progress, splitting into ≥ 3 movements, the clip format (800×400 mp4, sheet size, nothing below
+the baseline, zoom curve), the RAM cap (too low → error; the child tree's `ru_maxrss` stays under the cap),
+cancel → exit 130 within 1.5 s with cleanup (new and pre-existing `--out`), missing ffmpeg, `--ffmpeg`/`--ffprobe`
+as files and folders under a path with spaces, bad input, and writes confined to `--out` (empty TMPDIR, tool
+and input folders unchanged). Runtime is about 1 min on one core. Requires ffmpeg with libx264.
