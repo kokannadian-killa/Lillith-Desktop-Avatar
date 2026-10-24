@@ -26,7 +26,9 @@
 #                         ~/.local/share/lillith-voice/models that has SHA256SUMS]
 #   LILLITH_VOICE_FLAVOR  quality = fp32 flow_lm_main (recommended, ANDROID_ASSETS.md)
 #                         small   = int8 flow_lm_main (experimental: can cut lines short)  [quality]
-#   LILLITH_VOICE_STT     1 = whisper tiny.en + silero VAD for the mic, 0 = none   [1]
+#   LILLITH_VOICE_STT     0 = speech output only (Ko, 2026-10-24: no mic on Android for now)
+#                         1 = opt-in: also ship whisper tiny.en + silero VAD (+~100 MiB) for a
+#                         future mic feature (the app has no RECORD_AUDIO / STT runtime yet)   [0]
 #   LILLITH_VOICE_KOKORO  1 = also ship the Kokoro p1 fallback (+353 MB; no Android
 #                         runtime or espeak-ng G2P for it yet)   [0]
 #   STAGE_ONLY=1          only stage assets (clips + voice) into $OUT/stage and list
@@ -67,7 +69,7 @@ fi
 # ── voice: locate + verify the kit models before any long build step ──
 VOICE="${LILLITH_VOICE:-1}"
 VOICE_FLAVOR="${LILLITH_VOICE_FLAVOR:-quality}"
-VOICE_STT="${LILLITH_VOICE_STT:-1}"
+VOICE_STT="${LILLITH_VOICE_STT:-0}"   # speaking only by default; 1 = opt-in STT models
 VOICE_KOKORO="${LILLITH_VOICE_KOKORO:-0}"
 LINK_ASSETS="$REPO/tools/lillith-voice/android/link_assets.sh"
 VOICE_MODELS=""
@@ -118,10 +120,11 @@ if [ "$VOICE" != 1 ]; then
   echo "==> 4/7 voice: skipped (LILLITH_VOICE=0): the app will log that it has no voice models"
   return
 fi
-echo "==> 4/7 voice (assets/voice: cloned 'lillith' Pocket TTS, STT; stored uncompressed)"
-local stt_flag=""; [ "$VOICE_STT" = 1 ] || stt_flag="--no-stt"
+local stt_flag="" stt_what=", STT (opt-in)"; [ "$VOICE_STT" = 1 ] || { stt_flag="--no-stt"; stt_what=", speaking only"; }
+echo "==> 4/7 voice (assets/voice: cloned 'lillith' Pocket TTS$stt_what; stored uncompressed)"
 LILLITH_VOICE_MODELS="$VOICE_MODELS" LINK_KOKORO="$VOICE_KOKORO" \
   bash "$LINK_ASSETS" "$STAGE/assets" "$VOICE_FLAVOR" $stt_flag
+[ "$VOICE_STT" = 1 ] || rmdir "$STAGE/assets/voice/stt" 2>/dev/null || true   # no empty stt/ in the APK
 # link_assets.sh makes symlinks; turn them into hard links (no extra disk) or
 # copies, so aapt2 packages real files whatever it does with links.
 find "$STAGE/assets/voice" -type l | while read -r l; do
