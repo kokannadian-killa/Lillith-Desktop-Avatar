@@ -238,6 +238,10 @@ enum Cmd {
         /// dismisses it, nothing runs).
         #[arg(long)]
         demo_contract: bool,
+        /// The overlay owns `[chat.server]`: a clicked Yes on the
+        /// model-server card asks it (over stdout) to start the server.
+        #[arg(long)]
+        app_server: bool,
     },
 }
 
@@ -480,6 +484,7 @@ async fn main() -> Result<()> {
             ref screenshot,
             demo,
             demo_contract,
+            app_server,
         }) => {
             let (full, config_path) = load_config(&cli);
             let pos = x.zip(y);
@@ -493,6 +498,7 @@ async fn main() -> Result<()> {
                 screenshot.clone(),
                 demo,
                 demo_contract,
+                app_server,
             )?;
         }
         Some(Cmd::Setup {
@@ -1121,13 +1127,22 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     let tx = memory_wiring::tee(feed, &memory);
     let monitor = start_monitor(cli, &cfg, tx.clone());
     let chat_on = cfg.chat.enabled;
-    let launcher = chat_on.then(|| chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm));
     // Optional self-spawned llama-server (`[chat.server]`), stopped on exit.
+    // Never started on its own: only after a clicked Yes on the bubble's
+    // Soul Contract card (see `ServerGuard::start`).
     let server = if chat_on && !cli.no_llm {
-        chat::ServerGuard::start(&cfg.chat, Some(&memory)).await
+        chat::ServerGuard::start(&cfg.chat).await
     } else {
         chat::ServerGuard::default()
     };
+    let launcher = chat_on.then(|| {
+        let l = chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm);
+        if !cli.no_llm && cfg.chat.server.should_spawn() {
+            l.with_server(server.handle(), cfg.chat.clone(), memory.clone())
+        } else {
+            l
+        }
+    });
     if chat_on {
         tracing::info!(
             endpoint = %cfg.chat.endpoint,

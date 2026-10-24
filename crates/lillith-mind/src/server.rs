@@ -180,6 +180,13 @@ impl LlamaServer {
         }
     }
 
+    /// The child is still alive.
+    pub fn is_running(&mut self) -> bool {
+        self.child
+            .as_mut()
+            .is_some_and(|c| matches!(c.try_wait(), Ok(None)))
+    }
+
     pub fn pid(&self) -> Option<u32> {
         self.child.as_ref().map(Child::id)
     }
