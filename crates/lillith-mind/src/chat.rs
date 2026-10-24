@@ -10,7 +10,7 @@ use crate::knowledge::{parse_skill_proposal, KnowledgeBase, SkillDraft};
 use crate::llm::{ChatOptions, Flavor, LlmClient, LlmError, Message};
 use crate::persona;
 use lillith_core::access::plan::PlanRequest;
-use lillith_core::config::{ChatConfig, MindConfig};
+use lillith_core::config::{ChatConfig, MemoryConfig, MindConfig};
 use lillith_core::soul_contract::{PendingAction, SoulContract};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -68,6 +68,9 @@ pub struct ChatSession {
     last_tool_output: Option<String>,
     /// Which tool produced `last_tool_output`.
     last_tool_op: Option<&'static str>,
+    /// The learning memory graph (`[memory]`). `None` = off: nothing is
+    /// read or written. Attached by [`ChatSession::with_memory`].
+    memory: Option<lillith_memory::Brain>,
 }
 
 /// Most tool calls chained after one message of Ko's (each tool result is fed
@@ -126,7 +129,68 @@ impl ChatSession {
             pending_tool: None,
             last_tool_output: None,
             last_tool_op: None,
+            memory: None,
         }
+    }
+
+    /// Attaches the learning memory (`[memory]`). Disabled config, or a DB
+    /// that fails to open, leaves memory off (logged, chat unaffected).
+    pub fn with_memory(mut self, cfg: &MemoryConfig) -> Self {
+        self.memory = None;
+        if cfg.enabled {
+            match lillith_memory::Brain::open(cfg) {
+                Ok(b) if b.is_enabled() => self.memory = Some(b),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("[memory] could not open the memory db: {e}"),
+            }
+        }
+        self
+    }
+
+    /// Attaches an already-open brain (tests, custom paths).
+    pub fn with_brain(mut self, brain: lillith_memory::Brain) -> Self {
+        self.memory = brain.is_enabled().then_some(brain);
+        self
+    }
+
+    /// The memory graph, if on (e.g. to feed desktop events into it with
+    /// [`lillith_memory::Brain::observe_event`]).
+    pub fn memory(&self) -> Option<&lillith_memory::Brain> {
+        self.memory.as_ref()
+    }
+
+    /// Handles a "forget ..." chat command locally (no model call). Returns
+    /// the in-character line, or `None` when `user` is not a forget command
+    /// or memory is off.
+    fn handle_forget(&mut self, user: &str) -> Option<String> {
+        let brain = self.memory.as_ref()?;
+        let cmd = lillith_memory::parse_forget(user)?;
+        let ctx = lillith_memory::Ctx::now();
+        let result = brain.forget(&cmd, &ctx);
+        // Chat history holds the same things in plain text: drop them too.
+        match &cmd {
+            lillith_memory::ForgetCmd::All => self.history.clear(),
+            lillith_memory::ForgetCmd::Topic(t) => {
+                let t = t.to_lowercase();
+                self.history
+                    .retain(|m| !m.content.to_lowercase().contains(t.as_str()));
+            }
+            // History has no timestamps; the last turns are the recent ones
+            // (~1 turn a minute is a generous upper bound).
+            lillith_memory::ForgetCmd::LastSecs(secs) => {
+                let turns = (*secs / 60).max(1) as usize;
+                let keep = self.history.len().saturating_sub(turns.saturating_mul(2));
+                self.history.truncate(keep);
+            }
+        }
+        self.save();
+        Some(match result {
+            Ok(_) => persona::forget_line(&cmd),
+            Err(e) => {
+                tracing::warn!("[memory] forget failed: {e}");
+                "I tried to let that go, but something stuck. Check the log, love.".into()
+            }
+        })
     }
 
     /// Attaches the knowledge/skills base from `[mind]`: indexes both folders
@@ -159,6 +223,14 @@ impl ChatSession {
         if let Some(ctx) = self.knowledge.as_ref().and_then(|kb| kb.context_for(user)) {
             s.push_str("\n\n");
             s.push_str(&ctx);
+        }
+        if let Some(block) = self
+            .memory
+            .as_ref()
+            .and_then(|b| b.context_block(user, &lillith_memory::Ctx::now()))
+        {
+            s.push_str("\n\n");
+            s.push_str(&block);
         }
         s
     }
@@ -379,6 +451,10 @@ impl ChatSession {
         }
 
         let user = user.trim();
+        if let Some(line) = self.handle_forget(user) {
+            on_token(&line);
+            return Outcome::Reply(line);
+        }
         let messages = self.request_messages(user);
         self.salt = self.salt.wrapping_add(1);
         let result = match &self.client {
@@ -397,6 +473,9 @@ impl ChatSession {
                 self.history.push(Message::user(user));
                 self.history.push(Message::assistant(reply.clone()));
                 self.save();
+                if let Some(b) = &self.memory {
+                    b.observe_interaction(user, &reply, &lillith_memory::Ctx::now());
+                }
                 // A reply may propose a skill; hold it for the Soul Contract
                 // gate (never written here).
                 self.pending_skill = parse_skill_proposal(&reply);
@@ -592,6 +671,63 @@ mod tests {
             history_turns: 1,
             ..ChatConfig::default()
         }
+    }
+
+    fn mem_brain() -> lillith_memory::Brain {
+        lillith_memory::Brain::open_in_memory(&MemoryConfig::default()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn memory_learns_and_injects_into_the_next_prompt() {
+        let (url, mut reqs) = fake_server(vec![
+            sse_reply(&["Noted, pet."]),
+            sse_reply(&["Synthwave it is."]),
+        ])
+        .await;
+        let mut s = ChatSession::new(&cfg(&url), false).with_brain(mem_brain());
+        s.send("I love dark synthwave", |_| {}).await;
+        let _ = reqs.recv().await.unwrap();
+        s.send("put on some synthwave", |_| {}).await;
+        let r2 = reqs.recv().await.unwrap();
+        assert!(r2.contains("[Memory"), "memory block injected");
+        assert!(r2.contains("Ko likes dark synthwave"));
+        // Memory off: no block, nothing learned.
+        let off = ChatSession::new(&cfg(&url), true).with_memory(&MemoryConfig::disabled());
+        assert!(off.memory().is_none());
+        assert!(!off.full_system_prompt("synthwave").contains("[Memory"));
+    }
+
+    #[tokio::test]
+    async fn forget_command_is_answered_locally_and_deletes() {
+        let mut s = ChatSession::new(&ChatConfig::default(), true).with_brain(mem_brain());
+        let b = s.memory().unwrap();
+        b.observe_interaction("I hate pineapple", "", &lillith_memory::Ctx::now());
+        assert!(s.full_system_prompt("pineapple").contains("pineapple"));
+        let mut shown = String::new();
+        let out = s
+            .send("forget about pineapple", |t| shown.push_str(t))
+            .await;
+        assert!(matches!(out, Outcome::Reply(_)), "no model call (offline)");
+        assert!(shown.contains("pineapple"), "{shown}");
+        assert!(!s
+            .full_system_prompt("pineapple")
+            .contains("dislikes pineapple"));
+        let out = s.send("forget everything", |_| {}).await;
+        assert!(out.text().contains("Wiped"));
+        assert_eq!(s.memory().unwrap().stats().nodes, 0);
+    }
+
+    #[tokio::test]
+    async fn safeword_never_reaches_memory() {
+        // (The bare safeword is handled by the kill switch before memory; not
+        // sent here so this test doesn't bump the global stop epoch.)
+        let (url, mut reqs) = fake_server(vec![sse_reply(&["Mm."])]).await;
+        let mut s = ChatSession::new(&cfg(&url), false).with_brain(mem_brain());
+        s.send("I love red wine and my cat is Nyx", |_| {}).await;
+        let r = reqs.recv().await.unwrap();
+        assert!(!r.contains("[Memory"));
+        assert_eq!(s.memory().unwrap().stats().nodes, 0, "nothing stored");
+        assert!(!s.full_system_prompt("red").contains("[Memory"));
     }
 
     #[tokio::test]

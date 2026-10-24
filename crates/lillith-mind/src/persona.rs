@@ -171,3 +171,22 @@ mod persona_prompt_tests {
         );
     }
 }
+
+/// Her line after a "forget ..." command was carried out.
+pub fn forget_line(cmd: &lillith_memory::ForgetCmd) -> String {
+    match cmd {
+        lillith_memory::ForgetCmd::All => {
+            "Done. Wiped clean, every last memory of you. Start fresh with me?".into()
+        }
+        lillith_memory::ForgetCmd::Topic(t) => {
+            format!("Gone. I don't remember anything about {t} now.")
+        }
+        lillith_memory::ForgetCmd::LastSecs(s) => {
+            let m = (*s / 60).max(1);
+            format!(
+                "Forgotten. The last {m} minute{} never happened.",
+                if m == 1 { "" } else { "s" }
+            )
+        }
+    }
+}
