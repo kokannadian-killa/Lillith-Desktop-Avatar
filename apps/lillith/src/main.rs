@@ -902,6 +902,9 @@ struct VoiceSink {
     /// Error memory for the voice's recovery ladder.
     memory: std::sync::Arc<lillith_memory::MemoryBridge>,
     recovery: memory_wiring::VoiceRecovery,
+    /// The engine name `recovery` was last told about (see
+    /// [`VoiceSink::sync_recovery_engine`]).
+    recovery_engine: &'static str,
 }
 
 impl VoiceSink {
@@ -926,19 +929,34 @@ impl VoiceSink {
         let st = voice.stats();
         let recovery =
             memory_wiring::VoiceRecovery::new(voice.engine_name(), st.engine_errors, st.spoken);
+        let recovery_engine = voice.engine_name();
         Self {
             voice,
             config,
             daemon,
             lipsync,
             memory,
+            recovery_engine,
             recovery,
+        }
+    }
+
+    /// The voice switches engines at runtime in both directions (the
+    /// re-probe moves to the daemon; a failover drops back to the
+    /// fallback, and back again): tell the recovery ladder once per switch,
+    /// so later errors carry the name of the engine actually running.
+    fn sync_recovery_engine(&mut self) {
+        let live = self.voice.engine_name();
+        if live != self.recovery_engine {
+            self.recovery.set_engine(live);
+            self.recovery_engine = live;
         }
     }
 
     /// Runs the voice recovery ladder; `false`: do not speak right now.
     fn recover(&mut self) -> bool {
         use memory_wiring::VoiceStep;
+        self.sync_recovery_engine();
         let st = self.voice.stats();
         match self.recovery.poll(
             st.engine_errors,
@@ -1026,13 +1044,11 @@ impl lillith_overlay::ActionSink for VoiceSink {
 
     fn lipsync_lines(&mut self, out: &mut Vec<String>) -> bool {
         use lillith_voice::daemon::LipsyncMsg;
+        self.sync_recovery_engine();
         // The daemon came up after her (the voice re-probe switched to
         // it): subscribe now. Only spawns a thread; never blocks.
         if self.lipsync.is_none() && self.voice.engine_name() == "voiced" {
             if let Some(d) = self.daemon.clone() {
-                // Errors from now on belong to the daemon, not the
-                // startup engine.
-                self.recovery.set_engine(self.voice.engine_name());
                 match lillith_voice::daemon::LipsyncReader::spawn(d) {
                     Ok(r) => self.lipsync = Some(r),
                     Err(e) => {
