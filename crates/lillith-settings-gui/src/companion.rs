@@ -195,7 +195,8 @@ pub fn poses_for(m: &Manifest, active: Option<&Outfit>) -> Vec<PoseGroup> {
 }
 
 /// Avatar ▸ Outfit entries as the overlay lists them: non-hidden outfits
-/// of `seasons`, available when the set has one of their clips.
+/// of `seasons` that have at least one of their clips in the set (the
+/// others aren't shown until their clips land).
 pub fn outfits_of(m: &Manifest, seasons: &Seasons) -> Vec<OutfitChoice> {
     seasons
         .listed()
@@ -204,6 +205,7 @@ pub fn outfits_of(m: &Manifest, seasons: &Seasons) -> Vec<OutfitChoice> {
             label: o.label().to_string(),
             available: o.available(|c| m.clips.contains_key(c)),
         })
+        .filter(|o| o.available)
         .collect()
 }
 
@@ -481,9 +483,9 @@ mod tests {
         let m = Manifest::from_toml_str(&text).expect("manifest");
         let seasons = Seasons::bundled();
         let o = outfits_of(&m, &seasons);
-        assert_eq!(o.len(), 6);
-        assert_eq!(o[0].id, "halloween");
-        assert!(o[0].available && o[1..].iter().all(|o| !o.available));
+        // Only halloween has clips in this set: the rest are hidden.
+        assert_eq!(o.len(), 1);
+        assert!(o[0].id == "halloween" && o[0].available);
         let flat = |g: Vec<PoseGroup>| -> Vec<String> {
             g.into_iter()
                 .flat_map(|g| g.clips.into_iter().map(|c| c.0))

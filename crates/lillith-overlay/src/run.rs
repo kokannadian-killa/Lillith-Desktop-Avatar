@@ -2121,6 +2121,8 @@ impl Controller {
                     label: o.label().to_string(),
                     available: o.available(|c| m.clips.contains_key(c)),
                 })
+                // Outfits whose clips haven't landed yet stay out of the menu.
+                .filter(|o| o.available)
                 .collect(),
             outfit: self.outfit_setting.clone(),
             outfit_active: active.map(|o| o.label().to_string()),
@@ -4618,8 +4620,10 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         );
         assert_eq!(flirty(&c).len(), 2, "{:?}", flirty(&c));
         let x = c.menu_state(None).extras;
-        assert_eq!(x.outfits.len(), 6);
-        assert!(x.outfits[0].available && x.outfits.iter().skip(1).all(|o| !o.available));
+        // Only outfits with clips in the set are listed (xmas has none yet
+        // in seasons.toml, so its stray clip stays hidden too).
+        assert_eq!(x.outfits.len(), 1);
+        assert!(x.outfits[0].available && x.outfits[0].id == "halloween");
         assert_eq!(x.outfit_active.as_deref(), Some("Micro Witch (Halloween)"));
         // Show off while she wears it includes one of its clips.
         c.menu_pick(MenuAction::ShowOff);
@@ -4651,7 +4655,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         assert_eq!(c.outfit_setting(), "halloween");
         assert_eq!(c.outfit_active().map(|o| o.id.as_str()), Some("halloween"));
         assert_eq!(Config::load(&cfg).unwrap().seasonal_outfit, "halloween");
-        // "Coming soon" outfits can't be picked.
+        // Unlisted indices do nothing.
         c.menu_pick(MenuAction::Outfit(3));
         assert_eq!(c.outfit_setting(), "halloween");
         // Off: base outfit, saved.

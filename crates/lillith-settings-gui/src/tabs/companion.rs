@@ -2,8 +2,8 @@
 //! `lillith_core::menu::build_menu`.
 //!
 //! Avatar ▸ Outfit is drawn inline as a row of thumbnail cards (Auto, Off,
-//! then every listed outfit from `assets/seasons.toml`; outfits without
-//! clips yet are disabled "coming soon" tiles). A pick stages
+//! then every outfit from `assets/seasons.toml` that has clips in the set;
+//! outfits whose clips haven't landed yet are not shown). A pick stages
 //! `seasonal_outfit`, saves, and goes to the overlay live.
 
 use super::{SettingsTab, Shared};
@@ -866,7 +866,7 @@ mod tests {
             seasons: Seasons::bundled(),
             root: None,
         }));
-        assert_eq!(tab.state.extras.outfits.len(), 6);
+        assert_eq!(tab.state.extras.outfits.len(), 1);
         let ctx = egui::Context::default();
         lillith_theme::egui_theme::install(&ctx);
         for _ in 0..2 {
