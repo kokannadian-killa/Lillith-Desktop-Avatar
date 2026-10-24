@@ -336,13 +336,14 @@ fn planned_addresses_build_kind_and_stop_are_gated_before_any_spawn() {
     );
     assert_eq!(r.status, JobStatus::Refused);
     assert!(r.reason.unwrap().contains("not implemented") && r.pids.is_empty());
-    let r = s.run(&Task::research("red", &[A]), &long());
-    assert_eq!(
-        (r.status, r.stop),
-        (JobStatus::Cancelled, Some(StopReason::Safeword))
-    );
+    // The safeword is not a topic: that one task is refused, the session
+    // is not stopped (the safeword only hushes her voice).
+    let sess = long();
+    let r = s.run(&Task::research("red", &[A]), &sess);
+    assert_eq!((r.status, r.stop), (JobStatus::Refused, None), "{r:?}");
     assert!(r.pids.is_empty());
     assert!(f.calls().is_empty());
+    assert_eq!(sess.stop_reason(), None);
 }
 
 #[test]
@@ -945,11 +946,6 @@ fn stop_audit_failed_kills_and_discards() {
 }
 
 #[test]
-fn stop_safeword_kills_and_discards() {
-    stopped("st-safeword", StopReason::Safeword);
-}
-
-#[test]
 fn stop_end_early_kills_and_discards() {
     stopped("st-end", StopReason::EndEarly);
 }
@@ -980,7 +976,6 @@ fn stop_reasons_are_all_there_and_first_one_wins() {
     assert_eq!(
         words,
         [
-            "safeword",
             "end_early",
             "session_deadline",
             "parent_exit",
@@ -999,50 +994,44 @@ fn stop_reasons_are_all_there_and_first_one_wins() {
 }
 
 #[test]
-fn safeword_red_and_ooc_stop_in_chat_stop_instantly_and_discard_in_flight_fetch() {
-    for word in ["red", "OOC: stop"] {
-        let f = Fake {
-            delay: Duration::from_secs(20),
-            ..Fake::default()
-        };
-        let env = Env::new("sw");
-        let mut s = sup(&f, &env, &format!("{}beat", get_fact()));
-        let sess = long();
-        assert!(!sess.observe_chat("reduce the heat"), "not a safeword");
-        let t = Instant::now();
-        let r = std::thread::scope(|sc| {
-            let s2 = sess.clone();
-            let ff = &f;
-            sc.spawn(move || {
-                while ff.calls().is_empty() {
-                    std::thread::sleep(Duration::from_millis(5));
-                }
-                std::thread::sleep(Duration::from_millis(100));
-                assert!(s2.observe_chat(word));
-            });
-            s.run(&task(&[A]), &sess)
+fn safeword_red_and_ooc_stop_in_chat_never_kill_a_worker_or_drop_its_fetch() {
+    // Ko, 2026-10-24: "Just the voice". The safeword stops her talking and
+    // drops her queued lines (the chat layer's kill_switch::hush); the
+    // worker, its in-flight fetch and the session all carry on. Both words
+    // land during one short fetch: fetches are one at a time process-wide
+    // (policy::LAST_FETCH), so a long one would starve other tests' TTLs.
+    let f = Fake {
+        delay: Duration::from_millis(150),
+        ..Fake::default()
+    };
+    let env = Env::new("sw");
+    let mut s = sup(&f, &env, &format!("{}fin", get_fact()));
+    let sess = long();
+    assert!(!sess.observe_chat("reduce the heat"), "not a safeword");
+    let r = std::thread::scope(|sc| {
+        let s2 = sess.clone();
+        let ff = &f;
+        sc.spawn(move || {
+            while ff.calls().is_empty() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            std::thread::sleep(Duration::from_millis(30));
+            for word in ["red", "OOC: stop"] {
+                assert!(s2.observe_chat(word), "{word} is the safeword");
+            }
         });
-        assert!(
-            t.elapsed() < Duration::from_secs(3),
-            "{word}: {:?}",
-            t.elapsed()
-        );
-        assert_eq!(
-            (r.status, r.stop),
-            (JobStatus::Cancelled, Some(StopReason::Safeword)),
-            "{word}"
-        );
-        assert!(
-            r.fetched.is_empty() && r.accepted.is_empty() && r.quarantined.is_empty(),
-            "{word}: in-flight page discarded"
-        );
-        all_dead(&r);
-        wiped(&r);
-        // The same session refuses every later job.
-        let r2 = s.run(&task(&[A]), &sess);
-        assert_eq!(r2.status, JobStatus::Cancelled);
-        assert!(r2.pids.is_empty());
-    }
+        s.run(&task(&[A]), &sess)
+    });
+    assert_eq!((r.status, r.stop), (JobStatus::Done, None), "{r:?}");
+    assert_eq!(r.fetched.len(), 1, "the in-flight page was kept");
+    assert_eq!(r.accepted.len(), 1, "{r:?}");
+    assert!(!env.audit().contains("\tWORKER\tkill\t"), "{}", env.audit());
+    assert_eq!(sess.stop_reason(), None, "the session runs on");
+    // The same session takes later jobs as usual.
+    let r2 = s.run(&task(&[A]), &sess);
+    assert_eq!(r2.status, JobStatus::Done, "{r2:?}");
+    wiped(&r);
+    wiped(&r2);
 }
 
 #[test]
@@ -1066,7 +1055,7 @@ fn process_wide_kill_switch_stops_the_session() {
         });
         s.run(&task(&[A]), &sess)
     });
-    // N4: reported as the kill switch, not as the safeword.
+    // N4: reported as the kill switch.
     assert_eq!(
         (r.status, r.stop),
         (JobStatus::Cancelled, Some(StopReason::KillSwitch))
@@ -1271,16 +1260,35 @@ fn kill_switch_works_on_its_own_without_any_chat_line() {
 }
 
 #[test]
-fn safeword_still_works_alongside_the_independent_stops() {
-    for word in ["red", "OOC: stop"] {
-        let (r, took) = stop_with("ind-sw", &|s| {
-            assert!(s.observe_chat(word));
-        });
-        assert_eq!(r.stop, Some(StopReason::Safeword), "{word}");
-        assert!(took < Duration::from_secs(3), "{word}: {took:?}");
+fn the_safeword_only_hushes_while_the_independent_stops_still_kill() {
+    // Red is still the safeword (her voice hushes in the chat layer) …
+    for word in ["red", "OOC: stop", " Red! "] {
+        assert!(
+            lillith_core::access::kill_switch::is_safeword(word),
+            "{word}"
+        );
+        let s = long();
+        assert!(s.observe_chat(word));
+        assert_eq!(s.stop_reason(), None, "{word}: no worker is stopped");
     }
-    assert!(lillith_core::access::kill_switch::is_safeword("red"));
     assert!(!long().observe_chat("reduce the heat"));
+    // … and after it End early, the plain stop and the kill switch still
+    // each stop and discard on their own.
+    let (r, _) = stop_with("ind-sw-end", &|s| {
+        assert!(s.observe_chat("red"));
+        s.end_early();
+    });
+    assert_eq!(r.stop, Some(StopReason::EndEarly));
+    let (r, _) = stop_with("ind-sw-stop", &|s| {
+        assert!(s.observe_chat("OOC: stop"));
+        s.stop();
+    });
+    assert_eq!(r.stop, Some(StopReason::Stop));
+    let (r, _) = stop_with("ind-sw-ks", &|s| {
+        assert!(s.observe_chat("red"));
+        s.request_stop(StopReason::KillSwitch);
+    });
+    assert_eq!(r.stop, Some(StopReason::KillSwitch));
 }
 
 #[test]

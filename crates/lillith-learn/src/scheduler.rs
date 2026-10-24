@@ -6,7 +6,7 @@
 //!  └── disabled        │  └──────────── step done ──────────────┤
 //!                      │                                        │ activity
 //!                Paused ◀── load / battery / fullscreen ────────┘
-//!                         (a safeword / stop drops the step → Waiting)
+//!                         (a stop drops the step → Waiting)
 //! ```
 //!
 //! - idle: no activity for `idle_after_s` (when `pause_on_activity`);
@@ -14,10 +14,11 @@
 //! - duty: after a step of length t she rests ≥ t·(1/max_duty − 1)
 //!   (9·t at 10 %), and busy time in the last 10 minutes stays ≤ max_duty;
 //! - budgets: `max_steps_per_hour`, `max_tokens_per_day`;
-//! - safeword (`kill_switch::hush_epoch()` changed or a `chat.safeword` event):
-//!   the running step is dropped and nothing of it is kept. There is no
-//!   rest period after it any more (`learn.safeword_cooldown_min` is not
-//!   read); only the normal duty rest for the dropped step applies.
+//! - stop (`kill_switch::epoch()` changed: Ctrl-C / SIGTERM / shutdown):
+//!   the running step is dropped and nothing of it is kept, with only the
+//!   normal duty rest for it (`learn.safeword_cooldown_min` is not read).
+//!   The safeword ("red") no longer touches learning at all: the runner
+//!   never feeds it in (Ko, 2026-10-24: "Just the voice").
 
 use lillith_core::config::LearnConfig;
 use std::collections::VecDeque;
@@ -94,9 +95,11 @@ pub struct Inputs {
     pub load1: Option<f32>,
     pub on_battery: bool,
     pub fullscreen: bool,
-    /// `kill_switch::hush_epoch()` (the safeword or a stop).
+    /// `kill_switch::epoch()` (a stop; the runner never passes the
+    /// safeword's hush epoch).
     pub kill_epoch: u64,
-    /// A `chat.safeword` event arrived since the last tick.
+    /// An extra one-shot drop signal (kept for callers and tests; the
+    /// runner always passes `false` — the safeword never stops learning).
     pub safeword: bool,
 }
 

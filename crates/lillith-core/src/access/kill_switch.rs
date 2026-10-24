@@ -2,10 +2,11 @@
 //!
 //! - [`hush`] (the safeword: "red" or "OOC: stop"). She stops talking, her
 //!   queued lines are dropped, and anything still waiting for Ko is
-//!   cancelled (Soul Contract cards, the model-server wait, a learning step,
-//!   an online-research card). It shuts **nothing** down: running commands
-//!   and the Windows admin helper are left alone (Ko, 2026-10-24: "Only
-//!   remove the shutdown part; red still stops her talking").
+//!   cancelled (Soul Contract cards, the model-server wait, an
+//!   online-research card). It shuts **nothing** down: running commands,
+//!   the Windows admin helper, helper workers, sandbox builds and idle
+//!   learning are left alone (Ko, 2026-10-24: "Only remove the shutdown
+//!   part; red still stops her talking", then "Just the voice").
 //! - [`stop_all`] (Ctrl-C / SIGTERM / app shutdown). Every command runner
 //!   started before that moment sees [`epoch`] move and kills its child
 //!   process tree, and the registered hooks run. The Windows admin broker
@@ -55,8 +56,9 @@ pub fn stopped_since(start: u64) -> bool {
 }
 
 /// The safeword: bumps the hush epoch only. Her talking, queued lines and
-/// anything waiting for Ko (cards, waits, learning steps) stop; running
-/// commands and the admin helper are NOT killed ([`epoch`] doesn't move).
+/// anything waiting for Ko (cards, waits) stop; running commands, the admin
+/// helper, helper workers and learning are NOT stopped ([`epoch`] doesn't
+/// move).
 pub fn hush() -> u64 {
     let e = HUSH.fetch_add(1, Ordering::SeqCst) + 1;
     tracing::warn!("safeword: she stops talking (hush epoch {e}); nothing is killed");

@@ -203,8 +203,9 @@ pub struct SkillCardRequest {
     pub text: CardText,
 }
 
-/// The card UI (implemented by the app later). `stop()` turns true on the
-/// safeword or any other [`StopReason`]: the card must close.
+/// The card UI (implemented by the app later). `stop()` turns true on any
+/// [`StopReason`] (End early, the plain stop, the kill switch, …): the card
+/// must close. The safeword is not one: it only hushes her voice.
 pub trait SandboxConsent {
     fn ask(&self, req: &SandboxCardRequest, stop: &dyn Fn() -> bool) -> SandboxAnswer;
 
@@ -582,6 +583,13 @@ fn size_arg(b: u64) -> String {
     b.to_string()
 }
 
+/// The `prlimit --fsize` actually used: the budget's, but never more than a
+/// quarter of the scratch cap (review N3-3), so one file written between
+/// two watchdog polls can't push `/work` far past its cap.
+pub(crate) fn effective_fsize(b: &BuildBudgets) -> u64 {
+    b.fsize_bytes.min((b.scratch_bytes / 4).max(1))
+}
+
 /// The compile-or-run argv inside `/work` (docs §6 toolchain), or which
 /// tool is missing.
 pub fn step_argv(tools: &SandboxTools, lang: Lang, step: BuildStep) -> Result<Vec<String>, String> {
@@ -710,7 +718,7 @@ pub fn sandbox_argv(
         format!("--as={}", size_arg(budgets.memory_bytes)),
         format!("--cpu={}", budgets.cpu_s),
         format!("--nproc={}", budgets.nproc),
-        format!("--fsize={}", size_arg(budgets.fsize_bytes)),
+        format!("--fsize={}", size_arg(effective_fsize(budgets))),
         format!("--nofile={NOFILE}"),
         s("--core=0"),
         p(&tools.timeout),
@@ -1314,20 +1322,22 @@ impl Practice {
             return Err(BuildError::NotApproved(why.to_string()));
         }
         audit("CONFIRM", &[]).map_err(|e| BuildError::Audit(e.to_string()))?;
-        // Never overwrite: the name must still be free at the click.
-        if path.exists() {
-            return Err(BuildError::Io(format!(
-                "{} appeared meanwhile",
-                path.display()
-            )));
-        }
         mkdir_private(&dir).map_err(|e| BuildError::Io(e.to_string()))?;
         let mut contract = lillith_core::soul_contract::SoulContract::new(self.audit_log.clone());
         let id = contract.request(action);
-        match contract.confirm(id) {
+        // Never overwrite: the write itself refuses an existing file (no
+        // exists()-then-write race; review N3-4).
+        match contract.confirm_new_file(id) {
             Ok(_) => {
                 self.worker_audit(session, "skill", &format!("written card={card}"), &job.id);
                 Ok(path)
+            }
+            Err(lillith_core::soul_contract::ContractError::Io(e))
+                if e.kind() == std::io::ErrorKind::AlreadyExists =>
+            {
+                let why = format!("{} appeared meanwhile; not replaced", path.display());
+                self.worker_audit(session, "skill", &format!("not written: {why}"), &job.id);
+                Err(BuildError::Io(why))
             }
             Err(e) => {
                 self.worker_audit(session, "skill", &format!("not written: {e}"), &job.id);
@@ -1986,7 +1996,7 @@ mod tests {
              --remount-ro / --clearenv --setenv CARGO_NET_OFFLINE true \
              --setenv PATH /usr/bin:/bin --setenv HOME /work --setenv TMPDIR /tmp \
              --setenv LANG C --setenv TZ UTC --setenv MALLOC_ARENA_MAX 1 \
-             -- /usr/bin/prlimit --as=536870912 --cpu=20 --nproc=64 --fsize=16777216 \
+             -- /usr/bin/prlimit --as=536870912 --cpu=20 --nproc=64 --fsize=13107200 \
              --nofile=64 --core=0 /usr/bin/timeout -k 2 30 /usr/bin/python3 -I -S main.py"
         );
         // Rust: the doc's rustc line (+ the resolved linker), its sysroot
@@ -2239,7 +2249,7 @@ mod tests {
     }
 
     #[test]
-    fn safeword_and_every_stop_reason_cancel_an_open_card() {
+    fn every_stop_reason_cancels_an_open_card() {
         let dir = tmp("cancelcard");
         let p = practice_in(&dir, fake_tools());
         let j = BuildJob::new("w-cancel", "sum numbers", Lang::Python, PY_OK);
@@ -2250,19 +2260,6 @@ mod tests {
             };
             let e = p.propose(&j, BuildStep::Compile, &c, &s).unwrap_err();
             assert_eq!(e, BuildError::Stopped(r));
-        }
-        // The safeword said in chat ("red", "OOC: stop").
-        for word in ["red", "OOC: stop"] {
-            let s = session();
-            let c = WaitsForStop {
-                trigger: Box::new(|| {
-                    assert!(s.observe_chat(word));
-                }),
-            };
-            assert_eq!(
-                p.propose(&j, BuildStep::Compile, &c, &s).unwrap_err(),
-                BuildError::Stopped(StopReason::Safeword)
-            );
         }
         // The process-wide kill switch, reported as such (N4).
         let fired = Arc::new(AtomicBool::new(false));
@@ -2279,11 +2276,53 @@ mod tests {
         let a = audit(&dir);
         assert_eq!(
             a.matches("\tCANCELLED\tsandbox_run\t").count(),
-            StopReason::ALL.len() + 3,
+            StopReason::ALL.len() + 1,
             "{a}"
         );
         assert!(!a.contains("CONFIRM"), "{a}");
         assert!(!p.work_dir("w-cancel").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A card that hears the safeword while open, then gets a click on Yes.
+    struct SaysRedThenYes<'s> {
+        session: &'s Session,
+        word: &'static str,
+        saw_stop: std::cell::Cell<bool>,
+    }
+
+    impl SandboxConsent for SaysRedThenYes<'_> {
+        fn ask(&self, _req: &SandboxCardRequest, stop: &dyn Fn() -> bool) -> SandboxAnswer {
+            assert!(self.session.observe_chat(self.word), "{}", self.word);
+            std::thread::sleep(Duration::from_millis(50));
+            self.saw_stop.set(stop());
+            SandboxAnswer::Click(CardAnswer::Yes)
+        }
+    }
+
+    #[test]
+    fn the_safeword_never_cancels_an_open_card_it_only_hushes_her_voice() {
+        // Ko, 2026-10-24: "Just the voice". Red stops her talking (the chat
+        // layer's kill_switch::hush); the sandbox card and session go on.
+        let dir = tmp("redcard");
+        let p = practice_in(&dir, fake_tools());
+        let j = BuildJob::new("w-red", "sum numbers", Lang::Python, PY_OK);
+        for word in ["red", "OOC: stop"] {
+            assert!(lillith_core::access::kill_switch::is_safeword(word));
+            let s = session();
+            let c = SaysRedThenYes {
+                session: &s,
+                word,
+                saw_stop: std::cell::Cell::new(true),
+            };
+            let a = p.propose(&j, BuildStep::Compile, &c, &s);
+            assert!(a.is_ok(), "{word}: {a:?}");
+            assert!(!c.saw_stop.get(), "{word}: the card never saw a stop");
+            assert_eq!(s.stop_reason(), None, "{word}: the session runs on");
+        }
+        let a = audit(&dir);
+        assert!(!a.contains("	CANCELLED	sandbox_run	"), "{a}");
+        assert_eq!(a.matches("	CONFIRM	sandbox_run	").count(), 2, "{a}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2506,7 +2545,8 @@ mod tests {
                 !stdout.contains("ALLOCATED") && stderr.contains("MemoryError"),
                 "{stderr}"
             );
-            // A 32 MiB file: --fsize stops it at 16 MiB.
+            // A 32 MiB file: --fsize stops it at a quarter of the scratch
+            // cap (12.5 MiB, below the 16 MiB budget; review N3-3).
             let end = raw(
                 &t,
                 &work,
@@ -2527,7 +2567,7 @@ mod tests {
                 std::fs::metadata(work.join("big"))
                     .map(|m| m.len())
                     .unwrap_or(0)
-                    <= 16 << 20
+                    <= effective_fsize(&b)
             );
         }
         assert!(t0.elapsed() < Duration::from_secs(40), "{:?}", t0.elapsed());
@@ -2565,8 +2605,9 @@ mod tests {
             return;
         }
         for r in [
-            StopReason::Safeword,
             StopReason::EndEarly,
+            StopReason::Stop,
+            StopReason::KillSwitch,
             StopReason::ParentExit,
         ] {
             let dir = tmp("stoprun");
@@ -2603,6 +2644,44 @@ mod tests {
             assert!(!dir.join("skills").exists());
             let _ = std::fs::remove_dir_all(&dir);
         }
+    }
+
+    #[test]
+    fn bwrap_the_safeword_during_a_run_kills_nothing() {
+        let Some(t) = real_sandbox("bwrap_the_safeword_during_a_run_kills_nothing") else {
+            return;
+        };
+        if t.python3.is_none() {
+            eprintln!("SKIP bwrap_the_safeword…: no python3");
+            return;
+        }
+        let dir = tmp("redrun");
+        let p = practice_in(&dir, t);
+        let s = session();
+        let mut j = BuildJob::new(
+            "w-redrun",
+            "count a little",
+            Lang::Python,
+            "import time\nfor i in range(8):\n    time.sleep(0.1)\nprint('finished', 8)\n",
+        );
+        let a = p.propose(&j, BuildStep::Compile, &yes(), &s).unwrap();
+        assert!(p.execute(&mut j, a, &s).unwrap().ok);
+        let a = p.propose(&j, BuildStep::Run, &yes(), &s).unwrap();
+        let out = std::thread::scope(|sc| {
+            sc.spawn(|| {
+                std::thread::sleep(Duration::from_millis(200));
+                assert!(s.observe_chat("red"));
+                assert!(s.observe_chat("OOC: stop"));
+            });
+            p.execute(&mut j, a, &s)
+        })
+        .unwrap();
+        assert!(out.ok && out.stdout.contains("finished 8"), "{out:?}");
+        assert_eq!(s.stop_reason(), None, "the safeword stopped nothing");
+        let au = audit(&dir);
+        assert!(!au.contains("\tWORKER\tkill\t"), "{au}");
+        assert!(!au.contains("\tCANCELLED\tsandbox_run\t"), "{au}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn end_to_end(t: SandboxTools, lang: Lang, src: &str, expect: &str) {
@@ -2956,6 +3035,52 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Says Yes, but first puts other content at the card's target path,
+    /// like a second offer (or Ko) racing for the same name.
+    struct TargetAppearsThenYes(&'static str);
+
+    impl SandboxConsent for TargetAppearsThenYes {
+        fn ask(&self, _req: &SandboxCardRequest, _stop: &dyn Fn() -> bool) -> SandboxAnswer {
+            SandboxAnswer::Click(CardAnswer::Yes)
+        }
+
+        fn ask_skill(&self, req: &SkillCardRequest, _stop: &dyn Fn() -> bool) -> SandboxAnswer {
+            std::fs::create_dir_all(req.path.parent().unwrap()).unwrap();
+            std::fs::write(&req.path, self.0).unwrap();
+            SandboxAnswer::Click(CardAnswer::Yes)
+        }
+    }
+
+    #[test]
+    fn a_second_offer_for_the_same_target_never_overwrites_it() {
+        // Review N3-4: no exists()-then-write; the write is create-new.
+        let dir = tmp("skillrace");
+        let p = practice_in(&dir, fake_tools());
+        let j = ran_job("w-race");
+        let target = dir.join("skills").join("sum-the-numbers-1-to-10.md");
+        let e = p.offer_skill(&j, &TargetAppearsThenYes("ko's own notes\n"), &session());
+        assert!(
+            matches!(&e, Err(BuildError::Io(w)) if w.contains("appeared meanwhile")),
+            "{e:?}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            "ko's own notes\n",
+            "the existing file is untouched"
+        );
+        let a = audit(&dir);
+        assert!(a.contains("\tWORKER\tskill\tnot written: "), "{a}");
+        assert!(!a.contains("written card=skill-"), "{a}");
+        // No temp sibling is left behind.
+        let names: Vec<String> = std::fs::read_dir(dir.join("skills"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(names, vec!["sum-the-numbers-1-to-10.md".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn with_mind_off_no_skill_card_and_nothing_written() {
         let dir = tmp("mindoff");
@@ -3018,6 +3143,103 @@ mod tests {
     }
 
     #[test]
+    fn fsize_is_never_more_than_a_quarter_of_the_scratch_cap() {
+        // Review N3-3: one file can't push /work far past its cap.
+        let d = BuildBudgets::default();
+        assert_eq!(effective_fsize(&d), (50 * 1024 * 1024) / 4);
+        assert!(effective_fsize(&d) < d.fsize_bytes);
+        let small = BuildBudgets {
+            scratch_bytes: 4 << 20,
+            ..Default::default()
+        };
+        assert_eq!(effective_fsize(&small), 1 << 20);
+        let tight = BuildBudgets {
+            fsize_bytes: 1 << 10,
+            ..Default::default()
+        };
+        assert_eq!(effective_fsize(&tight), 1 << 10, "a smaller budget wins");
+        let argv = sandbox_argv(
+            &fake_tools(),
+            Path::new("/tmp/w-fsize"),
+            &small,
+            BuildStep::Run,
+            &["/usr/bin/true".to_string()],
+            None,
+        );
+        assert!(argv.contains(&format!("--fsize={}", 1 << 20)), "{argv:?}");
+        assert_eq!(
+            super::super::process::SANDBOX_POLL,
+            Duration::from_millis(10)
+        );
+    }
+
+    #[test]
+    fn bwrap_work_dir_overshoot_stays_well_under_one_old_fsize() {
+        let Some(t) = real_sandbox("bwrap_work_dir_overshoot_stays_well_under_one_old_fsize")
+        else {
+            return;
+        };
+        let root = tmp("workfast");
+        let work = root.join("w-workfast");
+        std::fs::create_dir_all(&work).unwrap();
+        let cap: u64 = 4 << 20;
+        let b = BuildBudgets {
+            scratch_bytes: cap,
+            ..Default::default()
+        };
+        let run = |script: &str| {
+            let argv = sandbox_argv(
+                &t,
+                &work,
+                &b,
+                BuildStep::Run,
+                &[
+                    "/usr/bin/sh".to_string(),
+                    "-c".to_string(),
+                    script.to_string(),
+                ],
+                None,
+            );
+            let w = work.clone();
+            let over = move || dir_usage(&w).0 > cap;
+            super::super::process::run_sandboxed_watched(
+                &argv,
+                &work,
+                OUTPUT_CAP,
+                Duration::from_secs(30),
+                &|| None,
+                &over,
+            )
+            .unwrap()
+        };
+        // One file asking for the old --fsize (16 MiB) in a single go: it
+        // stops at cap/4, so on its own it can't take /work over the cap.
+        let end = run("head -c 16777216 /dev/zero > /work/one");
+        assert_ne!(end, SandboxEnd::OverCap, "{end:?}");
+        assert!(
+            dir_bytes(&work) <= effective_fsize(&b),
+            "{}",
+            dir_bytes(&work)
+        );
+        std::fs::remove_file(work.join("one")).unwrap();
+        // Many files as fast as the box can write them: the watchdog
+        // (every SANDBOX_POLL) kills the group, and the overshoot stays
+        // under one old 16 MiB --fsize (before N3-3 a single file could
+        // add that much between two polls).
+        let end = run(
+            "i=0; while [ $i -lt 400 ]; do head -c 16777216 /dev/zero > /work/f$i; i=$((i+1)); done; echo DONE",
+        );
+        assert_eq!(end, SandboxEnd::OverCap);
+        let used = dir_bytes(&work);
+        assert!(
+            used < cap + (16 << 20),
+            "overshoot {} bytes past a {cap}-byte cap",
+            used.saturating_sub(cap)
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn bwrap_practice_over_the_scratch_cap_fails() {
         let Some(t) = real_sandbox("bwrap_practice_over_the_scratch_cap_fails") else {
             return;
@@ -3027,8 +3249,8 @@ mod tests {
         }
         let dir = tmp("capfail");
         let p = practice_in(&dir, t);
-        let src =
-            "f = open('big', 'w')\nf.write('x' * (3 * 1024 * 1024))\nf.close()\nprint('wrote')\n";
+        // Many files, each under --fsize (cap/4), together over the cap.
+        let src = "for i in range(12):\n    f = open('big%d' % i, 'w')\n    f.write('x' * (200 * 1024))\n    f.close()\nprint('wrote')\n";
         let mut j = BuildJob::new("w-capfail", "write a big file", Lang::Python, src);
         let mut b = j.budgets().clone();
         b.scratch_bytes = 1 << 20;

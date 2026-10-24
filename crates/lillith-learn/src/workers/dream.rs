@@ -36,7 +36,10 @@ pub struct SessionCardRequest {
     pub card: String,
     pub session: String,
     pub minutes: u64,
-    /// The end time shown on the card (UTC).
+    /// The end time shown on the card (UTC). The session ends at exactly
+    /// this time: its deadline is fixed when the card appears, not at the
+    /// click (review N3-1), so a slow click shortens the session instead
+    /// of moving its end past what the card said.
     pub deadline_utc: String,
     /// The budgets shown on the card.
     pub budgets: String,
@@ -91,6 +94,7 @@ pub struct SessionApproval {
     session: String,
     minutes: u64,
     deadline: Instant,
+    deadline_utc: String,
     external: bool,
     audit_log: Option<PathBuf>,
     epoch: u64,
@@ -105,6 +109,11 @@ impl SessionApproval {
     }
     pub fn minutes(&self) -> u64 {
         self.minutes
+    }
+    /// The end time the card showed (UTC); the session's deadline is that
+    /// same moment.
+    pub fn deadline_utc(&self) -> &str {
+        &self.deadline_utc
     }
     /// Whether the external option was offered and ticked.
     pub fn external(&self) -> bool {
@@ -188,7 +197,12 @@ pub fn propose_session(
     let tok = super::random_token();
     let card = format!("dream-{}", &tok[..16]);
     let session = format!("s-{}", &tok[16..32]);
-    let deadline_utc = crate::audit::utc(crate::now_s() + (minutes * 60) as f64);
+    // One reference for both the shown end time and the real deadline
+    // (review N3-1): taken once, when the card is made.
+    let length = Duration::from_secs(minutes * 60);
+    let shown_at = Instant::now();
+    let deadline = shown_at + length;
+    let deadline_utc = crate::audit::utc(crate::now_s() + length.as_secs_f64());
     let b = Budgets::research(&cfg.learn);
     let budgets = format!(
         "{} page{} and {} KiB per trip, {} min per worker, at most {} worker{}, one fetch every {} s or more",
@@ -269,7 +283,8 @@ pub fn propose_session(
                 card,
                 session,
                 minutes,
-                deadline: Instant::now() + Duration::from_secs(minutes * 60),
+                deadline,
+                deadline_utc,
                 external,
                 audit_log,
                 epoch,

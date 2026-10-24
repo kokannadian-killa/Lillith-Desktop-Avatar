@@ -5,9 +5,12 @@
 //!
 //! The thread lowers its own priority ([`crate::hygiene`]), feeds the
 //! [`Scheduler`] from the desktop events it is shown ([`LearnHandle::observe`])
-//! plus load / battery readings, and runs at most one step at a time. The
-//! safeword (`kill_switch::hush_epoch()` moving, or a `chat.safeword` event)
-//! drops a running step at once (nothing kept); there is no rest after it.
+//! plus load / battery readings, and runs at most one step at a time. A
+//! stop (`kill_switch::stop_all`: Ctrl-C / SIGTERM / shutdown, moving
+//! `kill_switch::epoch()`) drops a running step at once (nothing kept).
+//! The safeword ("red" / "OOC: stop", `chat.safeword`) does **not** pause
+//! or stop learning: it only hushes her voice (Ko, 2026-10-24: "Just the
+//! voice").
 
 use crate::learner::{Learner, Outcome};
 use crate::scheduler::{Decision, Inputs, Limits, Scheduler, State};
@@ -19,7 +22,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// The overlay's safeword event.
+/// The overlay's safeword event. The learner ignores it: the safeword only
+/// hushes her voice and never pauses or stops learning.
 pub const SAFEWORD_EVENT: &str = "chat.safeword";
 /// How often the scheduler is ticked.
 const TICK: Duration = Duration::from_secs(2);
@@ -73,8 +77,12 @@ impl Sensors for SysSensors {
     }
 }
 
-/// `true` for events that mean Ko is at the desktop.
+/// `true` for events that mean Ko is at the desktop. The safeword event
+/// is not one: the safeword never pauses learning.
 pub fn is_activity(ev: &Event) -> bool {
+    if ev.name == SAFEWORD_EVENT {
+        return false;
+    }
     ev.name.starts_with("user.") || ev.name.starts_with("chat.") || ev.name.starts_with("pointer.")
 }
 
@@ -82,7 +90,6 @@ pub fn is_activity(ev: &Event) -> bool {
 struct Shared {
     start: Instant,
     last_activity_ms: AtomicU64,
-    safeword: AtomicBool,
     quit: AtomicBool,
     state: AtomicU8,
 }
@@ -157,7 +164,6 @@ impl LearnHandle {
         let shared = Arc::new(Shared {
             start: Instant::now(),
             last_activity_ms: AtomicU64::new(0),
-            safeword: AtomicBool::new(false),
             quit: AtomicBool::new(false),
             state: AtomicU8::new(state_code(State::Waiting)),
         });
@@ -174,11 +180,9 @@ impl LearnHandle {
         })
     }
 
-    /// Offers a desktop / chat event (never blocks).
+    /// Offers a desktop / chat event (never blocks). [`SAFEWORD_EVENT`] is
+    /// ignored (it only hushes her voice).
     pub fn observe(&self, ev: &Event) {
-        if ev.name == SAFEWORD_EVENT {
-            self.shared.safeword.store(true, Ordering::SeqCst);
-        }
         if is_activity(ev) {
             let ms = (self.shared.now_s() * 1000.0) as u64;
             self.shared.last_activity_ms.store(ms, Ordering::SeqCst);
@@ -249,8 +253,10 @@ fn run_loop(
             load1: sensors.load1(),
             on_battery: sensors.on_battery(),
             fullscreen: sensors.fullscreen(),
-            kill_epoch: kill_switch::hush_epoch(),
-            safeword: sh.safeword.swap(false, Ordering::SeqCst),
+            // Only a real stop (Ctrl-C / SIGTERM / shutdown) drops a step;
+            // the safeword's hush epoch is not looked at.
+            kill_epoch: kill_switch::epoch(),
+            safeword: false,
         };
         if sched.tick(&inputs) == Decision::Run {
             sched.begin(now);
@@ -258,21 +264,19 @@ fn run_loop(
             let epoch0 = inputs.kill_epoch;
             let act0 = sh.last_activity_ms.load(Ordering::SeqCst);
             let pause_on_activity = cfg.learn.pause_on_activity;
-            let safeword =
-                || sh.safeword.load(Ordering::SeqCst) || kill_switch::hushed_since(epoch0);
+            let stopped = || kill_switch::stopped_since(epoch0);
             let stop = || {
                 sh.quit.load(Ordering::SeqCst)
-                    || safeword()
+                    || stopped()
                     || (pause_on_activity && sh.last_activity_ms.load(Ordering::SeqCst) != act0)
             };
             let rep = learner.step(sum, &stop);
             let end = sh.now_s();
-            if safeword() {
+            if stopped() {
                 // Dropped: nothing of the step is kept. No rest period after
-                // the safeword; she waits for the next idle window as usual.
-                sh.safeword.store(false, Ordering::SeqCst);
+                // a stop; she waits for the next idle window as usual.
                 sched.abort(end, true);
-                tracing::info!("learn: safeword, step dropped");
+                tracing::info!("learn: stop, step dropped");
             } else {
                 match &rep.outcome {
                     Outcome::Discarded(
@@ -315,6 +319,26 @@ mod tests {
         assert!(is_activity(&Event::new("user.returned")));
         assert!(is_activity(&Event::new("chat.open")));
         assert!(!is_activity(&Event::new("app.focus")));
+    }
+
+    #[test]
+    fn the_safeword_event_never_pauses_or_stops_learning() {
+        // Ko, 2026-10-24: "Just the voice".
+        assert!(!is_activity(&Event::new(SAFEWORD_EVENT)));
+        let sh = Shared {
+            start: Instant::now(),
+            last_activity_ms: AtomicU64::new(7),
+            quit: AtomicBool::new(false),
+            state: AtomicU8::new(state_code(State::Running)),
+        };
+        let h = LearnHandle {
+            shared: Arc::new(sh),
+            join: None,
+        };
+        h.observe(&Event::new(SAFEWORD_EVENT));
+        assert_eq!(h.shared.last_activity_ms.load(Ordering::SeqCst), 7);
+        assert!(!h.shared.quit.load(Ordering::SeqCst));
+        assert_eq!(h.state(), State::Running);
     }
 
     #[test]

@@ -10,8 +10,10 @@
 //!   wall clock plus fetch, page, byte and token budgets). On breach the
 //!   supervisor kills it (SIGKILL of its process group, no asking).
 //!   Heartbeats every `heartbeat_s`; `missed_heartbeats_kill` missed → kill.
-//!   Workers never outlive the session, the safeword, End early or the
-//!   parent ([`StopReason`], `PR_SET_PDEATHSIG`, bwrap `--die-with-parent`).
+//!   Workers never outlive the session, End early, the plain stop, the
+//!   kill switch or the parent ([`StopReason`], `PR_SET_PDEATHSIG`, bwrap
+//!   `--die-with-parent`). The safeword ("red" / "OOC: stop") is not a
+//!   stop here: it only hushes her voice (Ko, 2026-10-24: "Just the voice").
 //! - **Least privilege.** A worker has no memory write, no file system
 //!   outside its tmpfs scratch dir, and — stricter than the doc's "Tor
 //!   SOCKS port only" — **no network at all**: it asks the parent for each
@@ -110,16 +112,17 @@ impl WorkerKind {
 /// workers and discard in-flight work. Battery / thermal detection belongs
 /// to the dream orchestration; it only reports the reason here.
 ///
-/// Each stop works on its own: the safeword ("red" / "OOC: stop" seen by
-/// [`supervisor::Session::observe_chat`] or in a task topic), End early
+/// Each stop works on its own: End early
 /// ([`supervisor::Session::end_early`]), the process-wide kill switch
 /// (`lillith_core::access::kill_switch::stop_all`, reported as
 /// [`StopReason::KillSwitch`]) and the generic stop
 /// ([`supervisor::Session::stop`]) never go through one another.
+///
+/// The safeword ("red" / "OOC: stop") is deliberately **not** a stop
+/// reason: it only stops her talking and drops her queued lines
+/// (`kill_switch::hush`); workers, builds and learning keep running.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StopReason {
-    /// "red" / "OOC: stop" in chat or in a task topic.
-    Safeword,
     /// End early (right-click menu / tray).
     EndEarly,
     /// The session's hard deadline.
@@ -141,8 +144,7 @@ pub enum StopReason {
 }
 
 impl StopReason {
-    pub const ALL: [StopReason; 9] = [
-        StopReason::Safeword,
+    pub const ALL: [StopReason; 8] = [
         StopReason::EndEarly,
         StopReason::SessionDeadline,
         StopReason::ParentExit,
@@ -155,7 +157,6 @@ impl StopReason {
 
     pub fn word(self) -> &'static str {
         match self {
-            StopReason::Safeword => "safeword",
             StopReason::EndEarly => "end_early",
             StopReason::SessionDeadline => "session_deadline",
             StopReason::ParentExit => "parent_exit",

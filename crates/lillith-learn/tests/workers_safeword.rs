@@ -1,6 +1,7 @@
 //! Helper-worker sessions come only from a clicked dream-session card, and
-//! every stop works on its own: the safeword ("red", "OOC: stop"), the
-//! process-wide kill switch, End early and the plain stop. Its own test
+//! every stop works on its own: the process-wide kill switch, End early and
+//! the plain stop. The safeword ("red", "OOC: stop") is not a stop: it only
+//! hushes her voice (Ko, 2026-10-24: "Just the voice"). Its own test
 //! binary: `stop_all()` bumps a process-wide epoch, so the tests here take
 //! one lock and every session is made after the previous kill switch.
 
@@ -200,13 +201,15 @@ fn the_external_tick_comes_from_the_card_only_when_offered() {
     let a = propose_session(&cfg, 60, &c, Some(d.log())).unwrap();
     assert!(c.seen.borrow()[0].external_offered);
     assert!(!a.external());
-    // Offered and ticked: on, until any stop.
+    // Offered and ticked: on, until any stop (the safeword is not one).
     let a = propose_session(&cfg, 60, &Card::click(true), Some(d.log())).unwrap();
     assert!(a.external());
     let s = Session::from_card(a).unwrap();
     assert!(s.external_allowed());
     assert!(s.observe_chat("red"));
-    assert!(!s.external_allowed(), "the safeword turns external off");
+    assert!(s.external_allowed(), "the safeword only hushes her voice");
+    s.stop();
+    assert!(!s.external_allowed(), "a stop turns external off");
 }
 
 #[test]
@@ -231,19 +234,35 @@ fn the_plain_stop_works_on_its_own() {
 }
 
 #[test]
-fn the_safeword_still_stops_sessions() {
+fn the_safeword_hushes_her_voice_but_stops_no_session() {
+    use lillith_core::access::kill_switch;
     let _g = lock();
     let d = Dir::new("sw");
     for word in ["red", "OOC: stop"] {
-        assert!(lillith_core::access::kill_switch::is_safeword(word));
+        assert!(kill_switch::is_safeword(word));
         let s = clicked(&d);
         assert_eq!(s.stop_reason(), None);
+        // What the chat layer does on the safeword: hush (her talking and
+        // queued lines stop) — never stop_all.
+        let (hush0, kill0) = (kill_switch::hush_epoch(), kill_switch::epoch());
         assert!(s.observe_chat(word), "{word}");
-        assert_eq!(s.stop_reason(), Some(StopReason::Safeword), "{word}");
+        kill_switch::hush();
+        assert!(
+            kill_switch::hushed_since(hush0),
+            "{word}: her voice is hushed"
+        );
+        assert!(!kill_switch::stopped_since(kill0), "{word}: nothing killed");
+        assert_eq!(s.stop_reason(), None, "{word}: the session runs on");
+        // A dream card opened right after the safeword still works.
+        assert_eq!(clicked(&d).stop_reason(), None);
+        // The hard stops still work on that same session.
+        s.end_early();
+        assert_eq!(s.stop_reason(), Some(StopReason::EndEarly), "{word}");
     }
     let s = clicked(&d);
     assert!(!s.observe_chat("reduce the heat"));
     assert_eq!(s.stop_reason(), None);
+    assert!(!d.audit().contains("\tDREAM\tend\tsafeword"));
 }
 
 #[test]
@@ -272,4 +291,26 @@ fn the_kill_switch_works_on_its_own() {
     assert!(d.audit().contains("\tCANCELLED\tdream_session\t"));
     // A session clicked after the kill switch runs normally.
     assert_eq!(clicked(&d).stop_reason(), None);
+}
+
+#[test]
+fn the_card_end_time_and_the_session_deadline_share_one_reference() {
+    // Review N3-1: the deadline is fixed when the card appears (the time it
+    // shows), so a slow click can't push the real end past the shown one.
+    let _g = lock();
+    let d = Dir::new("deadline");
+    let mut c = Card::click(false);
+    c.hook = Box::new(|| std::thread::sleep(std::time::Duration::from_millis(1200)));
+    let a = propose_session(&on(), 30, &c, Some(d.log())).unwrap();
+    let shown = c.seen.borrow()[0].deadline_utc.clone();
+    assert_eq!(a.deadline_utc(), shown, "the approval keeps the card's end");
+    assert!(d.audit().contains(&format!("deadline={shown}")));
+    let s = Session::from_card(a).unwrap();
+    let left = s.remaining();
+    let len = std::time::Duration::from_secs(30 * 60);
+    assert!(
+        left <= len - std::time::Duration::from_millis(1100),
+        "the slow click came out of the session, not past the shown end: {left:?}"
+    );
+    assert!(left > len - std::time::Duration::from_secs(30), "{left:?}");
 }

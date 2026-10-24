@@ -79,10 +79,10 @@ impl Task {
 /// there is no other public constructor. Its id, deadline and the
 /// "also use my TaskCompletion bots" tick all come from that card.
 ///
-/// Every stop works on its own ([`StopReason`]): [`Session::observe_chat`]
-/// (the safeword "red" / "OOC: stop"), [`Session::end_early`],
+/// Every stop works on its own ([`StopReason`]): [`Session::end_early`],
 /// [`Session::stop`], the process-wide kill switch (polled here, reported as
-/// [`StopReason::KillSwitch`]) and the deadline.
+/// [`StopReason::KillSwitch`]) and the deadline. The safeword is not one
+/// of them ([`Session::observe_chat`]): it only hushes her voice.
 #[derive(Clone)]
 pub struct Session {
     id: String,
@@ -172,8 +172,8 @@ impl Session {
     }
 
     /// Whether Ko ticked "also use my TaskCompletion bots" on this
-    /// session's card and nothing has stopped the session since (the
-    /// safeword or any other stop disables external for the rest of it).
+    /// session's card and nothing has stopped the session since (any stop
+    /// disables external for the rest of it; the safeword is not a stop).
     pub fn external_allowed(&self) -> bool {
         self.external && self.stop_reason().is_none()
     }
@@ -185,26 +185,26 @@ impl Session {
             .compare_exchange(0, r.code(), Ordering::SeqCst, Ordering::SeqCst);
     }
 
-    /// End early (tray / right-click menu). Works on its own: no safeword
-    /// or kill switch involved.
+    /// End early (tray / right-click menu). Works on its own: no kill
+    /// switch involved.
     pub fn end_early(&self) {
         self.request_stop(StopReason::EndEarly);
     }
 
     /// A plain stop (panel, CLI, the dream subsystem shutting down). Works
-    /// on its own: no safeword or kill switch involved.
+    /// on its own: no kill switch involved.
     pub fn stop(&self) {
         self.request_stop(StopReason::Stop);
     }
 
-    /// Shows the session one chat line: the safeword ("red", "OOC: stop")
-    /// stops it. Returns whether it did.
+    /// Shows the session one chat line. Returns whether it was the
+    /// safeword ("red", "OOC: stop"), but the safeword **never** stops the
+    /// session, its workers or a build: it only stops her talking and drops
+    /// her queued lines, which the chat layer does (`kill_switch::hush`).
+    /// Ko, 2026-10-24: "Just the voice". End early, the plain stop and the
+    /// kill switch are the hard stops.
     pub fn observe_chat(&self, text: &str) -> bool {
-        let hit = lillith_core::access::kill_switch::is_safeword(text);
-        if hit {
-            self.request_stop(StopReason::Safeword);
-        }
-        hit
+        lillith_core::access::kill_switch::is_safeword(text)
     }
 
     pub fn stop_reason(&self) -> Option<StopReason> {
@@ -426,12 +426,18 @@ impl<'f> Supervisor<'f> {
         self
     }
 
-    pub fn with_job_log(mut self, dir: Option<PathBuf>) -> Self {
+    /// Tests only: production always writes the default D8 job log dir
+    /// (review N3-2, like Practice's setters).
+    #[cfg(test)]
+    pub(crate) fn with_job_log(mut self, dir: Option<PathBuf>) -> Self {
         self.joblog = JobLog::new(dir);
         self
     }
 
-    pub fn with_quarantine_dir(mut self, dir: Option<PathBuf>) -> Self {
+    /// Tests only: production always quarantines into the default dir
+    /// (review N3-2).
+    #[cfg(test)]
+    pub(crate) fn with_quarantine_dir(mut self, dir: Option<PathBuf>) -> Self {
         self.quarantine = Quarantine::new(dir);
         self
     }
@@ -611,10 +617,15 @@ impl<'f> Supervisor<'f> {
                 format!("stop: {}", r.word()),
             );
         }
+        // The safeword is not a research topic; refusing this one task is
+        // all it does (the session and its other workers go on).
         if lillith_memory::is_safeword(&task.topic) {
-            session.request_stop(StopReason::Safeword);
-            rep.stop = Some(StopReason::Safeword);
-            return finish(self, rep, JobStatus::Cancelled, "stop: safeword".into());
+            return finish(
+                self,
+                rep,
+                JobStatus::Refused,
+                "the safeword is not a research topic".into(),
+            );
         }
         if task.topic.trim().is_empty()
             || task.urls.is_empty()

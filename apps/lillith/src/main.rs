@@ -1253,7 +1253,8 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     let memory = memory_wiring::start(&cfg.memory, feed.clone());
     let tx = memory_wiring::tee(feed, &memory);
     // The idle learner (own thread + memory connection) sees the same
-    // events: activity pauses it, `chat.safeword` stops it at once.
+    // events: activity pauses it; `chat.safeword` doesn't touch it (the
+    // safeword only hushes her voice), Ctrl-C / stop drops a step.
     let learner = learn_wiring::start(&cfg, !cli.no_llm);
     let tx = learn_wiring::tee(tx, learner.as_ref());
     let monitor = start_monitor(cli, &cfg, tx.clone());

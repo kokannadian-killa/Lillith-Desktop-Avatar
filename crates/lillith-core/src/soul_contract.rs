@@ -1022,7 +1022,18 @@ impl SoulContract {
     /// A deletion is refused with [`ContractError::NeedsSignature`] and stays
     /// pending: it only runs through [`sign_deletion`](Self::sign_deletion).
     pub fn confirm(&mut self, id: RequestId) -> Result<Confirmed, ContractError> {
-        self.confirm_impl(id, None)
+        self.confirm_impl(id, None, false)
+    }
+
+    /// [`confirm`](Self::confirm) for a [`PendingAction::WriteSkill`] /
+    /// [`PendingAction::WriteFile`] that must create a **new** file: the
+    /// write fails with `AlreadyExists` (nothing replaced) if anything is
+    /// at the path by then. No separate existence check, so no
+    /// check-then-write race. The content still lands atomically (a full
+    /// temp file, then a no-clobber hard link). Other actions behave as
+    /// in `confirm`.
+    pub fn confirm_new_file(&mut self, id: RequestId) -> Result<Confirmed, ContractError> {
+        self.confirm_impl(id, None, true)
     }
 
     /// [`confirm`](Self::confirm), streaming a project build/run's output
@@ -1033,13 +1044,14 @@ impl SoulContract {
         id: RequestId,
         sink: crate::build::LineSink<'_>,
     ) -> Result<Confirmed, ContractError> {
-        self.confirm_impl(id, Some(sink))
+        self.confirm_impl(id, Some(sink), false)
     }
 
     fn confirm_impl(
         &mut self,
         id: RequestId,
         sink: Option<crate::build::LineSink<'_>>,
+        new_file: bool,
     ) -> Result<Confirmed, ContractError> {
         match self.pending.iter().find(|(i, _)| *i == id) {
             Some((_, PendingAction::DeletePaths { .. })) => {
@@ -1051,7 +1063,13 @@ impl SoulContract {
             _ => {}
         }
         let action = self.take(id)?;
-        let res = action.execute_with(sink);
+        let res = match (&action, new_file) {
+            (
+                PendingAction::WriteSkill { path, body } | PendingAction::WriteFile { path, body },
+                true,
+            ) => write_new(path, body.as_bytes()).map(|()| (Some(path.clone()), None)),
+            _ => action.execute_with(sink),
+        };
         self.log_command("CONFIRM", &action, &res);
         let (path, output) = res?;
         self.audit("CONFIRM", &action);
@@ -1712,6 +1730,41 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     std::fs::rename(&tmp, path)
 }
 
+/// Writes a file that must not exist yet: the bytes go to a temp sibling,
+/// which is then hard-linked to `path` (the link fails with
+/// `AlreadyExists` if anything is there, so nothing is ever replaced) and
+/// removed. A file system without hard links falls back to a plain
+/// `create_new` write. Either way there is no check-then-write race.
+fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = tmp_sibling(path);
+    let _ = std::fs::remove_file(&tmp);
+    {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+    }
+    let linked = std::fs::hard_link(&tmp, path);
+    let _ = std::fs::remove_file(&tmp);
+    match linked {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Err(e),
+        Err(_) => {
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)?;
+            f.write_all(bytes)
+        }
+    }
+}
+
 /// A `<name>.<pid>.tmp` sibling of `path`, so concurrent writers don't clash.
 fn tmp_sibling(path: &Path) -> PathBuf {
     let name = path
@@ -2354,6 +2407,47 @@ mod tests {
             .filter(|e| e.file_name().to_string_lossy().contains(".tmp"))
             .collect();
         assert!(leftovers.is_empty(), "temp file left: {leftovers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn confirm_new_file_never_replaces_an_existing_file() {
+        let dir = tmpdir("confirmnew");
+        let skills = dir.join("skills");
+        let log = dir.join("audit.log");
+        let path = skills.join("greet.md");
+        let mut sc = SoulContract::new(Some(log.clone()));
+        let id = sc.request(PendingAction::WriteSkill {
+            path: path.clone(),
+            body: "first\n".into(),
+        });
+        let done = sc.confirm_new_file(id).unwrap();
+        assert_eq!(done.path.as_deref(), Some(path.as_path()));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "first\n");
+        // A second new-file write to the same target fails, nothing replaced.
+        let id = sc.request(PendingAction::WriteSkill {
+            path: path.clone(),
+            body: "second\n".into(),
+        });
+        let e = sc.confirm_new_file(id).unwrap_err();
+        assert!(
+            matches!(&e, ContractError::Io(io) if io.kind() == std::io::ErrorKind::AlreadyExists),
+            "{e:?}"
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "first\n");
+        let leftovers: Vec<_> = std::fs::read_dir(&skills)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "temp file left: {leftovers:?}");
+        // Plain confirm keeps its old (replacing) behaviour.
+        let id = sc.request(PendingAction::WriteSkill {
+            path: path.clone(),
+            body: "third\n".into(),
+        });
+        sc.confirm(id).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "third\n");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
