@@ -1,0 +1,11 @@
+[Unit]
+Description=Lillith bot routines (one pass, run by lillith-scheduler.timer)
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/lillith-bot scheduler --once
+# local-only: no network needed; block everything but loopback
+IPAddressDeny=any
+IPAddressAllow=localhost
+Nice=10

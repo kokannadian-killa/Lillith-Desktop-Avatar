@@ -1,0 +1,12 @@
+[Unit]
+Description=Lillith local bot API on 127.0.0.1:8765
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/lillith-bot serve --host 127.0.0.1 --port 8765
+Restart=on-failure
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=default.target
