@@ -23,7 +23,7 @@ use lillith_mind::chat::{default_history_path, ChatSession, Outcome, MAX_TOOL_CH
 use lillith_mind::server::{already_running, LlamaServer};
 use lillith_overlay::{ChatAnchor, ChatHook};
 use lillith_panel::chat_bubble::{
-    run_chat_bubble, BubbleOptions, Emit, BUBBLE_SIZE, SERVER_APPROVED_EVENT,
+    run_chat_bubble, BubbleOptions, Emit, BUBBLE_SIZE, SERVER_APPROVED_EVENT, SERVER_CARD_EVENT,
 };
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
@@ -69,7 +69,13 @@ pub struct Launcher {
     offline: bool,
     /// `[chat.server]` the bubble may ask for (after a clicked Yes).
     server: Option<ApprovedServer>,
+    /// The Soul Contract audit log: a bubble that dies with the
+    /// model-server card up gets its `CANCELLED` written here.
+    audit_log: Option<PathBuf>,
 }
+
+/// Audit note when the overlay finds the bubble gone with a card up.
+pub const BUBBLE_GONE_NOTE: &str = "chat bubble gone before an answer (killed)";
 
 /// What [`Launcher`] needs to start `[chat.server]` on the bubble's
 /// [`SERVER_APPROVED_EVENT`].
@@ -88,7 +94,14 @@ impl Launcher {
             config,
             offline,
             server: None,
+            audit_log: None,
         }
+    }
+
+    /// Where a killed bubble's open model-server card is closed.
+    pub fn with_audit_log(mut self, audit_log: Option<PathBuf>) -> Self {
+        self.audit_log = audit_log;
+        self
     }
 
     /// The app owns `[chat.server]`: the bubble is told so (`--app-server`)
@@ -159,31 +172,11 @@ impl Launcher {
         let feed = self.feed.clone();
         let state = self.state.clone();
         let server = self.server.clone();
+        let audit_log = self.audit_log.clone();
         std::thread::Builder::new()
             .name("lillith-chat-feed".into())
             .spawn(move || {
-                let mut closed = false;
-                for line in std::io::BufReader::new(out).lines() {
-                    let Ok(line) = line else { break };
-                    if let Some(ev) = decode(&line) {
-                        if ev.name == SERVER_APPROVED_EVENT {
-                            // Sent only after a clicked Yes on the card
-                            // (audited CONFIRM in the bubble).
-                            if let Some(s) = &server {
-                                s.handle.spawn_approved(&s.cfg, Some(&s.memory));
-                            }
-                            continue;
-                        }
-                        closed |= ev.name == "chat.closed";
-                        if feed.send(ev).is_err() {
-                            return;
-                        }
-                    }
-                }
-                // Crashed or killed without saying goodbye: stop talking.
-                if !closed {
-                    let _ = feed.send(Event::new("chat.closed"));
-                }
+                pump(out, &feed, server.as_ref(), audit_log);
                 if let Ok(mut st) = state.lock() {
                     st.closed_at = Some(Instant::now());
                 }
@@ -200,6 +193,50 @@ impl Launcher {
                 let _ = c.wait();
             }
         }
+    }
+}
+
+/// Forwards the bubble's stdout into the overlay feed until it ends. The
+/// model-server card protocol is handled here, not forwarded: an approval
+/// starts the server; a card id is remembered so that, if the bubble ends
+/// (crash, SIGKILL) with that card still open in the audit log, `CANCELLED`
+/// is appended for it (nothing when the bubble already recorded a decision).
+fn pump(
+    out: impl std::io::Read,
+    feed: &Sender<Event>,
+    server: Option<&ApprovedServer>,
+    audit_log: Option<PathBuf>,
+) {
+    let mut closed = false;
+    let mut card: Option<String> = None;
+    for line in std::io::BufReader::new(out).lines() {
+        let Ok(line) = line else { break };
+        let Some(ev) = decode(&line) else { continue };
+        if ev.name == SERVER_APPROVED_EVENT {
+            // Sent only after a clicked Yes on the card (audited CONFIRM
+            // in the bubble).
+            if let Some(s) = server {
+                s.handle.spawn_approved(&s.cfg, Some(&s.memory));
+            }
+            continue;
+        }
+        if ev.name == SERVER_CARD_EVENT {
+            card = ev.detail.clone();
+            continue;
+        }
+        closed |= ev.name == "chat.closed";
+        if feed.send(ev).is_err() {
+            break;
+        }
+    }
+    if let Some(id) = card {
+        if SoulContract::new(audit_log).cancel_open_model_server_card(&id, BUBBLE_GONE_NOTE) {
+            tracing::info!(card = %id, "chat bubble gone with the model-server card up: CANCELLED");
+        }
+    }
+    // Crashed or killed without saying goodbye: stop talking.
+    if !closed {
+        let _ = feed.send(Event::new("chat.closed"));
     }
 }
 
@@ -230,26 +267,40 @@ impl ServerGuard {
         g
     }
 
-    /// `lillith chat --spawn-server`: Ko asked for the server on the
-    /// command line himself (an explicit per-run flag, `Initiator::You`),
-    /// so it starts now; audited `CLI_FLAG` in the Soul Contract log.
-    pub async fn start_cli(cfg: &ChatConfig, mind: &MindConfig) -> Self {
+    /// `lillith chat --spawn-server`: the flag only asks; starting is a
+    /// program launch, so it waits for the Soul Contract (the card when a
+    /// desktop is available, else a `[y/N]` on the controlling terminal,
+    /// else `NO_UI`; see [`crate::server_consent`]). `true` when it was
+    /// started. A server already answering needs no card.
+    pub async fn start_cli(cfg: &ChatConfig, mind: &MindConfig) -> (Self, bool) {
         let g = Self::default();
-        if !cfg.server.should_spawn() || already_running(&cfg.endpoint).await {
-            return g;
+        if !cfg.server.should_spawn() {
+            return (g, false);
         }
-        if let Some(argv) = lillith_mind::server::display_argv(cfg) {
-            SoulContract::new(mind.audit_log_path()).record(
-                "CLI_FLAG",
-                &PendingAction::StartModelServer {
-                    argv,
-                    restart: false,
-                },
-            );
+        if already_running(&cfg.endpoint).await {
+            return (g, true);
         }
-        g.handle().spawn_approved(cfg, None);
+        let Some(argv) = lillith_mind::server::display_argv(cfg) else {
+            return (g, false);
+        };
+        let log = mind.audit_log_path();
+        let decision = tokio::task::spawn_blocking(move || {
+            crate::server_consent::decide(
+                &mut SoulContract::new(log),
+                PendingAction::start_model_server(argv, false),
+                crate::server_consent::show_card,
+                crate::server_consent::ask_tty,
+            )
+        })
+        .await
+        .unwrap_or(crate::server_consent::Decision::NoUi);
+        println!("[soul contract] {}", decision.describe());
+        if !decision.approved() {
+            return (g, false);
+        }
+        let ok = g.handle().spawn_approved(cfg, None);
         g.stop_on_signal();
-        g
+        (g, ok)
     }
 
     /// The spawn side, shared with [`Launcher`] (no `Drop`: only the
@@ -285,8 +336,8 @@ impl ServerGuard {
 pub struct ServerHandle(Arc<Mutex<Option<LlamaServer>>>);
 
 impl ServerHandle {
-    /// Spawns `[chat.server]` after an approval (clicked Yes, or the
-    /// explicit `--spawn-server` flag). No-op when the one it started is
+    /// Spawns `[chat.server]` after an approval (a clicked Yes, or a typed
+    /// y / yes on the terminal for `--spawn-server`). No-op when the one it started is
     /// still running. Spawn failures are remembered in `memory`.
     pub fn spawn_approved(
         &self,
@@ -428,18 +479,21 @@ pub async fn cli_chat(
     let _server = if spawn_server {
         let mut c = cfg.clone();
         c.enabled = true;
-        let g = ServerGuard::start_cli(&c, &mind).await;
-        // Wait for the model before the first message.
-        let client = lillith_mind::llm::LlmClient::with_timeout(
-            lillith_mind::llm::Flavor::OpenAiCompat,
-            cfg.endpoint.as_str(),
-            "",
-            Duration::from_secs(2),
-        );
-        let t0 = Instant::now();
-        let limit = Duration::from_secs_f32(cfg.server.startup_timeout_s.max(1.0));
-        while !matches!(client.health().await, Ok(true)) && t0.elapsed() < limit {
-            tokio::time::sleep(Duration::from_millis(300)).await;
+        let (g, started) = ServerGuard::start_cli(&c, &mind).await;
+        // Declined / no UI: chat goes on and falls back to text-only.
+        if started {
+            // Wait for the model before the first message.
+            let client = lillith_mind::llm::LlmClient::with_timeout(
+                lillith_mind::llm::Flavor::OpenAiCompat,
+                cfg.endpoint.as_str(),
+                "",
+                Duration::from_secs(2),
+            );
+            let t0 = Instant::now();
+            let limit = Duration::from_secs_f32(cfg.server.startup_timeout_s.max(1.0));
+            while !matches!(client.health().await, Ok(true)) && t0.elapsed() < limit {
+                tokio::time::sleep(Duration::from_millis(300)).await;
+            }
         }
         Some(g)
     } else {
@@ -917,6 +971,68 @@ mod tests {
         chat.system_prompt = "Chat wins.".into();
         let s = new_session(&chat, &full.mind, &MemoryConfig::disabled(), Some(&path));
         assert_eq!(s.system_prompt(), "Chat wins.");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_killed_bubble_with_a_card_up_is_cancelled_by_the_overlay() {
+        let dir = std::env::temp_dir().join(format!("lillith-pump-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let sc = SoulContract::new(Some(log.clone()));
+        let card = |answer: Option<&str>| {
+            let a = PendingAction::start_model_server(vec!["/opt/llama-server".into()], true);
+            sc.record("PROPOSED", &a);
+            if let Some(d) = answer {
+                sc.record(d, &a);
+            }
+            a.card_id().unwrap().to_string()
+        };
+        let cancelled = |id: &str| {
+            std::fs::read_to_string(&log)
+                .unwrap()
+                .lines()
+                .filter(|l| l.contains("\tCANCELLED\t") && l.contains(&format!("card={id}")))
+                .count()
+        };
+        let feed = |id: &str, said_goodbye: bool| {
+            let mut out = format!(
+                "{}\n{}\n",
+                encode("chat.opened", None),
+                encode(SERVER_CARD_EVENT, Some(id))
+            );
+            if said_goodbye {
+                out.push_str(&encode("chat.closed", None));
+                out.push('\n');
+            }
+            let (tx, rx) = std::sync::mpsc::channel();
+            pump(out.as_bytes(), &tx, None, Some(log.clone()));
+            rx.try_iter().map(|e| e.name).collect::<Vec<_>>()
+        };
+
+        // SIGKILLed with the card up (no goodbye, nothing recorded).
+        let killed = card(None);
+        let names = feed(&killed, false);
+        assert_eq!(
+            names,
+            ["chat.opened", "chat.closed"],
+            "card id not forwarded"
+        );
+        assert_eq!(cancelled(&killed), 1);
+        assert!(std::fs::read_to_string(&log)
+            .unwrap()
+            .contains(&format!("card={killed}\t{BUBBLE_GONE_NOTE}\n")));
+
+        // Answered (or cancelled by the bubble's own close handler) before
+        // it went away: nothing more is written.
+        for d in ["DENY", "CANCELLED", "CONFIRM"] {
+            let id = card(Some(d));
+            let before = std::fs::read_to_string(&log).unwrap();
+            feed(&id, d != "CONFIRM");
+            assert_eq!(std::fs::read_to_string(&log).unwrap(), before, "{d}");
+        }
+        assert!(sc.open_model_server_cards().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

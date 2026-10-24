@@ -32,6 +32,7 @@ use std::path::PathBuf;
 mod chat;
 mod memory_wiring;
 mod preview;
+mod server_consent;
 
 #[derive(Debug, Parser)]
 #[command(name = "lillith", version, about = "Lillith desktop companion")]
@@ -131,7 +132,9 @@ enum Cmd {
     Chat {
         /// Message to send (omit for an interactive loop; `/quit` ends it).
         message: Option<String>,
-        /// Start llama-server from `[chat.server]` first (and stop it after).
+        /// Offer to start llama-server from `[chat.server]` first (and stop
+        /// it after). Starting it is a program launch: it waits for a Yes
+        /// on the Soul Contract card, or a typed y on the terminal.
         #[arg(long)]
         spawn_server: bool,
         /// Don't load or save the chat history file.
@@ -242,6 +245,17 @@ enum Cmd {
         /// model-server card asks it (over stdout) to start the server.
         #[arg(long)]
         app_server: bool,
+    },
+    /// The stand-alone model-server Soul Contract card (started by
+    /// `lillith chat --spawn-server`; prints yes / no / timeout / cancelled).
+    #[command(hide = true)]
+    ServerCard {
+        /// "Restart …" instead of "Start …".
+        #[arg(long)]
+        restart: bool,
+        /// The command line to show.
+        #[arg(last = true)]
+        argv: Vec<String>,
     },
 }
 
@@ -500,6 +514,9 @@ async fn main() -> Result<()> {
                 demo_contract,
                 app_server,
             )?;
+        }
+        Some(Cmd::ServerCard { restart, ref argv }) => {
+            server_consent::card_main(argv.clone(), restart)?;
         }
         Some(Cmd::Setup {
             ref gguf,
@@ -1130,13 +1147,21 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     // Optional self-spawned llama-server (`[chat.server]`), stopped on exit.
     // Never started on its own: only after a clicked Yes on the bubble's
     // Soul Contract card (see `ServerGuard::start`).
+    // A model-server card left PROPOSED by an earlier run (bubble or app
+    // killed before an answer) is closed now; existing lines stay as they are.
+    let orphans = lillith_core::soul_contract::SoulContract::new(cfg.mind.audit_log_path())
+        .close_orphaned_model_server_cards("orphaned PROPOSED closed at startup");
+    if orphans > 0 {
+        tracing::info!(orphans, "soul contract: closed orphaned model-server cards");
+    }
     let server = if chat_on && !cli.no_llm {
         chat::ServerGuard::start(&cfg.chat).await
     } else {
         chat::ServerGuard::default()
     };
     let launcher = chat_on.then(|| {
-        let l = chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm);
+        let l = chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm)
+            .with_audit_log(cfg.mind.audit_log_path());
         if !cli.no_llm && cfg.chat.server.should_spawn() {
             l.with_server(server.handle(), cfg.chat.clone(), memory.clone())
         } else {
