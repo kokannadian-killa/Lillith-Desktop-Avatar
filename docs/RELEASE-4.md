@@ -54,6 +54,19 @@ the build is published.
   no-white-fringe, the new poses) keep their fixed versions. Still 194 clips;
   none removed.
 
+- **The installer cleans up after itself.** `bash install.sh --uninstall` now
+  also offers to remove her voice (the `lillith-voice` service, its commands
+  including `lillith-listen`, the fish snippet and `~/.local/share/lillith-voice`)
+  and the bundled llama-server copy. `--purge` also deletes her memory
+  (`memory.db`) and her `knowledge/` and `skills/` folders. It only removes
+  Lillith's own files: your models (e.g. `~/AI/models`) and your own llama.cpp
+  are never touched. `~/.local/share/lillith` is now private (0700).
+- **pacman package name fixed.** Without a bundled server the installer now
+  offers Arch's `llama-cpp` (the old `llama.cpp` name is tried second).
+  INSTALL.md has a "before you install" list.
+- **The installer's clip count is right.** It said "195 clips" for the 194-clip
+  set because it counted the list's footer line.
+
 ## Known limits
 
 - Voice is Linux-only (Windows and Android voice runtimes aren't done).

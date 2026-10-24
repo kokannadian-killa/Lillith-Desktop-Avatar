@@ -781,7 +781,8 @@ step "8/8  Checking the install"
 "$LILLITH" --help >/dev/null || die "$LILLITH --help failed"
 ok "lillith --help runs"
 if [[ $ASSET_STATE != lfs ]]; then
-  n="$(cd "$DATA_DIR" && "$LILLITH" preview --list 2>/dev/null | tail -n +2 | wc -l)" || n=0
+  # The list ends with an "N clips" line (after a header row): use that number.
+  n="$(cd "$DATA_DIR" && "$LILLITH" preview --list 2>/dev/null | awk '/^[0-9]+ clips$/ { n = $1 } END { print n + 0 }')" || n=0
   if [[ $n -gt 0 ]]; then ok "her animation set loads ($n clips)"; else warn "lillith preview --list found no clips"; fi
 fi
 case ":$PATH:" in

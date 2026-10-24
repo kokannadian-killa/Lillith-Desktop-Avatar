@@ -42,7 +42,7 @@ built.
 - **Python 3.13 or 3.14** for her voice (`python` on Garuda is 3.14).
 - **Your `.gguf` model**, e.g. `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf`.
 
-If the release has the zip in two parts (`.part1`, `.part2`), put all of the
+If the release has the zip in parts (`.part1`, `.part2`, `.part3`), put all of the
 release files in one folder and run `bash join-and-verify.sh` first. It joins
 them and checks the sha256.
 
