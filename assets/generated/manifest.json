@@ -6225,6 +6225,37 @@
    "video": "tease_shoulder_glance_arch/tease_shoulder_glance_arch.mp4"
   },
   {
+   "name": "squeeze_kneel_press_wink",
+   "frame_count": 180,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front (kneeling)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "squeeze_kneel_press_wink/",
+   "sheet": "squeeze_kneel_press_wink/squeeze_kneel_press_wink_sheet.png",
+   "manifest": "squeeze_kneel_press_wink/squeeze_kneel_press_wink.json",
+   "preview": "squeeze_kneel_press_wink/squeeze_kneel_press_wink_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "squeeze"
+   ],
+   "allure": true,
+   "video": "squeeze_kneel_press_wink/squeeze_kneel_press_wink.mp4"
+  },
+  {
    "name": "squeeze_bent_over_cleavage",
    "frame_count": 204,
    "frame_width": 400,
@@ -6292,6 +6323,99 @@
     244
    ],
    "feet_lowest_y": 392
+  },
+  {
+   "name": "squeeze_chest_push_shimmy",
+   "frame_count": 180,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "squeeze_chest_push_shimmy/",
+   "sheet": "squeeze_chest_push_shimmy/squeeze_chest_push_shimmy_sheet.png",
+   "manifest": "squeeze_chest_push_shimmy/squeeze_chest_push_shimmy.json",
+   "preview": "squeeze_chest_push_shimmy/squeeze_chest_push_shimmy_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "squeeze"
+   ],
+   "allure": true,
+   "video": "squeeze_chest_push_shimmy/squeeze_chest_push_shimmy.mp4"
+  },
+  {
+   "name": "squeeze_lean_forward_arms",
+   "frame_count": 204,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "squeeze_lean_forward_arms/",
+   "sheet": "squeeze_lean_forward_arms/squeeze_lean_forward_arms_sheet.png",
+   "manifest": "squeeze_lean_forward_arms/squeeze_lean_forward_arms.json",
+   "preview": "squeeze_lean_forward_arms/squeeze_lean_forward_arms_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "squeeze"
+   ],
+   "allure": true,
+   "video": "squeeze_lean_forward_arms/squeeze_lean_forward_arms.mp4"
+  },
+  {
+   "name": "squeeze_hands_press_tease",
+   "frame_count": 204,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "squeeze_hands_press_tease/",
+   "sheet": "squeeze_hands_press_tease/squeeze_hands_press_tease_sheet.png",
+   "manifest": "squeeze_hands_press_tease/squeeze_hands_press_tease.json",
+   "preview": "squeeze_hands_press_tease/squeeze_hands_press_tease_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "squeeze"
+   ],
+   "allure": true,
+   "video": "squeeze_hands_press_tease/squeeze_hands_press_tease.mp4"
   }
  ]
 }
