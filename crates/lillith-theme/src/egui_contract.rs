@@ -24,7 +24,7 @@
 
 use crate::egui_theme::{
     additive, blade_divider, blood_drips, c32, glow_blob, gradient_rect, iron_frame, neon_line,
-    neon_rect, skull,
+    neon_rect,
 };
 use crate::geom::{self, Pt};
 use crate::palette::{self as pal, Rgba};
@@ -78,16 +78,8 @@ pub const SKULL_TOP_GAP: f32 = 6.0;
 /// `(up, down)`, measured from the real horn outline (tips included) and the
 /// jaw, so the header can be laid out without the horns hitting the frame.
 fn skull_extent(s: f32) -> (f32, f32) {
-    let k = crate::geom::skull([0.0, 0.0], s);
-    let mut top = k.cranium.0[1] - k.cranium.1;
-    for h in &k.horns {
-        for q in crate::geom::tapered_quads(h, k.horn_width, 0.5) {
-            for pt in q {
-                top = top.min(pt[1]);
-            }
-        }
-    }
-    (-top, k.jaw[3])
+    let k = crate::geom::death_skull([0.0, 0.0], s);
+    (-k.top(), k.bottom())
 }
 
 /// Header block for a skull of size `s`: `(centre offset from the inner
@@ -305,24 +297,25 @@ fn plate(
         30.0,
     );
 
-    // --- header: forge-lit horned skull ---------------------------------------
+    // --- header: death-metal skull over a smouldering forge ------------------
     let cx = rect.center().x;
     let mut y = inner.top();
     let sc = Pos2::new(cx, y + skull_c);
     glow_blob(
         &p,
-        sc + Vec2::new(0.0, skull_s * 0.1),
-        skull_s * 1.1,
-        pal::EMBER,
-        0.9 + 0.5 * flick,
+        sc + Vec2::new(0.0, skull_s * 0.25),
+        skull_s * 1.15,
+        pal::BLOOD,
+        0.9 + 0.4 * flick,
     );
-    glow_blob(&p, sc, skull_s * 0.8, pal::CRIMSON, 0.8);
-    flames(&p, sc + Vec2::new(0.0, skull_s * 0.42), skull_s, t);
-    skull(
+    glow_blob(&p, sc, skull_s * 0.75, pal::CRIMSON, 0.55);
+    smoke_and_embers(&p, sc + Vec2::new(0.0, skull_s * 0.55), skull_s, t);
+    crate::egui_theme::death_skull(
         &p,
         sc,
         skull_s,
-        pal::EMBER.lerp(pal::EMBER_CORE, flick * 0.6),
+        pal::BLOOD_NEON.lerp(pal::EMBER, 0.35 + flick * 0.3),
+        flick,
     );
     y += skull_h;
 
@@ -479,30 +472,39 @@ fn corner_spikes(p: &Painter, r: Rect, s: f32) {
     }
 }
 
-/// Licking forge flames under the skull (crimson → ember → hot core).
-fn flames(p: &Painter, base: Pos2, s: f32, t: f32) {
-    let cols = [pal::CRIMSON, pal::EMBER, pal::EMBER_CORE];
-    let tongues = 7;
-    for (layer, col) in cols.iter().enumerate() {
-        let k = 1.0 - layer as f32 * 0.3;
-        for i in 0..tongues {
-            let u = i as f32 / (tongues - 1) as f32 - 0.5;
-            let wob = (t * (3.0 + i as f32 * 0.7) + i as f32).sin();
-            let x = base.x + u * s * 1.3 * k;
-            let hgt = s * (0.32 + 0.18 * (1.0 - u.abs() * 2.0)) * k * (0.85 + 0.15 * wob);
-            let half = s * 0.11 * k;
-            let tri: Vec<Pt> = vec![
-                [x - half, base.y],
-                [x + half, base.y],
-                [x + wob * s * 0.04, base.y - hgt],
-            ];
-            let poly = if geom::is_convex(&tri) {
-                tri
-            } else {
-                tri.into_iter().rev().collect()
-            };
-            crate::egui_theme::fill_convex(p, &poly, c32(col.fade(0.85)));
+/// Black smoke rolling up behind the skull, with sparse embers drifting out.
+fn smoke_and_embers(p: &Painter, base: Pos2, s: f32, t: f32) {
+    // slow black smoke rolling up behind the skull, breaking up the glow
+    for i in 0..9 {
+        let fi = i as f32;
+        let ph = (t * 0.08 + fi * 0.173).fract();
+        let x = base.x + ((fi * 2.39).sin() * 0.75 + (t * 0.3 + fi).sin() * 0.06) * s;
+        let y = base.y - ph * s * 1.25;
+        let r = s * (0.16 + 0.22 * ph);
+        let a = (1.0 - ph) * ph * 4.0;
+        for k in 0..3 {
+            p.circle_filled(
+                Pos2::new(x, y),
+                r * (1.0 - k as f32 * 0.28),
+                c32(Rgba::hex(0x050003).fade(0.12 * a)),
+            );
         }
+    }
+    // sparse embers drifting up out of it
+    let mut rng = geom::Rng::new(0x13);
+    for _ in 0..16 {
+        let (u, speed, off) = (rng.range(-0.8, 0.8), rng.range(0.12, 0.3), rng.f());
+        let ph = (t * speed + off).fract();
+        let x = base.x + (u + (t * 1.7 + off * 9.0).sin() * 0.05) * s;
+        let y = base.y + s * 0.1 - ph * s * 1.4;
+        let a = (1.0 - ph) * (ph * 6.0).min(1.0);
+        let col = if off > 0.5 {
+            pal::EMBER
+        } else {
+            pal::BLOOD_NEON
+        };
+        p.circle_filled(Pos2::new(x, y), 0.6 + off, additive(col, 0.9 * a));
+        p.circle_filled(Pos2::new(x, y), 2.0 + off * 1.5, additive(col, 0.18 * a));
     }
 }
 
@@ -655,9 +657,9 @@ mod tests {
     fn horn_tips_clear_the_top_of_the_plate() {
         for s in [36.0, 46.0] {
             let (centre, height) = skull_header(s);
-            let k = crate::geom::skull([0.0, centre], s);
+            let k = crate::geom::death_skull([0.0, centre], s);
             for h in &k.horns {
-                for q in crate::geom::tapered_quads(h, k.horn_width, 0.5) {
+                for q in crate::geom::tapered_quads(h, k.horn_width, k.horn_tip) {
                     for pt in q {
                         assert!(
                             pt[1] >= SKULL_TOP_GAP - 0.01,
@@ -667,8 +669,9 @@ mod tests {
                     }
                 }
             }
-            // The title starts below the jaw.
-            assert!(height > centre + k.jaw[3] - centre);
+            assert!((k.top() - SKULL_TOP_GAP).abs() < 0.01, "size {s}: gap");
+            // The title starts below the chin.
+            assert!(height > k.bottom());
         }
     }
 

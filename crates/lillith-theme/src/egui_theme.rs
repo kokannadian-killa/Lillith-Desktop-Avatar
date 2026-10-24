@@ -559,6 +559,255 @@ pub fn skull(p: &Painter, c: Pos2, s: f32, eye: Rgba) {
     );
 }
 
+/// Triangle fan from `c` to the closed `ring`, shaded `inner` → `outer`
+/// (a cheap radial gradient). `ring` must be star-shaped about `c`.
+pub fn fan(p: &Painter, c: Pt, ring: &[Pt], inner: Color32, outer: Color32) {
+    let mut m = Mesh::default();
+    m.colored_vertex(p2(c), inner);
+    for q in ring {
+        m.colored_vertex(p2(*q), outer);
+    }
+    let n = ring.len() as u32;
+    for i in 0..n {
+        m.add_triangle(0, 1 + i, 1 + (i + 1) % n);
+    }
+    p.add(Shape::mesh(m));
+}
+
+/// Anti-aliased outline of a closed polygon.
+fn outline(p: &Painter, ring: &[Pt], width: f32, color: Color32) {
+    p.add(Shape::Path(PathShape::closed_line(
+        pts(ring),
+        PathStroke::new(width, color),
+    )));
+}
+
+/// Anti-aliased open polyline.
+fn polyline(p: &Painter, line: &[Pt], width: f32, color: Color32) {
+    p.add(Shape::Path(PathShape::line(
+        pts(line),
+        PathStroke::new(width, color),
+    )));
+}
+
+/// Soft dark smudge (grime, recesses): stacked translucent black discs.
+fn grime(p: &Painter, c: Pos2, radius: f32, strength: f32) {
+    for i in 0..5 {
+        let t = i as f32 / 5.0;
+        p.circle_filled(
+            c,
+            radius * (1.0 - t * 0.7),
+            c32(Rgba::hex(0x0a0204).fade(strength * 0.16)),
+        );
+    }
+}
+
+/// The Soul Contract's death-metal skull (see [`geom::DeathSkull`]),
+/// centred on `c`, `s` ≈ crown-to-chin height. `eye` is the ember far back
+/// in the sockets; `pulse` (0..=1) breathes it.
+pub fn death_skull(p: &Painter, c: Pos2, s: f32, eye: Rgba, pulse: f32) {
+    let k = geom::death_skull([c.x, c.y], s);
+    let ink = Rgba::hex(0x070103);
+    let edge_w = (s * 0.03).max(1.0);
+    let fine = (s * 0.018).max(0.7);
+    let shift =
+        |v: &[Pt], d: f32| -> Vec<Pt> { v.iter().map(|q| [q[0] + d, q[1] + d * 1.3]).collect() };
+
+    // drop shadow
+    let sh = c32(Rgba::hex(0x000000).alpha(150));
+    for h in &k.horns {
+        tapered(p, &shift(h, 1.5), k.horn_width, k.horn_tip, sh);
+    }
+    let sc = [k.cranium_c[0] + 1.5, k.cranium_c[1] + 2.0];
+    fan(p, sc, &shift(&k.cranium, 1.5), sh, sh);
+    let sm = [k.mandible_c[0] + 1.5, k.mandible_c[1] + 2.0];
+    fan(p, sm, &shift(&k.mandible, 1.5), sh, sh);
+
+    // horns: dark keratin, ringed, burnt black at the tips
+    let horn_base = Rgba::hex(0x6a5a4b);
+    let horn_mid = Rgba::hex(0x2e2420);
+    for h in &k.horns {
+        let quads = geom::tapered_quads(h, k.horn_width, k.horn_tip);
+        let n = quads.len().max(1) as f32;
+        for (i, q) in quads.iter().enumerate() {
+            let t = i as f32 / n;
+            let col = if t < 0.55 {
+                horn_base.lerp(horn_mid, t / 0.55)
+            } else {
+                horn_mid.lerp(ink, (t - 0.55) / 0.45)
+            };
+            fill_convex(p, q, c32(col));
+        }
+        // a hot crimson rim along the underside, lit by the forge below
+        let rim: Vec<Pt> = quads.iter().map(|q| q[3]).collect();
+        polyline(
+            p,
+            &rim[..rim.len() * 2 / 3],
+            fine,
+            additive(pal::CRIMSON, 0.55),
+        );
+        // highlight down the spine
+        tapered(
+            p,
+            &h[..h.len() * 3 / 4],
+            k.horn_width * 0.22,
+            0.3,
+            c32(Rgba::hex(0xb8a68f).alpha(70)),
+        );
+        // segment ridges
+        for (i, q) in quads.iter().enumerate().take(quads.len() - 2) {
+            let w = if i % 2 == 0 { fine * 1.2 } else { fine * 0.7 };
+            p.line_segment([p2(q[0]), p2(q[3])], Stroke::new(w, c32(ink.alpha(210))));
+        }
+        let mut ring: Vec<Pt> = quads.iter().map(|q| q[0]).collect();
+        ring.push(quads[quads.len() - 1][1]);
+        ring.extend(quads.iter().rev().map(|q| q[3]));
+        outline(p, &ring, (edge_w * 0.8).max(0.8), c32(ink.alpha(230)));
+    }
+
+    // lower jaw
+    fan(
+        p,
+        k.mandible_c,
+        &k.mandible,
+        c32(Rgba::hex(0x9c8f7c)),
+        c32(Rgba::hex(0x3a2f27)),
+    );
+    outline(p, &k.mandible, edge_w, c32(ink));
+
+    // cranium: aged bone, bright forehead, filthy edges
+    fan(
+        p,
+        k.cranium_c,
+        &k.cranium,
+        c32(Rgba::hex(0xd2c6b1)),
+        c32(Rgba::hex(0x4a3e34)),
+    );
+    glow_blob(
+        p,
+        c + Vec2::new(-0.07 * s, -0.36 * s),
+        0.2 * s,
+        Rgba::hex(0xfff1dc),
+        0.55,
+    );
+    for (x, y, r, a) in [
+        (-0.33, -0.12, 0.09, 0.9),
+        (0.33, -0.12, 0.09, 0.9),
+        (-0.24, 0.19, 0.075, 1.0),
+        (0.24, 0.19, 0.075, 1.0),
+        (0.0, 0.24, 0.08, 0.8),
+    ] {
+        grime(p, c + Vec2::new(x * s, y * s), r * s, a);
+    }
+    for g in &k.grooves {
+        polyline(p, g, fine, c32(ink.alpha(70)));
+    }
+
+    // brow ridge catches the light; sockets sink into black
+    for b in &k.brow {
+        tapered(
+            p,
+            b,
+            (s * 0.05).max(1.2),
+            0.6,
+            c32(Rgba::hex(0xeee4d2).alpha(170)),
+        );
+    }
+    for (i, ring) in k.sockets.iter().enumerate() {
+        let cc = k.socket_c[i];
+        let wide: Vec<Pt> = ring
+            .iter()
+            .map(|q| [cc[0] + (q[0] - cc[0]) * 1.3, cc[1] + (q[1] - cc[1]) * 1.3])
+            .collect();
+        fan(
+            p,
+            cc,
+            &wide,
+            c32(Rgba::hex(0x1a0e0a).alpha(220)),
+            c32(Rgba::hex(0x2a1e18).alpha(0)),
+        );
+        fan(
+            p,
+            cc,
+            ring,
+            c32(Rgba::hex(0x000000)),
+            c32(Rgba::hex(0x140608)),
+        );
+        outline(p, ring, fine, c32(ink));
+        let e = p2(cc) + Vec2::new(0.0, 0.012 * s);
+        glow_blob(p, e, 0.1 * s, pal::BLOOD_NEON, 0.6 + 0.4 * pulse);
+        p.circle_filled(e, (0.024 * s).max(0.8), c32(eye));
+    }
+
+    // inverted-heart nasal cavity
+    for lobe in &k.nose {
+        fill_convex(p, lobe, c32(Rgba::hex(0x050003)));
+        outline(p, lobe, fine * 0.8, c32(ink));
+    }
+
+    // mouth + fangs
+    let mouth = Rect::from_min_max(
+        Pos2::new(k.mouth[0], k.mouth[1]),
+        Pos2::new(k.mouth[2], k.mouth[3]),
+    );
+    p.rect_filled(mouth, CornerRadius::same(1), c32(Rgba::hex(0x050003)));
+    for f in &k.fangs {
+        let tri = if geom::is_convex(f) {
+            f.to_vec()
+        } else {
+            f.iter().rev().copied().collect()
+        };
+        fill_convex(p, &tri, c32(Rgba::hex(0xd8cdb8)));
+        let mid = [(f[0][0] + f[1][0]) * 0.5, (f[0][1] + f[1][1]) * 0.5];
+        let half: Vec<Pt> = vec![mid, f[1], f[2]];
+        let half = if geom::is_convex(&half) {
+            half
+        } else {
+            half.into_iter().rev().collect()
+        };
+        fill_convex(p, &half, c32(Rgba::hex(0x7d6f5e)));
+        outline(p, f, (fine * 0.7).max(0.6), c32(ink.alpha(220)));
+    }
+
+    // fissures: a dark split with a lit lip
+    for cr in &k.cracks {
+        polyline(
+            p,
+            &shift(cr, 0.5),
+            (fine * 0.6).max(0.5),
+            c32(Rgba::hex(0xf2e8d6).alpha(60)),
+        );
+        polyline(p, cr, fine * 1.1, c32(Rgba::hex(0x1a0c08).alpha(235)));
+    }
+
+    // crisp silhouette so it reads at popup size
+    outline(p, &k.cranium, edge_w, c32(ink));
+
+    // blood weeping from the right socket
+    tapered(
+        p,
+        &k.drip,
+        (s * 0.045).max(1.2),
+        (s * 0.03).max(1.0),
+        c32(pal::BLOOD),
+    );
+    let end = p2(*k.drip.last().unwrap_or(&k.socket_c[1]));
+    p.circle_filled(
+        end + Vec2::new(0.0, 0.01 * s),
+        (s * 0.03).max(1.0),
+        c32(pal::BLOOD),
+    );
+    polyline(
+        p,
+        &k.drip
+            .iter()
+            .map(|q| [q[0] - 0.4, q[1]])
+            .collect::<Vec<_>>(),
+        0.6,
+        c32(pal::BLOOD_SHEEN.alpha(140)),
+    );
+}
+
 /// A rune carved into stone/iron: dark groove, lit lower edge, optional
 /// inner glow (`glow` > 0).
 pub fn carved_rune(p: &Painter, idx: usize, origin: Pos2, h: f32, glow: Option<Rgba>) {
