@@ -58,7 +58,22 @@ pub trait ActionSink {
     fn set_speaker(&mut self, _on: bool) {}
     /// config.toml changed (Settings saved): re-read what applies live.
     fn config_changed(&mut self, _path: &std::path::Path) {}
+    /// Voice-daemon lip-sync lines that arrived since the last frame
+    /// (appended to `out`, never blocks). Returns `true` if the daemon
+    /// went away (drop any audio-driven mouth).
+    fn lipsync_lines(&mut self, _out: &mut Vec<String>) -> bool {
+        false
+    }
+    /// Cut her voice now: barge-in (`chat.barge_in`, the user started
+    /// talking) or the safeword (`chat.safeword`). `reason` is
+    /// `barge_in` / `safeword`.
+    fn interrupt(&mut self, _reason: &str) {}
 }
+
+/// The user started push-to-talk in the bubble: her voice stops.
+pub const CHAT_BARGE_IN: &str = "chat.barge_in";
+/// The bubble heard the safeword (voice or typed): everything stops.
+pub const CHAT_SAFEWORD: &str = "chat.safeword";
 
 /// Shared [`ActionSink`] handle (cloneable so the Wayland → X11 fallback
 /// keeps the same voice).
@@ -209,6 +224,8 @@ pub struct Controller {
     screen: Option<(u32, u32)>,
     quit: bool,
     feed: Option<EventFeed>,
+    /// Feed events read but not applied yet (spread over frames).
+    feed_backlog: std::collections::VecDeque<Event>,
     sink: Option<SinkHandle>,
     /// Menu "Pause system monitor": feed events are dropped while set.
     pub monitor_paused: bool,
@@ -335,6 +352,7 @@ impl Controller {
             screen: None,
             quit: false,
             feed: opts.events.clone(),
+            feed_backlog: std::collections::VecDeque::new(),
             sink: opts.sink.clone(),
             monitor_paused: false,
             menu: None,
@@ -1011,6 +1029,7 @@ impl Controller {
             || self.tease.active();
         let actions = self.brain.tick(dt, busy);
         self.apply(actions);
+        self.pump_lipsync();
         self.talk.tick(dt, self.stage.animator_mut());
         self.pump_showoff();
         let view = self.talk.speech.as_ref().map(|s| s.view());
@@ -1441,6 +1460,20 @@ impl Controller {
             }
             return;
         }
+        if ev.name == CHAT_BARGE_IN || ev.name == CHAT_SAFEWORD {
+            let safeword = ev.name == CHAT_SAFEWORD;
+            if safeword {
+                tracing::warn!("safeword from the chat bubble: stopping everything");
+                lillith_core::access::kill_switch::stop_all();
+            }
+            self.talk.reset_lipsync();
+            if let Some(sink) = &self.sink {
+                if let Ok(mut s) = sink.0.lock() {
+                    s.interrupt(if safeword { "safeword" } else { "barge_in" });
+                }
+            }
+            return;
+        }
         if ev.name.starts_with("chat.") {
             self.talk
                 .event(&ev.name, ev.detail.as_deref(), self.stage.animator_mut());
@@ -1452,6 +1485,25 @@ impl Controller {
         tracing::debug!(event = %ev.name, detail = ?ev.detail, "event");
         let a = self.brain.event(ev);
         self.apply(a);
+    }
+
+    /// Feeds the voice daemon's lip-sync lines to her mouth (every frame,
+    /// before `talk.tick`; not through the event feed, which is capped and
+    /// paused with the monitor).
+    fn pump_lipsync(&mut self) {
+        let Some(sink) = &self.sink else { return };
+        let mut lines = Vec::new();
+        let gone = sink
+            .0
+            .lock()
+            .map(|mut s| s.lipsync_lines(&mut lines))
+            .unwrap_or(false);
+        if gone {
+            self.talk.reset_lipsync();
+        }
+        for l in &lines {
+            self.talk.feed_lipsync(l);
+        }
     }
 
     /// Hands a finished chat reply to the voice (it decides whether the
@@ -1468,25 +1520,35 @@ impl Controller {
     }
 
     /// Applies pending [`EventFeed`] events (at most [`MAX_EVENTS_PER_TICK`]).
+    ///
+    /// The safeword and barge-in ([`CHAT_SAFEWORD`], [`CHAT_BARGE_IN`])
+    /// share this feed with the chat bubble but are applied first, every
+    /// frame: never dropped while the system monitor is paused and never
+    /// queued behind a token burst.
     fn drain_feed(&mut self) {
         let Some(feed) = &self.feed else { return };
-        let mut batch = Vec::new();
         if let Ok(rx) = feed.lock() {
-            while batch.len() < MAX_EVENTS_PER_TICK {
-                match rx.try_recv() {
-                    Ok(ev) => batch.push(ev),
-                    Err(_) => break,
-                }
-            }
+            self.feed_backlog.extend(rx.try_iter());
+        }
+        let (urgent, rest): (std::collections::VecDeque<Event>, _) =
+            std::mem::take(&mut self.feed_backlog)
+                .into_iter()
+                .partition(|ev| ev.name == CHAT_SAFEWORD || ev.name == CHAT_BARGE_IN);
+        self.feed_backlog = rest;
+        for ev in &urgent {
+            self.event(ev);
         }
         if self.monitor_paused {
-            if !batch.is_empty() {
-                tracing::debug!(dropped = batch.len(), "system monitor paused");
+            if !self.feed_backlog.is_empty() {
+                tracing::debug!(dropped = self.feed_backlog.len(), "system monitor paused");
+                self.feed_backlog.clear();
             }
             return;
         }
-        for ev in batch {
-            self.event(&ev);
+        let n = self.feed_backlog.len().min(MAX_EVENTS_PER_TICK);
+        let batch: Vec<Event> = self.feed_backlog.drain(..n).collect();
+        for ev in &batch {
+            self.event(ev);
         }
     }
 
@@ -2843,10 +2905,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
             tx.send(Event::new("user.activity")).unwrap();
         }
         c.tick(0.05).unwrap();
-        assert_eq!(
-            c.feed.as_ref().unwrap().lock().unwrap().try_iter().count(),
-            4
-        );
+        assert_eq!(c.feed_backlog.len(), 4, "rest waits for the next frame");
         drop(tx);
         c.tick(0.05).unwrap(); // disconnected feed is harmless
         let _ = std::fs::remove_dir_all(dir);
@@ -2897,6 +2956,98 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         fn config_changed(&mut self, _: &std::path::Path) {
             *self.reloads.lock().unwrap() += 1;
         }
+    }
+
+    /// A voice sink with a lip-sync queue and recorded interrupts.
+    #[derive(Default, Clone)]
+    struct LipSink {
+        lines: Arc<Mutex<Vec<String>>>,
+        gone: Arc<Mutex<bool>>,
+        interrupts: Arc<Mutex<Vec<String>>>,
+    }
+    impl ActionSink for LipSink {
+        fn on_actions(&mut self, _: &[Action]) {}
+        fn lipsync_lines(&mut self, out: &mut Vec<String>) -> bool {
+            out.append(&mut self.lines.lock().unwrap());
+            std::mem::take(&mut *self.gone.lock().unwrap())
+        }
+        fn interrupt(&mut self, reason: &str) {
+            self.interrupts.lock().unwrap().push(reason.to_string());
+        }
+    }
+
+    #[test]
+    fn daemon_lipsync_feeds_the_mouth_and_barge_in_interrupts() {
+        let (dir, mut c) = m3_controller("lipsync", MoveMode::Stay);
+        let sink = LipSink::default();
+        c.sink = Some(SinkHandle::new(sink.clone()));
+        let pts: Vec<String> = (0..=60).map(|i| format!("[{},0.6]", i * 33)).collect();
+        sink.lines.lock().unwrap().extend([
+            format!(
+                r#"{{"ev":"envelope","utt":3,"chunk":0,"fps":30,"pts":[{}]}}"#,
+                pts.join(",")
+            ),
+            r#"{"ev":"chunk_start","utt":3,"chunk":0,"mono_ms":42}"#.to_string(),
+        ]);
+        c.tick(0.016).unwrap();
+        assert!(c.talk.active(), "lip-sync lines drive her mouth");
+        assert!(sink.lines.lock().unwrap().is_empty(), "drained every frame");
+        // Barge-in: the voice is cut and the audio mouth dropped.
+        c.event(&Event::new(CHAT_BARGE_IN));
+        assert_eq!(*sink.interrupts.lock().unwrap(), ["barge_in"]);
+        c.tick(0.016).unwrap();
+        assert!(!c.talk.active());
+        // Daemon gone: reset.
+        sink.lines
+            .lock()
+            .unwrap()
+            .push(r#"{"ev":"chunk_start","utt":4,"chunk":0,"mono_ms":1}"#.to_string());
+        c.tick(0.016).unwrap();
+        assert!(c.talk.active());
+        *sink.gone.lock().unwrap() = true;
+        c.tick(0.016).unwrap();
+        assert!(!c.talk.active());
+        // Safeword from the bubble: kill switch + voice cut.
+        let before = lillith_core::access::kill_switch::epoch();
+        c.event(&Event::new(CHAT_SAFEWORD));
+        assert!(lillith_core::access::kill_switch::stopped_since(before));
+        assert_eq!(*sink.interrupts.lock().unwrap(), ["barge_in", "safeword"]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn safeword_beats_a_paused_monitor_and_a_token_burst() {
+        let (dir, mut c) = m3_controller("safeword-feed", MoveMode::Stay);
+        let sink = LipSink::default();
+        c.sink = Some(SinkHandle::new(sink.clone()));
+        let (tx, rx) = std::sync::mpsc::channel();
+        c.feed = Some(Arc::new(Mutex::new(rx)));
+        // System monitor paused: other events are dropped, the safeword not.
+        c.monitor_paused = true;
+        tx.send(Event::new("user.activity")).unwrap();
+        tx.send(Event::new(CHAT_SAFEWORD)).unwrap();
+        let before = lillith_core::access::kill_switch::epoch();
+        c.tick(0.016).unwrap();
+        assert!(lillith_core::access::kill_switch::stopped_since(before));
+        assert_eq!(*sink.interrupts.lock().unwrap(), ["safeword"]);
+        assert!(c.feed_backlog.is_empty());
+        // Unpaused: a burst of tokens doesn't delay it past this frame.
+        c.monitor_paused = false;
+        tx.send(Event::new(crate::chat::CHAT_START)).unwrap();
+        for _ in 0..(MAX_EVENTS_PER_TICK * 2) {
+            tx.send(Event::with_detail(crate::chat::CHAT_TOKEN, "la "))
+                .unwrap();
+        }
+        tx.send(Event::new(CHAT_BARGE_IN)).unwrap();
+        tx.send(Event::new(CHAT_SAFEWORD)).unwrap();
+        let before = lillith_core::access::kill_switch::epoch();
+        c.tick(0.016).unwrap();
+        assert!(lillith_core::access::kill_switch::stopped_since(before));
+        assert_eq!(
+            *sink.interrupts.lock().unwrap(),
+            ["safeword", "barge_in", "safeword"]
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

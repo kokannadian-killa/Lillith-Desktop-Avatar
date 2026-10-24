@@ -4,6 +4,10 @@
 //! and `lillith_voice_input.py`:
 //!
 //! - [`config`]: the `[voice]` config table ([`VoiceConfig`]).
+//! - [`daemon`]: client for the local voice daemon (`lillith-voiced`,
+//!   Unix socket / named pipe only): `say`, barge-in `stop`, push-to-talk
+//!   `listen`, the lip-sync subscription, and the voice safety rules
+//!   (safeword by voice; voice is never Soul Contract consent).
 //! - [`lines`]: [`LineSource`] (event + mood → line) and the PG
 //!   [`DefaultLines`] table.
 //! - `engine` (feature `voice`): Piper → aplay/paplay, espeak-ng, spd-say
@@ -29,6 +33,7 @@
 //! ```
 
 pub mod config;
+pub mod daemon;
 #[cfg(feature = "voice")]
 pub mod engine;
 pub mod lines;
@@ -40,7 +45,7 @@ pub mod speech_text;
 pub mod stt;
 pub mod tts;
 
-pub use config::{EngineChoice, PlayerChoice, VoiceConfig};
+pub use config::{EngineChoice, PlayerChoice, SttConfig, VoiceConfig};
 pub use lines::{DefaultLines, LineSource, NoLines};
 #[cfg(feature = "voice")]
 pub use speech::{Dropped, Gate, Stats, Urgency, Voice};

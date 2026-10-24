@@ -1,10 +1,12 @@
-//! TTS engines run as subprocesses (feature `voice`): Piper piped to
+//! TTS engines (feature `voice`): the local voice daemon ([`DaemonEngine`],
+//! Unix socket / named pipe), and subprocesses: Piper piped to
 //! `aplay`/`paplay`, espeak-ng, spd-say, and a silent [`NullEngine`].
 //!
 //! Text is always passed as a single argv entry or on stdin, never through
 //! a shell. [`detect`] picks the engine once at start-up and says why.
 
 use crate::config::{EngineChoice, PlayerChoice, VoiceConfig};
+use crate::daemon::{DaemonClient, PingInfo, Request, SayReply};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -44,6 +46,10 @@ pub trait Engine: Send {
         true
     }
     fn start(&mut self, text: &str, opts: &SpeakOpts) -> std::io::Result<Box<dyn Playback>>;
+    /// Degraded-voice notice for the UI (e.g. cloned voice unavailable).
+    fn voice_warning(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Says nothing (no engine installed or `engine = "none"`).
@@ -217,6 +223,122 @@ impl Engine for SpdSay {
             pump: None,
             on_stop: Some((self.bin.clone(), vec!["-C".into()])),
             done: false,
+        }))
+    }
+}
+
+/// The local voice daemon (`lillith-voiced`, PROTOCOL.md v2). `start`
+/// opens a connection and sends `say` with `wait:true`; a reader thread
+/// waits for the reply (it comes when playback ends), so [`Playback::poll`]
+/// never blocks. [`Playback::stop`] sends `stop` on a second connection
+/// (barge-in / mute / speakers off), which also makes the pending `say`
+/// reply at once.
+#[derive(Debug, Clone)]
+pub struct DaemonEngine {
+    pub client: DaemonClient,
+    /// Preset to request (`None` = the daemon's default).
+    pub preset: Option<String>,
+    /// Set when the cloned 'lillith' voice is unavailable (fallback p1).
+    pub fallback: Option<String>,
+}
+
+impl DaemonEngine {
+    /// For a daemon that answered `ping` with `info`; `want` is
+    /// `[voice] preset` (falls back to `p1`).
+    pub fn new(client: DaemonClient, info: &PingInfo, want: &str) -> Self {
+        let fallback = info.fallback_warning(want);
+        if let Some(w) = &fallback {
+            tracing::warn!("voice: {w}");
+        }
+        Self {
+            client,
+            preset: info.pick_preset(want),
+            fallback,
+        }
+    }
+}
+
+struct DaemonPlayback {
+    client: DaemonClient,
+    done: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    reply: std::sync::mpsc::Receiver<Result<SayReply, String>>,
+    finished: bool,
+}
+
+impl Playback for DaemonPlayback {
+    fn poll(&mut self) -> bool {
+        if self.finished {
+            return true;
+        }
+        match self.reply.try_recv() {
+            Ok(r) => {
+                if let Err(e) = r {
+                    tracing::debug!("voice daemon say: {e}");
+                }
+                self.finished = true;
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => self.finished = true,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+        }
+        self.finished
+    }
+
+    fn stop(&mut self) {
+        if self.finished || self.done.load(std::sync::atomic::Ordering::SeqCst) {
+            self.finished = true;
+            return;
+        }
+        if let Err(e) = self.client.stop(Some("interrupt")) {
+            tracing::debug!("voice daemon stop: {e}");
+        }
+        self.finished = true;
+    }
+}
+
+impl Engine for DaemonEngine {
+    fn name(&self) -> &'static str {
+        "voiced"
+    }
+    fn voice_warning(&self) -> Option<String> {
+        self.fallback.clone()
+    }
+    fn start(&mut self, text: &str, o: &SpeakOpts) -> std::io::Result<Box<dyn Playback>> {
+        let text: String = text.chars().filter(|c| !c.is_control()).collect();
+        let req = Request::Say {
+            text,
+            wait: true,
+            preset: self.preset.clone(),
+            speed: Some(o.rate),
+        };
+        // Blocks until playback ends: no read timeout on this connection.
+        let conn = self
+            .client
+            .send(&req, None)
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = std::sync::Arc::clone(&done);
+        std::thread::Builder::new()
+            .name("lillith-voiced-say".into())
+            .spawn(move || {
+                use std::io::BufRead;
+                let mut r = std::io::BufReader::new(conn);
+                let mut line = String::new();
+                let res = match r.read_line(&mut line) {
+                    Ok(0) => Err("connection closed".to_string()),
+                    Ok(_) => crate::daemon::parse_reply(&line)
+                        .map(|v| SayReply::from_value(&v))
+                        .map_err(|e| e.to_string()),
+                    Err(e) => Err(e.to_string()),
+                };
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                let _ = tx.send(res);
+            })?;
+        Ok(Box::new(DaemonPlayback {
+            client: self.client.clone(),
+            done,
+            reply: rx,
+            finished: false,
         }))
     }
 }
@@ -445,13 +567,44 @@ pub struct Detected {
     pub reason: String,
 }
 
-/// Picks the engine for `cfg` with the real `$PATH`.
+/// Picks the engine for `cfg` with the real `$PATH` and the real daemon
+/// socket.
 pub fn detect(cfg: &VoiceConfig) -> Detected {
-    detect_with(cfg, &which)
+    detect_full(cfg, &which, &ping_daemon)
 }
 
-/// [`detect`] with an injectable binary lookup (tests).
+/// Asks the daemon at `[voice] daemon_socket` (or the default endpoint)
+/// for `ping`; `None` when it is missing or does not answer.
+pub fn ping_daemon(cfg: &VoiceConfig) -> Option<(DaemonClient, PingInfo)> {
+    let client = DaemonClient::from_config(cfg)?;
+    if !client.present() {
+        return None;
+    }
+    match client.ping() {
+        Ok(info) => Some((client, info)),
+        Err(e) => {
+            tracing::debug!("voice daemon at {}: {e}", client.endpoint().display());
+            None
+        }
+    }
+}
+
+/// A daemon probe for [`detect_full`] ([`ping_daemon`], or a fake in tests).
+pub type DaemonProbe = dyn Fn(&VoiceConfig) -> Option<(DaemonClient, PingInfo)>;
+
+/// [`detect`] with an injectable binary lookup and no daemon (tests).
 pub fn detect_with(cfg: &VoiceConfig, lookup: &dyn Fn(&str) -> Option<PathBuf>) -> Detected {
+    detect_full(cfg, lookup, &|_| None)
+}
+
+/// [`detect`] with an injectable binary lookup and daemon probe. The daemon
+/// goes first (`auto` / `daemon`) only when the probe answers; otherwise
+/// the subprocess chain is used, so a missing socket falls back cleanly.
+pub fn detect_full(
+    cfg: &VoiceConfig,
+    lookup: &dyn Fn(&str) -> Option<PathBuf>,
+    probe: &DaemonProbe,
+) -> Detected {
     let none = |reason: String| Detected {
         engine: Box::new(NullEngine),
         reason,
@@ -460,9 +613,25 @@ pub fn detect_with(cfg: &VoiceConfig, lookup: &dyn Fn(&str) -> Option<PathBuf>) 
         return none("voice disabled in config".into());
     }
     let mut why = Vec::new();
+    if matches!(cfg.engine, EngineChoice::Auto | EngineChoice::Daemon) {
+        match probe(cfg) {
+            Some((client, info)) => {
+                let engine = DaemonEngine::new(client, &info, cfg.preset());
+                return Detected {
+                    reason: format!(
+                        "voice daemon ({}, preset {})",
+                        engine.client.endpoint().display(),
+                        engine.preset.as_deref().unwrap_or("daemon default")
+                    ),
+                    engine: Box::new(engine),
+                };
+            }
+            None => why.push("voice daemon not running".to_string()),
+        }
+    }
     let order: &[EngineChoice] = match cfg.engine {
         EngineChoice::None => return none("engine = \"none\"".into()),
-        EngineChoice::Auto => &[
+        EngineChoice::Auto | EngineChoice::Daemon => &[
             EngineChoice::Piper,
             EngineChoice::EspeakNg,
             EngineChoice::SpdSay,
@@ -530,7 +699,7 @@ pub fn detect_with(cfg: &VoiceConfig, lookup: &dyn Fn(&str) -> Option<PathBuf>) 
     }
     // Windows: the built-in SAPI voices when nothing else was found.
     #[cfg(windows)]
-    if matches!(cfg.engine, EngineChoice::Auto) {
+    if matches!(cfg.engine, EngineChoice::Auto | EngineChoice::Daemon) {
         if let Some(bin) = lookup("powershell") {
             return Detected {
                 reason: "sapi (Windows built-in voices)".into(),
@@ -652,6 +821,108 @@ mod tests {
             ],
             [8192, -8192]
         );
+    }
+
+    #[test]
+    fn daemon_missing_falls_back_to_espeak() {
+        for engine in [EngineChoice::Auto, EngineChoice::Daemon] {
+            let cfg = VoiceConfig {
+                engine,
+                daemon_socket: Some(PathBuf::from("/nonexistent/lillith/voiced.sock")),
+                ..VoiceConfig::default()
+            };
+            let d = detect_full(&cfg, &fake(&["espeak-ng"]), &ping_daemon);
+            assert_eq!(d.engine.name(), "espeak-ng", "{engine:?}");
+            let d = detect_full(&cfg, &fake(&[]), &ping_daemon);
+            assert_eq!(d.engine.name(), "none");
+            assert!(
+                d.reason.contains("voice daemon not running"),
+                "{}",
+                d.reason
+            );
+        }
+        // Explicit engines never probe the daemon.
+        let cfg = VoiceConfig {
+            engine: EngineChoice::EspeakNg,
+            ..VoiceConfig::default()
+        };
+        let probe = |_: &VoiceConfig| -> Option<(DaemonClient, PingInfo)> { panic!("probed") };
+        assert_eq!(
+            detect_full(&cfg, &fake(&["espeak-ng"]), &probe)
+                .engine
+                .name(),
+            "espeak-ng"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_engine_says_waits_and_stops_on_a_second_connection() {
+        use crate::daemon::{fake::FakeDaemon, request_command};
+        use serde_json::Value;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        use std::time::Duration;
+        let release = Arc::new(AtomicBool::new(false));
+        let r = Arc::clone(&release);
+        let d = FakeDaemon::start(
+            "engine",
+            Box::new(move |v: &Value| match request_command(v) {
+                "ping" => vec![r#"{"ok":true,"protocol":2,"presets":["p1","bella"]}"#.into()],
+                "say" => {
+                    // Blocks like a real wait:true say until stopped.
+                    for _ in 0..400 {
+                        if r.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    vec![r#"{"ok":true,"utt":7,"stopped":true}"#.into()]
+                }
+                "stop" => {
+                    r.store(true, Ordering::SeqCst);
+                    vec![r#"{"ok":true}"#.into()]
+                }
+                _ => vec![r#"{"ok":false,"error":"?"}"#.into()],
+            }),
+        );
+        let cfg = VoiceConfig {
+            daemon_socket: Some(d.sock.clone()),
+            ..VoiceConfig::default()
+        };
+        let mut det = detect_full(&cfg, &fake(&["espeak-ng"]), &ping_daemon);
+        assert_eq!(det.engine.name(), "voiced", "{}", det.reason);
+        assert!(
+            det.reason.contains("preset p1"),
+            "lillith missing → p1: {}",
+            det.reason
+        );
+        let mut p = det
+            .engine
+            .start("Hiii babe.", &SpeakOpts::from_config(&cfg))
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!p.poll(), "still speaking");
+        p.stop();
+        assert!(p.poll());
+        let seen = d.seen.lock().unwrap().clone();
+        let say = seen.iter().find(|v| request_command(v) == "say").unwrap();
+        assert_eq!(say["text"], "Hiii babe.");
+        assert_eq!(say["wait"], true);
+        assert_eq!(say["preset"], "p1");
+        assert!(d.commands().contains(&"stop".to_string()));
+        // A finished say polls done without a stop.
+        let mut p = det
+            .engine
+            .start("again", &SpeakOpts::from_config(&cfg))
+            .unwrap();
+        for _ in 0..200 {
+            if p.poll() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(p.poll());
     }
 
     #[test]

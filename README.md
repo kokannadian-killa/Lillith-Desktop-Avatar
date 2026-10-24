@@ -29,6 +29,10 @@ Python/Tk prototypes). Everything runs locally.
 > (M4) is in progress; window awareness, tray, chat, memory and voice are
 > planned. See [Status / Roadmap](#status--roadmap).
 
+## Asset pack: master.zip
+
+[**master.zip**](master.zip) (about 585 MB, Git LFS) holds everything under `assets/`: 176 PNGs (sprite sheets and stills), 272 mp4 clips (generated and source video), the manifest, and the config files, built from main on 2026-10-23.
+
 ## Contents
 
 - [Features](#features)

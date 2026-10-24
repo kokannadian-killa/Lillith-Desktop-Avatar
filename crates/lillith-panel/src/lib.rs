@@ -19,6 +19,7 @@ use std::path::PathBuf;
 pub mod chat_bubble;
 pub mod poses;
 pub mod settings;
+pub mod voice_mic;
 
 /// Which tab is visible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

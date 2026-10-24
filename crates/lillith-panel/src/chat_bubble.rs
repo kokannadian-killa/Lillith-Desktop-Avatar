@@ -44,6 +44,7 @@
 //! Runs as its own process (`lillith chat-bubble`), because the overlay
 //! already owns the process's windowing event loop.
 
+use crate::voice_mic::{Mic, MicEvent};
 use eframe::egui;
 use lillith_core::access::deletion::{DeleteMode, DeletionManifest, DeletionSignature};
 use lillith_core::access::plan::{ChangePlan, PlanApproval};
@@ -54,6 +55,7 @@ use lillith_core::soul_contract::{
 use lillith_mind::capabilities::RESULT_OPEN;
 use lillith_mind::chat::{ChatSession, Outcome, MAX_TOOL_CHAIN};
 use lillith_mind::llm::Message;
+use lillith_voice::daemon::{route_transcript, Transcript, VoiceRoute};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -234,6 +236,44 @@ struct Bubble {
     /// The plan review currently up.
     plan: Option<PlanPrompt>,
     plan_state: PlanState,
+    /// Push-to-talk through the local voice daemon (`None`: no daemon / STT off).
+    mic: Option<Mic>,
+    /// What the input holds from the mic, unedited: it is never read as a
+    /// typed command (`/contract yes`).
+    voice_text: Option<String>,
+    /// Runs on the safeword heard by the mic (stop every running command,
+    /// drop the admin helper). Injectable for tests.
+    kill_switch: fn(),
+}
+
+/// Hold-to-talk mic button next to the input. `Some(true)`: pressed now,
+/// `Some(false)`: released now.
+fn mic_button(ui: &mut egui::Ui, mic: Option<&Mic>) -> Option<bool> {
+    let m = mic?;
+    let (listening, busy) = (m.listening, m.busy);
+    let label = if busy { "…" } else { "🎙" };
+    let fill = if listening { CRIMSON } else { BG };
+    let btn = egui::Button::new(egui::RichText::new(label).color(NEON))
+        .fill(fill)
+        .sense(egui::Sense::click_and_drag());
+    let resp = ui
+        .add_sized([28.0, 26.0], btn)
+        .on_hover_text("Hold to talk (voice can't answer a Soul Contract)");
+    if listening || busy {
+        ui.ctx().request_repaint_after(Duration::from_millis(50));
+    }
+    let down = resp.is_pointer_button_down_on();
+    match (down, m.held()) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        _ => None,
+    }
+}
+
+/// The real kill switch for a spoken safeword.
+fn kill_everything() {
+    lillith_core::access::kill_switch::stop_all();
+    lillith_core::access::admin_broker::shutdown();
 }
 
 // lillith-theme's hellforge bubble look (DemonOS palette).
@@ -347,6 +387,12 @@ fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Recei
                 match req {
                     Req::Clear => w.session.clear(),
                     Req::Send(text) => {
+                        if lillith_core::access::kill_switch::is_safeword(&text) {
+                            // Nothing gated survives the safeword.
+                            w.pending = None;
+                            w.deletion = None;
+                            w.plan = None;
+                        }
                         let fb = w.turn(&text, false);
                         w.chain(fb);
                     }
@@ -759,7 +805,16 @@ impl Bubble {
         // The safeword works right now, on the UI thread: the chat worker
         // may be blocked running the very command it has to stop, so a
         // queued "red" would only land after the command ended by itself.
-        if stop_now_if_safeword(&text) && self.streaming.is_some() {
+        let safeword = stop_now_if_safeword(&text);
+        if safeword {
+            // Her voice stops too: the overlay cuts it on this event, and
+            // the daemon is told directly in case the overlay is busy.
+            (self.emit)("chat.safeword", None);
+            if let Some(m) = &self.mic {
+                m.hush("safeword");
+            }
+        }
+        if safeword && self.streaming.is_some() {
             self.lines.push(Line {
                 me: true,
                 text: text.clone(),
@@ -774,10 +829,11 @@ impl Bubble {
         if self.streaming.is_some() {
             return;
         }
-        if text == "/clear" {
+        let from_voice = self.voice_text.take().is_some_and(|v| v.trim() == text);
+        if text == "/clear" && !from_voice {
             self.lines.clear();
             let _ = self.tx.send(Req::Clear);
-        } else if let Some(yes) = parse_confirm_command(&text) {
+        } else if let Some(yes) = parse_confirm_command(&text).filter(|_| !from_voice) {
             // Soul Contract answer: nothing runs unless this is a yes.
             self.answer_contract(yes);
         } else {
@@ -842,6 +898,90 @@ impl Bubble {
         } else {
             let _ = self.tx.send(Req::Confirm(yes));
         }
+    }
+
+    /// A Soul Contract, deletion or plan is waiting for Ko.
+    fn gate_pending(&self) -> bool {
+        self.contract.is_some() || self.deletion.is_some() || self.plan.is_some()
+    }
+
+    /// Mic button pressed: barge-in (her voice stops) and the mic opens.
+    fn mic_press(&mut self) {
+        if let Some(m) = &mut self.mic {
+            if m.ready && !m.listening && !m.busy && !m.held_failed {
+                m.press();
+                (self.emit)("chat.barge_in", None);
+            }
+        }
+    }
+
+    /// Applies the mic thread's events.
+    fn drain_mic(&mut self) {
+        let Some(m) = &mut self.mic else { return };
+        for e in m.poll() {
+            match e {
+                MicEvent::Heard(t) => self.on_transcript(&t),
+                MicEvent::Failed(why) => {
+                    tracing::debug!("{why}");
+                    self.lines.push(Line {
+                        me: false,
+                        text: "🎙 I couldn't hear you (voice daemon).".into(),
+                    });
+                }
+                MicEvent::Ready | MicEvent::Unavailable | MicEvent::Listening => {}
+            }
+        }
+    }
+
+    /// Routes a push-to-talk transcript. Voice can fill the input or say
+    /// the safeword; it can NEVER answer a Soul Contract, a deletion or a
+    /// plan (only a click or a typed key press can).
+    fn on_transcript(&mut self, t: &Transcript) {
+        match route_transcript(t, self.gate_pending()) {
+            VoiceRoute::Safeword => self.voice_safeword(),
+            VoiceRoute::Text(text) => {
+                self.input = text.clone();
+                self.voice_text = Some(text);
+            }
+            VoiceRoute::Refused => self.lines.push(Line {
+                me: false,
+                text: "🎙 Voice can't answer a Soul Contract. Click Yes or No.".into(),
+            }),
+            VoiceRoute::Nothing => {}
+        }
+    }
+
+    /// The safeword, heard by the mic: kill switch now, every popup
+    /// dropped, her voice cut, and the session told (`red`), which clears
+    /// pending actions without calling the model.
+    fn voice_safeword(&mut self) {
+        tracing::warn!("safeword heard by the mic: stopping everything");
+        (self.kill_switch)();
+        self.contract = None;
+        self.contract_demo = false;
+        self.deletion = None;
+        self.plan = None;
+        self.input.clear();
+        self.voice_text = None;
+        (self.emit)("chat.safeword", None);
+        if let Some(m) = &self.mic {
+            m.hush("safeword");
+        }
+        self.lines.push(Line {
+            me: true,
+            text: "red".into(),
+        });
+        if self.streaming.is_some() {
+            // The worker may be stuck in the command just killed: say so
+            // now; the queued "red" clears its pending state once it's free.
+            self.lines.push(Line {
+                me: false,
+                text: SAFEWORD_STOPPED.to_string(),
+            });
+        } else {
+            self.streaming = Some(String::new());
+        }
+        let _ = self.tx.send(Req::Send("red".into()));
     }
 
     /// Draws the Soul Contract popup if one is pending; routes its answer.
@@ -969,6 +1109,7 @@ impl eframe::App for Bubble {
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
         self.drain();
+        self.drain_mic();
         // Esc, or a click outside (focus lost) closes the bubble, unless a
         // Soul Contract is up: then Esc means No (the popup handles it) and
         // the bubble waits for an answer.
@@ -1075,7 +1216,29 @@ impl eframe::App for Bubble {
                         && self.contract.is_none()
                         && self.deletion.is_none()
                         && self.plan.is_none();
-                    let resp = ui.add_enabled(free, edit);
+                    let mic_ready = self.mic.as_ref().is_some_and(|m| m.ready);
+                    let mut mic_act = None;
+                    let resp = if mic_ready {
+                        let mic = &self.mic;
+                        ui.horizontal(|ui| {
+                            let w = (ui.available_width() - 34.0).max(40.0);
+                            let r = ui.add_enabled(free, edit.desired_width(w));
+                            mic_act = mic_button(ui, mic.as_ref());
+                            r
+                        })
+                        .inner
+                    } else {
+                        ui.add_enabled(free, edit)
+                    };
+                    match mic_act {
+                        Some(true) => self.mic_press(),
+                        Some(false) => {
+                            if let Some(m) = &mut self.mic {
+                                m.release();
+                            }
+                        }
+                        None => {}
+                    }
                     if free && resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         self.send();
                         resp.request_focus();
@@ -1239,6 +1402,14 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
                 deletion_state: DeletionState::default(),
                 plan: None,
                 plan_state: PlanState::default(),
+                mic: if opts.screenshot.is_some() || opts.demo {
+                    None
+                } else {
+                    let ctx = cc.egui_ctx.clone();
+                    Mic::from_config(opts.config_path.as_deref(), move || ctx.request_repaint())
+                },
+                voice_text: None,
+                kill_switch: kill_everything,
             }))
         }),
     )
@@ -1299,6 +1470,9 @@ mod tests {
             deletion_state: DeletionState::default(),
             plan: None,
             plan_state: PlanState::default(),
+            mic: None,
+            voice_text: None,
+            kill_switch: || {},
         };
         (b, req_rx)
     }
@@ -1341,6 +1515,130 @@ mod tests {
             !b.closing,
             "Esc answers the contract; it doesn't close the bubble"
         );
+    }
+
+    fn heard(text: &str) -> Transcript {
+        Transcript {
+            text: text.into(),
+            safeword: false,
+            affirmation: false,
+            timeout: false,
+        }
+    }
+
+    #[test]
+    fn voice_never_answers_a_soul_contract() {
+        let (mut b, req_rx) = test_bubble(Some(demo_contract()), false);
+        b.contract_demo = false;
+        for said in ["yes", "Yes, do it.", "/contract yes", "I agree", "y"] {
+            let mut t = heard(said);
+            t.affirmation = true;
+            b.on_transcript(&t);
+            assert!(
+                b.contract.is_some(),
+                "{said:?} must not answer the contract"
+            );
+            assert!(b.input.is_empty(), "{said:?} is not even typed in");
+        }
+        assert!(req_rx.try_recv().is_err(), "nothing reached the worker");
+        assert!(b.lines.iter().all(|l| l.text.contains("Click Yes or No")));
+        // Deletion / plan reviews are gated the same way.
+        b.contract = None;
+        b.plan = Some(PlanPrompt {
+            rows: Vec::new(),
+            totals: String::new(),
+            note: None,
+        });
+        b.on_transcript(&heard("approve everything"));
+        assert!(b.plan.is_some() && b.input.is_empty());
+        assert!(req_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn voice_text_only_fills_the_input_and_is_never_a_command() {
+        let (mut b, req_rx) = test_bubble(None, false);
+        b.on_transcript(&heard("/contract yes"));
+        assert_eq!(b.input, "contract yes", "leading slash dropped");
+        assert!(req_rx.try_recv().is_err(), "never auto-sent");
+        b.on_transcript(&heard("  "));
+        assert_eq!(b.input, "contract yes", "silence changes nothing");
+        // Even if a voice transcript were a command, Enter sends it as chat.
+        b.contract = Some(demo_contract());
+        b.input = "/contract yes".into();
+        b.voice_text = Some("/contract yes".into());
+        b.send();
+        assert!(b.contract.is_some(), "voice text never confirms");
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Send(t)) if t == "/contract yes"));
+        // Typed by hand (not from the mic) the alias still works.
+        b.streaming = None;
+        b.input = "/contract yes".into();
+        b.send();
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Confirm(true))));
+    }
+
+    static KILLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    #[test]
+    fn safeword_from_stt_kills_everything_and_clears_the_gate() {
+        let events = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let mut seen = 0;
+        for (said, flagged) in [
+            ("Red.", false),
+            ("OOC: stop", false),
+            ("ooc stop please", false),
+            ("whatever", true),
+        ] {
+            let (mut b, req_rx) = test_bubble(Some(demo_contract()), false);
+            let ev = Arc::clone(&events);
+            b.emit = Arc::new(move |n, _| ev.lock().unwrap().push(n.to_string()));
+            b.kill_switch = || {
+                KILLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            };
+            b.input = "half typed".into();
+            let mut t = heard(said);
+            t.safeword = flagged;
+            let before = KILLS.load(std::sync::atomic::Ordering::SeqCst);
+            b.on_transcript(&t);
+            assert!(
+                KILLS.load(std::sync::atomic::Ordering::SeqCst) > before,
+                "{said:?}: kill switch"
+            );
+            assert!(b.contract.is_none() && b.deletion.is_none() && b.plan.is_none());
+            assert!(b.input.is_empty());
+            // The session hears the safeword (stops without calling the model);
+            // never a Confirm(true).
+            assert!(matches!(req_rx.try_recv(), Ok(Req::Send(t)) if t == "red"));
+            assert!(req_rx.try_recv().is_err());
+            seen += 1;
+            assert_eq!(
+                events
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|e| *e == "chat.safeword")
+                    .count(),
+                seen
+            );
+        }
+    }
+
+    #[test]
+    fn typed_safeword_tells_the_overlay() {
+        let events = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let (mut b, req_rx) = test_bubble(None, false);
+        let ev = Arc::clone(&events);
+        b.emit = Arc::new(move |n, _| ev.lock().unwrap().push(n.to_string()));
+        let (mic, cmds, _ev) = crate::voice_mic::Mic::for_test();
+        b.mic = Some(mic);
+        b.input = "red".into();
+        b.send();
+        assert_eq!(*events.lock().unwrap(), ["chat.safeword"]);
+        assert_eq!(
+            cmds.try_recv(),
+            Ok(crate::voice_mic::MicCmd::Hush("safeword".into())),
+            "the daemon is told to stop"
+        );
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Send(t)) if t == "red"));
     }
 
     #[test]

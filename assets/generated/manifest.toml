@@ -1547,8 +1547,8 @@ baseline_y = 392
 scale = 0.559
 tags = ["canonical", "facing:front (seated on an edge, legs dangling)", "baked_motion", "variant_of:perch_sit"]
 seat_y = 240
-seat_x_range = [126, 234]
-feet_lowest_y = 377
+seat_x_range = [130, 238]
+feet_lowest_y = 389
 video = "arch_trace/arch_trace.mp4"
 
 [[clips.arch_trace.frames]]
@@ -3877,8 +3877,8 @@ baseline_y = 392
 scale = 0.559
 tags = ["canonical", "facing:front (drops in from above, lands seated on the edge)", "baked_motion", "blend"]
 seat_y = 240
-seat_x_range = [163, 234]
-feet_lowest_y = 376
+seat_x_range = [159, 242]
+feet_lowest_y = 387
 video = "blend_drag_held_to_perch_sit/blend_drag_held_to_perch_sit.mp4"
 
 [clips.blend_drag_held_to_perch_sit.blend]
@@ -9457,8 +9457,8 @@ baseline_y = 392
 scale = 0.559
 tags = ["canonical", "facing:front (seated on an edge, legs dangling)", "baked_motion", "variant_of:perch_sit"]
 seat_y = 240
-seat_x_range = [157, 234]
-feet_lowest_y = 375
+seat_x_range = [154, 239]
+feet_lowest_y = 387
 video = "chest_press_tease/chest_press_tease.mp4"
 
 [[clips.chest_press_tease.frames]]
@@ -10057,8 +10057,8 @@ baseline_y = 392
 scale = 0.559
 tags = ["canonical", "facing:front (seated on an edge, legs dangling)", "baked_motion", "variant_of:perch_sit"]
 seat_y = 240
-seat_x_range = [155, 236]
-feet_lowest_y = 375
+seat_x_range = [152, 240]
+feet_lowest_y = 387
 video = "cleavage_beckon/cleavage_beckon.mp4"
 
 [[clips.cleavage_beckon.frames]]
