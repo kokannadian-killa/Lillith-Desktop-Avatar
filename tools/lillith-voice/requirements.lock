@@ -1,0 +1,20 @@
+# Pinned, tested set (Pocket TTS ONNX + kokoro-onnx 0.6.1 + sherpa-onnx STT). Wheels exist for CPython 3.13 and 3.14 (Arch: python 3.14.x).
+kokoro-onnx==0.6.1
+onnxruntime==1.31.0
+numpy==2.5.4
+soundfile==0.14.0
+phonemizer==3.4.0
+espeakng-loader==0.2.4
+cffi==2.1.1
+pycparser==3.12
+attrs==26.1.0
+cloudpickle==3.1.2
+dlinfo==2.0.0
+flatbuffers==25.12.19
+joblib==1.6.0
+packaging==26.3
+protobuf==7.36.2
+typing_extensions==4.16.0
+sentencepiece==0.2.2
+sherpa-onnx==2.0.0
+sherpa-onnx-core==2.0.0

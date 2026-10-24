@@ -661,6 +661,11 @@ impl Animator {
         &self.base
     }
 
+    /// `true` while the base is the idle (standing) clip.
+    pub fn on_idle_base(&self) -> bool {
+        self.base == self.idle_base
+    }
+
     /// Frames used for a blink (empty if there is no blink clip).
     pub fn blink_frames(&self) -> &[usize] {
         &self.blink_frames
@@ -1193,6 +1198,29 @@ impl Animator {
         Ok(Some(dur))
     }
 
+    /// Lands through the blend clip `blend` (e.g. `blend_drag_held_to_perch_sit`):
+    /// the base switches to the blend's `to` clip, the blend plays over it
+    /// (replacing any reaction or transition) and hands over to the base on
+    /// the blend's `to_frame`. Returns the blend's length in seconds.
+    pub fn land_into(&mut self, blend: &str) -> Result<f32, AnimError> {
+        let (to, to_frame) = self
+            .clip(blend)?
+            .blend
+            .as_ref()
+            .map(|b| (b.to.clone(), b.to_frame as usize))
+            .ok_or_else(|| AnimError::UnknownClip(format!("{blend} (not a blend)")))?;
+        self.set_base(&to, false)?;
+        let dur = ClipPlayer::for_clip(&self.manifest.clips[blend]).duration_s();
+        self.start_overlay(
+            blend.to_string(),
+            false,
+            OverlayKind::Transition { remaining_s: dur },
+        );
+        // Handed over on the frame the blend leads into (see `tick`).
+        self.entry = Some((to, to_frame));
+        Ok(dur)
+    }
+
     /// [`Self::stand`] from a seated (non-walk) base through its
     /// `<base> -> idle` blend when the manifest has one. Returns the blend's
     /// length in seconds (`None`: a plain [`Self::stand`]).
@@ -1446,7 +1474,8 @@ impl Animator {
         }
         if done {
             let ended = self.overlay.take().map(|o| o.clip);
-            // An idle→walk blend hands over on the walk frame it leads into.
+            // An idle→walk (or landing) blend hands over on the base frame it
+            // leads into.
             if let (Some(c), Some((walk, f))) = (ended, self.entry.clone()) {
                 let leads_in = self.manifest.clips[&c]
                     .blend

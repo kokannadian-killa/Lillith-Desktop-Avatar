@@ -6,7 +6,7 @@
 use crate::backend::Backend;
 use crate::chat::{ChatAnchor, ChatHook, ClickGate, Talk};
 use crate::drag::{Drag, Placement, Release};
-use crate::gravity::{self, FallStep, Frame, Gravity, Mode, PerchCheck, Sit};
+use crate::gravity::{self, FallStep, Frame, Gravity, LandBlend, Mode, PerchCheck, Sit};
 use crate::menu_popup::{Fonts, MenuHit, MenuKey, MenuPopup};
 use crate::settings_window::{Launch, SettingsWindow};
 use crate::stage::{Changed, Stage, StageError};
@@ -16,7 +16,7 @@ use lillith_anim::atlas::{Clip, Manifest};
 use lillith_anim::avatar::AvatarStore;
 use lillith_core::config::{save_overlay, MoveMode, OverlayPos};
 use lillith_core::config::{Config, JiggleMode};
-use lillith_core::desktop::{Desktop, Landing};
+use lillith_core::desktop::{Desktop, Landing, Rect};
 use lillith_core::interaction::Button;
 use lillith_core::menu::{
     on_menu_action, open_settings_command, settings_template, MenuAction, MenuEffect, MenuExtras,
@@ -74,6 +74,8 @@ pub trait ActionSink {
 pub const CHAT_BARGE_IN: &str = "chat.barge_in";
 /// The bubble heard the safeword (voice or typed): everything stops.
 pub const CHAT_SAFEWORD: &str = "chat.safeword";
+/// Talk clip held after speech once the voice daemon is in use (s).
+pub const DAEMON_TALK_HOLD_S: f32 = 1.0;
 
 /// Shared [`ActionSink`] handle (cloneable so the Wayland → X11 fallback
 /// keeps the same voice).
@@ -113,6 +115,90 @@ pub fn sit_clips(m: &Manifest) -> Vec<String> {
         .filter(|(n, c)| c.seat_y.is_some() && (n.as_str() == SIT_CLIP || c.has_tag(SIT_BASE_TAG)))
         .map(|(n, _)| n.clone())
         .collect()
+}
+
+/// Clip tag: a lounge base a perch may pick instead of a sit (e.g.
+/// `perch_lounge`): she lies along the window top. Needs `seat_y` (the line
+/// her body rests on) and `seat_x_range` (the part of her lying on the edge).
+pub const LOUNGE_BASE_TAG: &str = "lounge_base";
+
+/// A lounge keeps its resting span at least this many px inside the window's
+/// left and right edges.
+pub const LOUNGE_EDGE_PX: i32 = 8;
+
+/// Lounge bases a perch may pick ([`LOUNGE_BASE_TAG`] with `seat_y` and
+/// `seat_x_range`; sorted).
+pub fn lounge_clips(m: &Manifest) -> Vec<String> {
+    m.clips
+        .iter()
+        .filter(|(_, c)| {
+            c.has_tag(LOUNGE_BASE_TAG) && c.seat_y.is_some() && c.seat_x_range.is_some()
+        })
+        .map(|(n, _)| n.clone())
+        .collect()
+}
+
+/// A lounge's rest line above its feet anchor in cell px (like
+/// [`seat_cell`], but a lounge lying on its feet line rests at 0).
+pub fn lounge_cell(clip: &Clip) -> Option<i32> {
+    let d = clip.frames.first()?.anchor.1 - clip.seat_y?;
+    (d >= 0).then_some(d)
+}
+
+/// [`gravity::lounge_shift`] for lounge `clip` at `scale` on window top
+/// `rect`, her feet at column `feet_x`.
+pub fn lounge_fit(clip: &Clip, scale: f32, feet_x: i32, rect: Rect) -> Option<i32> {
+    let ax = clip.frames.first()?.anchor.0;
+    gravity::lounge_shift(
+        clip.seat_x_range,
+        ax,
+        scale,
+        feet_x,
+        (rect.x, rect.right()),
+        LOUNGE_EDGE_PX,
+    )
+}
+
+/// The landing blend from the drag pose into a seated base.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LandingBlend {
+    /// The blend clip (e.g. `blend_drag_held_to_perch_sit`).
+    pub blend: String,
+    /// The seated base it hands over to (one of [`sit_clips`]).
+    pub to: String,
+    /// The blend's own seat line above its feet anchor in cell px (the
+    /// base's when the blend has no `seat_y`).
+    pub seat_cell: i32,
+    /// The base's seat line ([`seat_cell`]).
+    pub to_seat_cell: i32,
+}
+
+/// The manifest's landing blend for a drop in pose `from` (the drag pose,
+/// `drag_held`): the first clip (sorted) whose `[blend]` goes from `from` to
+/// one of the [`sit_clips`] with seat data. `None` without one (she then
+/// lands standing, as before).
+pub fn landing_blend(m: &Manifest, from: &str) -> Option<LandingBlend> {
+    let sits = sit_clips(m);
+    m.clips.iter().find_map(|(n, c)| {
+        let b = c.blend.as_ref()?;
+        if b.from != from || !sits.contains(&b.to) {
+            return None;
+        }
+        let to_seat_cell = seat_cell(&m.clips[&b.to])?;
+        Some(LandingBlend {
+            blend: n.clone(),
+            to: b.to.clone(),
+            seat_cell: seat_cell(c).unwrap_or(to_seat_cell),
+            to_seat_cell,
+        })
+    })
+}
+
+/// `overlay` is `sit`'s own blend: its landing blend or a
+/// `blend_<from>_to_<clip>` sit-down (not an interruption of the sit).
+fn own_sit_blend(sit: &Sit, overlay: &str) -> bool {
+    sit.landing.as_ref().is_some_and(|l| l.clip == overlay)
+        || (overlay.starts_with("blend_") && overlay.ends_with(&format!("_to_{}", sit.clip)))
 }
 
 /// `clip`'s seat line above its feet anchor in cell px (`anchor y - seat_y`
@@ -226,6 +312,9 @@ pub struct Controller {
     feed: Option<EventFeed>,
     /// Feed events read but not applied yet (spread over frames).
     feed_backlog: std::collections::VecDeque<Event>,
+    /// The safeword cut the current reply: its queued tokens / `chat.end`
+    /// are ignored (never shown or spoken) until the next `chat.start`.
+    chat_stopped: bool,
     sink: Option<SinkHandle>,
     /// Menu "Pause system monitor": feed events are dropped while set.
     pub monitor_paused: bool,
@@ -353,6 +442,7 @@ impl Controller {
             quit: false,
             feed: opts.events.clone(),
             feed_backlog: std::collections::VecDeque::new(),
+            chat_stopped: false,
             sink: opts.sink.clone(),
             monitor_paused: false,
             menu: None,
@@ -729,6 +819,7 @@ impl Controller {
     /// rises with it; otherwise she is up at once. (The window follows
     /// [`gravity::Perch::bottom`] in [`Self::gravity_tick`].)
     fn stand_up(&mut self, blend: bool) {
+        self.drop_sit_blend();
         let Mode::Perched(p) = &mut self.gravity.mode else {
             return;
         };
@@ -760,6 +851,23 @@ impl Controller {
         tracing::debug!(clip = %sit.clip, "perch: stood up");
     }
 
+    /// Drops the sit's own landing or sit-down blend if it is still playing
+    /// (she leaves the sit before it finished: a grab, a lost perch, a
+    /// resettle), so it does not keep drawing over the next pose.
+    fn drop_sit_blend(&mut self) {
+        let Some(sit) = self.gravity.perch().and_then(|p| p.sit.as_ref()) else {
+            return;
+        };
+        let own = self
+            .stage
+            .animator()
+            .overlay_clip()
+            .is_some_and(|o| own_sit_blend(sit, o));
+        if own {
+            self.stage.animator_mut().clear_overlays();
+        }
+    }
+
     /// Starts a fall from `from` (her footing went away).
     fn start_fall(&mut self, from: Placement, why: &str) {
         tracing::info!(why, bottom = from.bottom, "gravity: falling");
@@ -785,12 +893,52 @@ impl Controller {
         };
         self.apply_area();
         if self.brain.phase() == Phase::Dragged {
-            let a = self.brain.input(Input::DragEnd { left: p.left });
+            let mut a = self.brain.input(Input::DragEnd { left: p.left });
+            if self.land_through_blend() {
+                // The drop's `Stand` would reset her to the base pose
+                // mid-blend; the landing blend and the sit it hands over to
+                // own her pose now.
+                a.retain(|a| !matches!(a, Action::Stand));
+            }
             self.apply(a);
             self.persist(p);
         } else {
             self.brain.set_position(p.left as f32);
         }
+    }
+
+    /// Right after landing on a window from a drag or fall (still in the
+    /// drag pose): plays the manifest's [`landing_blend`] with its seat line
+    /// on the window top, then hands over to its seated base at the blend's
+    /// `to_frame` and stays seated for a usual sit. `false` (nothing
+    /// changed) without a blend, off a window, or already seated.
+    fn land_through_blend(&mut self) -> bool {
+        if !matches!(&self.gravity.mode, Mode::Perched(p) if p.sit.is_none()) {
+            return false;
+        }
+        let anim = self.stage.animator();
+        let Some(lb) = landing_blend(anim.manifest(), anim.base()) else {
+            return false;
+        };
+        let Ok(dur) = self.stage.animator_mut().land_into(&lb.blend) else {
+            return false;
+        };
+        let left_s = dur + self.gravity.sit_length();
+        tracing::debug!(blend = %lb.blend, clip = %lb.to, dur, "perch: landing through a blend");
+        if let Mode::Perched(p) = &mut self.gravity.mode {
+            p.rise = None;
+            p.sit = Some(Sit {
+                clip: lb.to,
+                left_s,
+                seat_cell: lb.to_seat_cell,
+                sink: None,
+                landing: Some(LandBlend {
+                    clip: lb.blend,
+                    seat_cell: lb.seat_cell,
+                }),
+            });
+        }
+        true
     }
 
     /// Gravity, perch checks and sits (after the brain moved her this tick).
@@ -862,6 +1010,7 @@ impl Controller {
             Mode::Perched(p) => match gravity::check_perch(&desk, &p, fx) {
                 PerchCheck::Lost(why) => {
                     let drop = p.lowered_px(self.stage.scale());
+                    self.drop_sit_blend();
                     let anim = self.stage.animator_mut();
                     if p.sit.as_ref().is_some_and(|s| anim.base() == s.clip) {
                         anim.stand();
@@ -880,11 +1029,12 @@ impl Controller {
                         p.rect = r;
                     }
                     self.apply_area();
-                    self.perch_sit(dt);
+                    self.lounge_refit(&frame);
+                    self.perch_sit(dt, &frame);
                     self.perch_hold(&frame);
                 }
                 PerchCheck::Ok => {
-                    self.perch_sit(dt);
+                    self.perch_sit(dt, &frame);
                     self.perch_hold(&frame);
                 }
             },
@@ -893,18 +1043,25 @@ impl Controller {
 
     /// Sits down on the window edge now and then while perched and calm;
     /// stands up when the sit is over or anything else takes over.
-    fn perch_sit(&mut self, dt: f32) {
+    fn perch_sit(&mut self, dt: f32, frame: &Frame) {
         let Mode::Perched(p) = &self.gravity.mode else {
             return;
         };
+        let rect = p.rect;
         let anim = self.stage.animator();
         if let Some(mut sit) = p.sit.clone() {
-            // Its own sit-down blend (`blend_<from>_to_<clip>`) is not an
-            // interruption.
+            // Its own landing or sit-down blend is not an interruption.
             let interrupted = anim.base() != sit.clip
-                || anim.overlay_clip().is_some_and(|o| {
-                    !(o.starts_with("blend_") && o.ends_with(&format!("_to_{}", sit.clip)))
-                });
+                || anim.overlay_clip().is_some_and(|o| !own_sit_blend(&sit, o));
+            // The landing blend handed over to the seated base: its seat
+            // line from now on.
+            if sit
+                .landing
+                .as_ref()
+                .is_some_and(|l| anim.overlay_clip() != Some(l.clip.as_str()))
+            {
+                sit.landing = None;
+            }
             if let Some(e) = &mut sit.sink {
                 e.step(dt);
                 if e.done() {
@@ -948,17 +1105,31 @@ impl Controller {
             return;
         }
         let m = self.stage.animator().manifest();
-        let seated: Vec<(String, i32)> = sit_clips(m)
+        let scale = self.stage.scale();
+        let cur = self.pending_move.unwrap_or(self.placement);
+        let feet_x = frame.feet_at(cur).0;
+        // (clip, seat cell, shift): the sits, plus the lounges that fit along
+        // this window top (shifted onto it if need be; too narrow: sits only).
+        let mut seated: Vec<(String, i32, i32)> = sit_clips(m)
             .into_iter()
-            .filter_map(|n| seat_cell(&m.clips[&n]).map(|d| (n, d)))
+            .filter_map(|n| seat_cell(&m.clips[&n]).map(|d| (n, d, 0)))
             .collect();
+        seated.extend(lounge_clips(m).into_iter().filter_map(|n| {
+            let c = &m.clips[&n];
+            let d = lounge_cell(c)?;
+            let dx = lounge_fit(c, scale, feet_x, rect)?;
+            Some((n, d, dx))
+        }));
         let Some(i) = self.gravity.pick_sit(seated.len()) else {
             return;
         };
-        let (clip, seat_cell) = seated[i].clone();
+        let (clip, seat_cell, dx) = seated[i].clone();
         let Ok(blend_s) = self.stage.animator_mut().sit_down(&clip) else {
             return;
         };
+        if dx != 0 {
+            self.shift_on_perch(dx);
+        }
         let left_s = self.gravity.sit_length();
         // Through a blend the window sinks with it; else all at once.
         let sink = blend_s.filter(|&s| s > 0.0).map(gravity::Ease::new);
@@ -969,7 +1140,43 @@ impl Controller {
                 left_s,
                 seat_cell,
                 sink,
+                landing: None,
             });
+        }
+    }
+
+    /// Moves her `dx` px along her window top (a lounge fitting onto it).
+    fn shift_on_perch(&mut self, dx: i32) {
+        let cur = self.pending_move.unwrap_or(self.placement);
+        let to = Placement {
+            left: cur.left + dx,
+            ..cur
+        };
+        self.pending_move = Some(to);
+        self.brain.set_position(to.left as f32);
+        tracing::debug!(dx, "perch: lounge shifted onto the window");
+    }
+
+    /// Her window was resized while she lounges on it: back onto it, or up
+    /// when it is now too narrow for the lounge.
+    fn lounge_refit(&mut self, frame: &Frame) {
+        let Some(p) = self.gravity.perch() else {
+            return;
+        };
+        let Some(sit) = &p.sit else { return };
+        let m = self.stage.animator().manifest();
+        let Some(c) = m
+            .clips
+            .get(&sit.clip)
+            .filter(|c| c.has_tag(LOUNGE_BASE_TAG))
+        else {
+            return;
+        };
+        let cur = self.pending_move.unwrap_or(self.placement);
+        match lounge_fit(c, self.stage.scale(), frame.feet_at(cur).0, p.rect) {
+            Some(0) => {}
+            Some(dx) => self.shift_on_perch(dx),
+            None => self.stand_up(false),
         }
     }
 
@@ -1030,6 +1237,8 @@ impl Controller {
         let actions = self.brain.tick(dt, busy);
         self.apply(actions);
         self.pump_lipsync();
+        self.talk.body_free =
+            !self.drag.active() && !self.tease.active() && !self.gravity.sitting();
         self.talk.tick(dt, self.stage.animator_mut());
         self.pump_showoff();
         let view = self.talk.speech.as_ref().map(|s| s.view());
@@ -1465,6 +1674,11 @@ impl Controller {
             if safeword {
                 tracing::warn!("safeword from the chat bubble: stopping everything");
                 lillith_core::access::kill_switch::stop_all();
+                // The reply in flight is dead: wrap up what's shown, and
+                // nothing of it still queued is shown or spoken.
+                self.chat_stopped = true;
+                self.talk
+                    .event(crate::chat::CHAT_ERROR, None, self.stage.animator_mut());
             }
             self.talk.reset_lipsync();
             if let Some(sink) = &self.sink {
@@ -1475,6 +1689,14 @@ impl Controller {
             return;
         }
         if ev.name.starts_with("chat.") {
+            if ev.name == crate::chat::CHAT_START {
+                self.chat_stopped = false;
+            } else if self.chat_stopped
+                && (ev.name == crate::chat::CHAT_TOKEN || ev.name == crate::chat::CHAT_END)
+            {
+                tracing::debug!(event = %ev.name, "dropped: reply cut by the safeword");
+                return;
+            }
             self.talk
                 .event(&ev.name, ev.detail.as_deref(), self.stage.animator_mut());
             if ev.name == crate::chat::CHAT_END {
@@ -1500,6 +1722,11 @@ impl Controller {
             .unwrap_or(false);
         if gone {
             self.talk.reset_lipsync();
+        }
+        if !lines.is_empty() {
+            // The voice daemon is speaking: hold the talk clip between the
+            // text and the voice.
+            self.talk.set_hold(DAEMON_TALK_HOLD_S);
         }
         for l in &lines {
             self.talk.feed_lipsync(l);
@@ -1529,6 +1756,26 @@ impl Controller {
         let Some(feed) = &self.feed else { return };
         if let Ok(rx) = feed.lock() {
             self.feed_backlog.extend(rx.try_iter());
+        }
+        // Chat events queued before the (last) safeword belong to the reply
+        // it killed: drop them so they are never shown or spoken.
+        if let Some(last) = self
+            .feed_backlog
+            .iter()
+            .rposition(|e| e.name == CHAT_SAFEWORD)
+        {
+            let mut i = 0;
+            self.feed_backlog.retain(|e| {
+                let reply = [
+                    crate::chat::CHAT_START,
+                    crate::chat::CHAT_TOKEN,
+                    crate::chat::CHAT_END,
+                ]
+                .contains(&e.name.as_str());
+                let keep = i >= last || !reply;
+                i += 1;
+                keep
+            });
         }
         let (urgent, rest): (std::collections::VecDeque<Event>, _) =
             std::mem::take(&mut self.feed_backlog)
@@ -1624,6 +1871,7 @@ impl Controller {
         self.last_drag_x = Some((now, p.left));
         if !was {
             self.cancel_tease();
+            self.drop_sit_blend();
             self.gravity.mode = Mode::Held;
             self.click_gate.cancel();
             let a = self.brain.input(Input::DragStart);
@@ -2721,6 +2969,335 @@ frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// `[clips.<name>]` of `n` 40×40 frames (anchor [20, 38]) at 8 fps.
+    fn clip_n(name: &str, n: usize, extra: &str) -> String {
+        let f = "{ x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }";
+        let frames = vec![f; n].join(", ");
+        format!("[clips.{name}]\npage = \"idle.png\"\nfps = 8.0\n{extra}frames = [ {frames} ]\n")
+    }
+
+    /// `[clips.<name>.blend]` from `from` to `to`.
+    fn blend_of(name: &str, from: &str, to: &str) -> String {
+        format!("[clips.{name}.blend]\nfrom = \"{from}\"\nto = \"{to}\"\nfrom_frame = 0\nto_frame = 0\n")
+    }
+
+    /// One window `w0` at `rect` above a 1200×760 work area.
+    fn one_window(rect: lillith_core::desktop::Rect) -> Desktop {
+        use lillith_core::desktop::{DeskWindow, Rect};
+        let mut d = Desktop::default();
+        d.set_area(Rect::new(0, 0, 1200, 800), Rect::new(0, 0, 1200, 760));
+        d.set_windows(vec![DeskWindow {
+            id: "w0".into(),
+            class: "kate".into(),
+            rect,
+        }]);
+        d
+    }
+
+    /// One 60 Hz frame, applying the move like a backend.
+    fn step(c: &mut Controller) {
+        c.tick(1.0 / 60.0).unwrap();
+        if let Some(p) = c.take_move() {
+            c.placement = p;
+        }
+    }
+
+    #[test]
+    fn landing_blend_is_found_by_its_blend_fields() {
+        let m = |toml: &str| {
+            lillith_anim::atlas::Manifest::from_toml_str(&format!(
+                "{}{}{toml}",
+                clip_n("idle", 1, ""),
+                clip_n("drag_held", 1, "")
+            ))
+            .unwrap()
+        };
+        let perch = clip_n(
+            "perch_sit",
+            1,
+            "seat_y = 20\nseat_x_range = [14, 26]\ntags = [\"sit_base\"]\n",
+        );
+        let land = |name: &str, extra: &str, to: &str| {
+            format!(
+                "{}{}",
+                clip_n(name, 2, extra),
+                blend_of(name, "drag_held", to)
+            )
+        };
+        // Its own seat line (anchor 38 - seat_y 16), and the base's.
+        let with_seat = land("land_a", "seat_y = 16\n", "perch_sit");
+        let got = landing_blend(&m(&format!("{perch}{with_seat}")), "drag_held").unwrap();
+        assert_eq!(
+            got,
+            LandingBlend {
+                blend: "land_a".into(),
+                to: "perch_sit".into(),
+                seat_cell: 22,
+                to_seat_cell: 18,
+            }
+        );
+        // Matched on `from` (the pose she is dropped in), not the name.
+        assert_eq!(
+            landing_blend(&m(&format!("{perch}{with_seat}")), "idle"),
+            None
+        );
+        // No seat_y on the blend: the base's seat line.
+        let no_seat = land("land_b", "", "perch_sit");
+        let got = landing_blend(&m(&format!("{perch}{no_seat}")), "drag_held").unwrap();
+        assert_eq!((got.seat_cell, got.to_seat_cell), (18, 18));
+        // A blend into a clip that is not a sit base, an idle -> sit blend,
+        // or a sit base without seat data: none.
+        let wave = format!("{}{}", clip_n("wave", 1, ""), land("land_c", "", "wave"));
+        assert_eq!(
+            landing_blend(&m(&format!("{perch}{wave}")), "drag_held"),
+            None
+        );
+        let idle_in = format!(
+            "{}{}",
+            clip_n("blend_idle_to_perch_sit", 2, ""),
+            blend_of("blend_idle_to_perch_sit", "idle", "perch_sit")
+        );
+        assert_eq!(
+            landing_blend(&m(&format!("{perch}{idle_in}")), "drag_held"),
+            None
+        );
+        let seatless = clip_n("perch_sit", 1, "tags = [\"sit_base\"]\n");
+        assert_eq!(
+            landing_blend(&m(&format!("{seatless}{with_seat}")), "drag_held"),
+            None
+        );
+        // sit_swing counts as a sit base too.
+        let swing = clip_n("sit_swing", 1, "seat_y = 20\n");
+        let to_swing = land("land_d", "", "sit_swing");
+        assert_eq!(
+            landing_blend(&m(&format!("{swing}{to_swing}")), "drag_held").map(|l| l.to),
+            Some("sit_swing".into())
+        );
+    }
+
+    #[test]
+    fn lands_on_a_window_through_the_landing_blend_then_sits() {
+        use lillith_core::desktop::Rect;
+        // perch_sit: seat 18 cell px above the feet (36 px at scale 2), 4
+        // frames. The landing blend: 6 frames (0.75 s), seat 22 cell px up.
+        let mut toml = clip_n(
+            "perch_sit",
+            4,
+            "mode = \"loop\"\nseat_y = 20\nseat_x_range = [14, 26]\ntags = [\"sit_base\"]\n",
+        );
+        let blend = "blend_drag_held_to_perch_sit";
+        toml.push_str(&clip_n(blend, 6, "mode = \"once\"\nseat_y = 16\n"));
+        toml.push_str(&blend_of(blend, "drag_held", "perch_sit"));
+        let (dir, mut c) = m3_controller_with("grav_land_blend", MoveMode::Stay, &toml);
+        c.gravity.cfg.sit_for_s = (2.0, 2.0);
+        c.set_screen((1200, 800));
+        c.set_desktop(Some(one_window(Rect::new(50, 300, 600, 400))));
+        drag_drop(&mut c, 0.0, -650.0);
+        let mut t = 0.0;
+        loop {
+            step(&mut c);
+            if matches!(c.gravity.mode, Mode::Perched(_)) {
+                break;
+            }
+            t += 1.0 / 60.0;
+            assert!(t < 3.0, "never landed: {:?}", c.gravity.mode);
+            assert_eq!(
+                c.stage.animator().base(),
+                "drag_held",
+                "falls in the drag pose"
+            );
+        }
+        // Landed on the window: the blend plays over perch_sit; the drop
+        // ended the drag without resetting her to idle.
+        assert_eq!(c.brain.phase(), Phase::Idle, "landing ends the drag");
+        assert_eq!(c.stage.animator().base(), "perch_sit");
+        assert_eq!(c.stage.animator().overlay_clip(), Some(blend));
+        assert!(c.gravity.sitting());
+        // The blend's seat line on the window top (standing bottom 496)
+        // from its first frame, for as long as it plays.
+        let mut during = Vec::new();
+        step(&mut c);
+        while c.stage.animator().overlay_clip() == Some(blend) {
+            during.push(c.placement.bottom);
+            assert_eq!(c.stage.animator().base(), "perch_sit", "no reset mid-blend");
+            step(&mut c);
+        }
+        assert!(during.len() > 30, "{during:?}");
+        assert!(during.iter().all(|&b| b == 496 - 44), "{during:?}");
+        // Handed over to perch_sit at frame 0 (a free-running base would be
+        // on frame 2 after 0.75 s), still seated, now on its own seat line.
+        assert_eq!(c.stage.animator().base(), "perch_sit");
+        assert_eq!(c.stage.animator().base_frame(), 0);
+        assert_eq!(c.stage.animator().overlay_clip(), None);
+        assert!(c.gravity.sitting());
+        step(&mut c);
+        assert_eq!(c.placement.bottom, 496 - 36);
+        // A usual sit after it, then up on her feet on the window top.
+        let mut t = 0.0;
+        while c.gravity.sitting() {
+            step(&mut c);
+            t += 1.0 / 60.0;
+            assert!(t < 3.0, "never stood up");
+        }
+        assert!(t > 1.5, "sat {t} s after the landing");
+        step(&mut c);
+        assert_eq!(c.stage.animator().base(), "idle");
+        assert_eq!(c.placement.bottom, 496);
+
+        // Grabbed again mid-landing: the blend stops drawing over the drag pose.
+        drag_drop(&mut c, 0.0, -200.0);
+        while !matches!(c.gravity.mode, Mode::Perched(_)) {
+            step(&mut c);
+        }
+        step(&mut c);
+        assert_eq!(c.stage.animator().overlay_clip(), Some(blend));
+        assert!(c.press((40.0, 40.0), (40.0, 40.0), true));
+        c.motion((40.0, 0.0)).unwrap();
+        assert_eq!(c.gravity.mode, Mode::Held);
+        assert_eq!(c.stage.animator().base(), "drag_held");
+        assert_eq!(c.stage.animator().overlay_clip(), None);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn lands_standing_without_a_landing_blend() {
+        use lillith_core::desktop::Rect;
+        // Only blends that do not lead from the drag pose into a sit base.
+        let mut toml = clip_n(
+            "perch_sit",
+            4,
+            "mode = \"loop\"\nseat_y = 20\ntags = [\"sit_base\"]\n",
+        );
+        for (n, from, to) in [
+            ("blend_idle_to_perch_sit", "idle", "perch_sit"),
+            ("blend_drag_held_to_wave", "drag_held", "wave"),
+        ] {
+            toml.push_str(&clip_n(n, 6, "mode = \"once\"\n"));
+            toml.push_str(&blend_of(n, from, to));
+        }
+        let (dir, mut c) = m3_controller_with("grav_land_plain", MoveMode::Stay, &toml);
+        c.set_screen((1200, 800));
+        c.set_desktop(Some(one_window(Rect::new(50, 300, 600, 400))));
+        drag_drop(&mut c, 0.0, -650.0);
+        while !matches!(c.gravity.mode, Mode::Perched(_)) {
+            step(&mut c);
+        }
+        step(&mut c);
+        assert_eq!(c.brain.phase(), Phase::Idle);
+        assert_eq!(c.stage.animator().base(), "idle");
+        assert_eq!(c.stage.animator().overlay_clip(), None);
+        assert!(!c.gravity.sitting());
+        assert_eq!(c.placement.bottom, 496);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn lounge_clips_need_the_tag_and_seat_data() {
+        let m = |toml: &str| {
+            lillith_anim::atlas::Manifest::from_toml_str(&format!(
+                "{}{}{toml}",
+                clip_n("idle", 1, ""),
+                clip_n("drag_held", 1, "")
+            ))
+            .unwrap()
+        };
+        let lounge = clip_n(
+            "perch_lounge",
+            1,
+            "seat_y = 36\nseat_x_range = [2, 38]\ntags = [\"lounge_base\"]\n",
+        );
+        let no_range = clip_n("lounge_b", 1, "seat_y = 36\ntags = [\"lounge_base\"]\n");
+        let untagged = clip_n("lounge_c", 1, "seat_y = 36\nseat_x_range = [2, 38]\n");
+        let flat = clip_n(
+            "lounge_d",
+            1,
+            "seat_y = 38\nseat_x_range = [2, 38]\ntags = [\"lounge_base\"]\n",
+        );
+        let mm = m(&format!("{lounge}{no_range}{untagged}{flat}"));
+        assert_eq!(lounge_clips(&mm), ["lounge_d", "perch_lounge"]);
+        // Not a sit: the sit picker and the perch margin leave lounges out.
+        assert!(sit_clips(&mm).is_empty());
+        // Rest line 2 cell px above the feet; lying on the feet line: 0.
+        assert_eq!(lounge_cell(&mm.clips["perch_lounge"]), Some(2));
+        assert_eq!(lounge_cell(&mm.clips["lounge_d"]), Some(0));
+        assert_eq!(seat_cell(&mm.clips["lounge_d"]), None);
+        // Fit at scale 2 (span -36..36 around the feet) on a 50..650 top.
+        let c = &mm.clips["perch_lounge"];
+        let win = Rect::new(50, 300, 600, 400);
+        assert_eq!(lounge_fit(c, 2.0, 300, win), Some(0));
+        assert_eq!(lounge_fit(c, 2.0, 620, win), Some(642 - 656));
+        assert_eq!(lounge_fit(c, 2.0, 60, win), Some(58 - 24));
+        assert_eq!(lounge_fit(c, 2.0, 540, Rect::new(500, 300, 84, 400)), None);
+        assert_eq!(lounge_fit(&mm.clips["lounge_b"], 2.0, 300, win), None);
+    }
+
+    #[test]
+    fn lounges_along_wide_window_tops_and_only_sits_on_narrow_ones() {
+        use lillith_core::desktop::Rect;
+        // sit_swing: seat 18 cell px up. perch_lounge: rests 2 cell px up
+        // (4 px at scale 2) on x 2..38 of the cell (anchor x 20): 72 px wide.
+        let sit = "mode = \"loop\"\nseat_y = 20\nseat_x_range = [14, 26]\n";
+        let lounge = "mode = \"loop\"\nseat_y = 36\nseat_x_range = [2, 38]\n\
+                      tags = [\"lounge_base\"]\n";
+        let toml = format!(
+            "{}{}",
+            clip_n("sit_swing", 1, sit),
+            clip_n("perch_lounge", 1, lounge)
+        );
+        let controller = |tag: &str, rect: Rect, left: i32| {
+            let (dir, mut c) = m3_controller_with(tag, MoveMode::Stay, &toml);
+            c.gravity.cfg.sit_every_s = (0.2, 0.2);
+            c.gravity.cfg.sit_for_s = (0.5, 0.5);
+            c.set_screen((1200, 800));
+            c.set_desktop(Some(one_window(rect)));
+            c.placement = Placement { left, bottom: 700 };
+            c.gravity.mode = Mode::Settle { wait: 0.0 };
+            (dir, c)
+        };
+        // Wide top 50..650, feet at x 620: a lounge there would stick out
+        // past 642 (8 px inside the right edge), so it moves her 14 px left.
+        let (dir, mut c) = controller("grav_lounge_wide", Rect::new(50, 300, 600, 400), 580);
+        let (mut sat, mut lounged) = (false, false);
+        let mut t = 0.0;
+        while !(sat && lounged) {
+            step(&mut c);
+            t += 1.0 / 60.0;
+            assert!(t < 60.0, "sat {sat}, lounged {lounged}");
+            if !c.gravity.sitting() {
+                continue;
+            }
+            match c.stage.animator().base() {
+                "sit_swing" => sat = true,
+                "perch_lounge" if !lounged => {
+                    lounged = true;
+                    step(&mut c);
+                    assert_eq!(c.placement.left, 580 - 14, "shifted onto the top");
+                    assert_eq!(c.placement.bottom, 496 - 4, "rests on its own line");
+                }
+                _ => {}
+            }
+        }
+        let _ = std::fs::remove_dir_all(dir);
+
+        // Narrow top 500..584 (perchable, but 72 + 2 × 8 px do not fit):
+        // sits only.
+        let (dir, mut c) = controller("grav_lounge_narrow", Rect::new(500, 300, 84, 400), 500);
+        let mut sits = 0;
+        let mut was = false;
+        for _ in 0..(20 * 60) {
+            step(&mut c);
+            let now = c.gravity.sitting();
+            if now && !was {
+                sits += 1;
+            }
+            was = now;
+            assert_ne!(c.stage.animator().base(), "perch_lounge");
+        }
+        assert!(matches!(&c.gravity.mode, Mode::Perched(_)));
+        assert!(sits >= 5, "{sits}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// Global y of her drawn feet anchor minus `y` (window px are floats:
     /// the feet anchor is `anchor y × scale` into the canvas).
     fn feet_gap(c: &Controller, screen_h: i32, y: i32) -> f32 {
@@ -2964,9 +3541,13 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         lines: Arc<Mutex<Vec<String>>>,
         gone: Arc<Mutex<bool>>,
         interrupts: Arc<Mutex<Vec<String>>>,
+        spoken: Arc<Mutex<Vec<String>>>,
     }
     impl ActionSink for LipSink {
         fn on_actions(&mut self, _: &[Action]) {}
+        fn on_chat_reply(&mut self, reply: &str) {
+            self.spoken.lock().unwrap().push(reply.to_string());
+        }
         fn lipsync_lines(&mut self, out: &mut Vec<String>) -> bool {
             out.append(&mut self.lines.lock().unwrap());
             std::mem::take(&mut *self.gone.lock().unwrap())
@@ -3012,6 +3593,52 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         c.event(&Event::new(CHAT_SAFEWORD));
         assert!(lillith_core::access::kill_switch::stopped_since(before));
         assert_eq!(*sink.interrupts.lock().unwrap(), ["barge_in", "safeword"]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn safeword_kills_the_queued_reply_it_interrupts() {
+        let (dir, mut c) = m3_controller("safeword-reply", MoveMode::Stay);
+        let sink = LipSink::default();
+        c.sink = Some(SinkHandle::new(sink.clone()));
+        let (tx, rx) = std::sync::mpsc::channel();
+        c.feed = Some(Arc::new(Mutex::new(rx)));
+        let send = |name: &str, d: Option<&str>| {
+            tx.send(match d {
+                Some(d) => Event::with_detail(name, d),
+                None => Event::new(name),
+            })
+            .unwrap();
+        };
+        send(crate::chat::CHAT_START, None);
+        for _ in 0..(MAX_EVENTS_PER_TICK * 2) {
+            send(crate::chat::CHAT_TOKEN, Some("la "));
+        }
+        let full = format!("{}SECRET", "la ".repeat(MAX_EVENTS_PER_TICK * 2));
+        send(crate::chat::CHAT_END, Some(&full));
+        send(CHAT_SAFEWORD, None);
+        for _ in 0..10 {
+            c.tick(0.016).unwrap();
+        }
+        assert!(sink.spoken.lock().unwrap().is_empty(), "nothing spoken");
+        let shown = c
+            .talk
+            .speech
+            .as_ref()
+            .map(|s| s.text.clone())
+            .unwrap_or_default();
+        assert!(!shown.contains("SECRET"), "reply not re-shown: {shown:?}");
+        // Belt and braces: a stale chat.end arriving after the safeword (no
+        // new chat.start) is ignored too.
+        send(crate::chat::CHAT_END, Some("late SECRET"));
+        c.tick(0.016).unwrap();
+        assert!(sink.spoken.lock().unwrap().is_empty());
+        // The next reply works normally.
+        send(crate::chat::CHAT_START, None);
+        send(crate::chat::CHAT_TOKEN, Some("hi"));
+        send(crate::chat::CHAT_END, Some("hi"));
+        c.tick(0.016).unwrap();
+        assert_eq!(*sink.spoken.lock().unwrap(), ["hi"]);
         let _ = std::fs::remove_dir_all(dir);
     }
 
