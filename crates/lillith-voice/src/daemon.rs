@@ -735,9 +735,12 @@ impl LipsyncReader {
     /// disconnected meanwhile (speakers off / muted: nothing to animate,
     /// but the queue must not grow).
     pub fn discard(&self) -> bool {
-        self.rx
-            .try_iter()
-            .fold(false, |gone, m| gone || m == LipsyncMsg::Disconnected)
+        // Not `any`: that would stop early and leave the rest queued.
+        let mut gone = false;
+        for m in self.rx.try_iter() {
+            gone |= m == LipsyncMsg::Disconnected;
+        }
+        gone
     }
 
     /// Stops the thread and waits briefly for it (a blocked Windows pipe
