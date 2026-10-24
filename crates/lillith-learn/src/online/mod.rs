@@ -8,8 +8,8 @@
 //! 1. is off unless `[learn] online` (default **false**), `[learn]
 //!    enabled` and `[memory] enabled` are all on;
 //! 2. is refused when the local Tor SOCKS port doesn't answer (Tor is never
-//!    installed or started here), when an address is not plain `http(s)`,
-//!    points at Ko's own network, is on `[learn] block_hosts`, or carries a
+//!    installed or started here), when an address is not `https://`
+//!    (plain `http://` only with `[learn] allow_http = true`), points at Ko's own network, is on `[learn] block_hosts`, or carries a
 //!    local identifier (§12 denylist); tracking parameters are stripped
 //!    before anything is shown or sent;
 //! 3. audits `PROPOSED` (purpose, every address, the caps) before any byte
@@ -21,8 +21,8 @@
 //! 4. fetches only the approved addresses, one read-only GET per hop on
 //!    the trip's own Tor circuit; a redirect to a host that is not on the
 //!    list is recorded and stops the trip; `max_pages` / `max_bytes` are
-//!    hard caps (overflow is not fetched); the safeword stops it and
-//!    discards everything;
+//!    hard caps (overflow is not fetched); the safeword stops it within
+//!    about a second, even mid-request, and discards everything;
 //! 5. keeps fetched text only as untrusted `web` notes under
 //!    `knowledge/web/` (with `url` and `trip_id`), after the §7 ingest
 //!    filter; never as instructions;
@@ -324,6 +324,7 @@ pub struct OnlineResearch<'f> {
     max_pages: u32,
     max_bytes: u64,
     max_wall: Duration,
+    allow_http: bool,
 }
 
 impl std::fmt::Debug for OnlineResearch<'_> {
@@ -356,6 +357,7 @@ impl<'f> OnlineResearch<'f> {
             max_pages: cfg.learn.online_max_pages.max(1),
             max_bytes: cfg.learn.online_max_bytes.max(1),
             max_wall: MAX_WALL,
+            allow_http: cfg.learn.allow_http,
         })
     }
 
@@ -389,6 +391,12 @@ impl<'f> OnlineResearch<'f> {
     /// identifier. Returns the cleaned URL.
     fn vet(&self, u: &Url) -> Result<Url, String> {
         let u = u.strip_tracking();
+        if !u.is_https() && !self.allow_http {
+            return Err(format!(
+                "{u} is plain http:// and [learn] allow_http = false (a Tor exit node \
+                 could read or change it); use https://"
+            ));
+        }
         if self.blocked_host(u.host()) {
             return Err(format!("{} is on [learn] block_hosts", u.host()));
         }
@@ -594,8 +602,26 @@ impl<'f> OnlineResearch<'f> {
                     break 'trip;
                 }
                 rep.pages += 1;
-                let page = match self.fetcher.get(&url, &trip_id, max_bytes - rep.bytes) {
+                let halt = || stop() || Instant::now() >= deadline;
+                let got = self
+                    .fetcher
+                    .get(&url, &trip_id, max_bytes - rep.bytes, &halt);
+                let page = match got {
                     Ok(p) => p,
+                    Err(FetchError::Stopped) => {
+                        rep.visits.push(Visit {
+                            url: url.to_string(),
+                            status: None,
+                            note: "stopped mid-request".into(),
+                        });
+                        if stop() {
+                            cancelled = true;
+                        } else {
+                            timed_out = true;
+                            rep.reason = Some(format!("the trip ran over {:?}", self.max_wall));
+                        }
+                        break 'trip;
+                    }
                     Err(e) => {
                         rep.visits.push(Visit {
                             url: url.to_string(),

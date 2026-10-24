@@ -876,6 +876,9 @@ pub struct LearnConfig {
     pub online_max_pages: u32,
     pub online_max_bytes: u64,
     pub tor_socks: String,
+    /// Online trips may fetch plain `http://` (off: a Tor exit node can
+    /// read and change plaintext, so only `https://` is fetched).
+    pub allow_http: bool,
     pub practice: bool,
     /// `[learn.dream]` (P7; parsed, unused).
     pub dream: LearnDreamConfig,
@@ -932,6 +935,7 @@ impl Default for LearnConfig {
             online_max_pages: 5,
             online_max_bytes: 2_097_152,
             tor_socks: "127.0.0.1:9050".into(),
+            allow_http: false,
             practice: true,
             dream: LearnDreamConfig::default(),
             workers: LearnWorkersConfig::default(),
@@ -1709,6 +1713,7 @@ mod tests {
         assert_eq!((d.idle_after_s, d.max_duty), (300.0, 0.10));
         assert_eq!((d.max_tokens_per_day, d.max_steps_per_hour), (40_000, 12));
         assert_eq!(d.max_file_bytes, 256 * 1024);
+        assert!(!d.online && !d.allow_http, "online and plain http ship off");
         assert!(d.topics.iter().any(|t| t == "linux-garuda"));
         assert!(d.source_on("man") && !d.source_on("web"));
         let old: Config = toml::from_str("scale = 0.5\n").unwrap();

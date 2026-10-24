@@ -1,27 +1,33 @@
 //! The network side of a trip, behind [`Fetcher`] so the engine is tested
 //! with no socket at all.
 //!
-//! [`TorFetcher`] is the only real transport: a plain HTTP/1.1 GET written
-//! by hand over `std::net::TcpStream` to the **local Tor SOCKS5 proxy**
+//! [`TorFetcher`] is the only real transport: one HTTP/1.1 GET written by
+//! hand over `std::net::TcpStream` to the **local Tor SOCKS5 proxy**
 //! (`[learn] tor_socks`, loopback only), with the host name sent to Tor
 //! (`socks5h`: no local DNS lookup ever happens) and the trip id as the
 //! SOCKS user name and password, so Tor (`IsolateSOCKSAuth`, on by default)
 //! gives every trip its own circuit. One request per connection
 //! (`Connection: close`); nothing persists between requests: no cookies,
-//! cache, `Referer`, auth, `ETag` / `If-Modified-Since`, no JavaScript.
-//! Headers are a fixed, generic Tor-Browser-like set pinned below.
+//! cache, `Referer`, auth, `ETag` / `If-Modified-Since`, no JavaScript, no
+//! TLS session resumption. Headers are a fixed, generic Tor-Browser-like
+//! set pinned below.
 //!
-//! `https://` is NOT available on this path: the workspace has no TLS
-//! client that can run over a SOCKS stream without adding a crate (the gate
-//! is `--locked`, offline), and adding a TLS dependency (e.g. `rustls` +
-//! `webpki-roots` directly, or reqwest's `socks` feature) is a lead
-//! decision. Until then an `https://` GET returns
-//! [`FetchError::TlsUnavailable`] and nothing is sent.
+//! `https://` runs rustls (ring provider, TLS 1.2 + 1.3) over that same
+//! SOCKS stream, SNI = the target host name, verified against the Mozilla
+//! roots compiled in from `webpki-roots` (nothing is downloaded at run
+//! time, no OpenSSL, no system store). Plain `http://` is refused by the
+//! engine unless `[learn] allow_http = true` (an exit node can read and
+//! change plaintext).
+//!
+//! Every socket read and write waits at most [`POLL`] and then checks the
+//! trip's `stop()` (safeword, End early, the trip clock), so a trip stops
+//! within about a second even in the middle of a slow body.
 
 use super::url::Url;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// Tor Browser 14 (ESR 128) on Windows: the most common Tor Browser
 /// fingerprint. Pinned; changed only by a normal code change.
@@ -36,8 +42,10 @@ pub const ACCEPT_ENCODING: &str = "identity";
 
 /// Largest response head read.
 pub const MAX_HEAD_BYTES: usize = 32 * 1024;
-/// Connect / read / write timeout of one request.
+/// A request with no progress for this long fails.
 pub const IO_TIMEOUT: Duration = Duration::from_secs(20);
+/// Longest single socket wait before `stop()` is checked again.
+pub const POLL: Duration = Duration::from_millis(500);
 
 /// One GET's answer (redirects are NOT followed: the engine checks each hop
 /// against the approved list before it is requested).
@@ -61,8 +69,10 @@ pub struct FetchedPage {
 pub enum FetchError {
     /// The Tor SOCKS port is not answering (or not loopback).
     TorUnavailable(String),
-    /// `https://` needs a TLS client this build doesn't have (lead decision).
-    TlsUnavailable,
+    /// The TLS handshake or certificate check failed.
+    Tls(String),
+    /// `stop()` turned true (safeword, End early, the trip clock).
+    Stopped,
     /// The SOCKS handshake failed.
     Socks(String),
     Io(String),
@@ -74,9 +84,8 @@ impl std::fmt::Display for FetchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FetchError::TorUnavailable(w) => write!(f, "Tor is not available: {w}"),
-            FetchError::TlsUnavailable => f.write_str(
-                "https:// is not available yet (no TLS client in this build); nothing was sent",
-            ),
+            FetchError::Tls(w) => write!(f, "TLS: {w}"),
+            FetchError::Stopped => f.write_str("stopped"),
             FetchError::Socks(w) => write!(f, "Tor SOCKS: {w}"),
             FetchError::Io(w) => write!(f, "network: {w}"),
             FetchError::Http(w) => write!(f, "bad HTTP answer: {w}"),
@@ -86,7 +95,85 @@ impl std::fmt::Display for FetchError {
 
 impl From<std::io::Error> for FetchError {
     fn from(e: std::io::Error) -> Self {
+        if e.get_ref().is_some_and(|i| i.is::<StopMark>()) {
+            return FetchError::Stopped;
+        }
+        if let Some(t) = e.get_ref().and_then(|i| i.downcast_ref::<rustls::Error>()) {
+            return FetchError::Tls(t.to_string());
+        }
         FetchError::Io(e.to_string())
+    }
+}
+
+/// The io error [`Stoppable`] returns once `stop()` is true.
+#[derive(Debug)]
+struct StopMark;
+
+impl std::fmt::Display for StopMark {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("stopped")
+    }
+}
+
+impl std::error::Error for StopMark {}
+
+fn stopped() -> std::io::Error {
+    std::io::Error::other(StopMark)
+}
+
+/// A stream whose reads and writes give up when `stop()` turns true. The
+/// inner stream must time out after at most [`POLL`] (a `TcpStream` with
+/// `set_read_timeout(Some(POLL))`); each timeout re-checks `stop()`, and
+/// `idle` without any progress fails the call.
+pub struct Stoppable<'a, S> {
+    inner: S,
+    stop: &'a dyn Fn() -> bool,
+    idle: Duration,
+}
+
+impl<'a, S> Stoppable<'a, S> {
+    pub fn new(inner: S, stop: &'a dyn Fn() -> bool, idle: Duration) -> Self {
+        Self { inner, stop, idle }
+    }
+
+    pub fn get_ref(&self) -> &S {
+        &self.inner
+    }
+
+    fn retry<T>(&mut self, mut f: impl FnMut(&mut S) -> std::io::Result<T>) -> std::io::Result<T> {
+        let start = Instant::now();
+        loop {
+            if (self.stop)() {
+                return Err(stopped());
+            }
+            match f(&mut self.inner) {
+                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                    if start.elapsed() >= self.idle {
+                        return Err(std::io::Error::new(
+                            ErrorKind::TimedOut,
+                            format!("no answer for {:?}", self.idle),
+                        ));
+                    }
+                }
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                r => return r,
+            }
+        }
+    }
+}
+
+impl<S: Read> Read for Stoppable<'_, S> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.retry(|s| s.read(buf))
+    }
+}
+
+impl<S: Write> Write for Stoppable<'_, S> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.retry(|s| s.write(buf))
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.retry(|s| s.flush())
     }
 }
 
@@ -95,8 +182,15 @@ pub trait Fetcher {
     /// `Ok` when trips may run at all (Tor answering).
     fn available(&self) -> Result<(), String>;
     /// One read-only GET of `url` on `trip_id`'s circuit, reading at most
-    /// `max_bytes` of body.
-    fn get(&self, url: &Url, trip_id: &str, max_bytes: u64) -> Result<FetchedPage, FetchError>;
+    /// `max_bytes` of body. Gives up with [`FetchError::Stopped`] within
+    /// about a second of `stop()` turning true.
+    fn get(
+        &self,
+        url: &Url,
+        trip_id: &str,
+        max_bytes: u64,
+        stop: &dyn Fn() -> bool,
+    ) -> Result<FetchedPage, FetchError>;
 }
 
 /// The Tor SOCKS address, refused unless it is a loopback `ip:port`
@@ -226,7 +320,14 @@ fn read_capped<R: Read>(
     let room = cap.saturating_sub(body.len() as u64);
     let want = n.map_or(room + 1, |n| n.min(room + 1));
     let before = body.len();
-    r.by_ref().take(want).read_to_end(body)?;
+    match r.by_ref().take(want).read_to_end(body) {
+        // A TLS peer that closes without close_notify: what arrived counts
+        // (the length checks below still apply).
+        Err(e) if e.kind() == ErrorKind::UnexpectedEof => {}
+        r => {
+            r?;
+        }
+    }
     let got = (body.len() - before) as u64;
     if got > room {
         body.truncate(before + room as usize);
@@ -304,11 +405,46 @@ pub fn read_response<R: Read>(r: R, url: &Url, max_bytes: u64) -> Result<Fetched
     })
 }
 
-/// The real transport: Tor SOCKS5h on loopback, plain HTTP/1.1 GET.
+/// The Mozilla roots compiled into the binary (`webpki-roots`).
+pub fn bundled_roots() -> rustls::RootCertStore {
+    rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned())
+}
+
+/// The client config of one trip: ring, safe protocol versions, the given
+/// roots, no client auth, no session resumption (nothing links two
+/// requests), no ALPN (HTTP/1.1 only).
+pub fn tls_config(
+    roots: Arc<rustls::RootCertStore>,
+) -> Result<Arc<rustls::ClientConfig>, FetchError> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let mut c = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|e| FetchError::Tls(e.to_string()))?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    c.resumption = rustls::client::Resumption::disabled();
+    c.enable_sni = true;
+    Ok(Arc::new(c))
+}
+
+/// Writes the GET to `s` and reads the answer.
+fn exchange<S: Read + Write>(
+    s: &mut S,
+    url: &Url,
+    max_bytes: u64,
+) -> Result<FetchedPage, FetchError> {
+    s.write_all(&request_bytes(url))?;
+    s.flush()?;
+    read_response(s, url, max_bytes)
+}
+
+/// The real transport: Tor SOCKS5h on loopback, HTTP/1.1 GET, https via
+/// rustls over the SOCKS stream.
 #[derive(Debug, Clone)]
 pub struct TorFetcher {
     socks: String,
     timeout: Duration,
+    roots: Arc<rustls::RootCertStore>,
 }
 
 impl TorFetcher {
@@ -316,12 +452,59 @@ impl TorFetcher {
         Self {
             socks: tor_socks.to_string(),
             timeout: IO_TIMEOUT,
+            roots: Arc::new(bundled_roots()),
         }
     }
 
     /// `[learn] tor_socks`.
     pub fn from_config(cfg: &lillith_core::config::LearnConfig) -> Self {
         Self::new(&cfg.tor_socks)
+    }
+
+    /// Trust only `roots` instead of the bundled Mozilla set (tests, pinning).
+    pub fn with_roots(mut self, roots: rustls::RootCertStore) -> Self {
+        self.roots = Arc::new(roots);
+        self
+    }
+
+    /// No progress for this long fails a request (default [`IO_TIMEOUT`]).
+    pub fn with_timeout(mut self, d: Duration) -> Self {
+        self.timeout = d;
+        self
+    }
+
+    fn get_inner(
+        &self,
+        url: &Url,
+        trip_id: &str,
+        max_bytes: u64,
+        stop: &dyn Fn() -> bool,
+    ) -> Result<FetchedPage, FetchError> {
+        let a = socks_addr(&self.socks).map_err(FetchError::TorUnavailable)?;
+        if stop() {
+            return Err(FetchError::Stopped);
+        }
+        let tcp = TcpStream::connect_timeout(&a, self.timeout.min(Duration::from_secs(5)))
+            .map_err(|e| FetchError::TorUnavailable(e.to_string()))?;
+        tcp.set_read_timeout(Some(POLL))?;
+        tcp.set_write_timeout(Some(POLL))?;
+        tcp.set_nodelay(true)?;
+        let mut s = Stoppable::new(tcp, stop, self.timeout);
+        socks5_connect(&mut s, url.host(), url.port(), trip_id)?;
+        if url.is_https() {
+            let name = rustls::pki_types::ServerName::try_from(url.host().to_string())
+                .map_err(|e| FetchError::Tls(format!("server name: {e}")))?;
+            let conn = rustls::ClientConnection::new(tls_config(self.roots.clone())?, name)
+                .map_err(|e| FetchError::Tls(e.to_string()))?;
+            let mut tls = rustls::StreamOwned::new(conn, s);
+            let page = exchange(&mut tls, url, max_bytes);
+            let _ = tls.sock.get_ref().shutdown(std::net::Shutdown::Both);
+            page
+        } else {
+            let page = exchange(&mut s, url, max_bytes);
+            let _ = s.get_ref().shutdown(std::net::Shutdown::Both);
+            page
+        }
     }
 }
 
@@ -335,21 +518,18 @@ impl Fetcher for TorFetcher {
             .map_err(|e| format!("nothing answers on the Tor SOCKS port {a} ({e})"))
     }
 
-    fn get(&self, url: &Url, trip_id: &str, max_bytes: u64) -> Result<FetchedPage, FetchError> {
-        if url.is_https() {
-            // Adding a TLS client crate is a lead decision; see the module doc.
-            return Err(FetchError::TlsUnavailable);
+    fn get(
+        &self,
+        url: &Url,
+        trip_id: &str,
+        max_bytes: u64,
+        stop: &dyn Fn() -> bool,
+    ) -> Result<FetchedPage, FetchError> {
+        let r = self.get_inner(url, trip_id, max_bytes, stop);
+        // Whatever the inner layers made of it: a stop is a stop.
+        if r.is_err() && stop() {
+            return Err(FetchError::Stopped);
         }
-        let a = socks_addr(&self.socks).map_err(FetchError::TorUnavailable)?;
-        let mut s = TcpStream::connect_timeout(&a, self.timeout)
-            .map_err(|e| FetchError::TorUnavailable(e.to_string()))?;
-        s.set_read_timeout(Some(self.timeout))?;
-        s.set_write_timeout(Some(self.timeout))?;
-        socks5_connect(&mut s, url.host(), url.port(), trip_id)?;
-        s.write_all(&request_bytes(url))?;
-        s.flush()?;
-        let page = read_response(&mut s, url, max_bytes);
-        let _ = s.shutdown(std::net::Shutdown::Both);
-        page
+        r
     }
 }

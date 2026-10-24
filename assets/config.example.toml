@@ -322,6 +322,8 @@
 # online_max_pages = 5
 # online_max_bytes = 2097152
 # tor_socks = "127.0.0.1:9050"
+# allow_http = false     # online trips fetch https:// only; plain http:// can be read
+#                        # or changed by the Tor exit node. Leave off unless needed.
 # practice = true
 # [learn.dream]
 # min_minutes = 30

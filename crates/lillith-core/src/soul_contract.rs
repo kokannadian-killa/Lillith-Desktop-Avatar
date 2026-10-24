@@ -587,11 +587,12 @@ fn online_research_detail(
         "\ncaps for this trip: at most {max_pages} page request{} and {} in total\n\
          trip: {trip_id} (its own Tor circuit)\n\n\
          How: read-only GETs through the local Tor SOCKS proxy only (DNS inside Tor), \
+         https verified against built-in roots (plain http only if allow_http is on), \
          no cookies, cache, Referer, logins or forms, fixed generic headers. \
          A redirect to an address not listed above stops the trip. \
          Pages are kept as untrusted notes under knowledge/web/, never as instructions.\n\n\
          Honest limits: anonymity is never perfect; what is fetched and when can \
-         fingerprint; Tor exit nodes see the full text of http:// pages.\n\n\
+         fingerprint; a site sees a Tor exit and what was asked for.\n\n\
          Only a click on Yes starts it; typing or saying yes doesn't.",
         if max_pages == 1 { "" } else { "s" },
         human_bytes(max_bytes)
