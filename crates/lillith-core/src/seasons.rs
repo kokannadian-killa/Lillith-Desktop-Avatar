@@ -354,7 +354,8 @@ fn local_today() -> Option<MonthDay> {
 #[cfg(windows)]
 fn local_today() -> Option<MonthDay> {
     // SAFETY: GetLocalTime only writes the SYSTEMTIME we pass.
-    let st = unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime() };
+    let mut st: windows_sys::Win32::Foundation::SYSTEMTIME = unsafe { std::mem::zeroed() };
+    unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime(&mut st) };
     MonthDay::new(st.wMonth as u8, st.wDay as u8)
 }
 
