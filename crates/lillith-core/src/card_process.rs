@@ -114,9 +114,31 @@ pub fn display_available() -> bool {
 /// the answer (killed, as [`CardAnswer::TimedOut`], a few seconds after
 /// its own timeout).
 pub fn ask(exe: &Path, text: &CardText, timeout: Duration) -> CardAnswer {
+    ask_until(exe, text, timeout, || false)
+}
+
+/// [`ask`] that also closes the card when `stop()` turns true (the
+/// safeword): the card process is killed and the answer is
+/// [`CardAnswer::Cancelled`], never a Yes.
+pub fn ask_until(
+    exe: &Path,
+    text: &CardText,
+    timeout: Duration,
+    stop: impl Fn() -> bool,
+) -> CardAnswer {
     if !display_available() {
         return CardAnswer::NoUi;
     }
+    show_and_wait(exe, text, timeout, stop)
+}
+
+/// Spawns the card and waits for its word (no display check; tested).
+fn show_and_wait(
+    exe: &Path,
+    text: &CardText,
+    timeout: Duration,
+    stop: impl Fn() -> bool,
+) -> CardAnswer {
     let mut child = match Command::new(exe)
         .arg("contract-card")
         .arg("--timeout")
@@ -140,6 +162,11 @@ pub fn ask(exe: &Path, text: &CardText, timeout: Duration) -> CardAnswer {
     }
     let hard = Instant::now() + timeout + Duration::from_secs(10);
     loop {
+        if stop() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return CardAnswer::Cancelled;
+        }
         match child.try_wait() {
             Ok(Some(_)) => {
                 let mut out = String::new();
@@ -193,6 +220,47 @@ mod tests {
         for junk in ["", "y", "YES", "yes please", "ok"] {
             assert_eq!(CardAnswer::from_output(junk), CardAnswer::NoUi, "{junk}");
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_safeword_closes_an_open_card_and_it_is_never_a_yes() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let dir = std::env::temp_dir().join(format!(
+            "lillith-card-safeword-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // A "card" that would answer yes after a long wait.
+        let exe = dir.join("card.sh");
+        std::fs::write(&exe, "#!/bin/sh\ncat >/dev/null\nsleep 30\necho yes\n").unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let said_red = AtomicBool::new(false);
+        let t0 = Instant::now();
+        let a = show_and_wait(&exe, &CardText::default(), Duration::from_secs(60), || {
+            if t0.elapsed() > Duration::from_millis(200) {
+                said_red.store(true, Ordering::SeqCst);
+            }
+            said_red.load(Ordering::SeqCst)
+        });
+        assert_eq!(a, CardAnswer::Cancelled);
+        assert!(
+            t0.elapsed() < Duration::from_secs(10),
+            "the card was not closed"
+        );
+        // The same card left alone does answer (so Cancelled above is the
+        // safeword, not a broken script).
+        let exe = dir.join("card-yes.sh");
+        std::fs::write(&exe, "#!/bin/sh\ncat >/dev/null\necho yes\n").unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let a = show_and_wait(&exe, &CardText::default(), Duration::from_secs(60), || {
+            false
+        });
+        assert_eq!(a, CardAnswer::Yes);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -16,6 +16,7 @@
 
 use anyhow::Result;
 use lillith_core::access::deletion::{DeleteMode, DeletionSignature};
+use lillith_core::card_process::CardText;
 use lillith_core::config::{ChatConfig, MemoryConfig, MindConfig};
 use lillith_core::soul_contract::{ContractError, PendingAction, RequestId, SoulContract};
 use lillith_core::Event;
@@ -669,13 +670,15 @@ pub async fn cli_chat(
 }
 
 /// The console Soul Contract: if her last reply proposed a mutation (skill,
-/// file write, organize batch, command…), it waits for a mouse click on Yes
-/// on the Soul Contract card (see [`offer_on_card`]); a typed yes never
-/// counts and stdin is not read for it. Without a display nothing runs
-/// (`NO_UI`) and the console says how to do it by hand. A plan keeps its
-/// console review and a deletion its typed phrase (see
-/// [`sign_on_console`]). Returns the message to feed back to her (the tool
-/// result or Ko's answer), if any.
+/// file write, organize batch, command…), it runs only after a mouse click
+/// on Yes on the Soul Contract card (see [`offer_on_card`]); a typed yes
+/// never counts and stdin is not read for it. Without a display nothing
+/// runs (`NO_UI`) and the console says how to do it by hand. A plan or a
+/// deletion is reviewed on the console first, but typing there only PICKS
+/// (items, Trash/permanent, the list phrase); the run itself needs the
+/// same card's clicked Yes (see [`review_plan`] and [`sign_on_console`]).
+/// Returns the message to feed back to her (the tool result or Ko's
+/// answer), if any.
 fn offer_pending(session: &mut ChatSession, stdin: &mut dyn BufRead) -> Result<Option<String>> {
     offer_pending_with(
         session,
@@ -685,12 +688,16 @@ fn offer_pending(session: &mut ChatSession, stdin: &mut dyn BufRead) -> Result<O
     )
 }
 
+/// The card hook: shows a card and returns how it was answered (`None`: it
+/// could not open).
+type CardFn<'a> = dyn FnMut(&CardText) -> Option<lillith_mind::chat::CardChoice> + 'a;
+
 /// [`offer_pending`] with the display check and the card injectable (tests).
 fn offer_pending_with(
     session: &mut ChatSession,
     stdin: &mut dyn BufRead,
     display: bool,
-    card: impl FnOnce(&PendingAction) -> Option<lillith_mind::chat::CardChoice>,
+    mut card: impl FnMut(&CardText) -> Option<lillith_mind::chat::CardChoice>,
 ) -> Result<Option<String>> {
     let Some(action) = session.take_pending() else {
         return Ok(session.take_tool_feedback());
@@ -698,7 +705,14 @@ fn offer_pending_with(
     let mut contract = session.soul_contract();
     if matches!(action, PendingAction::Plan { .. }) {
         let id = contract.request(action.clone());
-        let res = review_plan(&mut contract, id, stdin, &mut std::io::stdout())?;
+        let res = review_plan(
+            &mut contract,
+            id,
+            stdin,
+            &mut std::io::stdout(),
+            display,
+            &mut card,
+        )?;
         return Ok(Some(ChatSession::answer_feedback(
             &action,
             res.as_deref().map_err(|e| e.as_str()),
@@ -706,7 +720,14 @@ fn offer_pending_with(
     }
     if matches!(action, PendingAction::DeletePaths { .. }) {
         let id = contract.request(action.clone());
-        let res = sign_on_console(&mut contract, id, stdin)?;
+        let res = sign_on_console(
+            &mut contract,
+            id,
+            stdin,
+            &mut std::io::stdout(),
+            display,
+            &mut card,
+        )?;
         return Ok(Some(ChatSession::answer_feedback(
             &action,
             res.as_deref().map_err(|e| e.as_str()),
@@ -717,13 +738,14 @@ fn offer_pending_with(
 
 /// Everything but plans and deletions: the mouse-only Soul Contract card
 /// (`lillith contract-card`), never a typed answer; nothing is read from
-/// stdin. No card: `NO_UI`, nothing runs, and the console says how to do it
-/// by hand. Returns the feedback for her.
+/// stdin. `PROPOSED` is audited before the card, then the outcome. No card:
+/// `NO_UI`, nothing runs, and the console says how to do it by hand.
+/// Returns the feedback for her.
 fn offer_on_card(
     contract: &mut SoulContract,
     action: PendingAction,
     display: bool,
-    card: impl FnOnce(&PendingAction) -> Option<lillith_mind::chat::CardChoice>,
+    card: impl FnOnce(&CardText) -> Option<lillith_mind::chat::CardChoice>,
 ) -> String {
     let prompt = action.prompt();
     if let Some(d) = &prompt.detail {
@@ -748,26 +770,96 @@ fn offer_on_card(
     ChatSession::answer_feedback(&kept, res.as_deref().map_err(|e| e.as_str()))
 }
 
+/// What a plan or deletion card's answer means for the console: `Ok(())`
+/// only for a clicked Yes. Anything else takes request `id` out of
+/// `contract` without running it (No → `DENY`; no answer → `TIMEOUT`;
+/// closed or the safeword → `CANCELLED`; no card → `NO_UI`), prints why
+/// (and `hint` for `NO_UI`) and returns the refusal for her.
+fn settle_card(
+    contract: &mut SoulContract,
+    id: RequestId,
+    decision: crate::contract_consent::Decision,
+    hint: &str,
+    out: &mut dyn Write,
+) -> Result<std::result::Result<(), String>> {
+    use crate::contract_consent::Decision;
+    use lillith_core::soul_contract::Answer;
+    use lillith_mind::chat::CardChoice;
+    let (tag, note) = match decision {
+        Decision::Card(CardChoice::Clicked(Answer::Yes)) => return Ok(Ok(())),
+        Decision::Card(CardChoice::Clicked(Answer::No)) => {
+            contract.deny(id)?;
+            writeln!(
+                out,
+                "[soul contract] declined on the card; nothing changed."
+            )?;
+            return Ok(Err("Ko said no on the card, so nothing ran".into()));
+        }
+        Decision::Card(CardChoice::TimedOut) => ("TIMEOUT", "no answer on the card; nothing ran"),
+        Decision::Card(CardChoice::Cancelled) => ("CANCELLED", "the card was closed; nothing ran"),
+        Decision::NoUi { display: false } => (
+            "NO_UI",
+            "no display for the card; a typed answer never approves; nothing ran",
+        ),
+        Decision::NoUi { display: true } => (
+            "NO_UI",
+            "card window could not open; a typed answer never approves; nothing ran",
+        ),
+    };
+    let _ = contract.withdraw(id, tag, note);
+    writeln!(
+        out,
+        "[soul contract] {}; discarded, nothing changed.",
+        decision.refusal().unwrap_or(note)
+    )?;
+    if matches!(decision, Decision::NoUi { .. }) {
+        writeln!(out, "{hint}")?;
+    }
+    Ok(Err(note.to_string()))
+}
+
 /// The console plan review: print every numbered item in full, then Ko
 /// types `all`, a selection like `1,3-5`, or `none` (empty also declines).
 /// If the selection includes deletes, he picks Trash/permanent and types the
-/// phrase. If the disk changed, the new plan is shown and he is asked again.
+/// phrase. Typing only PICKS: the chosen items run only after a clicked Yes
+/// on the Soul Contract card. Without a display nothing is asked and
+/// nothing runs (`NO_UI`). If the disk changed, the new plan is shown and
+/// he is asked again.
 pub(crate) fn review_plan_on_console(
     contract: &mut SoulContract,
     id: RequestId,
     stdin: &std::io::Stdin,
 ) -> Result<Result<String, String>> {
     let mut input = stdin.lock();
-    review_plan(contract, id, &mut input, &mut std::io::stdout())
+    review_plan(
+        contract,
+        id,
+        &mut input,
+        &mut std::io::stdout(),
+        crate::contract_consent::display_available(),
+        &mut crate::contract_consent::show_card,
+    )
 }
 
-/// [`review_plan_on_console`] over any reader / writer (tested).
+/// How Ko can do a plan himself when no card could be shown.
+fn plan_hint() -> String {
+    "Nothing ran and nothing changed. To do this by hand, carry out the numbered items \
+     listed above yourself.\n\
+     Or run `lillith chat` (or `lillith import-skills`) in a desktop session, where the \
+     Soul Contract card can open (only a mouse click on its Yes runs the plan)."
+        .to_string()
+}
+
+/// [`review_plan_on_console`] over any reader / writer and card (tested).
 pub(crate) fn review_plan(
     contract: &mut SoulContract,
     mut id: RequestId,
     input: &mut dyn BufRead,
     out: &mut dyn Write,
+    display: bool,
+    card: &mut CardFn<'_>,
 ) -> Result<Result<String, String>> {
+    use crate::contract_consent::{ask_card, Decision};
     use lillith_core::access::plan::{parse_selection, PlanApproval};
     loop {
         let Some(plan) = contract.plan(id).cloned() else {
@@ -778,9 +870,14 @@ pub(crate) fn review_plan(
             "[soul contract] REVIEW THE PLAN — nothing has happened yet:"
         )?;
         writeln!(out, "{}", plan.listing())?;
+        if !display {
+            // Nothing to click: don't ask for picks that could never run.
+            let d = Decision::NoUi { display: false };
+            return Ok(settle_card(contract, id, d, &plan_hint(), out)?.map(|()| String::new()));
+        }
         write!(
             out,
-            "Approve which? `all`, numbers like `1,3-5`, or `none`: "
+            "Pick which? `all`, numbers like `1,3-5`, or `none` (then confirm with a click on Yes on the Soul Contract card): "
         )?;
         out.flush()?;
         let mut line = String::new();
@@ -800,10 +897,11 @@ pub(crate) fn review_plan(
         };
         let approval = PlanApproval::subset(&plan, selected.iter().copied());
         let mut signature = None;
+        let mut deleting = String::new();
         if let Some(manifest) = plan.deletion_manifest(&selected) {
             writeln!(
                 out,
-                "The approved items include deleting:\n{}",
+                "The picked items include deleting:\n{}",
                 manifest.listing()
             )?;
             write!(out, "Where to? [T]rash (default) / type `permanent` to erase for good / `n` cancels everything: ")?;
@@ -819,7 +917,11 @@ pub(crate) fn review_plan(
                     return Ok(Err("Ko cancelled the plan".into()));
                 }
             };
-            write!(out, "To sign, type exactly: {}\n> ", manifest.phrase())?;
+            write!(
+                out,
+                "To sign the list, type exactly: {}\n> ",
+                manifest.phrase()
+            )?;
             out.flush()?;
             let mut typed = String::new();
             input.read_line(&mut typed)?;
@@ -831,6 +933,37 @@ pub(crate) fn review_plan(
                     return Ok(Err("Ko did not sign, so nothing ran".into()));
                 }
             }
+            deleting = format!("\n\nDeleting ({}):\n{}", mode.as_str(), manifest.listing());
+        }
+        let picked: Vec<String> = plan
+            .items
+            .iter()
+            .filter(|it| selected.contains(&it.n))
+            .map(|it| format!("{}. {}", it.n, it.line))
+            .collect();
+        let numbers: Vec<String> = selected.iter().map(usize::to_string).collect();
+        let text = CardText {
+            title: "REVIEW THE PLAN".into(),
+            summary: format!(
+                "Run plan item(s) {}: {}",
+                numbers.join(", "),
+                plan.totals(Some(&selected))
+            ),
+            target: String::new(),
+            detail: format!(
+                "{}{deleting}\n\nOnly a click on Yes runs these; typing or saying yes doesn't.",
+                picked.join("\n")
+            ),
+        };
+        writeln!(
+            out,
+            "[soul contract] Picked item(s) {}. Nothing runs until you click Yes on the Soul Contract card (a typed yes never counts).",
+            numbers.join(", ")
+        )?;
+        out.flush()?;
+        let decision = ask_card(true, &text, &mut *card);
+        if let Err(why) = settle_card(contract, id, decision, &plan_hint(), out)? {
+            return Ok(Err(why));
         }
         match contract.approve_plan(id, approval, signature) {
             Ok(done) => {
@@ -854,15 +987,39 @@ pub(crate) fn review_plan(
     }
 }
 
+/// `'path'` for a POSIX shell.
+fn sh_quote(p: &std::path::Path) -> String {
+    format!("'{}'", p.display().to_string().replace('\'', r"'\''"))
+}
+
+/// How Ko can delete the listed roots himself when no card could be shown.
+fn deletion_hint(roots: &[PathBuf]) -> String {
+    let list: Vec<String> = roots.iter().map(|r| sh_quote(r)).collect();
+    format!(
+        "Nothing was deleted. To do this by hand, move them to the Trash in your file manager, \
+         or in a terminal:\n  $ gio trash {}\n\
+         Or run `lillith chat` in a desktop session, where the Soul Contract card can open \
+         (only a mouse click on its Yes deletes).",
+        list.join(" ")
+    )
+}
+
 /// A deletion on the console: print EVERY file and folder (full paths,
 /// sizes, totals), then Ko types `t` (Trash, default) or `permanent`, then
-/// the exact phrase. If the files changed meanwhile, the new list is shown
-/// and he is asked again. Anything else cancels (audited as DENY).
+/// the exact list phrase. Typing only PICKS and signs the list: nothing is
+/// deleted until a clicked Yes on the Soul Contract card. Without a display
+/// nothing is asked and nothing is deleted (`NO_UI`, with by-hand steps).
+/// If the files changed meanwhile, the new list is shown and he is asked
+/// again. Anything else cancels (audited as DENY).
 fn sign_on_console(
     contract: &mut SoulContract,
     mut id: RequestId,
     stdin: &mut dyn BufRead,
+    out: &mut dyn Write,
+    display: bool,
+    card: &mut CardFn<'_>,
 ) -> Result<Result<String, String>> {
+    use crate::contract_consent::{ask_card, Decision};
     loop {
         let Some(PendingAction::DeletePaths { manifest }) = contract
             .pending()
@@ -872,10 +1029,21 @@ fn sign_on_console(
         else {
             return Ok(Err("the request vanished".into()));
         };
-        println!("[soul contract] She wants to DELETE these — every file and folder:");
-        println!("{}", manifest.listing());
-        print!("Where to? [T]rash (default) / type `permanent` to erase for good / `n` cancels: ");
-        let _ = std::io::stdout().flush();
+        writeln!(
+            out,
+            "[soul contract] She wants to DELETE these — every file and folder:"
+        )?;
+        writeln!(out, "{}", manifest.listing())?;
+        let hint = deletion_hint(&manifest.roots);
+        if !display {
+            let d = Decision::NoUi { display: false };
+            return Ok(settle_card(contract, id, d, &hint, out)?.map(|()| String::new()));
+        }
+        write!(
+            out,
+            "Where to? [T]rash (default) / type `permanent` to erase for good / `n` cancels: "
+        )?;
+        out.flush()?;
         let mut mode = String::new();
         stdin.read_line(&mut mode)?;
         let mode = match mode.trim().to_ascii_lowercase().as_str() {
@@ -883,31 +1051,67 @@ fn sign_on_console(
             "permanent" => DeleteMode::Permanent,
             _ => {
                 contract.deny(id)?;
-                println!("[soul contract] cancelled; nothing deleted.");
+                writeln!(out, "[soul contract] cancelled; nothing deleted.")?;
                 return Ok(Err("Ko cancelled the deletion".into()));
             }
         };
-        print!("To sign, type exactly: {}\n> ", manifest.phrase());
-        let _ = std::io::stdout().flush();
+        write!(
+            out,
+            "To sign the list, type exactly: {}\n> ",
+            manifest.phrase()
+        )?;
+        out.flush()?;
         let mut typed = String::new();
         stdin.read_line(&mut typed)?;
         let Ok(sig) = DeletionSignature::sign(&manifest, &typed, mode) else {
             contract.deny(id)?;
-            println!("[soul contract] not signed; nothing deleted.");
+            writeln!(out, "[soul contract] not signed; nothing deleted.")?;
             return Ok(Err("Ko did not sign".into()));
         };
+        writeln!(
+            out,
+            "[soul contract] List signed. Nothing is deleted until you click Yes on the Soul Contract card (a typed yes never counts)."
+        )?;
+        out.flush()?;
+        let text = CardText {
+            title: "DELETE — SIGN THE LIST".into(),
+            summary: format!(
+                "Delete {} ({})",
+                manifest.totals(),
+                match mode {
+                    DeleteMode::Trash => "to the Trash",
+                    DeleteMode::Permanent => "PERMANENTLY",
+                }
+            ),
+            target: manifest
+                .roots
+                .first()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
+            detail: format!(
+                "{}\n\nOnly a click on Yes deletes; typing or saying yes doesn't.",
+                manifest.listing()
+            ),
+        };
+        let decision = ask_card(true, &text, &mut *card);
+        if let Err(why) = settle_card(contract, id, decision, &hint, out)? {
+            return Ok(Err(why));
+        }
         match contract.sign_deletion(id, sig) {
             Ok(done) => {
-                let out = done.output.unwrap_or_default();
-                println!("{out}");
-                return Ok(Ok(out));
+                let text = done.output.unwrap_or_default();
+                writeln!(out, "{text}")?;
+                return Ok(Ok(text));
             }
             Err(ContractError::Changed { new_id }) => {
-                println!("[soul contract] the files changed since the list; here is the new one.");
+                writeln!(
+                    out,
+                    "[soul contract] the files changed since the list; here is the new one."
+                )?;
                 id = new_id;
             }
             Err(e) => {
-                println!("[soul contract] {e}");
+                writeln!(out, "[soul contract] {e}")?;
                 return Ok(Err(e.to_string()));
             }
         }
@@ -1295,7 +1499,10 @@ mod tests {
             || {},
         ));
         let mut out = Vec::new();
-        let r = review_plan(&mut sc, id, &mut input, &mut out).unwrap();
+        let r = review_plan(&mut sc, id, &mut input, &mut out, true, &mut |_| {
+            panic!("the safeword must not reach the card")
+        })
+        .unwrap();
         assert!(r.is_err(), "the safeword is never an approval");
         assert!(!dir.join("A").exists());
         let _ = std::fs::remove_dir_all(&dir);
@@ -1416,7 +1623,15 @@ mod tests {
             plan: ChangePlan::build(reqs(), None, None).unwrap(),
         });
         let mut out = Vec::new();
-        let r = review_plan(&mut sc, id, &mut "none\n".as_bytes(), &mut out).unwrap();
+        let r = review_plan(
+            &mut sc,
+            id,
+            &mut "none\n".as_bytes(),
+            &mut out,
+            true,
+            &mut |_| panic!("`none` must not reach the card"),
+        )
+        .unwrap();
         assert!(r.is_err());
         let shown = String::from_utf8(out).unwrap();
         assert!(
@@ -1424,15 +1639,367 @@ mod tests {
             "{shown}"
         );
         assert!(!dir.join("A").exists() && !dir.join("b.txt").exists());
-        // `1,3` runs just those.
+        // `1,3` runs just those, after the card's clicked Yes.
         let id = sc.request(PendingAction::Plan {
             plan: ChangePlan::build(reqs(), None, None).unwrap(),
         });
         let mut out = Vec::new();
-        let r = review_plan(&mut sc, id, &mut "1,3\n".as_bytes(), &mut out).unwrap();
+        let r = review_plan(
+            &mut sc,
+            id,
+            &mut "1,3\n".as_bytes(),
+            &mut out,
+            true,
+            &mut |_| Some(clicked_yes()),
+        )
+        .unwrap();
         assert!(r.is_ok(), "{r:?}");
         assert!(dir.join("A").is_dir() && dir.join("C").is_dir());
         assert!(!dir.join("b.txt").exists(), "item 2 was not chosen");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn clicked_yes() -> lillith_mind::chat::CardChoice {
+        lillith_mind::chat::CardChoice::Clicked(lillith_core::soul_contract::Answer::Yes)
+    }
+
+    /// Every way a card can end without a clicked Yes, plus "no card".
+    fn not_yes() -> Vec<(&'static str, Option<lillith_mind::chat::CardChoice>)> {
+        use lillith_core::soul_contract::Answer;
+        use lillith_mind::chat::CardChoice;
+        vec![
+            ("DENY", Some(CardChoice::Clicked(Answer::No))),
+            ("TIMEOUT", Some(CardChoice::TimedOut)),
+            ("CANCELLED", Some(CardChoice::Cancelled)),
+            ("NO_UI", None),
+        ]
+    }
+
+    struct TmpDir(PathBuf);
+
+    impl TmpDir {
+        fn new(tag: &str) -> Self {
+            let d = std::env::temp_dir().join(format!(
+                "lillith-console2-{tag}-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let _ = std::fs::remove_dir_all(&d);
+            std::fs::create_dir_all(&d).unwrap();
+            Self(d)
+        }
+
+        fn audit(&self) -> PathBuf {
+            self.0.join("data").join("audit.log")
+        }
+
+        fn tags(&self) -> Vec<String> {
+            std::fs::read_to_string(self.audit())
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|l| l.split('\t').nth(1).map(String::from))
+                .collect()
+        }
+
+        fn contract(&self) -> SoulContract {
+            std::fs::create_dir_all(self.0.join("data")).unwrap();
+            SoulContract::new(Some(self.audit())).with_trash_dir(self.0.join("trash"))
+        }
+    }
+
+    impl Drop for TmpDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn victims(t: &TmpDir) -> PendingAction {
+        use lillith_core::access::deletion::DeletionManifest;
+        let a = t.0.join("victim-a.txt");
+        let b = t.0.join("victim-b.txt");
+        std::fs::write(&a, "a").unwrap();
+        std::fs::write(&b, "b").unwrap();
+        PendingAction::DeletePaths {
+            manifest: DeletionManifest::build(&[a, b], Some(&t.0.join("data"))).unwrap(),
+        }
+    }
+
+    fn victims_there(t: &TmpDir) -> bool {
+        t.0.join("victim-a.txt").exists() && t.0.join("victim-b.txt").exists()
+    }
+
+    #[test]
+    fn a_typed_phrase_never_deletes_only_the_cards_yes_does() {
+        let typed = "t\nDELETE 2 ITEMS\n";
+        // With a display: the typed phrase only signs the list; No / Esc /
+        // timeout / closed (or the safeword) / no window delete nothing.
+        for (tag, choice) in not_yes() {
+            let t = TmpDir::new(&format!("del-{tag}"));
+            let mut sc = t.contract();
+            let id = sc.request(victims(&t));
+            let mut out = Vec::new();
+            let mut shown = 0;
+            let r = sign_on_console(
+                &mut sc,
+                id,
+                &mut typed.as_bytes(),
+                &mut out,
+                true,
+                &mut |text| {
+                    shown += 1;
+                    assert!(text.detail.contains("victim-a.txt"), "{text:?}");
+                    assert!(text.summary.contains("Trash"), "{text:?}");
+                    choice
+                },
+            )
+            .unwrap();
+            assert_eq!(shown, 1, "{tag}: the card was asked once");
+            assert!(r.is_err(), "{tag}: {r:?}");
+            assert!(victims_there(&t), "{tag}: something was deleted");
+            assert!(sc.pending().is_empty(), "{tag}: still pending");
+            assert_eq!(t.tags(), [tag], "{tag}");
+            let shown = String::from_utf8(out).unwrap();
+            assert!(shown.contains("victim-b.txt"), "{shown}");
+            assert_eq!(shown.contains("gio trash"), tag == "NO_UI", "{shown}");
+        }
+        // Without a display: nothing is asked, read or deleted (NO_UI), and
+        // the console says how to do it by hand.
+        for typed in [typed, "y\n", "yes\n", "DELETE 2 ITEMS\n"] {
+            let t = TmpDir::new("del-nodisplay");
+            let mut sc = t.contract();
+            let id = sc.request(victims(&t));
+            let mut out = Vec::new();
+            let mut stdin = typed.as_bytes();
+            let r = sign_on_console(&mut sc, id, &mut stdin, &mut out, false, &mut |_| {
+                panic!("no display: no card")
+            })
+            .unwrap();
+            assert!(r.is_err() && victims_there(&t));
+            assert_eq!(stdin, typed.as_bytes(), "stdin was read");
+            assert_eq!(t.tags(), ["NO_UI"]);
+            let shown = String::from_utf8(out).unwrap();
+            assert!(
+                shown.contains("Nothing was deleted") && shown.contains("$ gio trash '"),
+                "{shown}"
+            );
+        }
+        // A typed y / wrong phrase never reaches the card and deletes nothing.
+        for typed in ["y\ny\n", "t\nyes\n", "yes\n"] {
+            let t = TmpDir::new("del-typo");
+            let mut sc = t.contract();
+            let id = sc.request(victims(&t));
+            let r = sign_on_console(
+                &mut sc,
+                id,
+                &mut typed.as_bytes(),
+                &mut Vec::new(),
+                true,
+                &mut |_| panic!("an unsigned list must not reach the card"),
+            )
+            .unwrap();
+            assert!(r.is_err() && victims_there(&t), "{typed:?}");
+            assert_eq!(t.tags(), ["DENY"]);
+        }
+        // The signed list plus a clicked Yes deletes exactly the list.
+        let t = TmpDir::new("del-yes");
+        let mut sc = t.contract();
+        let id = sc.request(victims(&t));
+        let r = sign_on_console(
+            &mut sc,
+            id,
+            &mut typed.as_bytes(),
+            &mut Vec::new(),
+            true,
+            &mut |_| Some(clicked_yes()),
+        )
+        .unwrap();
+        assert!(r.is_ok(), "{r:?}");
+        assert!(!t.0.join("victim-a.txt").exists() && !t.0.join("victim-b.txt").exists());
+        assert_eq!(t.tags(), ["CONFIRM-SIGNED-TRASH"]);
+    }
+
+    #[test]
+    fn a_typed_selection_only_picks_plan_items_the_cards_yes_runs_them() {
+        use lillith_core::access::plan::{ChangePlan, PlanRequest};
+        let plan = |t: &TmpDir| PendingAction::Plan {
+            plan: ChangePlan::build(
+                (1..=5)
+                    .map(|i| PlanRequest::Mkdir {
+                        path: t.0.join(format!("D{i}")),
+                    })
+                    .collect(),
+                None,
+                None,
+            )
+            .unwrap(),
+        };
+        let made = |t: &TmpDir| -> Vec<usize> {
+            (1..=5)
+                .filter(|i| t.0.join(format!("D{i}")).is_dir())
+                .collect()
+        };
+        // `1,3-5`, `all` and a typed `y` (= all) only pick: no card Yes =
+        // nothing runs.
+        for typed in ["1,3-5\n", "all\n", "y\n"] {
+            for (tag, choice) in not_yes() {
+                let t = TmpDir::new(&format!("plan-{tag}"));
+                let mut sc = t.contract();
+                let id = sc.request(plan(&t));
+                let mut out = Vec::new();
+                let mut seen = None;
+                let r = review_plan(
+                    &mut sc,
+                    id,
+                    &mut typed.as_bytes(),
+                    &mut out,
+                    true,
+                    &mut |text| {
+                        seen = Some(text.clone());
+                        choice
+                    },
+                )
+                .unwrap();
+                assert!(r.is_err(), "{typed:?} {tag}");
+                assert!(made(&t).is_empty(), "{typed:?} {tag}: ran {:?}", made(&t));
+                assert!(sc.pending().is_empty());
+                let seen = seen.expect("the card was asked");
+                if typed == "1,3-5\n" {
+                    assert!(seen.summary.contains("1, 3, 4, 5"), "{seen:?}");
+                    assert!(!seen.detail.contains("D2"), "{seen:?}");
+                }
+                let tags = t.tags();
+                assert!(tags.iter().any(|x| x == tag), "{tag}: {tags:?}");
+                assert!(
+                    !tags
+                        .iter()
+                        .any(|x| x == "APPROVED" || x.starts_with("RESULT")),
+                    "{tags:?}"
+                );
+                let shown = String::from_utf8(out).unwrap();
+                assert_eq!(shown.contains("by hand"), tag == "NO_UI", "{shown}");
+            }
+        }
+        // No display: nothing is read, asked or run; by-hand steps printed.
+        for typed in ["all\n", "1,3-5\n", "y\n"] {
+            let t = TmpDir::new("plan-nodisplay");
+            let mut sc = t.contract();
+            let id = sc.request(plan(&t));
+            let mut out = Vec::new();
+            let mut stdin = typed.as_bytes();
+            let r = review_plan(&mut sc, id, &mut stdin, &mut out, false, &mut |_| {
+                panic!("no display: no card")
+            })
+            .unwrap();
+            assert!(r.is_err() && made(&t).is_empty());
+            assert_eq!(stdin, typed.as_bytes(), "stdin was read");
+            assert!(t.tags().iter().any(|x| x == "NO_UI"), "{:?}", t.tags());
+            let shown = String::from_utf8(out).unwrap();
+            assert!(shown.contains("by hand"), "{shown}");
+        }
+        // `1,3-5` then a clicked Yes runs exactly those.
+        let t = TmpDir::new("plan-yes");
+        let mut sc = t.contract();
+        let id = sc.request(plan(&t));
+        let r = review_plan(
+            &mut sc,
+            id,
+            &mut "1,3-5\n".as_bytes(),
+            &mut Vec::new(),
+            true,
+            &mut |_| Some(clicked_yes()),
+        )
+        .unwrap();
+        assert!(r.is_ok(), "{r:?}");
+        assert_eq!(made(&t), [1, 3, 4, 5]);
+    }
+
+    #[test]
+    fn a_plans_deletes_need_the_signed_list_and_the_cards_yes() {
+        use lillith_core::access::plan::{ChangePlan, PlanRequest};
+        let t = TmpDir::new("plan-del");
+        let victim = t.0.join("victim.txt");
+        std::fs::write(&victim, "v").unwrap();
+        let data = t.0.join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let mk = || PendingAction::Plan {
+            plan: ChangePlan::build(
+                vec![PlanRequest::Delete {
+                    path: victim.clone(),
+                }],
+                Some(&data),
+                None,
+            )
+            .unwrap(),
+        };
+        for (tag, choice) in not_yes() {
+            let mut sc = t.contract();
+            let id = sc.request(mk());
+            let r = review_plan(
+                &mut sc,
+                id,
+                &mut "all\nt\nDELETE 1 ITEM\n".as_bytes(),
+                &mut Vec::new(),
+                true,
+                &mut |text| {
+                    assert!(text.detail.contains("victim.txt"), "{text:?}");
+                    choice
+                },
+            )
+            .unwrap();
+            assert!(r.is_err() && victim.exists(), "{tag}");
+        }
+        let mut sc = t.contract();
+        let id = sc.request(mk());
+        let r = review_plan(
+            &mut sc,
+            id,
+            &mut "all\nt\nDELETE 1 ITEM\n".as_bytes(),
+            &mut Vec::new(),
+            true,
+            &mut |_| Some(clicked_yes()),
+        )
+        .unwrap();
+        assert!(r.is_ok(), "{r:?}");
+        assert!(!victim.exists());
+    }
+
+    #[test]
+    fn a_console_tool_action_audits_proposed_then_its_outcome() {
+        let t = TmpDir::new("proposed");
+        let target = t.0.join("out.txt");
+        let mut sc = t.contract();
+        let audit = t.audit();
+        let fb = offer_on_card(
+            &mut sc,
+            PendingAction::WriteFile {
+                path: target.clone(),
+                body: "hi".into(),
+            },
+            true,
+            |_| {
+                let now = std::fs::read_to_string(&audit).unwrap_or_default();
+                assert_eq!(now.lines().count(), 1, "{now}");
+                assert!(now.contains("\tPROPOSED\twrite_file\t"), "{now}");
+                Some(clicked_yes())
+            },
+        );
+        assert!(!fb.is_empty() && target.exists());
+        assert_eq!(t.tags(), ["PROPOSED", "CONFIRM"]);
+        for (tag, choice) in not_yes() {
+            let t = TmpDir::new(&format!("proposed-{tag}"));
+            let mut sc = t.contract();
+            let target = t.0.join("out.txt");
+            offer_on_card(
+                &mut sc,
+                PendingAction::WriteFile {
+                    path: target.clone(),
+                    body: "hi".into(),
+                },
+                true,
+                |_| choice,
+            );
+            assert!(!target.exists());
+            assert_eq!(t.tags(), ["PROPOSED", tag]);
+        }
     }
 }

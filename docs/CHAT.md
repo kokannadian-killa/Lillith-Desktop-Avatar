@@ -164,9 +164,19 @@ its **Yes** runs it (`CONFIRM`; No / Esc is `DENY`, no answer within 120 s
 `/contract yes` on the console never approves; nothing is read from stdin
 for it. With no desktop (SSH, a bare console), or if the card window can't
 open, it is `NO_UI`: nothing runs, and the console prints how to do it by
-hand (the command to run, or the file to save). Change plans and deletions
-keep their own console review. One-shot `lillith chat "…"` never runs a
-proposed action.
+hand (the command to run, or the file to save). Each one audits `PROPOSED`
+before the card opens, then its outcome line.
+
+Change plans (including desktop skill imports, also `lillith import-skills`)
+and deletions are reviewed on the console first, but typing there only
+**picks**: `all` / `1,3-5` / `none` choose plan items, and a deletion's
+Trash/`permanent` choice and typed list phrase (`DELETE 2 ITEMS`) sign the
+exact list. Nothing runs or is deleted until a mouse click on **Yes** on the
+same Soul Contract card (`CONFIRM`); No / Esc, no answer, a closed card or
+the safeword (`red` / `OOC: stop`, which closes an open card) run nothing.
+With no desktop it is `NO_UI`: nothing is asked, nothing runs, and the
+console prints how to do it by hand. One-shot `lillith chat "…"` never runs
+a proposed action.
 
 Live test of the client code against a real server:
 

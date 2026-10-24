@@ -11,8 +11,15 @@
 //! 2. No desktop, or the card window can't open: `NO_UI`. Nothing runs and
 //!    the console says how to do it by hand.
 //!
-//! Plans and deletions keep their own console review (see `chat.rs`).
+//! Every tool action first audits `PROPOSED` (before the card), then its
+//! outcome line, like the model-server card.
+//!
+//! Plans and deletions (see `chat.rs`) use the same card through
+//! [`ask_card`]: a typed answer there only PICKS (which plan items, Trash or
+//! permanent, the typed list phrase); the run itself still needs the card's
+//! clicked Yes. The safeword closes an open card (`CANCELLED`).
 
+use lillith_core::card_process::CardText;
 use lillith_core::soul_contract::{Answer, PendingAction, SoulContract};
 use lillith_mind::chat::CardChoice;
 use std::time::Duration;
@@ -56,17 +63,36 @@ impl Decision {
     }
 }
 
-/// Asks for `action` on the card (only when `display`), audits the outcome
-/// in `sc`, and runs the action only after a clicked Yes. `card` shows the
-/// card (`None`: it could not open); injectable for tests. Returns the
-/// decision and the result to feed back to her.
+/// Shows `text` on the card (only when `display`) and says how it was
+/// decided. `card` shows the card (`None`: it could not open); injectable
+/// for tests. Nothing is read from stdin and nothing is audited or run here.
+pub fn ask_card(
+    display: bool,
+    text: &CardText,
+    card: impl FnOnce(&CardText) -> Option<CardChoice>,
+) -> Decision {
+    match if display { card(text) } else { None } {
+        Some(c) => Decision::Card(c),
+        None => Decision::NoUi { display },
+    }
+}
+
+/// Audits `PROPOSED` for `action`, asks for it on the card (only when
+/// `display`), audits the outcome in `sc`, and runs the action only after a
+/// clicked Yes. `card` shows the card (`None`: it could not open);
+/// injectable for tests. Returns the decision and the result to feed back
+/// to her.
 pub fn offer(
     sc: &mut SoulContract,
     action: PendingAction,
     display: bool,
-    card: impl FnOnce(&PendingAction) -> Option<CardChoice>,
+    card: impl FnOnce(&CardText) -> Option<CardChoice>,
 ) -> (Decision, Result<String, String>) {
-    let choice = if display { card(&action) } else { None };
+    sc.record("PROPOSED", &action);
+    let choice = match ask_card(display, &card_text(&action), card) {
+        Decision::Card(c) => Some(c),
+        Decision::NoUi { .. } => None,
+    };
     let Some(choice) = choice else {
         let note = if display {
             "card window could not open; a typed yes never approves; nothing ran"
@@ -151,22 +177,40 @@ pub fn display_available() -> bool {
     crate::server_consent::display_available()
 }
 
-/// Shows the card in its own process (the shared `lillith contract-card`,
-/// see `lillith_core::card_process`, so this process never owns a window
-/// event loop). Its stdin carries only the card text, never an answer: the
-/// card approves only on a primary mouse click on its non-focusable Yes.
-/// `None` when the window couldn't open.
-pub fn show_card(action: &PendingAction) -> Option<CardChoice> {
-    use lillith_core::card_process::{ask, CardText};
+/// What the card shows for a tool action.
+pub fn card_text(action: &PendingAction) -> CardText {
     let p = action.prompt();
-    let exe = std::env::current_exe().ok()?;
-    let text = CardText {
+    CardText {
         title: p.title.to_string(),
         summary: p.summary.clone(),
         target: p.target.clone().unwrap_or_default(),
         detail: p.detail.clone().unwrap_or_default(),
-    };
-    card_choice(ask(&exe, &text, CARD_TIMEOUT))
+    }
+}
+
+/// Shows the card in its own process (the shared `lillith contract-card`,
+/// see `lillith_core::card_process`, so this process never owns a window
+/// event loop). Its stdin carries only the card text, never an answer: the
+/// card approves only on a primary mouse click on its non-focusable Yes.
+/// The safeword ("red" / "OOC: stop") closes it: `Cancelled`, never a Yes.
+/// `None` when the window couldn't open.
+pub fn show_card(text: &CardText) -> Option<CardChoice> {
+    use lillith_core::access::kill_switch::{epoch, stopped_since};
+    let exe = std::env::current_exe().ok()?;
+    let start = epoch();
+    let answer =
+        lillith_core::card_process::ask_until(&exe, text, CARD_TIMEOUT, || stopped_since(start));
+    after_safeword(card_choice(answer), stopped_since(start))
+}
+
+/// A card answered while (or just after) the safeword fired is `Cancelled`,
+/// even a Yes: nothing runs.
+fn after_safeword(choice: Option<CardChoice>, stopped: bool) -> Option<CardChoice> {
+    if stopped {
+        Some(CardChoice::Cancelled)
+    } else {
+        choice
+    }
 }
 
 /// The shared card's answer as a [`CardChoice`]; `NoUi` is `None`.
@@ -237,7 +281,7 @@ mod tests {
             assert_eq!(d.approved(), choice == yes);
             assert_eq!(res.is_ok(), choice == yes, "{res:?}");
             assert_eq!(t.0.join("out.txt").exists(), choice == yes, "{tag}");
-            assert_eq!(t.decisions(), [tag], "{tag}");
+            assert_eq!(t.decisions(), ["PROPOSED", tag], "{tag}");
         }
     }
 
@@ -255,8 +299,43 @@ mod tests {
             assert_eq!(d, Decision::NoUi { display });
             assert!(!d.approved() && res.is_err());
             assert!(!t.0.join("out.txt").exists());
-            assert_eq!(t.decisions(), ["NO_UI"]);
+            assert_eq!(t.decisions(), ["PROPOSED", "NO_UI"]);
         }
+    }
+
+    #[test]
+    fn proposed_is_written_before_the_card_and_the_outcome_follows() {
+        let t = Tmp::new("proposed");
+        let mut sc = SoulContract::new(Some(t.0.join("audit.log")));
+        let log = t.0.join("audit.log");
+        let (d, _) = offer(&mut sc, write(&t), true, |text| {
+            // The card is up: PROPOSED is already in the log, nothing else.
+            let now = std::fs::read_to_string(&log).unwrap_or_default();
+            let tags: Vec<&str> = now.lines().filter_map(|l| l.split('\t').nth(1)).collect();
+            assert_eq!(tags, ["PROPOSED"], "{now}");
+            assert!(
+                now.contains("write_file") && now.contains("out.txt"),
+                "{now}"
+            );
+            assert!(text.detail.contains("hello"));
+            Some(CardChoice::Clicked(Answer::Yes))
+        });
+        assert!(d.approved());
+        assert_eq!(t.decisions(), ["PROPOSED", "CONFIRM"]);
+    }
+
+    #[test]
+    fn the_safeword_turns_any_card_answer_into_cancelled() {
+        let yes = Some(CardChoice::Clicked(Answer::Yes));
+        assert_eq!(after_safeword(yes, true), Some(CardChoice::Cancelled));
+        assert_eq!(after_safeword(None, true), Some(CardChoice::Cancelled));
+        assert_eq!(after_safeword(yes, false), yes);
+        let t = Tmp::new("red");
+        let mut sc = SoulContract::new(Some(t.0.join("audit.log")));
+        let (d, res) = offer(&mut sc, write(&t), true, |_| after_safeword(yes, true));
+        assert!(!d.approved() && res.is_err());
+        assert!(!t.0.join("out.txt").exists());
+        assert_eq!(t.decisions(), ["PROPOSED", "CANCELLED"]);
     }
 
     #[test]
