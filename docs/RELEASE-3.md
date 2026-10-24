@@ -1,4 +1,4 @@
-# Release #3 notes (draft, `ci/batch6` at `3e2748d`)
+# Release #3 notes (draft, `main` at `3156237`)
 
 Draft notes for the next test build. They cover what changed since release #2
 (`test-build-d88ed30`). There's no release zip for this build yet, so the
@@ -23,6 +23,52 @@ its `.sha256`, and `INSTALL.md`). **INSTALL.md** covers Linux, Windows
   sitting or posing. She also holds the talking clip for about a second
   between sentences, so she doesn't flicker talk → idle → talk. (Fixes the
   release #2 known issue.)
+- **Learning memory (on by default, local only).** She now keeps a small
+  memory of what you tell her (people, likes, habits), which apps you use,
+  and which errors happened and what fixed them.
+  - Each chat turn (bubble and `lillith chat`) gets a short `[Memory]` note
+    of at most about 300 tokens. Memories you don't use fade by half every 14
+    days, and weak ones are deleted.
+  - It's one SQLite file with no network code:
+    `~/.local/share/lillith/memory.db` (respects `$XDG_DATA_HOME`), or
+    `%LOCALAPPDATA%\lillith\memory.db` on Windows. The folder is created
+    owner-only (0700) and the file 0600.
+  - **Turn it off** with `[memory] enabled = false` in your config. Then
+    nothing is read or written, and no memory file is created.
+  - **Forget from the chat:**
+    - "forget about <topic>" and "forget everything" ask first. Only a yes
+      ("yes", "y", "confirm", "do it") goes ahead; anything else cancels.
+    - "forget the last 30 minutes" (or hour, days, week, months) deletes
+      right away. So does "forget the last thing I said", which covers the
+      last 5 minutes.
+    - Forgotten rows are deleted, the file is vacuumed, and the matching
+      lines are also removed from her saved chat history.
+  - The safeword is never stored, nor is any message containing the word
+    "red" on its own.
+  - Other `[memory]` keys: `db_path`, `half_life_days`, `top_k`,
+    `max_context_tokens`, `prune_below`, `max_nodes`, `max_events` and
+    `max_errors`. They're all in `assets/config.example.toml`.
+  - The desktop app only. The Android app has no memory.
+- **No see-through double body during fast moves.**
+  - When two frames barely overlap, the smooth crossfade is now shortened,
+    or skipped with a hard switch. Before, she could briefly look like two
+    translucent bodies.
+  - Walk, run and the sultry `strut_*` walks always switch frames hard, so
+    there's no translucent back leg.
+  - The desktop and the Android renderer both use this.
+- **Logs go to stderr, never stdout.** The chat bubble and Settings windows
+  use stdout to talk to the overlay, so log lines there could break them.
+  Command-line output (`lillith status`, `lillith chat`, …) stays on stdout.
+  On Windows, when she isn't started from a terminal, logs still go to
+  `%LOCALAPPDATA%\lillith\lillith.log`.
+- **Voice kit: tighter local-only checks.**
+  - Its network guard now also refuses to *listen* on anything but loopback.
+    It rejects `0.0.0.0`, `::` and LAN addresses; Unix sockets are
+    unchanged.
+  - `lillith-chat` now uses the app's sampler defaults (temperature 0.95,
+    160 reply tokens).
+  - Its README shows the standard `llama-server` line on 127.0.0.1:8080
+    with `--jinja`.
 - **Perching: she lands on windows and lounges on them.**
   - Drop her (or let her fall) onto the top of a window and she plays the
     drag-to-perch blend and settles into a seated pose on the window edge,
@@ -75,8 +121,19 @@ telemetry.
 
 ## Known issues
 
-- The white-fringe cleanup is done for the six perch clips only. Other clips
-  can still show a thin light edge (see *Coming next*).
+- The white-fringe cleanup is done for the six perch clips and the five new
+  poses only (three of those still need the touch-ups below). Other clips can still show a thin light edge (see *Coming
+  next*).
+- Three of the new poses still have small matte leftovers until 01405a3
+  lands (see *Landing next*). `come_hither_crawl` has a grey floor shadow
+  and a purple smear, `kneel_sit_back_beckon` has grey specks in the
+  hair/neck gap, and `hip_sway_slow` has a few white pixels.
+- Memory forget, until a97a557 lands (see *Landing next*):
+  - "forget about <topic>" can remove more rows than you meant.
+  - A long time window ("forget the last 2 months") deletes without
+    asking.
+  - "forget the last thing I said" removes the last 5 minutes rather than
+    just your last message.
 - Voice kit:
   - The models aren't in any release yet (see above).
   - On Windows, only the named-pipe transport has been tested, and only
@@ -87,6 +144,34 @@ telemetry.
   rebuilt; the older, untested one is on `test-build-f8cd236`.
 - Muting from the right-click menu isn't remembered after a restart.
 
+## Landing next (on the lead's integration branch, not on `main` yet)
+
+Both are merged into the lead's `ci/batch9`, which isn't on GitHub yet. Their
+feature branches are on GitHub.
+
+- **Precise memory forget** (`feat/memory-forget-precision`, a97a557):
+  - "forget about <topic>" deletes only rows that contain the whole topic:
+    every word of a one- or two-word topic, or at least two thirds of a
+    longer one. Plurals match only the same word (job/jobs, never
+    new/news). `job = "google engineer"` no longer deletes a "google
+    chrome" event. Her chat history uses the same rule.
+  - The confirmation shows how many memories and chat messages match, plus
+    up to 3 examples.
+  - A time window longer than an hour now asks for "yes" first; an hour or
+    less still deletes right away.
+  - "forget the last thing I said" drops only your last message and her
+    reply from the chat history. In memory it still covers the last 5
+    minutes.
+  - On Windows, the data folder no longer falls back to the roaming
+    `%APPDATA%`; it's `%LOCALAPPDATA%\lillith`.
+  - A corrupt chat-history file is set aside as `.corrupt`. An unreadable
+    one is never overwritten.
+  - Each forget also adds a line to `audit.log` next to the memory file,
+    with the kind of forget and the counts only.
+- **Matte fixes for three new poses** (`art/slutty-poses`, 01405a3): cleans
+  up `come_hither_crawl`, `kneel_sit_back_beckon` and `hip_sway_slow` (see
+  *Known issues*). Their names, timing and placement are unchanged.
+
 ## Coming next (pending branches, not in this build)
 
 - **No white fringe** (`fix/no-white-fringe-ev`, `fix/no-white-fringe-gm`,
@@ -96,16 +181,6 @@ telemetry.
   - clips `g*`–`m*`, with a stricter pass that checks the frames as the
     app decodes them
   - clips `n*`–`r*`, including filling interior gaps on six of them
-- **Memory** (`feat/memory-graph`). A local learning memory: one SQLite file
-  (default `~/.local/share/lillith/memory.db`) with no network code.
-  - She remembers what you tell her (people, preferences, habits), app use
-    and errors and how they were fixed.
-  - Unused memories fade over time.
-  - A small relevant slice goes into each chat turn.
-  - "Forget …" requests are handled locally.
-  - Messages containing the safeword are never stored.
-  - It adds a `[memory]` config table, on by default; `enabled = false`
-    turns it off.
 
 ## Gate
 
