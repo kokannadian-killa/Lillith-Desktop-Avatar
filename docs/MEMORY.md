@@ -19,7 +19,7 @@ Status: design + first implementation on `feat/memory-graph`.
 | --- | --- |
 | `lillith-core::config` | New `[memory]` table (`MemoryConfig`), **`enabled = true` by default** (Ko's decision, 2026-10-23). The default is one line in `MemoryConfig::default()`; set it to `false` to make memory opt-in. |
 | `lillith-core::access::kill_switch::is_safeword` | Canonical safeword ("red" / "OOC: stop"). `lillith-memory::is_safeword` wraps it and is *stricter* for storage: any message containing the standalone word "red" or "OOC stop" anywhere is never stored. |
-| `lillith-core::event::Event` | Desktop/sensor events (`window.opened.<app>`, `app.crash`, ...). `Brain::observe_event` turns them into app-usage / error memories. These come from `lillith-sense` (monitor, KWin bridge). |
+| `lillith-core::event::Event` | Desktop/sensor events (`window.opened.<app>`, `app.crash`, ...). `Brain::observe_event` turns them into app-usage / error memories. These come from `lillith-sense` (monitor, KWin bridge) through the bridge below. |
 | `lillith-mind::chat::ChatSession` | Chat path. `with_memory(&MemoryConfig)` attaches a `Brain`; the system prompt gets a `[Memory]` block; replies feed `observe_interaction`; "forget ..." commands are answered locally. |
 | `lillith-mind::memory` | Legacy profile store (`lillith_memory.db`, Python schema). Left untouched; the graph lives in a separate `memory.db`. |
 
@@ -58,6 +58,67 @@ Counts over the `events` ring: requests / app launches bucketed by
 (hour-of-day bucket of 3h, weekday class: weekday/weekend). The prediction for
 "now" ranks subjects by `count(bucket match) / total(bucket)` with Laplace
 smoothing, multiplied by a small-sample damping `n / (n + 3)`. O(events), no ML.
+
+## Desktop wiring (`lillith_memory::bridge`, `apps/lillith/src/memory_wiring.rs`)
+
+**Event bridge.** The overlay's one event feed (system monitor, KWin
+bridge, chat bubble) goes through a tee: every event is forwarded unchanged
+and also offered to `MemoryBridge::observe`, which never blocks the sender.
+A pure `EventFilter` runs in the caller, then a `try_send` on a bounded
+queue (64; a full queue drops the event). One dedicated thread
+(`lillith-memory`) owns its own SQLite connection (`Brain` is not `Sync`)
+and calls `Brain::observe_event`.
+
+| Incoming | Stored as | Debounce |
+| --- | --- | --- |
+| `window.focused` (KWin `WindowActivated`, detail = window class) | `window.opened.app` + app id only (`org.kde.konsole` → `konsole`, ≤32 chars `[a-z0-9-]`) | same app again within 10 min dropped |
+| `app.crash`, `*.crash`, `*.error` (not `chat.*`) | the kind plus the first word of the detail as an app id (`app.crash: steam`) | same text within 60 s dropped |
+| `window.private`, private windows, `window.opened` (carries the caption), notifications, anything else | nothing | — |
+| anything carrying the safeword | nothing | — |
+
+At most `events_per_minute` (default 20) admitted events per 60 s window.
+`chat.*` events are never stored; they only mark "Ko is chatting" (and
+`chat.safeword` marks the safeword). With `enabled = false` there is no
+thread, no queue and no file; the tee is the plain feed.
+
+**Proactive lines.** Every `proactive_interval_min` (default 12) the thread
+calls `Brain::predict` and a `Proactive` gate picks the first prediction
+with `confidence ≥ proactive_min_confidence` (default 0.5). It stays quiet:
+
+- for 30 min after the safeword (the kill-switch epoch changed, or
+  `chat.safeword` came through the feed);
+- for 5 min after any chat activity, and while `set_busy_for` is active
+  (no fullscreen sensor exists yet; the overlay also drops the line while
+  the monitor is paused, and an asleep Lillith ignores low-priority rules);
+- for an app used in the last 30 min (she does not suggest what Ko is
+  already doing);
+- per subject for `proactive_cooldown_min` (default 180) and beyond
+  `proactive_max_per_hour` (default 2).
+
+The line ("Mm, about now you usually open steam. Want it, darling?") goes
+out as `memory.suggest` with the line as detail; the bundled rule shows it
+in the normal speech bubble (`{summary}`, pose/clip `calendar`, priority 30,
+cooldown 10 min). `proactive = false` turns only this off; learning stays.
+
+**Error recovery (`lillith_memory::recovery`).** A failure is recorded with
+a *stable* text, then the built-in `SafeFix` list is ordered by error
+memory (the fix that worked first, untried next, failed ones last), tried,
+and each outcome is recorded with `record_fix`. Only these three fixes
+exist; a stored fix string that is not one of them is never applied:
+
+| Failure (signature text) | Fixes | Where |
+| --- | --- | --- |
+| `llm: server unreachable` (nothing streamed yet) | `retry_backoff` (0.4 s, 1.2 s), `restart_llama_server` (only with `[chat.server]` configured and nothing answering; the startup spawn path, waits ≤90 s for `/health`) | `ChatSession::send` |
+| `llm: server loading` (503) | `retry_backoff` | `ChatSession::send` |
+| `voice: engine error (<engine>)` | `retry_backoff` (spoken lines rest 30 s, then worked when a line is spoken without a new error), `text_only` (speakers off for this run, never saved) | overlay voice sink |
+| `llama-server: spawn failed`, `setup: ...` | none (recorded, recurrences counted) | `ServerGuard::start`, `lillith setup` |
+| sensor crashes (`app.crash`, `*.error`) | none (recorded through the bridge) | feed |
+
+When nothing worked the chat answers with the usual in-character line for
+the *first* error. Recovery never contacts anything new: retries and the
+restart use the same loopback endpoint. With memory off the same fixes run
+in their default order and nothing is stored. A llama-server restarted by
+the chat bubble lives as long as that bubble process.
 
 ## On by default; turning it off; forgetting
 
@@ -122,8 +183,8 @@ a failure to rewrite it is said in the reply.
 
 ## Not done / for the lead
 
-- Feeding `lillith-sense` events into `Brain::observe_event` from the overlay
-  main loop is documented in the crate README but not wired (it lives in the
-  app's event loop, which other branches are touching).
+- No fullscreen / "busy" sensor: `MemoryBridge::set_busy_for` is the hook
+  for one. Windows has no `window.focused` source yet (KWin only), so app
+  habits are learned on KDE only.
 - LLM-assisted extraction: `Extractor` trait hook exists; the default is the
   rule-based extractor.
