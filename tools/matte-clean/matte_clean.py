@@ -38,7 +38,7 @@ import cc_lib  # noqa: E402
 import white_edge  # noqa: E402
 import mc_orig  # noqa: E402
 
-VERSION = 4
+VERSION = 5
 # per-worktree backup dir so parallel helpers never share or clobber one; originals are also recoverable from LFS
 BACKUP = os.environ.get('MC_BACKUP', os.path.join('/workspace/verify/nowhite/orig', os.path.basename(REPO)))
 LOCKED = {l.split('#')[0].strip() for l in open(os.path.join(HERE, 'locked.txt'))} - {''} \
@@ -131,6 +131,35 @@ S8 = np.ones((3, 3), bool)
 POCKET_MIN = 12
 
 
+def rim_despill(c, overlay=False):
+    """pale rim (v5): pixels in the 3 px edge ring (any alpha, incl. opaque) whose straight colour is light and
+    near-neutral (min >= 170, sat <= 40), at least 32 levels lighter (min channel) than the nearest solid interior
+    pixel, and that read light over a dark desktop (#101010 composite min >= 64): recolour to that interior colour,
+    alpha kept. Matches the app-decoded fringe QA (scratch-fringeqa/fringeqa.py) rim class."""
+    rgb = c[..., :3].astype(np.int32); a = c[..., 3].astype(np.int32)
+    clear = a < 8
+    if not clear.any() or clear.all():
+        return c, 0
+    d = nd.distance_transform_edt(~clear)
+    ring = (~clear) & (d <= 3)
+    ref = (a == 255) & (d >= 4)
+    if not ref.any():
+        return c, 0
+    _, (ry, rx) = nd.distance_transform_edt(~ref, return_indices=True)
+    F = rgb[ry, rx]
+    mn = rgb.min(-1); sat = rgb.max(-1) - mn
+    comp = (rgb * a[..., None] + 16 * (255 - a[..., None]) + 127) // 255
+    m = ring & (mn >= 170) & (sat <= 40) & (mn >= F.min(-1) + 32) & (comp.min(-1) >= 64)
+    if overlay and m.any():
+        lab, n = nd.label(a > 16, S8)
+        if n:
+            sz = nd.sum(a > 16, lab, range(1, n + 1)); m &= nd.binary_dilation(lab == int(np.argmax(sz)) + 1, iterations=3)
+    if not m.any():
+        return c, 0
+    out = c.copy(); out[..., :3][m] = F[m].astype(np.uint8)
+    return out, int(m.sum())
+
+
 def soft_despill(c, overlay=False):
     """soft edge pixels whitened toward the backdrop (white_edge.soft_lift_mask, includes the alpha 251-254 band
     the MP4 path snaps to opaque): recolour to the nearest solid interior colour, alpha kept."""
@@ -148,6 +177,7 @@ def clean_cell(c, name):
     r, n = fringe_pass(r, overlay=ov)
     st['fringe_px_fixed'] = n
     r, st['soft_px_despilled'] = soft_despill(r, overlay=ov)
+    r, st['rim_px_despilled'] = rim_despill(r, overlay=ov)
     if not ov:
         r, k = cc_lib.drop_specks(r); st['specks_dropped'] = st.get('specks_dropped', 0) + k
     return r, st

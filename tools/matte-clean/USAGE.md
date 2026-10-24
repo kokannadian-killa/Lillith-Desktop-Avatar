@@ -86,7 +86,10 @@ so single frames no longer fail by a few pixels. Version 4 (current) adds: (a) e
 (near-white neutral regions >= 12 px inside the body: hair/neck, arm/torso, thigh/tail) go fully clear, flood-limited
 to near-white neutral pixels, so helpers no longer hand-fix them; (b) a soft-edge despill: soft edge pixels whose
 colour is the nearest interior colour pushed toward white (including the alpha 251-254 band the MP4 path snaps to
-opaque) are recoloured to the interior colour with alpha kept. A clip cleaned by an older version is re-cleaned **from its original** (`$MC_BACKUP/<clip>_sheet.png` or the repo's
+opaque) are recoloured to the interior colour with alpha kept. Version 5 adds a pale-rim despill matching the
+app-decoded fringe QA (`/workspace/lillith/scratch-fringeqa/fringeqa.py`): pixels in the 3 px edge ring, any alpha,
+light and near-neutral (min >= 170, sat <= 40) and >= 32 lighter than the interior are recoloured to the interior.
+A clip cleaned by an older version is re-cleaned **from its original** (`$MC_BACKUP/<clip>_sheet.png` or the repo's
 Git LFS object store, located by the sha256 stamped in the JSON), never on top of the earlier output. If you ran an older version (v1 379900d, v2 11807e1), update your branch to the
 latest `fix/no-white-fringe` and re-run the same command (add `--force` only to redo v4 output).
 
