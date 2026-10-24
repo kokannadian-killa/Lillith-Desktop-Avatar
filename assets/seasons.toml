@@ -97,7 +97,7 @@ id = "valentines"
 name = "Heart Straps (Valentine's)"
 season = "valentines"
 thumbnail = "assets/generated/outfits/valentines.png"
-clips = []                  # feat/seasonal-valentines-spring (prefix valentines_)
+clips = ["valentines_strawberry_lick"]
 hidden = false
 
 [[outfit]]
@@ -105,7 +105,7 @@ id = "spring"
 name = "Spring Blossom"
 season = "spring"
 thumbnail = "assets/generated/outfits/spring.png"
-clips = []                  # feat/seasonal-valentines-spring (prefix spring_)
+clips = ["spring_lollipop_lick"]
 hidden = false
 
 [[outfit]]
