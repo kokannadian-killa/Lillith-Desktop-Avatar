@@ -10,7 +10,10 @@ loop seam (last->first diff vs typical consecutive diff).
   * de-fringes semi-transparent near-white edge pixels (colour from the opaque neighbours)
   * ground snap: frames whose lowest pixel is 1..8 px above y=392 are moved down onto it
     (not for airborne clips: drag_held, run_*, sit_swing, sleep, wake, tiptoe_bounce, blends with seated ends)
-  then rewrites sheet/on_gray/preview gif and bbox_per_frame. Writes _review/qa_report.json + .md."""
+  then rewrites sheet/on_gray/preview gif and bbox_per_frame. Writes _review/qa_report.json + .md.
+
+  qa_all.py --white-edge [--mp4] [--max N] assets/generated/<glob>: light-edge-pixel check on committed clip
+  dirs (see white_edge.py and white_edge_check below); exit 1 if any frame has light-coloured edge pixels."""
 import sys, os, glob, json
 import numpy as np
 from PIL import Image
@@ -131,6 +134,39 @@ def qa(d, fix):
         P['loop_seam_ratio'] = round(float(seam / (np.median(g) + 1e-6)), 2)
         if P['loop_seam_ratio'] > 2.5: P['issues'].append(f"loop seam {P['loop_seam_ratio']}x typical step")
     return P
+def white_edge_check(argv):
+    """qa_all.py --white-edge [--mp4] [--max N] <clip dirs or globs>: the light-edge-pixel check.
+    Fails (exit 1) any frame with more than white_edge.FRAME_MAX light-coloured boundary pixels
+    (alpha > 0, within 2.5 px of clear, min(RGB) >= 200, sat <= 28, lighter than the interior).
+    event_* / overlay clips are checked on the main body only (their icons/panels/fades are intentional)."""
+    import white_edge
+    use_mp4 = '--mp4' in argv
+    mx = white_edge.FRAME_MAX
+    if '--max' in argv: mx = int(argv[argv.index('--max') + 1])
+    names = [a for i, a in enumerate(argv) if not a.startswith('--') and (i == 0 or argv[i - 1] != '--max')]
+    ds = []
+    for n in names: ds += sorted(glob.glob(n)) if any(c in n for c in '*?[') else [n]
+    ds = [d.rstrip('/') for d in ds if os.path.isdir(d) and os.path.exists(f"{d}/{os.path.basename(d.rstrip('/'))}_sheet.png")]
+    fails = 0; tot = 0
+    for d in ds:
+        name = os.path.basename(d); ov = is_overlay(name) or name in ('spell_orb_cast',)
+        sheet = np.asarray(Image.open(f'{d}/{name}_sheet.png').convert('RGBA')); N = sheet.shape[1] // 400
+        srcs = [('png', [sheet[:400, i * 400:(i + 1) * 400] for i in range(N)])]
+        if use_mp4 and os.path.exists(f'{d}/{name}.mp4'):
+            import pack_mp4
+            srcs.append(('mp4', pack_mp4.decode(f'{d}/{name}.mp4', 400, 400)))
+        msg = []
+        for src, cells in srcs:
+            per = [white_edge.count(c, body_only=ov) for c in cells]; tot += sum(per)
+            bad = [i for i, n in enumerate(per) if n > mx]
+            msg.append(f'{src} light_edge {sum(per)} max {max(per)}@f{int(np.argmax(per))} bad_frames {len(bad)}/{len(cells)}')
+            if bad: fails += 1
+        failed = any(' bad_frames 0/' not in m for m in msg)
+        print(f"{name:<36} {'FAIL' if failed else 'OK  '} white-edge  " + ' | '.join(msg), flush=True)
+    print(f'white-edge: {len(ds)} clips, {fails} failing sources, {tot} light edge px total')
+    return 1 if fails else 0
+if __name__ == '__main__' and '--white-edge' in sys.argv:
+    sys.exit(white_edge_check([a for a in sys.argv[1:] if a != '--white-edge']))
 if __name__ == '__main__':
     sys.path.insert(0, f'{V2}/_tools')
     fix = '--fix' in sys.argv; names = [a for a in sys.argv[1:] if not a.startswith('--')]
