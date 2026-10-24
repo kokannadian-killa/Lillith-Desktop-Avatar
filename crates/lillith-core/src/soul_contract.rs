@@ -1165,6 +1165,26 @@ impl SoulContract {
         self.log_command(decision, action, &Ok((None, None)));
     }
 
+    /// Takes pending request `id` out of the queue WITHOUT running it and
+    /// audits `decision` with `note` (a card that timed out, was closed, or
+    /// could not be shown: `TIMEOUT` / `CANCELLED` / `NO_UI`). A plan also
+    /// gets a line per item and a `plans.log` entry. Never runs anything.
+    pub fn withdraw(
+        &mut self,
+        id: RequestId,
+        decision: &str,
+        note: &str,
+    ) -> Result<PendingAction, ContractError> {
+        let action = self.take(id)?;
+        if let PendingAction::Plan { plan } = &action {
+            self.audit_plan(decision, plan, None);
+            self.plans_log(&format!("{decision} #{}", id.0), note);
+        }
+        self.audit_with(decision, &action, Some(note));
+        self.log_command(decision, &action, &Ok((None, None)));
+        Ok(action)
+    }
+
     /// [`record`](Self::record) with a free-text note column.
     pub fn record_note(&self, decision: &str, action: &PendingAction, note: &str) {
         self.audit_with(decision, action, Some(note));

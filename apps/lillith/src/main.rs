@@ -1030,6 +1030,9 @@ impl lillith_overlay::ActionSink for VoiceSink {
         // it): subscribe now. Only spawns a thread; never blocks.
         if self.lipsync.is_none() && self.voice.engine_name() == "voiced" {
             if let Some(d) = self.daemon.clone() {
+                // Errors from now on belong to the daemon, not the
+                // startup engine.
+                self.recovery.set_engine(self.voice.engine_name());
                 match lillith_voice::daemon::LipsyncReader::spawn(d) {
                     Ok(r) => self.lipsync = Some(r),
                     Err(e) => {
