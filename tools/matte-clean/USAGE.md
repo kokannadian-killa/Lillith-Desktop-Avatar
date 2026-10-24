@@ -82,13 +82,36 @@ Raw takes in `assets/source/video/` are pipeline inputs only (read by `tools/vid
 `matte_clean` stamps `version` in each clip JSON. Version 2 added the opaque-gap pass (white backdrop seen between
 arm and waist / legs / tail with alpha left at 255, which the v1 metric could not see) and caps the edge erosion at
 2 px. Version 3 despills (recolours from the interior, alpha kept) whatever is still light after that erosion,
-so single frames no longer fail by a few pixels. Version 4 (current) adds: (a) enclosed backdrop pockets
+so single frames no longer fail by a few pixels. Version 4 adds: (a) enclosed backdrop pockets
 (near-white neutral regions >= 12 px inside the body: hair/neck, arm/torso, thigh/tail) go fully clear, flood-limited
 to near-white neutral pixels, so helpers no longer hand-fix them; (b) a soft-edge despill: soft edge pixels whose
 colour is the nearest interior colour pushed toward white (including the alpha 251-254 band the MP4 path snaps to
 opaque) are recoloured to the interior colour with alpha kept. Version 5 adds a pale-rim despill matching the
 app-decoded fringe QA (`/workspace/lillith/scratch-fringeqa/fringeqa.py`): pixels in the 3 px edge ring, any alpha,
 light and near-neutral (min >= 170, sat <= 40) and >= 32 lighter than the interior are recoloured to the interior.
+Version 6 (current) adds the **protect guard** (`protect.py`), fixing a v1-v5 bug where the island / leak passes
+deleted detached body parts (tail segments, boot tips, hands, glow and FX blobs) and punched pinholes into white
+skin highlights and the shoulder tattoo: every output cell is compared with its original and any >= 20 px body
+blob that lost over half its area (or fell apart into specks), any new enclosed hole in non-backdrop pixels, and
+any solid non-pale pixel whose alpha was cut deeper than 3 px inside the body is restored from the original
+(colour despilled). Enclosed near-white backdrop pockets still go clear; a near-white blob whose 1-3 px ring has a
+mean min >= 170 is a skin highlight, not backdrop, and is kept. The report's `protect_bad_frames` must be 0.
+
+### Regression check (run on every cleaned clip before merging)
+
+```
+python3 tools/matte-clean/regress.py --base 379900d assets/generated/*/          # check only, exit 1 on failures
+python3 tools/matte-clean/regress.py --base 379900d --fix assets/generated/*/    # repair failures in place (+ MP4)
+#   --alt-base REV --alt-clips a,b   compare those clips against another original (e.g. re-shot perch clips)
+#   --fix-any                        with --fix, also repair damage below the flag threshold
+```
+
+Per frame vs the original sheet (`git show BASE:... | git lfs smudge`): (a) the number of >= 20 px opaque blobs
+(alpha > 128) must not drop, except where original parts merely merged into one blob (reported as
+`comp_merged`), and no original body blob may keep < 50 % of its area; (b) a frame is flagged with > 30 new hole
+pixels (alpha < 128 now, opaque before, enclosed by the body, not near-white neutral backdrop) or > 30 deep-loss
+pixels. `--fix` restores those pixels from the original, keeps every other fringe fix, refreshes
+`bbox_per_frame`, repacks the MP4 and stamps `matte_protect` in the JSON (frame data never changes).
 A clip cleaned by an older version is re-cleaned **from its original** (`$MC_BACKUP/<clip>_sheet.png` or the repo's
 Git LFS object store, located by the sha256 stamped in the JSON), never on top of the earlier output. If you ran an older version (v1 379900d, v2 11807e1), update your branch to the
 latest `fix/no-white-fringe` and re-run the same command (add `--force` only to redo v4 output).

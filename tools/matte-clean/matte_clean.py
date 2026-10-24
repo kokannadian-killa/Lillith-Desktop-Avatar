@@ -12,6 +12,13 @@ Per frame of <clip>/<clip>_sheet.png (straight alpha, 400x400 cells):
      against white, and any that are still light with alpha < 0.9 are dropped (1-2 px erosion of the
      contaminated edge only; clean edges are never thinned).
   3. tiny detached specks are removed (not on overlay/event clips: their FX are detached on purpose).
+  4. protect guard (v6, tools/matte-clean/protect.py): compared with the original cell, any body part
+     (>= 20 px opaque blob that was not near-white backdrop) that lost over half its area or fell apart into
+     specks (tail segments, boot tips, hands, FX), any new enclosed hole in skin / highlight / tattoo pixels,
+     and any solid non-pale pixel whose alpha was cut deeper than 3 px inside her is put back from the
+     original (colour despilled like the rest). Enclosed near-white backdrop pockets (hair / neck / limb gaps)
+     stay removed; skin highlights are told apart from them by their ring (mean min >= 170 = highlight).
+     The per-frame check (protect.check) is re-run on the output and reported as `protect_bad_frames`.
 Event clips that carry `base_clip` + `base_frames` (code-drawn events: icons, start-menu panel, incognito fade)
 only get the cleaned base body swapped in where the event still equals its base frame, so their intentional
 white effects are untouched. Event clips without a base are skipped unless --events-all.
@@ -37,8 +44,9 @@ os.environ.setdefault('CC_REPO', REPO)
 import cc_lib  # noqa: E402
 import white_edge  # noqa: E402
 import mc_orig  # noqa: E402
+import protect  # noqa: E402
 
-VERSION = 5
+VERSION = 6
 # per-worktree backup dir so parallel helpers never share or clobber one; originals are also recoverable from LFS
 BACKUP = os.environ.get('MC_BACKUP', os.path.join('/workspace/verify/nowhite/orig', os.path.basename(REPO)))
 LOCKED = {l.split('#')[0].strip() for l in open(os.path.join(HERE, 'locked.txt'))} - {''} \
@@ -180,6 +188,7 @@ def clean_cell(c, name):
     r, st['rim_px_despilled'] = rim_despill(r, overlay=ov)
     if not ov:
         r, k = cc_lib.drop_specks(r); st['specks_dropped'] = st.get('specks_dropped', 0) + k
+    r, st['protect_px_restored'] = protect.restore(c, r, lambda x: rim_despill(soft_despill(x, overlay=ov)[0], overlay=ov))
     return r, st
 
 
@@ -263,9 +272,12 @@ def process(job):
         for k, v in st.items(): tot[k] = tot.get(k, 0) + int(v)
     after = [out[:400, i * 400:(i + 1) * 400] for i in range(len(cells))]
     stats(after, ov, res, 'after')
+    # regression guard against the source cells: lost parts / new holes / deep alpha loss
+    pb = [i for i, (o, c) in enumerate(zip(cells, after)) if protect.bad(protect.check(o, c))]
+    tot['protect_bad_frames'] = len(pb)
     res['stats'] = tot
     if a.dry_run:
-        res['status'] = 'dry-run'; return res
+        res['status'] = 'dry-run' + (f' (protect check flags frames {pb[:10]})' if pb else ''); return res
     os.makedirs(BACKUP, exist_ok=True)
     if not res.get('from_backup'):
         shutil.copy2(sp, bk)
@@ -290,7 +302,7 @@ def process(job):
                          'source_sha256': src_sha}
     assert all(js.get(k) == keep[k] for k in INVARIANT), f'{name}: invariant changed'
     json.dump(js, open(jp, 'w'), indent=2)
-    res['status'] = 'cleaned'
+    res['status'] = 'cleaned' if not pb else f'cleaned (protect check still flags frames {pb[:10]})'
     return res
 
 
