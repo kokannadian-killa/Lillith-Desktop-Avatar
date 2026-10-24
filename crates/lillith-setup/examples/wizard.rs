@@ -264,13 +264,18 @@ fn run(a: Args) -> Result<(), String> {
             let cfg = config_path(&a).ok().and_then(|p| config::load(&p).ok());
             let r = detect(&detect_opts(&a));
             let rep = scan(&scan_opts(&a, cfg.as_ref()));
-            let recs = recommend(&rep.models, scan::total_ram_bytes());
+            let host = HostInfo::detect();
+            let recs = recommend_for(&rep.models, &host);
+            let hint = preferred_model_hint(&rep.models, &host);
             if a.json {
-                let v = serde_json::json!({ "runtimes": r, "scan": rep, "recommendations": recs });
+                let v = serde_json::json!({ "runtimes": r, "scan": rep, "recommendations": recs, "host": host, "hint": hint });
                 println!("{}", serde_json::to_string_pretty(&v).unwrap());
             } else {
                 print_detect(&r);
                 print_scan(&rep, &recs);
+                if let Some(h) = &hint {
+                    println!("== Get this model ==\n  {}", h.message);
+                }
                 if let Some(top) = recs.first() {
                     let m = &rep.models[top.index];
                     let c = wizard::config_for_model(

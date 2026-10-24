@@ -55,6 +55,8 @@ pub enum LaunchError {
     Config(#[from] crate::config::ConfigError),
     #[error("no GGUF chosen yet ([llm] gguf_path is empty)")]
     NoModel,
+    #[error("llama-server is only started on 127.0.0.1; set server_url to http://127.0.0.1:PORT (got {0})")]
+    Host(String),
     #[error("{0}")]
     NotLocalModel(String),
     #[error("modelfile: {0}")]
@@ -65,38 +67,70 @@ pub enum LaunchError {
     Failed { status: String, output: String },
 }
 
-/// `llama-server -m <gguf> --host 127.0.0.1 --port 8080 -c 4096 --chat-template chatml`
-/// for `cfg` (host/port from the validated loopback `server_url`).
+/// The llama-server line for `cfg`, e.g.
+/// `llama-server -m <gguf> --host 127.0.0.1 --port 8080 -c 4096 -t 2 --jinja`.
+///
+/// Always `--host 127.0.0.1` (loopback only; a `[::1]` server URL is refused
+/// rather than silently mismatched) and always `--jinja`, so the model's own
+/// embedded chat template is used. No `--chat-template <name>`: with
+/// `--jinja` (llama.cpp's default) a name like `chatml` is taken as literal
+/// template text and every prompt collapses to the word "chatml".
+/// `-t` is `[llm] threads`, or this machine's physical cores when 0.
 pub fn llama_server_command(
     cfg: &LlmConfig,
     bin: Option<&Path>,
+) -> Result<LaunchCommand, LaunchError> {
+    llama_server_command_with(cfg, bin, crate::host::physical_cores())
+}
+
+/// [`llama_server_command`] with the physical core count injected (tests, GUI).
+pub fn llama_server_command_with(
+    cfg: &LlmConfig,
+    bin: Option<&Path>,
+    physical_cores: u32,
 ) -> Result<LaunchCommand, LaunchError> {
     if cfg.gguf_path.trim().is_empty() {
         return Err(LaunchError::NoModel);
     }
     let url: LocalUrl = cfg.server()?;
+    if url.ip != std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST) {
+        return Err(LaunchError::Host(url.ip.to_string()));
+    }
     let program = bin
         .map(|b| b.display().to_string())
         .or_else(|| (!cfg.llama_server_bin.is_empty()).then(|| cfg.llama_server_bin.clone()))
         .unwrap_or_else(|| "llama-server".into());
-    let host = url.ip.to_string();
-    let mut args = vec![
+    let ctx = if cfg.ctx_size == 0 {
+        4096
+    } else {
+        cfg.ctx_size
+    };
+    let args = vec![
         "-m".into(),
         cfg.gguf_path.clone(),
         "--host".into(),
-        host,
+        LOOPBACK_HOST.into(),
         "--port".into(),
         url.port.to_string(),
         "-c".into(),
-        cfg.ctx_size.to_string(),
-        "--chat-template".into(),
-        cfg.chat_template.clone(),
+        ctx.to_string(),
+        "-t".into(),
+        effective_threads(cfg.threads, physical_cores).to_string(),
+        "--jinja".into(),
     ];
-    if cfg.threads > 0 {
-        args.push("-t".into());
-        args.push(cfg.threads.to_string());
-    }
     Ok(LaunchCommand { program, args })
+}
+
+/// The only address the wizard ever binds llama-server to.
+pub const LOOPBACK_HOST: &str = "127.0.0.1";
+
+/// `-t`: the configured count, else `physical_cores` (at least 1).
+pub fn effective_threads(configured: u32, physical_cores: u32) -> u32 {
+    if configured > 0 {
+        configured
+    } else {
+        physical_cores.max(1)
+    }
 }
 
 /// Checks that a Modelfile only references local files (so `ollama create`
@@ -194,21 +228,62 @@ mod tests {
             gguf_path: "/workspace/models/qwen2.5-0.5b-instruct-q4_k_m.gguf".into(),
             ..Default::default()
         };
-        let c = llama_server_command(&cfg, None).unwrap();
+        let c = llama_server_command_with(&cfg, None, 2).unwrap();
         assert_eq!(
             c.to_shell_string(),
-            "llama-server -m /workspace/models/qwen2.5-0.5b-instruct-q4_k_m.gguf --host 127.0.0.1 --port 8080 -c 4096 --chat-template chatml"
+            "llama-server -m /workspace/models/qwen2.5-0.5b-instruct-q4_k_m.gguf --host 127.0.0.1 --port 8080 -c 4096 -t 2 --jinja"
         );
         let cfg = LlmConfig {
             gguf_path: "/home/ko/My Models/it's.gguf".into(),
             server_url: "http://localhost:9090".into(),
+            threads: 3,
             ..Default::default()
         };
-        let s = llama_server_command(&cfg, Some(Path::new("/opt/llama.cpp/bin/llama-server")))
-            .unwrap()
-            .to_shell_string();
+        let s =
+            llama_server_command_with(&cfg, Some(Path::new("/opt/llama.cpp/bin/llama-server")), 8)
+                .unwrap()
+                .to_shell_string();
         assert!(s.contains("'/home/ko/My Models/it'\"'\"'s.gguf'"), "{s}");
         assert!(s.contains("--host 127.0.0.1 --port 9090"));
+        assert!(s.contains("-t 3 "), "configured threads win: {s}");
+    }
+
+    #[test]
+    fn llama_server_always_jinja_loopback_and_physical_threads() {
+        for (tmpl, url) in [
+            ("chatml", "http://127.0.0.1:8080"),
+            ("llama3", "http://localhost:8081/v1"),
+            ("mistral-v1", "http://127.0.0.1:8082"),
+        ] {
+            let cfg = LlmConfig {
+                gguf_path: "/m.gguf".into(),
+                chat_template: tmpl.into(),
+                server_url: url.into(),
+                ..Default::default()
+            };
+            let a = llama_server_command_with(&cfg, None, 2).unwrap().args;
+            assert!(a.iter().any(|x| x == "--jinja"), "{a:?}");
+            let host = a.iter().position(|x| x == "--host").unwrap();
+            assert_eq!(a[host + 1], "127.0.0.1");
+            let c = a.iter().position(|x| x == "-c").unwrap();
+            assert_eq!(a[c + 1], "4096");
+            let t = a.iter().position(|x| x == "-t").unwrap();
+            assert_eq!(a[t + 1], "2", "i5-7200U: 2 physical cores");
+            // A template *name* under --jinja would be read as template text.
+            assert!(!a.iter().any(|x| x == "--chat-template"), "{a:?}");
+            assert!(!a.iter().any(|x| x == "0.0.0.0" || x == "::"));
+        }
+        assert_eq!(effective_threads(0, 0), 1);
+        assert_eq!(effective_threads(0, 4), 4);
+        assert_eq!(effective_threads(6, 4), 6);
+        // The real-host wrapper detects cores and still passes -t.
+        let cfg = LlmConfig {
+            gguf_path: "/m.gguf".into(),
+            ..Default::default()
+        };
+        let a = llama_server_command(&cfg, None).unwrap().args;
+        let t = a.iter().position(|x| x == "-t").unwrap();
+        assert!(a[t + 1].parse::<u32>().unwrap() >= 1);
     }
 
     #[test]
@@ -225,6 +300,16 @@ mod tests {
         assert!(matches!(
             llama_server_command(&LlmConfig::default(), None),
             Err(LaunchError::NoModel)
+        ));
+        // Loopback but not 127.0.0.1: refused instead of a host/URL mismatch.
+        let v6 = LlmConfig {
+            gguf_path: "/m.gguf".into(),
+            server_url: "http://[::1]:8080".into(),
+            ..Default::default()
+        };
+        assert!(matches!(
+            llama_server_command_with(&v6, None, 2),
+            Err(LaunchError::Host(_))
         ));
     }
 
