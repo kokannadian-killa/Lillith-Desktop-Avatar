@@ -79,6 +79,9 @@ def _time(m):
     return words + (" " + " ".join(ap.upper()) if ap else "")
 
 
+# an integer, with "," only as a thousands separator (1,234,567), never a trailing comma
+_INT = r"(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)"
+
 _ABBR = [
     (r"\bDr\.", "Doctor"), (r"\bMr\.", "Mister"), (r"\bMrs\.", "Missus"), (r"\bMs\.", "Miz"),
     (r"\bSt\.", "Saint"), (r"\bvs\.?", "versus"), (r"\be\.g\.", "for example"), (r"\bi\.e\.", "that is"),
@@ -102,13 +105,15 @@ def normalize(text: str) -> str:
     t = re.sub(r"\.{4,}", "...", t)
     for pat, rep in _ABBR:
         t = re.sub(pat, rep, t)
-    t = re.sub(r"([$£€])\s?(\d[\d,]*)(?:\.(\d{1,2}))?", _money, t)
-    t = re.sub(r"\b(\d{1,2}):(\d{2})\s*([ap]\.?m\.?)?", _time, t, flags=re.I)
+    t = re.sub(r"([$£€])\s?(" + _INT + r")(?:\.(\d{1,2}))?", _money, t)
+    # am/pm only as its own word: "at 5:30 today" keeps the space before "today"
+    t = re.sub(r"\b(\d{1,2}):(\d{2})(?:\s*([ap]\.?m\b\.?))?", _time, t, flags=re.I)
     t = re.sub(r"\b(\d+)\s*%", lambda m: num2words(int(m.group(1))) + " percent", t)
     t = re.sub(r"\b(\d+)(st|nd|rd|th)\b", lambda m: ordinal(int(m.group(1))), t)
     t = re.sub(r"\b(\d+)\s*(am|pm)\b", lambda m: num2words(int(m.group(1))) + " " + " ".join(m.group(2).upper()), t,
                flags=re.I)
     t = re.sub(r"\b(\d+)'s\b", lambda m: num2words(int(m.group(1))) + "s", t)
-    t = re.sub(r"(?<![\w.])\d[\d,]*(?:\.\d+)?(?![\w])", _number, t)
+    # a comma is a thousands separator only before exactly 3 digits: "5, maybe 6" keeps its comma
+    t = re.sub(r"(?<![\w.])" + _INT + r"(?:\.\d+)?(?![\w])", _number, t)
     t = re.sub(r"\s+", " ", t).strip()
     return t

@@ -44,6 +44,12 @@ HAND = [
     "\"Quoted.\" (Paren.) [Bracket.] 'Single.'", "Mr.Smith 5pm 5 pm 5PM 17:00 0:00 24:00 99:99",
     "$5 million, $3.2 billion, 5k, 10K, 2x, x2", "#1 fan, No. 1, 1/2, 3/4, 2^10, 5*3=15", "100°C 212°F",
     "Ko's 2nd birthday; Lily's 3rd.", "ready red read rad", "  leading and trailing  ", "a" * 300,
+    # textnorm fix (648277e): times keep the following space, a trailing comma is not a thousands separator
+    "Meet me at 5:30 today", "at 5:30 tonight, okay?", "5:30 amazing", "at 5:30pm",
+    "at 5:30 p.m. sharp", "at 7:05 AM", "at 9:00", "5, maybe 6",
+    "I want 3, no 4, kisses", "1,000 kisses", "1,234,567 stars", "$5, maybe $6",
+    "$1,250.50 total", "$1", "in 1999", "3.14",
+    "50%", "the 21st", "hiii~ hehe", "at 5pm",
 ]
 
 random.seed(20261024)
