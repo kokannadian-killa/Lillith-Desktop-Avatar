@@ -2,7 +2,7 @@
 
 A pixel is a *light edge pixel* when, on a straight-alpha RGBA cell:
   * alpha > 0 and it lies on the silhouette boundary (within EDGE_PX of a clear pixel, alpha < 8), and
-  * it is light and near-neutral (min(R,G,B) >= LIGHT_MIN, max-min <= SAT_MAX) -- i.e. white backdrop
+  * it is light and near-neutral (min(R,G,B) >= LIGHT_MIN, max-min <= SAT_MAX; warm skin highlights are more saturated) -- i.e. white backdrop
     bled into the edge (straight colour un-mixed against white), and
   * it is clearly lighter than the nearest solid interior pixel (mean > interior mean + LIFT), so genuinely
     white art (eye glints, teeth, a white glove seen edge-on) does not count.
@@ -13,8 +13,8 @@ import numpy as np
 from scipy import ndimage as nd
 
 EDGE_PX = 2.5
-LIGHT_MIN = 200
-SAT_MAX = 28
+LIGHT_MIN = 205
+SAT_MAX = 20
 LIFT = 24
 # a frame fails when it has more than this many light edge pixels (straight colour, alpha > 0)
 FRAME_MAX = 6
@@ -33,7 +33,9 @@ def light_edge_mask(c, body_only=False):
     light = band & (mn >= LIGHT_MIN) & (sat <= SAT_MAX)
     if not light.any():
         return light
-    ref = (a >= 250) & (d >= 3)
+    # interior reference = nearest solid pixel that is not itself backdrop-white, so an opaque white pocket
+    # (backdrop seen between arm and waist, alpha left at 255) is still flagged along its boundary
+    ref = (a >= 250) & (d >= 3) & ~((mn >= LIGHT_MIN) & (sat <= SAT_MAX))
     if ref.any():
         _, (ry, rx) = nd.distance_transform_edt(~ref, return_indices=True)
         inner = rgb[ry, rx].mean(-1)

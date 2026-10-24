@@ -37,7 +37,7 @@ os.environ.setdefault('CC_REPO', REPO)
 import cc_lib  # noqa: E402
 import white_edge  # noqa: E402
 
-VERSION = 1
+VERSION = 2
 BACKUP = os.environ.get('MC_BACKUP', '/workspace/verify/nowhite/orig')
 LOCKED = {l.split('#')[0].strip() for l in open(os.path.join(HERE, 'locked.txt'))} - {''} \
     if os.path.exists(os.path.join(HERE, 'locked.txt')) else set()
@@ -53,14 +53,15 @@ def fringe_pass(c, overlay=False):
     """despill + un-mix + erode the light boundary pixels white_edge flags. Returns (cell, n_fixed)."""
     out = c.copy()
     total = 0
-    for _ in range(3):
+    for _ in range(2):  # at most a 2 px erosion of the contaminated edge
         L = white_edge.light_edge_mask(out, body_only=overlay)
         if not L.any():
             break
         rgb = out[..., :3].astype(np.float32); a = out[..., 3].astype(np.float32)
         clear = a < 8
         d = nd.distance_transform_edt(~clear)
-        ref = (a >= 250) & (d >= 3)
+        mn_ = rgb.min(-1); sat_ = rgb.max(-1) - mn_
+        ref = (a >= 250) & (d >= 3) & ~((mn_ >= white_edge.LIGHT_MIN) & (sat_ <= white_edge.SAT_MAX))
         if not ref.any():
             break
         _, (ry, rx) = nd.distance_transform_edt(~ref, return_indices=True)
@@ -78,9 +79,44 @@ def fringe_pass(c, overlay=False):
     return out, total
 
 
+GAP_MIN, GAP_SAT, GAP_MAX_PX = 232, 14, 4000
+
+
+def gap_pass(c):
+    """opaque backdrop pockets: near-white neutral regions (min>=232, sat<=14) that touch the outside (within 2 px
+    of a clear pixel) are white keying backdrop seen through a gap (arm/waist, legs, hair, tail), even with alpha
+    255. Their alpha is un-mixed against white ((255-min)/55, so pure white -> 0) plus a 1 px near-white rim."""
+    rgb = c[..., :3].astype(np.int32); a = c[..., 3].astype(np.int32)
+    mn = rgb.min(-1); sat = rgb.max(-1) - mn
+    W = (a > 0) & (mn >= GAP_MIN) & (sat <= GAP_SAT)
+    if not W.any():
+        return c, 0
+    clear = a < 8
+    near_out = nd.binary_dilation(clear, S8, iterations=2)
+    lab, n = nd.label(W, S8)
+    if not n:
+        return c, 0
+    ids = np.arange(1, n + 1)
+    touch = nd.maximum(near_out, lab, ids) > 0
+    area = nd.sum(W, lab, ids); pure = nd.mean(mn, lab, ids)
+    G = np.isin(lab, ids[touch & (area <= GAP_MAX_PX) & (pure >= 238)])
+    if not G.any():
+        return c, 0
+    G |= nd.binary_dilation(G, S8) & (mn >= 220) & (sat <= 18) & (a > 0)
+    out = c.copy()
+    na = (a * np.clip((255.0 - mn) / 55.0, 0, 1)).round().astype(np.int32)
+    out[..., 3] = np.where(G, np.minimum(a, na), a).astype(np.uint8)
+    out[out[..., 3] <= 3] = 0
+    return out, int(G.sum())
+
+
+S8 = np.ones((3, 3), bool)
+
+
 def clean_cell(c, name):
     ov = cc_lib.is_overlay(name)
     r, st = cc_lib.clean(c, name)
+    r, st['gap_px_cleared'] = gap_pass(r) if not ov else (r, 0)
     r, n = fringe_pass(r, overlay=ov)
     st['fringe_px_fixed'] = n
     if not ov:
@@ -119,9 +155,22 @@ def process(job):
     if name in LOCKED and not a.include_locked:
         res['status'] = 'locked (audit only)'; return res
     mc = js.get('matte_clean') or {}
-    if mc.get('version') == VERSION and mc.get('sheet_sha256') == sha(sp) and not a.force:
+    cur = sha(sp)
+    if mc.get('version') == VERSION and mc.get('sheet_sha256') == cur and not a.force:
         res['status'] = 'already clean'; res['after_light_edge'], res['after_leak'] = res['before_light_edge'], res['before_leak']
         return res
+    # re-clean from the original, never on top of an earlier clean: if the sheet is our own earlier output
+    # (stamp matches) and the backup is that clip's original (source sha matches), start from the backup.
+    bk = os.path.join(BACKUP, f'{name}_sheet.png')
+    src_sha = cur
+    ours = mc.get('sheet_sha256') == cur
+    if ours and os.path.exists(bk) and (sha(bk) == mc.get('source_sha256') or (not mc.get('source_sha256') and mc.get('version', 0) < VERSION)):
+        # (v1 stamps carry no source sha; v1 backed the original up before its first write)
+        im, cells = load_cells(bk); src_sha = sha(bk)
+        res['before_light_edge'], res['before_leak'] = (lambda p, l: (sum(p), sum(l)))(*frame_stats(cells, ov))
+        res['from_backup'] = True
+    elif mc.get('sheet_sha256') == cur and mc.get('version', 0) < VERSION:
+        res['status'] = 'FAILED: cleaned by an older version but original backup missing/mismatched'; return res
     base = bfr = None
     if name.startswith('event_'):
         b = (js.get('base_clip') or '').split('/')[-1]
@@ -153,8 +202,11 @@ def process(job):
     if a.dry_run:
         res['status'] = 'dry-run'; return res
     os.makedirs(BACKUP, exist_ok=True)
-    bk = os.path.join(BACKUP, f'{name}_sheet.png')
-    if not os.path.exists(bk): shutil.copy2(sp, bk)
+    if not res.get('from_backup'):
+        if os.path.exists(bk) and sha(bk) != cur:
+            # a different original was backed up earlier (e.g. art re-imported since): keep it alongside
+            shutil.copy2(bk, bk + f'.{sha(bk)[:12]}')
+        shutil.copy2(sp, bk)
     Image.fromarray(out, 'RGBA').save(sp, optimize=True)
     keep = {k: js.get(k) for k in INVARIANT}
     if 'bbox_per_frame' in js:
@@ -172,7 +224,8 @@ def process(job):
         if p.returncode != 0:
             res['status'] = 'mp4 repack FAILED: ' + p.stderr[-300:]; return res
         js = json.load(open(jp))
-    js['matte_clean'] = {'version': VERSION, 'tool': 'tools/matte-clean/matte_clean.py', 'sheet_sha256': sha(sp)}
+    js['matte_clean'] = {'version': VERSION, 'tool': 'tools/matte-clean/matte_clean.py', 'sheet_sha256': sha(sp),
+                         'source_sha256': src_sha}
     assert all(js.get(k) == keep[k] for k in INVARIANT), f'{name}: invariant changed'
     json.dump(js, open(jp, 'w'), indent=2)
     res['status'] = 'cleaned'

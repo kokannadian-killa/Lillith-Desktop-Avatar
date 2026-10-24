@@ -73,7 +73,17 @@ re-run on top of its SHA with `--include-locked`:
 python3 tools/matte-clean/matte_clean.py --include-locked assets/generated/{cleavage_beckon,chest_press_tease,arch_trace,blend_drag_held_to_perch_sit,perch_sit}
 ```
 
-Raw takes in `assets/source/video/` are inputs to the pipeline, not shipped frames; leave them to the method owner.
+Raw takes in `assets/source/video/` are pipeline inputs only (read by `tools/video-pipeline/ingest.sh` /
+`build_clip.py` / `build_idle_v2.py` via `LILLITH_SRC_VIDEO`); the engine never loads them (it plays
+`assets/generated/<clip>/<clip>.mp4` or the sheet). Do not modify them.
+
+## Tool versions / re-runs
+
+`matte_clean` stamps `version` in each clip JSON. Version 2 added the opaque-gap pass (white backdrop seen between
+arm and waist / legs / tail with alpha left at 255, which the v1 metric could not see) and caps the edge erosion at
+2 px. A clip cleaned by an older version is re-cleaned **from its original** (`$MC_BACKUP/<clip>_sheet.png`,
+checked by sha256), never on top of the earlier output. If you ran v1 (commit 379900d), update your branch to the
+latest `fix/no-white-fringe` and re-run the same command.
 
 ## Options
 
@@ -83,8 +93,8 @@ matte_clean.py DIR|GLOB... [--dry-run] [--no-mp4] [--force] [--include-locked] [
 qa_all.py --white-edge [--mp4] [--max N] DIR|GLOB...
 ```
 
-`white-edge` check: a light edge pixel has alpha > 0, lies within 2.5 px of a clear pixel, has min(RGB) >= 200 and
-max-min <= 28, and is more than 24 levels lighter than the nearest solid interior pixel (so real white art does
+`white-edge` check: a light edge pixel has alpha > 0, lies within 2.5 px of a clear pixel, has min(RGB) >= 205 and
+max-min <= 20, and is more than 24 levels lighter than the nearest solid interior pixel (so real white art does
 not count). A frame fails with more than 6 (`--max`). Event/overlay clips are checked on the main body only.
 
 ## Renderer (why the fix is in the assets)
