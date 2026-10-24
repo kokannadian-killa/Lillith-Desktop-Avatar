@@ -147,8 +147,14 @@ impl Bridge {
                     out.push(Event::new("window.private"));
                 }
             }
-            BridgeCall::Activated { id, .. } => {
+            BridgeCall::Activated { id, class } => {
                 // TODO(M5): focus.long_work timer and Follow/perch targets.
+                // `window.focused` carries only the window class (never the
+                // caption) so memory can learn app habits; private windows
+                // and shell surfaces never emit it.
+                if !id.is_empty() && !ignored_class(&class) && !self.private_seen.contains(&id) {
+                    out.push(Event::with_detail("window.focused", class));
+                }
                 self.active = (!id.is_empty()).then_some(id);
             }
             BridgeCall::Stack(s) => self.desktop.set_windows(desktop::parse_stack(&s)),
@@ -320,10 +326,13 @@ mod tests {
             }),
             [Event::with_detail("window.minimized", "org.kde.konsole")]
         );
-        b.handle(BridgeCall::Activated {
-            id: "1".into(),
-            class: "firefox".into(),
-        });
+        // Window 1 went private above: focusing it reports nothing.
+        assert!(b
+            .handle(BridgeCall::Activated {
+                id: "1".into(),
+                class: "firefox".into(),
+            })
+            .is_empty());
         assert_eq!(b.active.as_deref(), Some("1"));
         assert_eq!(
             b.handle(BridgeCall::Removed {
@@ -337,6 +346,33 @@ mod tests {
         assert!(b.handle(added("9", "lillith", "Lillith")).is_empty());
         assert!(b.handle(added("9", "plasmashell", "")).is_empty());
         assert!(b.handle(BridgeCall::Cursor).is_empty());
+    }
+
+    #[test]
+    fn focus_never_reports_private_or_shell_windows() {
+        let mut b = Bridge::default();
+        b.handle(added("7", "firefox", "Mozilla Firefox Private Browsing"));
+        assert!(b
+            .handle(BridgeCall::Activated {
+                id: "7".into(),
+                class: "firefox".into(),
+            })
+            .is_empty());
+        assert_eq!(b.active.as_deref(), Some("7"));
+        assert!(b
+            .handle(BridgeCall::Activated {
+                id: "8".into(),
+                class: "plasmashell".into(),
+            })
+            .is_empty());
+        let ev = b.handle(BridgeCall::Activated {
+            id: "9".into(),
+            class: "org.kde.konsole".into(),
+        });
+        assert_eq!(
+            ev,
+            [Event::with_detail("window.focused", "org.kde.konsole")]
+        );
     }
 
     #[test]
