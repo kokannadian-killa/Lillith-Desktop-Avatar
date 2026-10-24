@@ -136,7 +136,10 @@ once; the chat stays usable while the card waits.
 | Safeword (`red`) while it waits | dropped, cooldown | `CANCELLED` |
 | Bubble closed (Esc / focus loss / window manager) while it waits | dropped by the bubble's close handler (`on_exit`, close-requested, `Drop`) | `CANCELLED` + note `chat bubble closed before an answer` |
 | Bubble killed (SIGKILL, crash) while it waits | the overlay sees the bubble's stdout end with the card still open | `CANCELLED` + note `chat bubble gone before an answer (killed)` |
-| Card still open from an earlier run (app killed too) | closed when the overlay starts | `CANCELLED` + note `orphaned PROPOSED closed at startup` |
+| Card still open from an earlier run (app killed too) | closed when the overlay starts (or `lillith chat --spawn-server`), unless the card's process (the pid in its id) is still alive | `CANCELLED` + note `orphaned PROPOSED closed at startup` |
+| Overlay starts the server for a `CONFIRM` | once per card: the approval event carries the card id and argv; the argv must equal what `[chat.server]` runs now and the card must have an unused `CONFIRM` | `USED` |
+| Overlay won't start it (argv differs, no `CONFIRM`, card already used) | nothing starts; the bubble stops waiting | `SPAWN_REFUSED` + reason |
+| Approved start failed (spawn error, never came up) | cooldown, no resend | `SPAWN_FAILED` + reason |
 
 Every line of one card carries the same `card=<id>` column after the path
 (`<ts>\t<DECISION>\tstart_model_server\t<binary>\tcard=<id>[\t<note>]`),
@@ -149,6 +152,15 @@ the next id-less decision; an orphaned one is closed with
 `proposed=<its timestamp>` instead of an id.) The bubble has no SIGTERM
 handler of its own; the overlay check and the startup scan cover it.
 
+- The card shows the whole command, one argument per line (`--api-key`
+  masked), scrolling when long, never cut off. The binary is resolved to
+  an absolute path for the card and the spawn alike, and the spawn drops
+  inherited `LLAMA_ARG_*` / `HF_*` env vars, so what runs is what was shown.
+- `USED`, `SPAWN_REFUSED` and `SPAWN_FAILED` come after the decision and
+  never open or close a card. Columns are sanitized (no tab or newline in a
+  path or note) and a torn last line is never glued to the next one.
+- Saying the safeword while the bubble waits for the approved server ends
+  the wait at once and nothing is resent.
 - Typed or spoken "yes" never approves: chat text (`yes`, `/contract yes`)
   is just a message, the voice path is refused while a card is up, and the
   start call (`start_approved_server` / `wait_for_approved_server`) does

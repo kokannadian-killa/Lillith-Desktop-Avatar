@@ -52,7 +52,7 @@ Looking is free. Doing is a plan.
 | open (app or program, with files) | `programs = true` | **plan item** (program, full path, args, files, cwd, risky) | same + `commands.log` |
 | run / skill scripts | `commands = true` | **plan item** (exact command, cwd, risky) | same + `commands.log` |
 | shell   | `allow_shell = true` | **risky plan item** | same + `commands.log` |
-| start / restart the local model server (`[chat.server]`) | `[chat.server]` set | **card, click on Yes only** (never typed/spoken yes); `lillith chat --spawn-server` without a desktop: `[y/N]` on the controlling tty | `PROPOSED` / `CONFIRM` / `DENY` / `TIMEOUT` / `NO_UI` / `CANCELLED` (`CONFIRM_TTY` / `DENY_TTY` for the tty), all with `card=<id>` + `commands.log` |
+| start / restart the local model server (`[chat.server]`) | `[chat.server]` set | **card, click on Yes only** (never typed/spoken yes); `lillith chat --spawn-server` without a desktop: `[y/N]` on the controlling tty | `PROPOSED` / `CONFIRM` / `DENY` / `TIMEOUT` / `NO_UI` / `CANCELLED` (`CONFIRM_TTY` / `DENY_TTY` for the tty), then `USED` / `SPAWN_REFUSED` / `SPAWN_FAILED` from the starter, all with `card=<id>` + `commands.log` |
 | run / shell that removes files | — | **refused** (use delete) | — |
 
 When one reply holds several ```` ```tool ```` blocks, the free ones run and

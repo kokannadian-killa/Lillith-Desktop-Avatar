@@ -74,7 +74,9 @@ a desktop is available, otherwise `Start local model server? [y/N]` on your
 terminal (read from the terminal itself, never from piped stdin; only `y` /
 `yes` starts it, audited `CONFIRM_TTY`, anything else is `DENY_TTY`). With
 neither (e.g. under a service manager) it is `NO_UI` and the chat stays
-text-only. See [MEMORY.md](MEMORY.md) ("Desktop wiring") for the full table.
+text-only. Keys typed before the question are discarded, so a stray `y`
+can't answer it. One card starts at most one server (`USED`; a refused or
+failed start is `SPAWN_REFUSED` / `SPAWN_FAILED`). See [MEMORY.md](MEMORY.md) ("Desktop wiring") for the full table.
 
 ```toml
 # ~/.config/lillith/config.toml  (or any file passed with --config)
