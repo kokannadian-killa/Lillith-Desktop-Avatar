@@ -143,7 +143,8 @@ impl Stage {
     /// manifest's cell size (largest frame) × `scale`, with every clip's
     /// feet anchor mapped to the same point.
     pub fn load(manifest_path: &Path, scale: f32, cfg: AnimatorConfig) -> Result<Self, StageError> {
-        let manifest = Manifest::load(manifest_path)?;
+        // The built-in set plus Ko's imported clips (add-only).
+        let manifest = lillith_anim::user_clips::load_with_user_clips(manifest_path)?;
         let dir = manifest_path
             .parent()
             .unwrap_or(Path::new("."))

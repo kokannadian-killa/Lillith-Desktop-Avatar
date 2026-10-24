@@ -13,6 +13,7 @@
 //! - [`talk`]: token-driven lip-flap for the `talk_loop` clip (chat replies).
 //! - [`lipsync`]: audio-driven lip-sync from the voice daemon's envelope/visemes.
 //! - [`video`]: alpha-packed MP4 clip source (local ffmpeg, LRU cache, PNG fallback).
+//! - [`user_clips`]: Ko's imported clips (`user-clips/user_manifest.toml`), merged add-only.
 //! - [`particles`]: cyan/magenta/purple/gold/red particle bursts (TODO, M9).
 //!
 //! Frames are composited on the CPU with `tiny-skia` into a [`Canvas`].
@@ -30,6 +31,7 @@ pub mod preview;
 pub mod render;
 pub mod talk;
 pub mod text;
+pub mod user_clips;
 pub mod video;
 
 /// CPU render target shared with the overlay (premultiplied RGBA).

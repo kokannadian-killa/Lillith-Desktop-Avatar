@@ -4,7 +4,7 @@
 
 use eframe::egui;
 use lillith_anim::animator::{Animator, AnimatorConfig, Dir};
-use lillith_anim::atlas::{default_manifest_path, Manifest};
+use lillith_anim::atlas::default_manifest_path;
 use lillith_anim::render::{draw_cell, render_frame, rgba_from_pixmap, PageCache};
 use lillith_anim::Canvas;
 use lillith_core::spring::{Channel, Transform};
@@ -55,7 +55,7 @@ impl Poses {
             );
             return;
         };
-        match Manifest::load(&path)
+        match lillith_anim::user_clips::load_with_user_clips(&path)
             .map_err(|e| e.to_string())
             .and_then(|m| {
                 Animator::new(

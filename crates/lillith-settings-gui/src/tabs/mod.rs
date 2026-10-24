@@ -9,6 +9,7 @@ pub mod brain;
 pub mod build;
 pub mod companion;
 pub mod icon;
+pub mod import;
 pub mod knobs;
 pub mod sealed;
 
@@ -92,7 +93,8 @@ pub struct TabRegistry {
 
 impl TabRegistry {
     /// Companion, Motion, Chat / Brain, Avatar, Icon, Voice, Build, About,
-    /// Access (`[mind.access]`, in the first add-in slot), Sealed II.
+    /// Access (`[mind.access]`, in the first add-in slot), Pose Builder
+    /// (video import, in the second).
     pub fn with_defaults(shared: &Shared) -> Self {
         let mut r = Self::default();
         r.register(Box::new(companion::CompanionTab::new(shared)));
@@ -108,6 +110,8 @@ impl TabRegistry {
         }
         // [mind.access] takes the first add-in slot.
         r.unseal(Box::new(knobs::KnobTab::access()));
+        // Pose Builder (import your own videos) takes the second.
+        r.unseal(Box::new(import::ImportTab::new()));
         r
     }
 
@@ -185,12 +189,12 @@ pub(crate) mod tests {
                 "build",
                 "about",
                 "access",
-                "sealed-2"
+                "import"
             ]
         );
-        assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 1);
-        r.unseal(Box::new(Dummy));
-        assert_eq!(r.index_of("dummy"), Some(9));
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 0);
+        // No sealed slot left: an add-in is appended.
+        r.unseal(Box::new(Dummy));
+        assert_eq!(r.index_of("dummy"), Some(10));
     }
 }

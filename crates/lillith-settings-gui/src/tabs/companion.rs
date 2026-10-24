@@ -38,7 +38,8 @@ pub struct LoadedSet {
 
 impl LoadedSet {
     pub fn load(manifest: &Path) -> Option<Self> {
-        let m = Manifest::load(manifest).ok()?;
+        // Built-in set plus Ko's imported clips (add-only).
+        let m = lillith_anim::user_clips::load_with_user_clips(manifest).ok()?;
         let seasons = Seasons::load_or_bundled(Seasons::path_for_manifest(manifest).as_deref());
         // <root>/assets/generated/manifest.toml
         let root = manifest
