@@ -6660,6 +6660,146 @@
    ],
    "allure": true,
    "video": "squeeze_hands_press_tease/squeeze_hands_press_tease.mp4"
+  },
+  {
+   "name": "halloween_hat_tip_wink",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "halloween_hat_tip_wink/",
+   "sheet": "halloween_hat_tip_wink/halloween_hat_tip_wink_sheet.png",
+   "manifest": "halloween_hat_tip_wink/halloween_hat_tip_wink.json",
+   "preview": "halloween_hat_tip_wink/halloween_hat_tip_wink_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "outfit:halloween",
+    "season:halloween",
+    "seasonal"
+   ],
+   "allure": true,
+   "video": "halloween_hat_tip_wink/halloween_hat_tip_wink.mp4",
+   "season": "halloween",
+   "outfit": "halloween"
+  },
+  {
+   "name": "halloween_broom_sit_lollipop",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "halloween_broom_sit_lollipop/",
+   "sheet": "halloween_broom_sit_lollipop/halloween_broom_sit_lollipop_sheet.png",
+   "manifest": "halloween_broom_sit_lollipop/halloween_broom_sit_lollipop.json",
+   "preview": "halloween_broom_sit_lollipop/halloween_broom_sit_lollipop_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "outfit:halloween",
+    "season:halloween",
+    "seasonal"
+   ],
+   "allure": true,
+   "video": "halloween_broom_sit_lollipop/halloween_broom_sit_lollipop.mp4",
+   "season": "halloween",
+   "outfit": "halloween"
+  },
+  {
+   "name": "halloween_cape_swirl_arch",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "halloween_cape_swirl_arch/",
+   "sheet": "halloween_cape_swirl_arch/halloween_cape_swirl_arch_sheet.png",
+   "manifest": "halloween_cape_swirl_arch/halloween_cape_swirl_arch.json",
+   "preview": "halloween_cape_swirl_arch/halloween_cape_swirl_arch_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "outfit:halloween",
+    "season:halloween",
+    "seasonal"
+   ],
+   "allure": true,
+   "video": "halloween_cape_swirl_arch/halloween_cape_swirl_arch.mp4",
+   "season": "halloween",
+   "outfit": "halloween"
+  },
+  {
+   "name": "halloween_pumpkin_hug_candy",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "halloween_pumpkin_hug_candy/",
+   "sheet": "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy_sheet.png",
+   "manifest": "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy.json",
+   "preview": "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "outfit:halloween",
+    "season:halloween",
+    "seasonal"
+   ],
+   "allure": true,
+   "video": "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy.mp4",
+   "season": "halloween",
+   "outfit": "halloween"
   }
  ]
 }
