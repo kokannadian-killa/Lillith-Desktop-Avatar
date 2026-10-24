@@ -107,23 +107,95 @@ fn local_host(h: &str) -> bool {
     {
         return true;
     }
-    match h.parse::<std::net::Ipv4Addr>() {
-        Ok(ip) => {
-            let o = ip.octets();
-            ip.is_loopback()
-                || ip.is_private()
-                || ip.is_link_local()
-                || ip.is_unspecified()
-                || ip.is_broadcast()
-                || ip.is_multicast()
-                || ip.is_documentation()
-                || (o[0] == 100 && (64..128).contains(&o[1]))
-                || o[0] == 0
-        }
-        // A dotted all-numeric host that isn't a valid IPv4 (e.g. `127.1`,
-        // `2130706433`) is refused too: resolvers read those as IPs.
-        Err(_) => h.split('.').all(|l| l.bytes().all(|b| b.is_ascii_digit())),
+    match ipv4_any(h) {
+        // Not an IP literal: an ordinary host name.
+        None => false,
+        // Numeric-looking but not a valid IPv4 (`1.2.3.4.5`, `0x1g`,
+        // `99999999999`): resolvers disagree on those, so refuse.
+        Some(Err(())) => true,
+        // Refused when local / reserved, and in any non-dotted-decimal
+        // spelling (`0x7f000001`, `0177.0.0.1`, `2130706433`, `127.1`):
+        // only the canonical form of a public address is let through.
+        Some(Ok(ip)) => reserved_v4(ip) || h != ip.to_string(),
     }
+}
+
+/// Loopback, private, link-local, CGNAT, documentation, benchmarking,
+/// IETF-reserved, class E, broadcast, multicast or "this network".
+fn reserved_v4(ip: std::net::Ipv4Addr) -> bool {
+    let o = ip.octets();
+    ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || ip.is_unspecified()
+        || ip.is_broadcast()
+        || ip.is_multicast()
+        || ip.is_documentation()
+        || o[0] == 0
+        || (o[0] == 100 && (64..128).contains(&o[1])) // 100.64.0.0/10
+        || (o[0] == 192 && o[1] == 0 && o[2] == 0) // 192.0.0.0/24
+        || (o[0] == 198 && (o[1] == 18 || o[1] == 19)) // 198.18.0.0/15
+        || o[0] >= 240 // 240.0.0.0/4 (and broadcast)
+}
+
+/// One IPv4 label in any spelling resolvers accept: decimal, `0x` hex or
+/// leading-zero octal. `None` if it isn't numeric at all; `Some(None)` if it
+/// is numeric-looking but malformed or too big.
+fn ipv4_label(l: &str) -> Option<Option<u64>> {
+    let (digits, radix) = if let Some(x) = l.strip_prefix("0x").or_else(|| l.strip_prefix("0X")) {
+        (x, 16)
+    } else if l.len() > 1 && l.starts_with('0') {
+        (&l[1..], 8)
+    } else {
+        (l, 10)
+    };
+    if l.is_empty()
+        || !l
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() || b == b'x' || b == b'X')
+    {
+        return None;
+    }
+    if radix != 16 && !l.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if digits.is_empty() {
+        return Some(Some(0));
+    }
+    Some(
+        u64::from_str_radix(digits, radix)
+            .ok()
+            .filter(|&v| v <= u64::from(u32::MAX)),
+    )
+}
+
+/// `h` read as an IPv4 literal the way resolvers (inet_aton, WHATWG) do:
+/// 1–4 dot-separated labels, each decimal / hex / octal, the last filling
+/// the remaining bytes. `None` when `h` is a host name (its last label is
+/// not numeric).
+fn ipv4_any(h: &str) -> Option<Result<std::net::Ipv4Addr, ()>> {
+    let labels: Vec<&str> = h.split('.').collect();
+    let last = *labels.last()?;
+    ipv4_label(last)?;
+    if labels.len() > 4 {
+        return Some(Err(()));
+    }
+    let mut vals = Vec::with_capacity(labels.len());
+    for l in &labels {
+        match ipv4_label(l) {
+            Some(Some(v)) => vals.push(v),
+            _ => return Some(Err(())),
+        }
+    }
+    let (head, tail) = vals.split_at(vals.len() - 1);
+    if head.iter().any(|&v| v > 255) || tail[0] >= 1u64 << (8 * (5 - vals.len())) {
+        return Some(Err(()));
+    }
+    let mut n = tail[0];
+    for (i, &v) in head.iter().enumerate() {
+        n |= v << (8 * (3 - i));
+    }
+    Some(Ok(std::net::Ipv4Addr::from(n as u32)))
 }
 
 impl Url {
@@ -338,6 +410,44 @@ mod tests {
             "http://2130706433/",
         ] {
             assert_eq!(Url::parse(local), Err(UrlError::Local), "{local}");
+        }
+        // N3: every spelling of a local / reserved IPv4, plus 198.18/15
+        // and 240/4; public addresses only in canonical dotted form.
+        for local in [
+            "http://0x7f000001/",
+            "http://0X7F000001/",
+            "http://0x7f.1/",
+            "http://0177.0.0.1/",
+            "http://0177.1/",
+            "http://017700000001/",
+            "http://3232235777/", // 192.168.1.1
+            "http://0xc0a80101/", // 192.168.1.1
+            "http://012.0.0.1/",  // 10.0.0.1
+            "http://198.18.0.1/",
+            "http://198.19.255.254/",
+            "http://240.0.0.1/",
+            "http://255.255.255.254/",
+            "http://0xf0000001/", // 240.0.0.1
+            "http://192.0.0.8/",
+            "http://224.0.0.1/",
+            "http://0x08080808/", // 8.8.8.8, but not canonical
+            "http://134744072/",  // 8.8.8.8 as an integer
+            "http://1.2.3.4.5/",
+            "http://1.2.3.256/",
+            "http://0x100000000/",
+            "http://08.1.1.1/",
+        ] {
+            assert_eq!(Url::parse(local), Err(UrlError::Local), "{local}");
+        }
+        for public in [
+            "https://8.8.8.8/",
+            "https://198.20.0.1/",
+            "https://239.255.255.255.example/",
+            "https://example.cafe/",
+            "https://0x.example.org/",
+            "https://1e100.net/",
+        ] {
+            assert!(Url::parse(public).is_ok(), "{public}");
         }
         assert_eq!(
             Url::parse_entry("wiki.archlinux.org").unwrap().to_string(),

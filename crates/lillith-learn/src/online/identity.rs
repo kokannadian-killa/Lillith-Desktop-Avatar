@@ -115,6 +115,14 @@ impl IdentityDenylist {
         d
     }
 
+    /// This list plus every identifier of `other` (nothing is dropped).
+    pub fn merged(mut self, other: IdentityDenylist) -> Self {
+        for w in &other.words {
+            self.add(w);
+        }
+        self
+    }
+
     /// Adds more identifiers (e.g. known names from memory).
     pub fn with<I: IntoIterator<Item = S>, S: AsRef<str>>(mut self, words: I) -> Self {
         for w in words {

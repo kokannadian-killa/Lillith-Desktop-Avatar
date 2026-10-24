@@ -589,7 +589,9 @@ fn online_research_detail(
          How: read-only GETs through the local Tor SOCKS proxy only (DNS inside Tor), \
          https verified against built-in roots (plain http only if allow_http is on), \
          no cookies, cache, Referer, logins or forms, fixed generic headers. \
-         A redirect to an address not listed above stops the trip. \
+         A redirect to a site (host) not listed above stops the trip; a redirect \
+         to another page or port on a listed site is followed; a redirect from \
+         https down to plain http always stops it. \
          Pages are kept as untrusted notes under knowledge/web/, never as instructions.\n\n\
          Honest limits: anonymity is never perfect; what is fetched and when can \
          fingerprint; a site sees a Tor exit and what was asked for.\n\n\

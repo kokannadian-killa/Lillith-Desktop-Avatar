@@ -65,6 +65,10 @@ fn redirect(to: &str) -> Canned {
 /// The test transport: canned pages by URL, records every request.
 struct TestFetcher {
     tor: Result<(), String>,
+    /// When set, `available()` snapshots this audit log's states.
+    probe_log: Option<PathBuf>,
+    at_probe: RefCell<Option<Vec<String>>>,
+    probes: Cell<usize>,
     pages: HashMap<String, Canned>,
     calls: RefCell<Vec<(String, String, u64)>>,
 }
@@ -73,6 +77,9 @@ impl TestFetcher {
     fn new() -> Self {
         Self {
             tor: Ok(()),
+            probe_log: None,
+            at_probe: RefCell::new(None),
+            probes: Cell::new(0),
             pages: HashMap::new(),
             calls: RefCell::new(Vec::new()),
         }
@@ -88,6 +95,15 @@ impl TestFetcher {
 
 impl Fetcher for TestFetcher {
     fn available(&self) -> Result<(), String> {
+        self.probes.set(self.probes.get() + 1);
+        if let Some(log) = &self.probe_log {
+            let lines: Vec<String> = std::fs::read_to_string(log)
+                .unwrap_or_default()
+                .lines()
+                .map(str::to_string)
+                .collect();
+            *self.at_probe.borrow_mut() = Some(states(&lines));
+        }
         self.tor.clone()
     }
     fn get(
@@ -255,7 +271,51 @@ fn tor_missing_refuses_the_trip_before_any_card_or_request() {
     );
     assert_eq!(c.shown.get(), 0, "no card without Tor");
     assert!(f.calls.borrow().is_empty(), "nothing sent");
-    assert_eq!(states(&env.audit()), ["REFUSED"]);
+    // N6: PROPOSED is written before the Tor probe.
+    assert_eq!(states(&env.audit()), ["PROPOSED", "REFUSED"]);
+}
+
+#[test]
+fn proposed_is_on_disk_before_the_tor_probe_and_tor_down_sends_nothing() {
+    // N6: the PROPOSED line exists when the probe runs (before any card).
+    let env = Env::new("tor-order");
+    let mut f = TestFetcher::new().page("https://example.org/", html(GOOD));
+    f.probe_log = Some(env.log());
+    f.tor = Err("nothing answers on the Tor SOCKS port".into());
+    let c = card(CardAnswer::Yes);
+    let rep = env
+        .engine(&on_cfg(), &f)
+        .run(&req(&["https://example.org/"]), &c, NEVER);
+    assert_eq!(f.probes.get(), 1);
+    assert_eq!(
+        f.at_probe.borrow().as_deref(),
+        Some(&["PROPOSED".to_string()][..])
+    );
+    assert_eq!(rep.state, TripState::Refused, "{rep:?}");
+    assert_eq!(c.shown.get(), 0, "no card");
+    assert!(f.calls.borrow().is_empty(), "nothing fetched");
+    assert!(rep.visits.is_empty() && rep.saved.is_empty());
+    assert!(env.notes().is_empty());
+    let log = env.audit();
+    assert_eq!(states(&log), ["PROPOSED", "REFUSED"]);
+    let card_id = |l: &String| l.split('\t').nth(3).map(str::to_string);
+    assert_eq!(card_id(&log[0]), card_id(&log[1]), "same trip");
+    assert!(log[1].contains("Tor"), "{}", log[1]);
+
+    // Tor up: the probe still sees PROPOSED first, then the card is shown.
+    let env = Env::new("tor-order-up");
+    let mut f = TestFetcher::new().page("https://example.org/", html(GOOD));
+    f.probe_log = Some(env.log());
+    let c = card(CardAnswer::No);
+    let rep = env
+        .engine(&on_cfg(), &f)
+        .run(&req(&["https://example.org/"]), &c, NEVER);
+    assert_eq!(
+        f.at_probe.borrow().as_deref(),
+        Some(&["PROPOSED".to_string()][..])
+    );
+    assert_eq!(rep.state, TripState::Denied);
+    assert_eq!(c.shown.get(), 1);
 }
 
 #[test]
@@ -467,17 +527,29 @@ fn redirect_inside_the_approved_host_is_followed() {
     let f = TestFetcher::new()
         .page("https://example.org/old", redirect("/new"))
         .page("https://example.org/new", html(GOOD));
-    let rep = env.engine(&on_cfg(), &f).run(
-        &req(&["https://example.org/old"]),
-        &card(CardAnswer::Yes),
-        NEVER,
-    );
+    let c = card(CardAnswer::Yes);
+    let rep = env
+        .engine(&on_cfg(), &f)
+        .run(&req(&["https://example.org/old"]), &c, NEVER);
     assert_eq!(rep.state, TripState::Done, "{}", rep.text());
     assert_eq!(
         f.urls(),
         ["https://example.org/old", "https://example.org/new"]
     );
     assert_eq!(rep.saved.len(), 1);
+    // N2: the card states the rule this test exercises (by host, not URL).
+    let shown = c.last.borrow().clone().unwrap();
+    let all = format!("{} {} {}", shown.title, shown.summary, shown.detail);
+    let all = all.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        all.contains("A redirect to a site (host) not listed above stops the trip"),
+        "{all}"
+    );
+    assert!(
+        all.contains("another page or port on a listed site is followed"),
+        "{all}"
+    );
+    assert!(!all.contains("an address not listed"), "{all}");
 }
 
 #[test]
@@ -1260,10 +1332,48 @@ fn an_unwritable_audit_log_refuses_the_trip_before_the_card() {
             "{rep:?}"
         );
         assert_eq!(c.shown.get(), 0, "{log:?}: no card without a PROPOSED line");
+        assert_eq!(f.probes.get(), 0, "{log:?}: not even the Tor probe");
         assert!(f.calls.borrow().is_empty(), "{log:?}: nothing sent");
         assert!(rep.visits.is_empty());
         assert!(env.notes().is_empty());
     }
+}
+
+#[test]
+fn reserved_and_odd_form_ipv4_hosts_are_refused_before_card_or_fetch() {
+    // N3: hex / octal / integer spellings and 198.18/15, 240/4.
+    for url in [
+        "https://0x7f000001/",
+        "https://0177.0.0.1/",
+        "https://2130706433/",
+        "https://3232235777/",
+        "https://198.18.0.1/",
+        "https://240.0.0.1/",
+    ] {
+        let env = Env::new("odd-ip");
+        let f = TestFetcher::new();
+        let c = card(CardAnswer::Yes);
+        let rep = env.engine(&on_cfg(), &f).run(&req(&[url]), &c, NEVER);
+        assert_eq!(rep.state, TripState::Refused, "{url}: {rep:?}");
+        assert!(
+            rep.reason.as_deref().unwrap().contains("local"),
+            "{url}: {rep:?}"
+        );
+        assert_eq!(c.shown.get(), 0, "{url}: no card");
+        assert_eq!(f.probes.get(), 0, "{url}: refused before PROPOSED/Tor");
+        assert!(f.calls.borrow().is_empty(), "{url}: nothing sent");
+        assert_eq!(states(&env.audit()), ["REFUSED"], "{url}");
+    }
+    // And as a redirect target on an approved trip.
+    let env = Env::new("odd-ip-redir");
+    let f = TestFetcher::new().page("https://example.org/", redirect("https://0x7f000001/admin"));
+    let rep = env.engine(&on_cfg(), &f).run(
+        &req(&["https://example.org/"]),
+        &card(CardAnswer::Yes),
+        NEVER,
+    );
+    assert_eq!(f.urls(), ["https://example.org/"]);
+    assert_ne!(rep.state, TripState::Done, "{}", rep.text());
 }
 
 #[test]
@@ -1353,6 +1463,24 @@ fn names_passed_to_the_engine_are_blocked_even_when_not_the_login_name() {
         assert_eq!(c.shown.get(), 0);
         assert!(f.calls.borrow().is_empty());
     }
+    // with_denylist adds; it never drops the names given to new().
+    let env = Env::new("names-merge");
+    let f = TestFetcher::new();
+    let c = card(CardAnswer::Yes);
+    let engine = OnlineResearch::new(&cfg, &f, &names)
+        .unwrap()
+        .with_knowledge_dir(Some(env.knowledge()))
+        .with_audit_log(Some(env.log()))
+        .with_denylist(IdentityDenylist::empty().with(["zorblatt"]));
+    for url in [
+        "https://example.org/people/nyxandra",
+        "https://example.org/zorblatt",
+    ] {
+        let rep = engine.run(&req(&[url]), &c, NEVER);
+        assert_eq!(rep.state, TripState::Refused, "{url}: {rep:?}");
+    }
+    assert_eq!(c.shown.get(), 0);
+    assert!(f.calls.borrow().is_empty());
     // Without the names the same address would have been proposed.
     let env = Env::new("names-none");
     let f = TestFetcher::new();

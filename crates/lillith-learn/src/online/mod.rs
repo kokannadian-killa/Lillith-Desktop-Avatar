@@ -7,13 +7,15 @@
 //!
 //! 1. is off unless `[learn] online` (default **false**), `[learn]
 //!    enabled` and `[memory] enabled` are all on;
-//! 2. is refused when the local Tor SOCKS port doesn't answer (Tor is never
-//!    installed or started here), when an address is not `https://`
+//! 2. is refused (after its `PROPOSED` line, see 3) when the local Tor
+//!    SOCKS port doesn't answer (Tor is never installed or started here),
+//!    and before anything else when an address is not `https://`
 //!    (plain `http://` only with `[learn] allow_http = true`), points at Ko's own network, is on `[learn] block_hosts`, or carries a
 //!    local identifier (§12 denylist); tracking parameters are stripped
 //!    before anything is shown or sent;
-//! 3. audits `PROPOSED` (purpose, every address, the caps) before any byte
-//!    leaves, then asks on the Soul Contract card
+//! 3. audits `PROPOSED` (purpose, every address, the caps) before the Tor
+//!    probe and before any byte leaves (fail-closed: no line, no trip),
+//!    then asks on the Soul Contract card
 //!    ([`PendingAction::OnlineResearch`]): only a mouse click on Yes
 //!    approves (`CONFIRM`); No is `DENIED`, no answer `TIMEOUT`, a closed
 //!    card or the safeword `CANCELLED`, no display `NO_UI` (a typed or
@@ -348,6 +350,11 @@ impl<'f> OnlineResearch<'f> {
     /// person name known to memory** (e.g. `name` attribute facts). Each
     /// name is blocked whole and by its parts ([`IdentityDenylist::with_names`]).
     pub fn new(cfg: &Config, fetcher: &'f dyn Fetcher, names: &[String]) -> Result<Self, Off> {
+        // TODO(production wiring, review S3): no production caller exists
+        // yet. Whoever wires `new()` into the app MUST pass the configured
+        // user name AND every person-name fact from memory (Brain `name`
+        // attribute facts) in `names`; `&[]` there would leave Ko's and
+        // other people's names out of the URL denylist.
         gate(cfg)?;
         Ok(Self {
             fetcher,
@@ -379,8 +386,11 @@ impl<'f> OnlineResearch<'f> {
         self
     }
 
+    /// Adds `deny`'s identifiers to the denylist. It never replaces it:
+    /// the local identity words and the `names` given to [`new`](Self::new)
+    /// always stay blocked.
     pub fn with_denylist(mut self, deny: IdentityDenylist) -> Self {
-        self.deny = deny;
+        self.deny = self.deny.merged(deny);
         self
     }
 
@@ -492,15 +502,8 @@ impl<'f> OnlineResearch<'f> {
         rep.approved = list.iter().map(Url::to_string).collect();
         let hosts: Vec<String> = list.iter().map(|u| u.host().to_string()).collect();
 
-        // 2. Tor must already be running; it is never installed here.
-        if let Err(why) = self.fetcher.available() {
-            return refuse(
-                rep,
-                format!("online research stays off: {why} (Tor is never installed for you)"),
-            );
-        }
-
-        // 3. PROPOSED before any byte leaves, then the mouse-only card.
+        // 2. PROPOSED first (before the Tor probe, the card or any request),
+        //    then Tor, then the mouse-only card.
         let action = PendingAction::OnlineResearch {
             trip_id: trip_id.clone(),
             purpose: purpose.clone(),
@@ -526,6 +529,14 @@ impl<'f> OnlineResearch<'f> {
             return refuse(
                 rep,
                 format!("the audit log can't be written ({e}); nothing is shown or sent"),
+            );
+        }
+        // 3. Tor must already be running; it is never installed here. The
+        //    probe is a loopback connect + close: nothing leaves the machine.
+        if let Err(why) = self.fetcher.available() {
+            return refuse(
+                rep,
+                format!("online research stays off: {why} (Tor is never installed for you)"),
             );
         }
         let p = action.prompt();
