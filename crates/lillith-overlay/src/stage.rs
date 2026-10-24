@@ -10,7 +10,9 @@ use crate::speech::{draw_speech, SpeechLayout, SpeechView};
 use lillith_anim::animator::{Animator, AnimatorConfig, Layer};
 use lillith_anim::atlas::Manifest;
 use lillith_anim::avatar::{draw_avatar, Avatar, AvatarMotion, AvatarPose, MotionInputs};
-use lillith_anim::render::{draw_cell, draw_cell_mix, draw_mouth, frame_transform, PageCache};
+use lillith_anim::render::{
+    draw_cell, draw_cell_crossfade, draw_mouth, frame_transform, PageCache,
+};
 use lillith_anim::talk::Mouth;
 use lillith_anim::text::Fonts;
 use lillith_anim::Canvas;
@@ -704,27 +706,15 @@ impl Stage {
             let a = &cell_cache.as_ref().expect("cell cached").1;
             let b = &cell_next.as_ref().expect("cell cached").1;
             let anchor_b = f.clip.frames[next].anchor;
-            draw_cell_mix(
+            draw_cell_crossfade(
                 canvas,
-                a,
-                f.rect.anchor,
-                origin,
-                f.flip,
-                &t,
-                scale,
-                1.0 - w,
-                tiny_skia::BlendMode::SourceOver,
-            );
-            draw_cell_mix(
-                canvas,
-                b,
-                anchor_b,
+                (a, f.rect.anchor),
+                (b, anchor_b),
                 origin,
                 f.flip,
                 &t,
                 scale,
                 w,
-                tiny_skia::BlendMode::Plus,
             );
         } else {
             let cell = &cell_cache.as_ref().expect("cell cached").1;
@@ -959,17 +949,27 @@ pub(crate) mod tests {
         // Early in frame 0: hard frame 0, nothing of frame 1 yet.
         assert_eq!(alpha_at(&st, 10), 255);
         assert_eq!(alpha_at(&st, 30), 0);
-        // 3/4 through frame 0 (0.5 s frames, fade over the last half):
-        // halfway mixed, both blocks semi-transparent.
+        // Fade over the last half of frame 0 (0.5 s frames): frame 1 fades
+        // in while frame 0 stays opaque, then frame 0 fades out. Never both
+        // half-transparent (that is the see-through "white halo" in motion).
         let mut steps = Vec::new();
         for _ in 0..9 {
             st.tick(0.05).unwrap();
             steps.push((alpha_at(&st, 10), alpha_at(&st, 30)));
         }
-        let mid = steps[5];
         assert!(
-            mid.0 > 60 && mid.0 < 200 && mid.1 > 60 && mid.1 < 200,
-            "{steps:?}"
+            steps.iter().any(|s| s.0 == 255 && s.1 > 0 && s.1 < 255),
+            "fade-in under an opaque frame 0: {steps:?}"
+        );
+        assert!(
+            steps.iter().any(|s| s.1 == 255 && s.0 > 0 && s.0 < 255),
+            "fade-out over an opaque frame 1: {steps:?}"
+        );
+        assert!(
+            steps
+                .iter()
+                .all(|s| s.0 == 255 || s.1 == 255 || s.0 == 0 || s.1 == 0),
+            "never both semi-transparent: {steps:?}"
         );
         // Monotonic fade: frame 0 goes out, frame 1 comes in.
         for w in steps.windows(2) {

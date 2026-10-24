@@ -225,6 +225,63 @@ pub fn draw_cell_mix(
     );
 }
 
+/// Cross-fades frame `a` into frame `b` (`w` = 0 → all `a`, 1 → all `b`)
+/// without making her see-through: where both frames cover a pixel the
+/// colours mix linearly, but each frame's *coverage* only fades over its own
+/// half of the fade ([`coverage_mix`]). A plain linear mix leaves every limb
+/// that moved between the two frames at ~50 % alpha mid-fade, so the desktop
+/// shows through it (a white ghost/halo around her while she walks or is
+/// dragged on a light wallpaper).
+#[allow(clippy::too_many_arguments)]
+pub fn draw_cell_crossfade(
+    canvas: &mut Canvas,
+    a: (&Canvas, (i32, i32)),
+    b: (&Canvas, (i32, i32)),
+    origin: (f32, f32),
+    flip: bool,
+    t: &Transform,
+    scale: f32,
+    w: f32,
+) {
+    let size = (canvas.width(), canvas.height());
+    let (Some(mut ca), Some(mut cb)) = (Canvas::new(size.0, size.1), Canvas::new(size.0, size.1))
+    else {
+        return;
+    };
+    draw_cell(&mut ca, a.0, a.1, origin, flip, t, scale);
+    draw_cell(&mut cb, b.0, b.1, origin, flip, t, scale);
+    coverage_mix(canvas, &ca, &cb, w);
+}
+
+/// Per-pixel cross-fade of premultiplied `a` and `b` into `dst` (all the
+/// same size): colour = the linear mix of the two (straight) colours
+/// weighted by coverage, alpha = the union of `a`'s coverage scaled by
+/// `min(1, 2(1 - w))` and `b`'s scaled by `min(1, 2w)`. So `a` stays fully
+/// opaque while `b` fades in over the first half, then `a` fades out over the
+/// second: never both half-transparent at once, and no pop at either end.
+pub fn coverage_mix(dst: &mut Canvas, a: &Canvas, b: &Canvas, w: f32) {
+    let w = w.clamp(0.0, 1.0);
+    let (ka, kb) = ((2.0 * (1.0 - w)).min(1.0), (2.0 * w).min(1.0));
+    let (pa, pb) = (a.data(), b.data());
+    for (i, d) in dst.data_mut().chunks_exact_mut(4).enumerate() {
+        let (sa, sb) = (&pa[i * 4..i * 4 + 4], &pb[i * 4..i * 4 + 4]);
+        let (aa, ab) = (sa[3] as f32 / 255.0, sb[3] as f32 / 255.0);
+        let den = (1.0 - w) * aa + w * ab;
+        if den <= 0.0 {
+            d.copy_from_slice(&[0, 0, 0, 0]);
+            continue;
+        }
+        let (ca, cb) = (aa * ka, ab * kb);
+        let alpha = ca + cb - ca * cb;
+        let a8 = (alpha * 255.0).round().min(255.0) as u8;
+        for c in 0..3 {
+            let straight = ((1.0 - w) * sa[c] as f32 + w * sb[c] as f32) / den;
+            d[c] = ((straight * alpha).round() as u8).min(a8);
+        }
+        d[3] = a8;
+    }
+}
+
 /// Draws `cell` into `canvas` per [`frame_transform`].
 pub fn draw_cell(
     canvas: &mut Canvas,
@@ -339,6 +396,39 @@ mod tests {
         let mut p = [Point::from_xy(x, y)];
         tf.map_points(&mut p);
         (p[0].x, p[0].y)
+    }
+
+    #[test]
+    fn crossfade_keeps_coverage_where_a_limb_moved() {
+        let px = |c: [u8; 4]| {
+            let mut p = Canvas::new(2, 1).unwrap();
+            p.data_mut()[..4].copy_from_slice(&c);
+            p
+        };
+        // Pixel 0: only frame a covers it; pixel 1 (left transparent in both).
+        let a = px([200, 100, 50, 255]);
+        let b = px([0, 0, 0, 0]);
+        let mut out = Canvas::new(2, 1).unwrap();
+        coverage_mix(&mut out, &a, &b, 0.5);
+        assert_eq!(&out.data()[..4], &[200, 100, 50, 255], "opaque mid-fade");
+        assert_eq!(&out.data()[4..], &[0, 0, 0, 0]);
+        coverage_mix(&mut out, &a, &b, 0.75);
+        assert_eq!(out.data()[3], 128, "fades out over the second half");
+        assert!(out.data()[0] <= out.data()[3], "stays premultiplied");
+        // Only frame b: fades in over the first half.
+        coverage_mix(&mut out, &b, &a, 0.25);
+        assert_eq!(out.data()[3], 128);
+        coverage_mix(&mut out, &b, &a, 0.5);
+        assert_eq!(out.data()[3], 255);
+        // Both opaque: linear colour mix, fully opaque.
+        let c = px([0, 0, 200, 255]);
+        coverage_mix(&mut out, &a, &c, 0.5);
+        assert_eq!(&out.data()[..4], &[100, 50, 125, 255]);
+        // Ends are exactly a and b.
+        coverage_mix(&mut out, &a, &c, 0.0);
+        assert_eq!(&out.data()[..4], &[200, 100, 50, 255]);
+        coverage_mix(&mut out, &a, &c, 1.0);
+        assert_eq!(&out.data()[..4], &[0, 0, 200, 255]);
     }
 
     #[test]
