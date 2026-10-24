@@ -112,7 +112,7 @@ model_path = "/home/me/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
 | `ctx_size` | `4096` | `-c` |
 | `threads` | `0` | `-t` (0 leaves it to llama-server) |
 | `gpu_layers` | unset | `-ngl` |
-| `extra_args` | `[]` | Extra arguments, passed through verbatim (e.g. `["--jinja"]`) |
+| `extra_args` | `[]` | Extra arguments (e.g. `["--jinja"]`). Allowlist only: `-c`/`--ctx-size`, `-t`/`--threads`, `-ngl`, `--jinja`, sampling flags (`--temp`, `--top-k`, `--top-p`, `--min-p`, …), `-b`/`-ub`, `--mlock`, `--no-mmap`, `--flash-attn`. Anything else is refused (nothing starts) and logged as `ARG_REFUSED` in the audit log |
 | `startup_timeout_s` | `90` | How long to wait for `/health` before warning |
 
 The host and port are taken from `endpoint`.

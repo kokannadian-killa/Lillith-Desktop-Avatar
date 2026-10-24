@@ -6,6 +6,9 @@ use super::{SettingsTab, Shared};
 use crate::chrome;
 use crate::task::Task;
 use egui::{pos2, vec2, Align2, RichText, Sense};
+use lillith_core::soul_contract::{
+    MODEL_SERVER_KIND, OLLAMA_CREATE_KIND, OLLAMA_CREATE_UNGATED_TAG, SETTINGS_UNGATED_TAG,
+};
 use lillith_setup::check::{self, ServerHealth};
 use lillith_setup::config::{self as llm, Backend, LlmConfig};
 use lillith_setup::modelfile::{
@@ -1132,7 +1135,13 @@ impl BrainTab {
             rounded(&self.cfg),
         );
         self.create_result = None;
+        let audit = lillith_core::config::audit_log_path();
         self.create = Some(Task::spawn(ctx, "ollama-create", move || {
+            // No card (Ko exempted it): one plain audit line per launch. A
+            // command that fails its checks never runs, so it gets none.
+            if let Ok(c) = launch::ollama_create_command(&bin, &name, &path, &cfg) {
+                audit_ungated(audit, OLLAMA_CREATE_UNGATED_TAG, OLLAMA_CREATE_KIND, &c);
+            }
             launch::ollama_create(&bin, &name, &path, &cfg).map_err(|e| e.to_string())
         }));
     }
@@ -1531,16 +1540,53 @@ impl BrainTab {
 /// The "Start llama-server" button runs without a card: it leaves one
 /// plain `SETTINGS_UNGATED` audit line with the command (api key masked).
 fn audit_settings_start(log: Option<PathBuf>, c: &launch::LaunchCommand) {
+    audit_ungated(log, SETTINGS_UNGATED_TAG, MODEL_SERVER_KIND, c);
+}
+
+/// One plain, card-less launch line (`tag`, kind `kind`) for `c`, secrets
+/// masked: `<ts>\t<tag>\t<kind>\t<program>\tno-card\t$ <argv>`.
+fn audit_ungated(log: Option<PathBuf>, tag: &str, kind: &str, c: &launch::LaunchCommand) {
     let argv: Vec<String> = std::iter::once(c.program.clone())
         .chain(c.args.iter().cloned())
         .collect();
-    lillith_core::soul_contract::SoulContract::new(log)
-        .record_ungated_launch(lillith_core::soul_contract::SETTINGS_UNGATED_TAG, &argv);
+    lillith_core::soul_contract::SoulContract::new(log).record_ungated_launch_as(tag, kind, &argv);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ollama_create_leaves_one_plain_masked_audit_line() {
+        let dir = std::env::temp_dir().join(format!("lillith-ungated-oc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let c = launch::LaunchCommand {
+            program: "/usr/bin/ollama".into(),
+            args: ["create", "lily", "-f", "/m/Modelfile.lily"]
+                .map(String::from)
+                .to_vec(),
+        };
+        audit_ungated(
+            Some(log.clone()),
+            OLLAMA_CREATE_UNGATED_TAG,
+            OLLAMA_CREATE_KIND,
+            &c,
+        );
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(text.lines().count(), 1, "{text}");
+        assert!(text.contains(
+            "\tOLLAMA_CREATE_UNGATED\tollama_create\t/usr/bin/ollama\tno-card\t$ /usr/bin/ollama create lily -f /m/Modelfile.lily"
+        ), "{text}");
+        // It never opens or closes a card.
+        assert!(
+            lillith_core::soul_contract::SoulContract::new(Some(log.clone()))
+                .open_model_server_cards()
+                .is_empty()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn the_start_button_leaves_a_plain_masked_audit_line() {

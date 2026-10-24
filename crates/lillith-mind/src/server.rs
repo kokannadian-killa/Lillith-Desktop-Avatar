@@ -27,7 +27,7 @@ pub enum ServerError {
     Exited(String),
     #[error("llama-server not ready after {0:?}")]
     NotReady(Duration),
-    #[error("refusing llama-server extra arg {0:?}: it would change the host, port, model, key or download source")]
+    #[error("refusing llama-server extra arg {0:?}: only context, threads, GPU layers, --jinja, sampling, batch, --mlock, --no-mmap and --flash-attn flags are allowed")]
     ForbiddenArg(String),
     #[error(
         "refusing to bind llama-server to {0:?}: only 127.0.0.1 / localhost / ::1 are allowed"
@@ -35,49 +35,126 @@ pub enum ServerError {
     BindHost(String),
 }
 
-/// `extra_args` that could rebind the server, swap the model, pull a model
-/// from the network, change the API key or serve files. These are fixed by
-/// the app; a matching extra arg (`--host`, `--host=…`, …) is refused.
-pub const FORBIDDEN_EXTRA_ARGS: &[&str] = &[
-    "--host",
-    "--port",
-    "-m",
-    "--model",
-    "-mu",
-    "--model-url",
-    "-hf",
-    "-hfr",
-    "--hf-repo",
-    "-hff",
-    "--hf-file",
-    "-hft",
-    "--hf-token",
-    "-dr",
-    "--docker-repo",
-    "--rpc",
-    "--api-key",
-    "--api-key-file",
-    "--path",
+/// The only llama-server flags `extra_args` may carry: context size,
+/// threads, GPU layers, the chat template switch, sampling, batch sizes and
+/// memory mapping. Everything else (host, port, model, downloads, API key,
+/// file serving, and any flag llama.cpp adds later) is refused.
+/// `(flag, takes_value)`.
+pub const ALLOWED_EXTRA_ARGS: &[(&str, bool)] = &[
+    ("-c", true),
+    ("--ctx-size", true),
+    ("-t", true),
+    ("--threads", true),
+    ("-ngl", true),
+    ("--n-gpu-layers", true),
+    ("--gpu-layers", true),
+    ("--jinja", false),
+    ("-b", true),
+    ("--batch-size", true),
+    ("-ub", true),
+    ("--ubatch-size", true),
+    ("--mlock", false),
+    ("--no-mmap", false),
+    ("-fa", false),
+    ("--flash-attn", false),
+    // Sampling.
+    ("--temp", true),
+    ("--top-k", true),
+    ("--top-p", true),
+    ("--min-p", true),
+    ("--typical", true),
+    ("--top-nsigma", true),
+    ("--repeat-penalty", true),
+    ("--repeat-last-n", true),
+    ("--presence-penalty", true),
+    ("--frequency-penalty", true),
+    ("--mirostat", true),
+    ("--mirostat-lr", true),
+    ("--mirostat-ent", true),
+    ("--dynatemp-range", true),
+    ("--dynatemp-exp", true),
+    ("--xtc-probability", true),
+    ("--xtc-threshold", true),
+    ("--dry-multiplier", true),
+    ("--dry-base", true),
+    ("--dry-allowed-length", true),
+    ("--dry-penalty-last-n", true),
+    ("-s", true),
+    ("--seed", true),
 ];
 
-/// Errors on the first forbidden extra arg: a flag from
-/// [`FORBIDDEN_EXTRA_ARGS`] (bare or `flag=value`), or any other Hugging
-/// Face / URL download flag (`-hf…`, `--hf-…`, `…-url…`, e.g. the draft,
-/// vocoder and mmproj variants).
+/// `--flash-attn` / `-fa` may carry `on`, `off` or `auto` (newer
+/// llama.cpp) or stand alone (older builds).
+const FLASH_ATTN_VALUES: &[&str] = &["on", "off", "auto"];
+
+/// A flag value: a short plain token (a number, `auto`, `all`, …), never a
+/// path, URL, or anything with spaces.
+fn plain_value(v: &str) -> bool {
+    // A leading `-` only for a negative number (`--seed -1`), so the next
+    // flag can't be swallowed as a value.
+    let negative_ok = !v.starts_with('-') || v.parse::<f64>().is_ok();
+    negative_ok
+        && !v.is_empty()
+        && v.len() <= 32
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+' | '_'))
+}
+
+/// Errors on the first extra arg that is not on [`ALLOWED_EXTRA_ARGS`]
+/// (bare or `flag=value`), a value flag without a plain value, or a stray
+/// positional arg.
 pub fn check_extra_args(extra: &[String]) -> Result<(), ServerError> {
-    for a in extra {
-        let t = a.trim();
-        let flag = t.split_once('=').map_or(t, |(f, _)| f);
-        let forbidden = FORBIDDEN_EXTRA_ARGS.contains(&flag)
-            || (flag.starts_with('-') && !flag.starts_with("--") && flag.starts_with("-hf"))
-            || flag == "-mmu"
-            || flag.starts_with("--hf-")
-            || (flag.starts_with('-') && flag.contains("-url"));
-        if forbidden {
-            return Err(ServerError::ForbiddenArg(a.clone()));
+    let mut it = extra.iter().peekable();
+    while let Some(a) = it.next() {
+        let refuse = || Err(ServerError::ForbiddenArg(a.clone()));
+        let (flag, inline) = match a.split_once('=') {
+            Some((f, v)) => (f, Some(v)),
+            None => (a.as_str(), None),
+        };
+        let Some(&(_, takes_value)) = ALLOWED_EXTRA_ARGS.iter().find(|(f, _)| *f == flag) else {
+            return refuse();
+        };
+        let flash = flag == "-fa" || flag == "--flash-attn";
+        match inline {
+            Some(v) if takes_value && plain_value(v) => {}
+            Some(v) if flash && FLASH_ATTN_VALUES.contains(&v) => {}
+            Some(_) => return refuse(),
+            None if takes_value => match it.next() {
+                Some(v) if plain_value(v) => {}
+                _ => return refuse(),
+            },
+            None if flash => {
+                if it
+                    .peek()
+                    .is_some_and(|v| FLASH_ATTN_VALUES.contains(&v.as_str()))
+                {
+                    it.next();
+                }
+            }
+            None => {}
         }
     }
     Ok(())
+}
+
+/// [`check_extra_args`], and on a refusal an `ARG_REFUSED` line in the
+/// audit log `audit` (binary `binary`; the refused arg with any secret
+/// masked).
+pub fn check_extra_args_audited(
+    extra: &[String],
+    binary: &str,
+    audit: Option<PathBuf>,
+) -> Result<(), ServerError> {
+    let r = check_extra_args(extra);
+    if let Err(ServerError::ForbiddenArg(arg)) = &r {
+        let shown = masked_args(std::slice::from_ref(arg)).join(" ");
+        lillith_core::soul_contract::SoulContract::new(audit).record_arg_refused(
+            binary,
+            &shown,
+            "refused llama-server extra arg (not on the allowlist); nothing started",
+        );
+    }
+    r
 }
 
 /// The literal address llama-server binds to: always `127.0.0.1`, for an
@@ -181,15 +258,20 @@ impl LlamaServer {
     /// Spawns llama-server for `cfg.server`, listening where `cfg.endpoint`
     /// points. Does not wait for the model to load (see [`Self::wait_ready`]).
     pub fn spawn(cfg: &ChatConfig) -> Result<Self, ServerError> {
+        Self::spawn_audited(cfg, lillith_core::config::audit_log_path())
+    }
+
+    /// [`Self::spawn`], writing a refused extra arg to the audit log `audit`.
+    pub fn spawn_audited(cfg: &ChatConfig, audit: Option<PathBuf>) -> Result<Self, ServerError> {
         // Loopback only: never bind the model to a network interface.
         lillith_setup::local::ensure_local(&cfg.endpoint, 80)?;
         let s = &cfg.server;
         let (host, port) = host_port(&cfg.endpoint)
             .ok_or_else(|| ServerError::BadEndpoint(cfg.endpoint.clone()))?;
         let host = bind_host(&host)?.to_string();
-        check_extra_args(&s.extra_args)?;
         // The same absolute path the card showed (`display_argv`).
         let bin = lillith_setup::launch::resolve_program(&s.binary);
+        check_extra_args_audited(&s.extra_args, &bin.display().to_string(), audit)?;
         let model = PathBuf::from(s.model_path.trim());
         if !bin.exists() && which(&bin).is_none() {
             return Err(ServerError::MissingBinary(bin));
@@ -412,8 +494,13 @@ mod tests {
     }
 
     #[test]
-    fn extra_args_cannot_override_host_model_key_or_fetch() {
+    fn extra_args_are_an_allowlist() {
+        let refused = |args: &[&str]| {
+            let v: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+            matches!(check_extra_args(&v), Err(ServerError::ForbiddenArg(_)))
+        };
         for bad in [
+            // The old denylist: still refused.
             "--host",
             "--host=0.0.0.0",
             "--port",
@@ -441,25 +528,56 @@ mod tests {
             "--mmproj-url",
             "-mmu",
             "--model-url=http://x",
+            // Not on the allowlist: refused now too.
+            "--chat-template",
+            "-np",
+            "--cont-batching",
+            "-mg",
+            "--lora",
+            "--mmproj",
+            "--log-file",
+            "--slot-save-path",
+            "--webui",
+            "--some-future-flag",
+            "positional",
+            "",
+            "--JINJA",
+            "--jinja=1",
+            "--mlock=yes",
+            "--flash-attn=maybe",
         ] {
-            assert!(
-                matches!(
-                    check_extra_args(&["--jinja".into(), bad.into()]),
-                    Err(ServerError::ForbiddenArg(_))
-                ),
-                "{bad}"
-            );
+            assert!(refused(&["--jinja", bad]), "{bad:?}");
+        }
+        // Values must be plain tokens and must be there.
+        for bad in [
+            &["-c"][..],
+            &["-c", "--host"],
+            &["--temp", "-x"],
+            &["-t", "/etc/passwd"],
+            &["--seed", "http://x"],
+            &["-ngl", "99 --host"],
+            &["--ctx-size=../m.gguf"],
+            &["-b", "512", "0.0.0.0"],
+        ] {
+            assert!(refused(bad), "{bad:?}");
         }
         let ok: Vec<String> = [
             "--jinja",
             "-ngl",
             "99",
+            "--n-gpu-layers=auto",
             "-t",
             "8",
+            "--threads",
+            "4",
             "-c",
             "8192",
+            "--ctx-size=4096",
             "--flash-attn",
             "--no-mmap",
+            "-fa",
+            "on",
+            "--flash-attn=auto",
             "--mlock",
             "-b",
             "512",
@@ -467,33 +585,57 @@ mod tests {
             "256",
             "--temp",
             "0.7",
-            "--chat-template",
-            "llama3",
-            "-np",
-            "1",
-            "--cont-batching",
-            "-mg",
-            "0",
-            "--mlock",
+            "--top-k",
+            "40",
+            "--top-p",
+            "0.9",
             "--min-p",
             "0.05",
+            "--repeat-penalty",
+            "1.1",
+            "--seed",
+            "-1",
+            "--mlock",
         ]
         .iter()
         .map(|s| s.to_string())
         .collect();
-        assert!(check_extra_args(&ok).is_ok());
-        // And spawn refuses before touching the binary.
+        assert!(check_extra_args(&ok).is_ok(), "{:?}", check_extra_args(&ok));
+        assert!(check_extra_args(&[]).is_ok());
+        // And spawn refuses before touching the binary, with an audit line.
+        let dir = std::env::temp_dir().join(format!(
+            "lillith-extra-args-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+        ));
+        let log = dir.join("audit.log");
         let cfg = ChatConfig {
             server: LlamaServerConfig {
-                extra_args: vec!["--host".into(), "0.0.0.0".into()],
+                binary: "/nonexistent/llama-server".into(),
+                extra_args: vec!["--jinja".into(), "--api-key=s3cret".into()],
                 ..LlamaServerConfig::default()
             },
             ..ChatConfig::default()
         };
         assert!(matches!(
-            LlamaServer::spawn(&cfg),
+            LlamaServer::spawn_audited(&cfg, Some(log.clone())),
             Err(ServerError::ForbiddenArg(_))
         ));
+        let text = std::fs::read_to_string(&log).expect("audit line written");
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 1, "{text}");
+        let cols: Vec<&str> = lines[0].split('\t').collect();
+        assert_eq!(cols[1], "ARG_REFUSED");
+        assert_eq!(cols[2], "start_model_server");
+        assert_eq!(cols[3], "/nonexistent/llama-server");
+        assert_eq!(cols[4], "no-card");
+        assert!(cols[5].contains("--api-key=***"), "{text}");
+        assert!(!text.contains("s3cret"), "{text}");
+        // An accepted list writes nothing.
+        let _ = std::fs::remove_file(&log);
+        assert!(check_extra_args_audited(&ok, "x", Some(log.clone())).is_ok());
+        assert!(!log.exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

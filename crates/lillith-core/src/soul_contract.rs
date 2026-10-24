@@ -148,6 +148,24 @@ pub const CARD_KINDS: &[&str] = &[MODEL_SERVER_KIND];
 pub const SETTINGS_UNGATED_TAG: &str = "SETTINGS_UNGATED";
 /// Plain audit tag (no card): runtime detection ran `<binary> --version`.
 pub const VERSION_PROBE_TAG: &str = "VERSION_PROBE";
+/// Plain audit tag (no card): the settings window ran `ollama create`
+/// (after writing its Modelfile). Exempt from the card by Ko's choice; this
+/// line only records it.
+pub const OLLAMA_CREATE_UNGATED_TAG: &str = "OLLAMA_CREATE_UNGATED";
+/// Plain audit tag (no card): the Build tab opened the project folder with
+/// `xdg-open`. Exempt from the card; this line only records it.
+pub const OPEN_DIR_UNGATED_TAG: &str = "OPEN_DIR_UNGATED";
+/// Plain audit tag (no card): the "Open settings" menu item opened
+/// config.toml in the desktop editor (`xdg-open` / Notepad). Not gated by a
+/// card; this line only records it.
+pub const OPEN_SETTINGS_UNGATED_TAG: &str = "OPEN_SETTINGS_UNGATED";
+/// Plain audit tag (no card): a llama-server extra arg was refused (it is
+/// not on the allowlist), so nothing was started.
+pub const ARG_REFUSED_TAG: &str = "ARG_REFUSED";
+/// Kind column of an `ollama create` launch line.
+pub const OLLAMA_CREATE_KIND: &str = "ollama_create";
+/// Kind column of a desktop "open" launch line (`xdg-open <path>`).
+pub const OPEN_PATH_KIND: &str = "open_path";
 /// Audit tags that never open or close a card: the ones written *after* a
 /// model-server card was decided (the overlay claiming or refusing a
 /// `CONFIRM`, or the spawn failing) and the card-less launch records.
@@ -157,6 +175,10 @@ pub const AFTER_DECISION_TAGS: &[&str] = &[
     "SPAWN_FAILED",
     SETTINGS_UNGATED_TAG,
     VERSION_PROBE_TAG,
+    OLLAMA_CREATE_UNGATED_TAG,
+    OPEN_DIR_UNGATED_TAG,
+    OPEN_SETTINGS_UNGATED_TAG,
+    ARG_REFUSED_TAG,
 ];
 
 /// The id column of a card-less launch line.
@@ -1270,9 +1292,29 @@ impl SoulContract {
     /// gated by a card ([`SETTINGS_UNGATED_TAG`], [`VERSION_PROBE_TAG`]):
     /// it records, it approves nothing, and it never touches a card.
     pub fn record_ungated_launch(&self, tag: &str, argv: &[String]) {
+        self.record_ungated_launch_as(tag, MODEL_SERVER_KIND, argv);
+    }
+
+    /// [`Self::record_ungated_launch`] with kind column `kind` (e.g.
+    /// [`OLLAMA_CREATE_KIND`], [`OPEN_PATH_KIND`]):
+    /// `<ts>\t<tag>\t<kind>\t<argv[0]>\tno-card\t$ <argv>`, secrets masked.
+    pub fn record_ungated_launch_as(&self, tag: &str, kind: &str, argv: &[String]) {
         let bin = argv.first().cloned().unwrap_or_default();
         let shown = format!("$ {}", mask_secret_args(argv).join(" "));
-        self.append_line(tag, MODEL_SERVER_KIND, &bin, NO_CARD, &shown);
+        self.append_line(tag, kind, &bin, NO_CARD, &shown);
+    }
+
+    /// Records a refused llama-server extra arg (card-less):
+    /// `<ts>\tARG_REFUSED\tstart_model_server\t<binary>\tno-card\t<why>: <arg>`.
+    /// The caller masks secrets in `arg` first.
+    pub fn record_arg_refused(&self, binary: &str, arg: &str, why: &str) {
+        self.append_line(
+            ARG_REFUSED_TAG,
+            MODEL_SERVER_KIND,
+            binary,
+            NO_CARD,
+            &format!("{why}: {arg}"),
+        );
     }
 
     /// The overlay is about to start llama-server for model-server card
@@ -1406,6 +1448,14 @@ impl SoulContract {
             );
         }
     }
+}
+
+/// A command's program and arguments as one argv (for a launch line).
+pub fn command_argv(cmd: &std::process::Command) -> Vec<String> {
+    std::iter::once(cmd.get_program())
+        .chain(cmd.get_args())
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect()
 }
 
 /// One-shot gate for a UI that held `action` behind the popup: files it with
