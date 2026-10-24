@@ -12,6 +12,7 @@ yourself.
 - [Windows (build from source)](#windows-build-from-source)
 - [Android (Termux chat, experimental APK)](#android-termux-chat-experimental-apk)
 - [Configuration](#configuration)
+- [Privacy: what she keeps on your machine](#privacy-what-she-keeps-on-your-machine)
 - [The safeword (kill switch)](#the-safeword-kill-switch)
 - [Troubleshooting](#troubleshooting)
 
@@ -349,12 +350,60 @@ The keys people change most are `mode`, `scale`, `[overlay] auto_fix_kwin`
 (the KDE blur fix at start-up), `[voice] enabled` (the **Speak out loud**
 toggle), `[behavior.tease]` (the "come closer" tease) and `[mind.access]`
 (what she may do on your machine, always behind the Soul Contract).
+**Memory** is on by default (`[memory] enabled = true`). Set
+`enabled = false` to turn it off. The other `[memory]` keys (`db_path`,
+`half_life_days`, `top_k`, `max_context_tokens`, `prune_below`,
+`max_nodes`, `max_events`, `max_errors`) are in the example file; see
+*Privacy* below.
 For the voice kit, `[voice] daemon_socket`, `preset` and `[voice.stt]` (the
 push-to-talk mic) are optional; the defaults find the local daemon.
 `lillith setup` (and the setup wizard) writes `[llm]`, `[chat]` and, for
 llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--jinja"]`).
 
 ---
+
+## Privacy: what she keeps on your machine
+
+Nothing leaves your machine: no cloud, no telemetry, and the model server is
+on 127.0.0.1 only. She does keep these files locally:
+
+| what | Linux | Windows |
+|---|---|---|
+| settings | `~/.config/lillith/config.toml` | `%APPDATA%\lillith\config.toml` |
+| learning memory (SQLite) | `~/.local/share/lillith/memory.db` | `%LOCALAPPDATA%\lillith\memory.db` |
+| saved chat history | `~/.local/share/lillith/chat_history.json` | `%LOCALAPPDATA%\lillith\chat_history.json` |
+| Soul Contract audit log | `~/.local/share/lillith/audit.log` | `%LOCALAPPDATA%\lillith\audit.log` |
+| app log | stderr only (not saved) | `%LOCALAPPDATA%\lillith\lillith.log` when not started from a terminal |
+
+On Linux, `$XDG_DATA_HOME` (if set) replaces `~/.local/share`.
+
+**Memory.** She remembers what you tell her (people, likes, habits), which
+apps you use, and errors and their fixes. A short note from that goes into
+each chat turn, and unused memories fade over time.
+- The memory folder is owner-only (0700) and the file is 0600. The safeword
+  is never stored.
+- **Turn it off** with `[memory] enabled = false`. Then nothing is read or
+  written, and no file is created.
+- **Forget from the chat:**
+  - "forget about <topic>" and "forget everything" ask first; answer "yes".
+  - "forget the last 30 minutes" (or hour, days, week) deletes right away.
+  - Forgotten rows are deleted, the file is vacuumed, and the matching chat
+    history lines go too.
+- To wipe it completely, quit her and delete `memory.db` (and
+  `chat_history.json` if you want).
+- The Android app and the Termux chat don't use this memory.
+
+**Logs** never go to stdout.
+- Linux: logs go to stderr and aren't saved unless you redirect them, e.g.
+  `env RUST_LOG=info,lillith=debug ./run.fish 2> ~/lillith.log`.
+- Windows: started from a terminal, logs show in that console. Started any
+  other way (shortcut, autostart), they go to
+  `%LOCALAPPDATA%\lillith\lillith.log`, which starts over once it passes
+  4 MB.
+
+**Voice kit** (optional): it only uses a local Unix socket or named pipe. Its
+network guard blocks any connection and refuses any listening socket that
+isn't loopback.
 
 ## The safeword (kill switch)
 
@@ -367,7 +416,8 @@ Windows it also shuts down the elevated admin helper.
 
 Every file change, command and program launch is a **Soul Contract** plan
 that you approve with Yes or No. Nothing runs before you approve it, and every
-action goes into the audit log (`~/.local/share/lillith/audit.log`). To undo
+action goes into the audit log (`~/.local/share/lillith/audit.log`, Windows
+`%LOCALAPPDATA%\lillith\audit.log`). To undo
 her last file-organize batch, run `lillith undo-organize`.
 
 ## Art kit (optional)
@@ -397,4 +447,7 @@ included; get any you need yourself.
   (`--no-voice` starts her with the speakers off). Then either start the
   voice kit's daemon (`systemctl --user start lillith-voice`, check with
   `lillith-say --status`) or install `espeak-ng` or piper.
-- **Debug log:** `env RUST_LOG=info,lillith=debug ./run.fish 2>&1 | tee ~/lillith.log`
+- **Debug log:** logs go to stderr, so capture them with
+  `env RUST_LOG=info,lillith=debug ./run.fish 2>&1 | tee ~/lillith.log`.
+- **She forgot something / remembers too much.** See *Privacy* above:
+  `[memory] enabled = false`, a "forget …" message, or delete `memory.db`.
