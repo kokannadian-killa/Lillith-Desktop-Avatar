@@ -75,6 +75,18 @@ pub const MIGRATIONS: &[&str] = &[
     );
     CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     "#,
+    // v2: `updated_at` = when a row's remembered *content* last changed (a
+    // new label/detail value, a new error sample/fix), so "forget the last
+    // N minutes" also removes old rows that were rewritten recently.
+    r#"
+    ALTER TABLE nodes ADD COLUMN updated_at REAL NOT NULL DEFAULT 0;
+    UPDATE nodes SET updated_at = created_at;
+    CREATE INDEX nodes_updated ON nodes(updated_at);
+    ALTER TABLE errors ADD COLUMN updated_at REAL NOT NULL DEFAULT 0;
+    UPDATE errors SET updated_at = last_seen;
+    CREATE INDEX errors_updated ON errors(updated_at);
+    CREATE INDEX edges_created ON edges(created_at);
+    "#,
 ];
 
 /// The schema version this build writes.
@@ -101,7 +113,9 @@ pub(crate) fn migrate_with(conn: &mut Connection, migrations: &[&str]) -> Result
         });
     }
     while v < latest {
-        let tx = conn.transaction()?;
+        // IMMEDIATE: take the write lock up front (two processes opening an
+        // old DB at once serialize instead of failing mid-upgrade).
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         tx.execute_batch(migrations[v as usize])?;
         tx.pragma_update(None, "user_version", v + 1)?;
         tx.commit()?;
@@ -128,6 +142,33 @@ mod tests {
             )
             .unwrap();
         assert_eq!(n, 6);
+    }
+
+    #[test]
+    fn v1_db_upgrades_to_v2_with_updated_at_backfilled() {
+        let mut c = Connection::open_in_memory().unwrap();
+        assert_eq!(migrate_with(&mut c, &MIGRATIONS[..1]).unwrap(), 1);
+        c.execute_batch(
+            "INSERT INTO nodes(kind,key,label,strength,created_at,last_seen)
+                 VALUES ('fact','k','Ko likes tea',1.0,100.0,500.0);
+             INSERT INTO errors(signature,sample,first_seen,last_seen)
+                 VALUES ('sig','boom',10.0,20.0);",
+        )
+        .unwrap();
+        assert_eq!(migrate(&mut c).unwrap(), LATEST);
+        let n: f64 = c
+            .query_row("SELECT updated_at FROM nodes WHERE key='k'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let e: f64 = c
+            .query_row(
+                "SELECT updated_at FROM errors WHERE signature='sig'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!((n, e), (100.0, 20.0));
     }
 
     #[test]
