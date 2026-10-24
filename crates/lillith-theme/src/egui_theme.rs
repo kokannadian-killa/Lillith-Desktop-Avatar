@@ -639,7 +639,10 @@ pub fn death_skull(p: &Painter, c: Pos2, s: f32, eye: Rgba, pulse: f32) {
             fill_convex(p, q, c32(col));
         }
         // a hot crimson rim along the underside, lit by the forge below
-        let rim: Vec<Pt> = quads.iter().map(|q| q[3]).collect();
+        let lower = |i: usize| -> Vec<Pt> { quads.iter().map(|q| q[i]).collect() };
+        let (a, b) = (lower(0), lower(3));
+        let sum = |v: &[Pt]| v.iter().map(|q| q[1]).sum::<f32>();
+        let rim = if sum(&a) > sum(&b) { a } else { b };
         polyline(
             p,
             &rim[..rim.len() * 2 / 3],
@@ -661,6 +664,7 @@ pub fn death_skull(p: &Painter, c: Pos2, s: f32, eye: Rgba, pulse: f32) {
         }
         let mut ring: Vec<Pt> = quads.iter().map(|q| q[0]).collect();
         ring.push(quads[quads.len() - 1][1]);
+        ring.push(quads[quads.len() - 1][2]);
         ring.extend(quads.iter().rev().map(|q| q[3]));
         outline(p, &ring, (edge_w * 0.8).max(0.8), c32(ink.alpha(230)));
     }
@@ -752,20 +756,9 @@ pub fn death_skull(p: &Painter, c: Pos2, s: f32, eye: Rgba, pulse: f32) {
     );
     p.rect_filled(mouth, CornerRadius::same(1), c32(Rgba::hex(0x050003)));
     for f in &k.fangs {
-        let tri = if geom::is_convex(f) {
-            f.to_vec()
-        } else {
-            f.iter().rev().copied().collect()
-        };
-        fill_convex(p, &tri, c32(Rgba::hex(0xd8cdb8)));
+        fill_convex(p, f, c32(Rgba::hex(0xd8cdb8)));
         let mid = [(f[0][0] + f[1][0]) * 0.5, (f[0][1] + f[1][1]) * 0.5];
-        let half: Vec<Pt> = vec![mid, f[1], f[2]];
-        let half = if geom::is_convex(&half) {
-            half
-        } else {
-            half.into_iter().rev().collect()
-        };
-        fill_convex(p, &half, c32(Rgba::hex(0x7d6f5e)));
+        fill_convex(p, &[mid, f[1], f[2]], c32(Rgba::hex(0x7d6f5e)));
         outline(p, f, (fine * 0.7).max(0.6), c32(ink.alpha(220)));
     }
 

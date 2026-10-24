@@ -1066,10 +1066,10 @@ mod tests {
         };
         assert!(star(&k.cranium, k.cranium_c));
         assert!(star(&k.mandible, k.mandible_c));
-        for i in 0..2 {
-            assert!(star(&k.sockets[i], k.socket_c[i]));
-            assert!(is_convex(&k.nose[i]));
+        for (ring, c) in k.sockets.iter().zip(k.socket_c) {
+            assert!(star(ring, c));
         }
+        assert!(k.nose.iter().all(|lobe| is_convex(lobe)));
         assert_eq!(k.fangs.len(), 13);
         // Horns tower over the crown; the chin is the lowest point.
         assert!(k.top() < k.cranium[0][1] - 10.0);
