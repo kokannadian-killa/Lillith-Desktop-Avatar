@@ -48,7 +48,7 @@
 //! Runs as its own process (`lillith chat-bubble`), because the overlay
 //! already owns the process's windowing event loop.
 
-use crate::voice_mic::{Mic, MicEvent};
+use crate::voice_mic::{Mic, MicEvent, MicState};
 use eframe::egui;
 use lillith_core::access::deletion::{DeleteMode, DeletionManifest, DeletionSignature};
 use lillith_core::access::plan::{ChangePlan, PlanApproval};
@@ -317,28 +317,38 @@ struct Bubble {
     kill_switch: fn(),
 }
 
-/// Hold-to-talk mic button next to the input. `Some(true)`: pressed now,
-/// `Some(false)`: released now.
-fn mic_button(ui: &mut egui::Ui, mic: Option<&Mic>) -> Option<bool> {
-    let m = mic?;
-    let (listening, busy) = (m.listening, m.busy);
-    let label = if busy { "…" } else { "🎙" };
-    let fill = if listening { CRIMSON } else { BG };
+/// The talk button's look and tooltip for each [`MicState`].
+fn mic_button_look(state: MicState) -> (&'static str, bool, &'static str) {
+    match state {
+        MicState::Idle => (
+            "🎙",
+            false,
+            "Click to talk: a Soul Contract card asks first, every time \
+             (voice can't answer a Soul Contract)",
+        ),
+        MicState::Waiting => (
+            "⏳",
+            false,
+            "Waiting for Yes on the mic card. Click to cancel.",
+        ),
+        MicState::Listening => ("⏹", true, "Listening. Click to stop."),
+        MicState::Busy => ("…", false, "Hearing you…"),
+    }
+}
+
+/// The talk button next to the input (a toggle: click to talk, click
+/// again to stop). `true`: clicked this frame.
+fn mic_button(ui: &mut egui::Ui, mic: Option<&Mic>) -> bool {
+    let Some(m) = mic else { return false };
+    let (label, hot, tip) = mic_button_look(m.state);
     let btn = egui::Button::new(egui::RichText::new(label).color(NEON))
-        .fill(fill)
-        .sense(egui::Sense::click_and_drag());
-    let resp = ui
-        .add_sized([28.0, 26.0], btn)
-        .on_hover_text("Hold to talk (voice can't answer a Soul Contract)");
-    if listening || busy {
+        .fill(if hot { CRIMSON } else { BG })
+        .sense(egui::Sense::CLICK);
+    let resp = ui.add_sized([28.0, 26.0], btn).on_hover_text(tip);
+    if m.state != MicState::Idle {
         ui.ctx().request_repaint_after(Duration::from_millis(50));
     }
-    let down = resp.is_pointer_button_down_on();
-    match (down, m.held()) {
-        (true, false) => Some(true),
-        (false, true) => Some(false),
-        _ => None,
-    }
+    resp.clicked_by(egui::PointerButton::Primary)
 }
 
 /// The real kill switch for a spoken safeword.
@@ -1014,7 +1024,7 @@ impl Bubble {
             // Her voice stops too: the overlay cuts it on this event, and
             // the daemon is told directly in case the overlay is busy.
             (self.emit)("chat.safeword", None);
-            if let Some(m) = &self.mic {
+            if let Some(m) = &mut self.mic {
                 m.hush("safeword");
             }
             // The worker cancels (and audits) the model-server card too.
@@ -1134,11 +1144,12 @@ impl Bubble {
             || self.server_card.is_some()
     }
 
-    /// Mic button pressed: barge-in (her voice stops) and the mic opens.
-    fn mic_press(&mut self) {
+    /// Talk button clicked: idle -> a new press (barge-in: her voice
+    /// stops; the daemon shows the mic card); waiting / listening -> stop
+    /// (cancels the card, or closes the mic and transcribes).
+    fn mic_click(&mut self) {
         if let Some(m) = &mut self.mic {
-            if m.ready && !m.listening && !m.busy && !m.held_failed {
-                m.press();
+            if m.toggle() {
                 (self.emit)("chat.barge_in", None);
             }
         }
@@ -1155,6 +1166,13 @@ impl Bubble {
                     self.lines.push(Line {
                         me: false,
                         text: "🎙 I couldn't hear you (voice daemon).".into(),
+                    });
+                }
+                MicEvent::StartFailed(why) => {
+                    tracing::debug!("{why}");
+                    self.lines.push(Line {
+                        me: false,
+                        text: "🎙 The mic didn't open (no Yes on the card).".into(),
                     });
                 }
                 MicEvent::Ready | MicEvent::Unavailable | MicEvent::Listening => {}
@@ -1194,7 +1212,7 @@ impl Bubble {
         self.input.clear();
         self.voice_text = None;
         (self.emit)("chat.safeword", None);
-        if let Some(m) = &self.mic {
+        if let Some(m) = &mut self.mic {
             m.hush("safeword");
         }
         self.lines.push(Line {
@@ -1492,7 +1510,7 @@ impl eframe::App for Bubble {
                         && self.deletion.is_none()
                         && self.plan.is_none();
                     let mic_ready = self.mic.as_ref().is_some_and(|m| m.ready);
-                    let mut mic_act = None;
+                    let mut mic_act = false;
                     let resp = if mic_ready {
                         let mic = &self.mic;
                         ui.horizontal(|ui| {
@@ -1505,14 +1523,8 @@ impl eframe::App for Bubble {
                     } else {
                         ui.add_enabled(free, edit)
                     };
-                    match mic_act {
-                        Some(true) => self.mic_press(),
-                        Some(false) => {
-                            if let Some(m) = &mut self.mic {
-                                m.release();
-                            }
-                        }
-                        None => {}
+                    if mic_act {
+                        self.mic_click();
                     }
                     if free && resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         self.send();
@@ -2053,6 +2065,64 @@ mod tests {
                 seen
             );
         }
+    }
+
+    #[test]
+    fn the_talk_button_shows_idle_waiting_and_listening() {
+        let looks: Vec<_> = [
+            MicState::Idle,
+            MicState::Waiting,
+            MicState::Listening,
+            MicState::Busy,
+        ]
+        .into_iter()
+        .map(mic_button_look)
+        .collect();
+        let labels: std::collections::HashSet<_> = looks.iter().map(|l| l.0).collect();
+        assert_eq!(labels.len(), 4, "every state looks different");
+        assert!(looks[1].2.contains("Waiting for Yes on the mic card"));
+        assert!(looks[1].2.contains("cancel"));
+        assert!(looks[2].1, "listening is lit");
+        assert!(looks[2].2.contains("Click to stop"));
+        assert!(
+            !looks[0].2.to_lowercase().contains("hold"),
+            "a toggle, not hold-to-talk"
+        );
+    }
+
+    #[test]
+    fn a_click_while_the_card_waits_cancels_instead_of_starting_again() {
+        let (mut b, _req_rx) = test_bubble(None, false);
+        let (mic, cmds, ev) = crate::voice_mic::Mic::for_test();
+        b.mic = Some(mic);
+        ev.send(MicEvent::Ready).unwrap();
+        b.drain_mic();
+        b.mic_click();
+        assert_eq!(cmds.try_recv(), Ok(crate::voice_mic::MicCmd::Start));
+        assert_eq!(b.mic.as_ref().unwrap().state, MicState::Waiting);
+        b.mic_click();
+        assert_eq!(cmds.try_recv(), Ok(crate::voice_mic::MicCmd::Stop));
+        b.mic_click();
+        assert!(
+            cmds.try_recv().is_err(),
+            "no second start while one is pending"
+        );
+        // The typed safeword closes an open mic too.
+        let (mic, cmds, ev) = crate::voice_mic::Mic::for_test();
+        b.mic = Some(mic);
+        ev.send(MicEvent::Ready).unwrap();
+        b.drain_mic();
+        b.mic_click();
+        ev.send(MicEvent::Listening).unwrap();
+        b.drain_mic();
+        let _ = cmds.try_recv();
+        b.input = "red".into();
+        b.send();
+        assert_eq!(
+            cmds.try_recv(),
+            Ok(crate::voice_mic::MicCmd::Hush("safeword".into()))
+        );
+        assert_eq!(cmds.try_recv(), Ok(crate::voice_mic::MicCmd::Stop));
     }
 
     #[test]

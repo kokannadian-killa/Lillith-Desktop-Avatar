@@ -153,6 +153,10 @@ target, then detail lines; stdout: `yes` / `no` / `timeout` / `cancelled` / `no_
     talk button, so start-on-press / stop-on-release would capture almost nothing. Such a client should
     treat the Yes as the start of the capture and stop on the next press (or use `listen` once, which ends
     on silence).
+    The chat bubble's talk button is such a toggle: the first click sends `listen start` (the button shows
+    ⏳ while the card waits, ⏹ once listening), a second click sends `listen stop` (cancelling a card that
+    is still up), and the stop is sent on its own connection and thread, never queued behind the pending
+    start. At most one `listen start` is in flight; every click is its own card.
 - **Always listening** (`kind:"always"`): every switch-on needs its own Yes (inline card or token). Turning it
   off (`"on":false`) is never gated.
 - Refusals: No, timeout, a closed card, no card UI (no display, or no `lillith` binary), or a bad, used,

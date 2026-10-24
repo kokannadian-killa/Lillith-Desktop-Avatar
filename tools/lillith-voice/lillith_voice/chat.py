@@ -3,7 +3,8 @@
 Voice loop:  --mic  (always listening, VAD turn-taking, barge-in)  or  --ptt  (Enter to talk / Enter to stop)
   mic -> silero VAD -> whisper (local) -> llama-server 127.0.0.1 -> Lillith's cloned voice.
 Safety: the safeword ("red" / "OOC: stop") stops her at once and is never sent to the model as chat;
-a spoken "yes" is never accepted as agreement to a Soul Contract or plan (type it instead).
+a spoken (or typed) "yes" is never accepted as agreement to a Soul Contract or plan: only a mouse click on
+Yes on the card approves.
 Only loopback URLs are accepted (netguard enforces it as well).
 """
 from . import netguard  # noqa: F401
@@ -21,7 +22,7 @@ from .client import connect, DaemonBackend
 
 _CONSENT_CTX = re.compile(r"soul\s*contract|\bplan\b|\bcontract\b|do you (agree|accept|consent)|confirm", re.I)
 SAFEWORD_NOTE = "[safeword heard - Lillith stopped. Type to continue.]"
-CONSENT_NOTE = ("[voice can't agree to a Soul Contract or plan - type your answer if you mean it]")
+CONSENT_NOTE = ("[voice can't agree to a Soul Contract or plan - click Yes on the card if you mean it]")
 
 _SENT = re.compile(r"^(.*?[.!?…]+[\"')\]]*)(\s+)(.*)$", re.S)
 
