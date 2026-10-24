@@ -17,13 +17,18 @@
 //!   runs whenever a real engine exists). Text on screen is not affected.
 //! - [`Voice::say_reply`] speaks a whole chat reply (cuts banter, skips the
 //!   cooldown, longer limit than banter lines).
-//! - Daemon re-probe: when `[voice] engine` is `auto` / `daemon` but the
-//!   voice daemon did not answer at start-up, a small prober thread pings
-//!   it again on every say (at most once per [`REPROBE_MIN_GAP`]) and every
-//!   [`REPROBE_PERIOD`]. Once it answers, the worker switches to the cloned
-//!   voice ([`crate::engine::DaemonEngine`]) before its next line (never
-//!   mid-line), the switch is logged once and the fallback warning clears.
-//!   The ping never runs on the caller's thread.
+//! - Daemon failover (`[voice] engine` = `auto` / `daemon`): the worker
+//!   holds the cloned voice ([`crate::engine::DaemonEngine`]) when the
+//!   daemon answers AND a local fallback voice (piper / espeak-ng / spd-say
+//!   / SAPI), always. While the daemon is down every line is spoken by the
+//!   fallback (with a WARN at start-up and on every daemon → fallback
+//!   transition, and [`Voice::voice_warning`] set); a line whose daemon
+//!   `say` fails is spoken again by the fallback, never dropped.
+//! - While on the fallback the daemon is re-checked before a line (at most
+//!   once per [`REPROBE_MIN_GAP`], on the worker thread) and by a prober
+//!   thread every [`REPROBE_PERIOD`]. Once it answers, the switch back is
+//!   logged once (INFO) and applies from the next line (never mid-line).
+//!   No ping ever runs on the caller's (UI) thread.
 
 use crate::config::{EngineChoice, VoiceConfig};
 use crate::daemon::{DaemonClient, PingInfo};
@@ -139,6 +144,11 @@ pub struct Stats {
     /// Lines cut while playing (interrupt / mute / shutdown).
     pub cut: u64,
     pub engine_errors: u64,
+    /// WARNs that a fallback voice is in use (start-up + each daemon →
+    /// fallback transition).
+    pub fallback_warnings: u64,
+    /// Switches fallback → cloned voice (one INFO each).
+    pub daemon_switches: u64,
 }
 
 struct State {
@@ -160,6 +170,20 @@ struct Shared {
     pending: Mutex<Option<Box<dyn Engine>>>,
     /// What [`Voice::engine_name`] / [`Voice::voice_warning`] report.
     info: Mutex<EngineInfo>,
+    /// The cloned voice is in use (no re-probing needed).
+    daemon_in_use: AtomicBool,
+    /// When the daemon was last pinged (start-up probe included).
+    last_probe: Mutex<Instant>,
+    /// How to re-probe (`None`: fixed engine, no failover).
+    probe: Mutex<Option<Arc<ProbeCtx>>>,
+    /// Wakes the prober thread.
+    reprobe: Reprobe,
+}
+
+struct ProbeCtx {
+    cfg: VoiceConfig,
+    probe: SharedProbe,
+    timing: ReprobeTiming,
 }
 
 #[derive(Debug, Clone)]
@@ -216,8 +240,8 @@ pub struct Voice {
     cfg: VoiceConfig,
     shared: Arc<Shared>,
     worker: Option<JoinHandle<()>>,
-    /// The daemon prober while on the fallback (`None`: not re-probing).
-    reprobe: Option<Arc<Reprobe>>,
+    /// A prober thread runs (daemon failover is on).
+    reprobing: bool,
     gate: Gate,
     lines: Box<dyn LineSource>,
     t0: Instant,
@@ -271,48 +295,64 @@ impl Voice {
         } else {
             tracing::info!("voice off: {}", d.reason);
         }
-        let on_fallback = d.engine.name() != "voiced";
-        let mut v = Self::with_engine(cfg, d.engine, Box::new(DefaultLines::default()));
-        if on_fallback && matches!(probe_cfg.engine, EngineChoice::Auto | EngineChoice::Daemon) {
+        let failover = matches!(probe_cfg.engine, EngineChoice::Auto | EngineChoice::Daemon);
+        let (fallback, daemon) = if d.engine.name() == "voiced" {
+            // Kept ready for when the daemon goes away mid-session.
+            let f = crate::engine::detect_full(&probe_cfg, lookup, &|_| None);
+            tracing::debug!("voice: fallback if the daemon goes away: {}", f.reason);
+            (f.engine, Some(d.engine))
+        } else {
+            (d.engine, None)
+        };
+        let mut v = Self::with_engines(cfg, fallback, daemon, Box::new(DefaultLines::default()));
+        if failover {
             v.start_reprobe(probe_cfg, probe, timing);
         }
         v
     }
 
-    /// Starts the daemon prober (see the module docs). The current engine
-    /// is the fallback; its warning says so until the daemon answers.
+    /// Turns on daemon failover (see the module docs) and starts the prober
+    /// thread. On the fallback now: WARN once and set the warning.
     fn start_reprobe(&mut self, probe_cfg: VoiceConfig, probe: SharedProbe, timing: ReprobeTiming) {
-        if let Ok(mut i) = self.shared.info.lock() {
-            if i.warning.is_none() {
-                i.warning = Some(if i.name == "none" {
-                    "voice daemon not running; she stays silent until it starts".into()
-                } else {
-                    format!(
-                        "voice daemon not running; using the {} voice until it starts",
-                        i.name
-                    )
-                });
-            }
+        if let Ok(mut l) = self.shared.last_probe.lock() {
+            *l = Instant::now();
         }
-        let rp = Arc::new(Reprobe::default());
-        let (sh, r) = (Arc::clone(&self.shared), Arc::clone(&rp));
+        if !self.shared.daemon_in_use.load(Ordering::SeqCst) {
+            let at = crate::daemon::DaemonClient::from_config(&probe_cfg)
+                .map(|c| c.endpoint().display().to_string())
+                .unwrap_or_else(|| "no endpoint".into());
+            let name = self.engine_name();
+            let w = fallback_warning(name, &format!("voice daemon not running ({at})"), "starts");
+            self.shared.warn_fallback(name, w);
+        }
+        if let Ok(mut c) = self.shared.probe.lock() {
+            *c = Some(Arc::new(ProbeCtx {
+                cfg: probe_cfg,
+                probe,
+                timing,
+            }));
+        }
+        let sh = Arc::clone(&self.shared);
         match std::thread::Builder::new()
             .name("lillith-voice-reprobe".into())
-            .spawn(move || prober(&sh, &r, &probe_cfg, &*probe, timing))
+            .spawn(move || prober(&sh))
         {
-            Ok(_) => self.reprobe = Some(rp),
+            Ok(_) => self.reprobing = true,
             Err(e) => tracing::warn!("voice daemon re-probe thread: {e}"),
         }
     }
 
-    /// Asks the prober for a re-check (rate-limited there; never blocks).
+    /// No worker (silent fallback): asks the prober for a re-check
+    /// (rate-limited there; never blocks). With a worker, the worker
+    /// re-checks before its next line itself.
     fn kick_reprobe(&self) {
-        if let Some(rp) = &self.reprobe {
-            if let Ok(mut st) = rp.state.lock() {
-                st.kicked = true;
-            }
-            rp.cv.notify_all();
+        if !self.reprobing || self.worker.is_some() {
+            return;
         }
+        if let Ok(mut st) = self.shared.reprobe.state.lock() {
+            st.kicked = true;
+        }
+        self.shared.reprobe.cv.notify_all();
     }
 
     /// With no worker yet (the fallback was silent), a daemon engine found
@@ -324,13 +364,27 @@ impl Voice {
         let Some(engine) = self.shared.pending.lock().ok().and_then(|mut p| p.take()) else {
             return;
         };
-        self.worker = Some(spawn_worker(&self.shared, engine, &self.cfg));
+        let engines = Engines {
+            fallback: Box::new(crate::engine::NullEngine),
+            daemon: Some(engine),
+        };
+        self.worker = Some(spawn_worker(&self.shared, engines, &self.cfg));
     }
 
     /// Explicit engine + line source (tests, custom engines).
     pub fn with_engine(
         cfg: VoiceConfig,
         engine: Box<dyn Engine>,
+        lines: Box<dyn LineSource>,
+    ) -> Self {
+        Self::with_engines(cfg, engine, None, lines)
+    }
+
+    /// `fallback` speaks whenever `daemon` is absent or fails.
+    fn with_engines(
+        cfg: VoiceConfig,
+        fallback: Box<dyn Engine>,
+        daemon: Option<Box<dyn Engine>>,
         lines: Box<dyn LineSource>,
     ) -> Self {
         let mut cfg = cfg;
@@ -348,21 +402,30 @@ impl Voice {
             muted: AtomicBool::new(cfg.mute),
             enabled: AtomicBool::new(cfg.enabled),
             pending: Mutex::new(None),
-            info: Mutex::new(EngineInfo {
-                name: engine.name(),
-                warning: engine.voice_warning(),
+            info: Mutex::new(match &daemon {
+                Some(d) => EngineInfo {
+                    name: d.name(),
+                    warning: d.voice_warning(),
+                },
+                None => EngineInfo {
+                    name: fallback.name(),
+                    warning: fallback.voice_warning(),
+                },
             }),
+            daemon_in_use: AtomicBool::new(daemon.is_some()),
+            last_probe: Mutex::new(Instant::now()),
+            probe: Mutex::new(None),
+            reprobe: Reprobe::default(),
         });
         // Spawned even while disabled so the speakers switch works live.
-        let worker = engine
-            .is_real()
-            .then(|| spawn_worker(&shared, engine, &cfg));
+        let worker = (fallback.is_real() || daemon.is_some())
+            .then(|| spawn_worker(&shared, Engines { fallback, daemon }, &cfg));
         Self {
             gate: Gate::new(cfg.cooldown_s, cfg.repeat_cooldown_s),
             cfg,
             shared,
             worker,
-            reprobe: None,
+            reprobing: false,
             lines,
             t0: Instant::now(),
         }
@@ -486,10 +549,10 @@ impl Voice {
         now: f64,
         max_chars: usize,
     ) -> Result<(), Dropped> {
-        // On the fallback: the prober re-checks the daemon in the
-        // background; a switch applies to later lines.
-        self.kick_reprobe();
+        // On the fallback: the daemon is re-checked off this thread; a
+        // switch applies to later lines.
         self.adopt_pending();
+        self.kick_reprobe();
         if !self.enabled() {
             return Err(Dropped::Disabled);
         }
@@ -567,12 +630,10 @@ impl Voice {
 
 impl Drop for Voice {
     fn drop(&mut self) {
-        if let Some(rp) = &self.reprobe {
-            if let Ok(mut st) = rp.state.lock() {
-                st.stop = true;
-            }
-            rp.cv.notify_all();
+        if let Ok(mut st) = self.shared.reprobe.state.lock() {
+            st.stop = true;
         }
+        self.shared.reprobe.cv.notify_all();
         if let Ok(mut s) = self.shared.state.lock() {
             s.shutdown = true;
             s.queue.clear();
@@ -584,82 +645,144 @@ impl Drop for Voice {
     }
 }
 
-fn spawn_worker(
-    shared: &Arc<Shared>,
-    engine: Box<dyn Engine>,
-    cfg: &VoiceConfig,
-) -> JoinHandle<()> {
+/// The worker's engines: the cloned voice while the daemon is up, and the
+/// local fallback (possibly [`crate::engine::NullEngine`]).
+struct Engines {
+    fallback: Box<dyn Engine>,
+    daemon: Option<Box<dyn Engine>>,
+}
+
+fn spawn_worker(shared: &Arc<Shared>, engines: Engines, cfg: &VoiceConfig) -> JoinHandle<()> {
     let sh = Arc::clone(shared);
     let opts = SpeakOpts::from_config(cfg);
     std::thread::Builder::new()
         .name("lillith-voice".into())
-        .spawn(move || worker(sh, engine, opts))
+        .spawn(move || worker(sh, engines, opts))
         .expect("spawn voice worker")
 }
 
-/// The prober thread: waits for a kick (a say; ignored within
-/// `min_gap` of the last probe) or the `period` timer, pings, and on the
-/// first answer stages a [`crate::engine::DaemonEngine`] and exits. The
-/// start-up probe counts as the first one.
-fn prober(
-    sh: &Shared,
-    rp: &Reprobe,
-    cfg: &VoiceConfig,
-    probe: &(dyn Fn(&VoiceConfig) -> Option<(DaemonClient, PingInfo)> + Send + Sync),
-    t: ReprobeTiming,
-) {
-    let mut last = Instant::now();
-    loop {
-        {
-            let Ok(mut st) = rp.state.lock() else { return };
-            loop {
-                if st.stop {
-                    return;
-                }
-                let now = Instant::now();
-                let kicked = std::mem::take(&mut st.kicked);
-                if kicked && now >= last + t.min_gap {
-                    break;
-                }
-                let Some(wait) = (last + t.period).checked_duration_since(now) else {
-                    break;
-                };
-                if wait.is_zero() {
-                    break;
-                }
-                st = match rp.cv.wait_timeout(st, wait) {
-                    Ok((g, _)) => g,
-                    Err(_) => return,
-                };
-            }
+/// The UI notice while the fallback speaks.
+fn fallback_warning(fallback: &str, why: &str, until: &str) -> String {
+    if fallback == "none" {
+        format!("{why}; no fallback voice installed, she stays silent until it {until}")
+    } else {
+        format!("{why}; using the fallback {fallback} voice until it {until}")
+    }
+}
+
+impl Shared {
+    fn probe_ctx(&self) -> Option<Arc<ProbeCtx>> {
+        self.probe.lock().ok().and_then(|c| c.clone())
+    }
+
+    fn since_last_probe(&self) -> Duration {
+        self.last_probe
+            .lock()
+            .map(|l| l.elapsed())
+            .unwrap_or(Duration::MAX)
+    }
+
+    /// Pings the daemon now (never on the caller's thread); on an answer
+    /// stages its engine for the worker's next line, logs the switch once
+    /// (INFO) and clears the fallback warning.
+    fn probe_and_stage(&self, ctx: &ProbeCtx) {
+        if let Ok(mut l) = self.last_probe.lock() {
+            *l = Instant::now();
         }
-        last = Instant::now();
-        let Some((client, info)) = probe(cfg) else {
+        let Some((client, info)) = (ctx.probe)(&ctx.cfg) else {
             tracing::debug!("voice daemon still not answering; staying on the fallback");
-            continue;
-        };
-        if rp.state.lock().map(|s| s.stop).unwrap_or(true) {
             return;
+        };
+        let engine = crate::engine::DaemonEngine::new(client, &info, ctx.cfg.preset());
+        let Ok(mut pending) = self.pending.lock() else {
+            return;
+        };
+        if self.daemon_in_use.swap(true, Ordering::SeqCst) {
+            return; // someone else switched already
         }
-        let engine = crate::engine::DaemonEngine::new(client, &info, cfg.preset());
+        if let Ok(mut s) = self.state.lock() {
+            s.stats.daemon_switches += 1;
+        }
         tracing::info!(
             endpoint = %engine.client.endpoint().display(),
             preset = engine.preset.as_deref().unwrap_or("daemon default"),
             "voice: the voice daemon is up now; switching to the cloned voice from the next line"
         );
-        if let Ok(mut i) = sh.info.lock() {
+        if let Ok(mut i) = self.info.lock() {
             i.name = engine.name();
             i.warning = engine.voice_warning();
         }
-        if let Ok(mut p) = sh.pending.lock() {
-            *p = Some(Box::new(engine));
+        *pending = Some(Box::new(engine));
+        drop(pending);
+        self.cv.notify_all();
+    }
+
+    /// The one WARN (stderr log, never stdout) for a fallback voice now in
+    /// use; it is also the UI's [`Voice::voice_warning`].
+    fn warn_fallback(&self, fallback: &'static str, w: String) {
+        tracing::warn!("voice: {w}");
+        if let Ok(mut s) = self.state.lock() {
+            s.stats.fallback_warnings += 1;
         }
-        sh.cv.notify_all();
-        return;
+        if let Ok(mut i) = self.info.lock() {
+            i.name = fallback;
+            i.warning = Some(w);
+        }
+    }
+
+    /// Daemon → fallback (once per transition): WARN and set the warning.
+    fn fall_back(&self, fallback: &'static str, why: &str) {
+        if !self.daemon_in_use.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        let w = fallback_warning(
+            fallback,
+            &format!("voice daemon unreachable (voice engine failed: {why})"),
+            "is back",
+        );
+        self.warn_fallback(fallback, w);
+        // The prober's timer resumes (it idles while the daemon is in use).
+        self.reprobe.cv.notify_all();
     }
 }
 
-fn worker(sh: Arc<Shared>, mut engine: Box<dyn Engine>, opts: SpeakOpts) {
+/// The prober thread: while on the fallback, pings the daemon when kicked
+/// (a say with no worker; ignored within `min_gap` of the last probe) or
+/// every `period`; idles while the cloned voice is in use. Exits when the
+/// voice is dropped.
+fn prober(sh: &Shared) {
+    let Some(ctx) = sh.probe_ctx() else { return };
+    let t = ctx.timing;
+    loop {
+        {
+            let Ok(mut st) = sh.reprobe.state.lock() else {
+                return;
+            };
+            loop {
+                if st.stop {
+                    return;
+                }
+                let kicked = std::mem::take(&mut st.kicked);
+                let wait = if sh.daemon_in_use.load(Ordering::SeqCst) {
+                    t.period
+                } else {
+                    let since = sh.since_last_probe();
+                    if (kicked && since >= t.min_gap) || since >= t.period {
+                        break;
+                    }
+                    t.period - since
+                };
+                st = match sh.reprobe.cv.wait_timeout(st, wait) {
+                    Ok((g, _)) => g,
+                    Err(_) => return,
+                };
+            }
+        }
+        sh.probe_and_stage(&ctx);
+    }
+}
+
+fn worker(sh: Arc<Shared>, mut eng: Engines, opts: SpeakOpts) {
     let mut warned = false;
     loop {
         let line = {
@@ -680,21 +803,72 @@ fn worker(sh: Arc<Shared>, mut engine: Box<dyn Engine>, opts: SpeakOpts) {
                 };
             }
         };
-        // Between lines only: a late daemon takes over here.
-        if let Some(e) = sh.pending.lock().ok().and_then(|mut p| p.take()) {
-            engine = e;
-            warned = false;
+        // Between lines only: on the fallback, a say re-checks the daemon
+        // (rate-limited), and a staged daemon engine takes over here.
+        if eng.daemon.is_none() && !sh.silenced() {
+            if let Some(ctx) = sh.probe_ctx() {
+                if sh.since_last_probe() >= ctx.timing.min_gap {
+                    sh.probe_and_stage(&ctx);
+                }
+            }
         }
-        if !sh.silenced() {
-            match engine.start(&line, &opts) {
-                Ok(p) => play(&sh, p),
-                Err(e) => {
-                    if !warned {
-                        tracing::warn!(engine = engine.name(), "voice engine failed: {e}");
-                        warned = true;
+        if let Some(e) = sh.pending.lock().ok().and_then(|mut p| p.take()) {
+            eng.daemon = Some(e);
+        }
+        // A stop / the safeword during that check: this line is gone.
+        let cut = sh
+            .state
+            .lock()
+            .map(|s| s.interrupt || s.shutdown)
+            .unwrap_or(true);
+        if !cut && !sh.silenced() {
+            let mut spoken = false;
+            if let Some(d) = eng.daemon.as_mut() {
+                let failed = match d.start(&line, &opts) {
+                    Ok(p) => match play(&sh, p) {
+                        Outcome::Failed(why) => Some(why),
+                        Outcome::Done | Outcome::Cut => None,
+                    },
+                    Err(e) => Some(e.to_string()),
+                };
+                match failed {
+                    None => spoken = true,
+                    Some(why) => {
+                        // The line is spoken by the fallback instead.
+                        if let Ok(mut s) = sh.state.lock() {
+                            s.stats.engine_errors += 1;
+                        }
+                        eng.daemon = None;
+                        sh.fall_back(eng.fallback.name(), &why);
                     }
-                    if let Ok(mut s) = sh.state.lock() {
-                        s.stats.engine_errors += 1;
+                }
+            }
+            let cut = sh
+                .state
+                .lock()
+                .map(|s| s.interrupt || s.shutdown)
+                .unwrap_or(true);
+            if !spoken && !cut && !sh.silenced() {
+                match eng.fallback.start(&line, &opts) {
+                    Ok(p) => {
+                        if let Outcome::Failed(why) = play(&sh, p) {
+                            tracing::debug!(
+                                engine = eng.fallback.name(),
+                                "voice line failed: {why}"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        if !warned {
+                            tracing::warn!(
+                                engine = eng.fallback.name(),
+                                "voice engine failed: {e}"
+                            );
+                            warned = true;
+                        }
+                        if let Ok(mut s) = sh.state.lock() {
+                            s.stats.engine_errors += 1;
+                        }
                     }
                 }
             }
@@ -705,17 +879,29 @@ fn worker(sh: Arc<Shared>, mut engine: Box<dyn Engine>, opts: SpeakOpts) {
     }
 }
 
-fn play(sh: &Shared, mut p: Box<dyn Playback>) {
+/// How one playback ended.
+enum Outcome {
+    Done,
+    /// Interrupt / mute / speakers off / shutdown.
+    Cut,
+    /// The engine failed mid-line (e.g. the daemon died).
+    Failed(String),
+}
+
+fn play(sh: &Shared, mut p: Box<dyn Playback>) -> Outcome {
     loop {
         if p.poll() {
+            if let Some(why) = p.failure() {
+                return Outcome::Failed(why);
+            }
             if let Ok(mut s) = sh.state.lock() {
                 s.stats.spoken += 1;
             }
-            return;
+            return Outcome::Done;
         }
         let Ok(s) = sh.state.lock() else {
             p.stop();
-            return;
+            return Outcome::Cut;
         };
         if s.shutdown || s.interrupt || sh.silenced() {
             drop(s);
@@ -723,7 +909,7 @@ fn play(sh: &Shared, mut p: Box<dyn Playback>) {
             if let Ok(mut s) = sh.state.lock() {
                 s.stats.cut += 1;
             }
-            return;
+            return Outcome::Cut;
         }
         let _ = sh.cv.wait_timeout(s, POLL);
     }
@@ -1049,7 +1235,9 @@ mod tests {
         }
     }
 
-    /// A Mock fallback plus a prober using `probe`.
+    const HOUR: u64 = 3_600_000;
+
+    /// A Mock fallback plus failover using `probe`.
     fn reprobing(m: &Mock, probe: SharedProbe, t: ReprobeTiming) -> Voice {
         let mut v = Voice::with_engine(cfg(), Box::new(m.clone()), Box::new(NoLines));
         v.start_reprobe(cfg(), probe, t);
@@ -1057,7 +1245,49 @@ mod tests {
     }
 
     #[test]
-    fn reprobe_on_say_is_rate_limited_and_never_blocks_the_caller() {
+    fn startup_fallback_warning_is_emitted_once() {
+        let m = Mock::default();
+        let v = reprobing(&m, Arc::new(|_: &VoiceConfig| None), fast(HOUR, HOUR));
+        assert_eq!(v.engine_name(), "mock");
+        let w = v.voice_warning().unwrap();
+        assert!(w.contains("voice daemon not running"), "{w}");
+        assert!(w.contains("fallback mock voice"), "{w}");
+        assert_eq!(v.stats().fallback_warnings, 1);
+        assert_eq!(v.stats().daemon_switches, 0);
+    }
+
+    #[test]
+    fn startup_fallback_warning_from_config() {
+        let lookup = |b: &str| (b == "espeak-ng").then(|| std::path::PathBuf::from("/x/espeak-ng"));
+        let v = Voice::from_config_with(
+            cfg(),
+            &lookup,
+            Arc::new(|_: &VoiceConfig| None),
+            fast(HOUR, HOUR),
+        );
+        assert_eq!(v.engine_name(), "espeak-ng");
+        assert!(v
+            .voice_warning()
+            .unwrap()
+            .contains("fallback espeak-ng voice"));
+        assert_eq!(v.stats().fallback_warnings, 1);
+        // A fixed engine is no fallback: no warning.
+        let fixed = VoiceConfig {
+            engine: crate::config::EngineChoice::EspeakNg,
+            ..cfg()
+        };
+        let v = Voice::from_config_with(
+            fixed,
+            &lookup,
+            Arc::new(|_: &VoiceConfig| None),
+            fast(HOUR, HOUR),
+        );
+        assert_eq!(v.voice_warning(), None);
+        assert_eq!(v.stats().fallback_warnings, 0);
+    }
+
+    #[test]
+    fn reprobe_before_a_line_is_rate_limited_and_never_blocks_the_caller() {
         let calls = Arc::new(AtomicUsize::new(0));
         let c = Arc::clone(&calls);
         let probe: SharedProbe = Arc::new(move |_: &VoiceConfig| {
@@ -1067,25 +1297,26 @@ mod tests {
             None
         });
         let m = Mock::default();
-        let mut v = reprobing(&m, probe, fast(150, 3_600_000));
-        assert_eq!(v.engine_name(), "mock");
-        assert!(v.voice_warning().unwrap().contains("daemon not running"));
+        let mut v = reprobing(&m, probe, fast(700, HOUR));
         // Within the gap of the start-up probe: no re-check.
         v.say_at("a", Urgency::Normal, 1.0).unwrap();
-        std::thread::sleep(Duration::from_millis(30));
+        wait_until(|| v.stats().spoken == 1);
         assert_eq!(calls.load(Ordering::SeqCst), 0);
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(750));
         let t = Instant::now();
         for i in 0..5 {
             v.say_at(&format!("line {i}"), Urgency::Normal, 2.0 + f64::from(i))
                 .unwrap();
         }
         assert!(t.elapsed() < Duration::from_millis(100), "say blocked");
-        std::thread::sleep(Duration::from_millis(100));
-        assert_eq!(calls.load(Ordering::SeqCst), 1, "one probe for five says");
-        // Still the fallback, still warned.
+        wait_until(|| !v.speaking());
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "one probe for a burst of says"
+        );
         assert_eq!(v.engine_name(), "mock");
-        assert!(v.voice_warning().is_some());
+        assert_eq!(v.stats().fallback_warnings, 1);
     }
 
     #[test]
@@ -1097,7 +1328,7 @@ mod tests {
             None
         });
         let m = Mock::default();
-        let v = reprobing(&m, probe, fast(3_600_000, 40));
+        let v = reprobing(&m, probe, fast(HOUR, 40));
         wait_until(|| calls.load(Ordering::SeqCst) >= 3);
         drop(v);
         // Dropping the voice stops the prober.
@@ -1108,7 +1339,7 @@ mod tests {
     }
 
     #[test]
-    fn no_reprobe_when_the_daemon_answered_or_engine_is_fixed() {
+    fn no_reprobe_when_the_engine_is_fixed() {
         let calls = Arc::new(AtomicUsize::new(0));
         let c = Arc::clone(&calls);
         let probe: SharedProbe = Arc::new(move |_: &VoiceConfig| {
@@ -1121,8 +1352,8 @@ mod tests {
             ..cfg()
         };
         let mut v = Voice::from_config_with(fixed, &lookup, probe, fast(0, 10));
-        assert!(v.reprobe.is_none());
-        assert_eq!(v.voice_warning(), None);
+        assert!(!v.reprobing);
+        v.set_muted(true);
         let _ = v.say_at("x", Urgency::Normal, 1.0);
         std::thread::sleep(Duration::from_millis(50));
         assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -1154,24 +1385,30 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn daemon_says(d: &crate::daemon::fake::FakeDaemon) -> Vec<String> {
+        d.seen
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|r| crate::daemon::request_command(r) == "say")
+            .map(|r| r["text"].as_str().unwrap_or_default().to_string())
+            .collect()
+    }
+
+    #[cfg(unix)]
     #[test]
     fn late_daemon_is_picked_up_between_lines_never_mid_line() {
         let c = daemon_cfg("late-start");
         let m = Mock::default();
         m.hold.store(true, Ordering::SeqCst);
         let mut v = Voice::with_engine(c.clone(), Box::new(m.clone()), Box::new(NoLines));
-        v.start_reprobe(
-            c.clone(),
-            Arc::new(crate::engine::ping_daemon),
-            fast(50, 3_600_000),
-        );
+        v.start_reprobe(c, Arc::new(crate::engine::ping_daemon), fast(HOUR, 60));
         // No daemon yet: the fallback speaks (and holds the line).
         v.say_at("one", Urgency::Normal, 1.0).unwrap();
         wait_until(|| m.started.lock().unwrap().len() == 1);
-        // Now the daemon starts; the next say kicks a re-check.
-        let d = say_ok_daemon("late-start");
-        std::thread::sleep(Duration::from_millis(80));
         v.say_at("two", Urgency::Normal, 2.0).unwrap();
+        // Now the daemon starts; the timer picks it up mid-line.
+        let d = say_ok_daemon("late-start");
         wait_until(|| v.engine_name() == "voiced");
         assert_eq!(
             v.voice_warning(),
@@ -1181,24 +1418,115 @@ mod tests {
         // "one" is still playing on the fallback: not cut, not switched.
         std::thread::sleep(Duration::from_millis(50));
         assert_eq!(m.stops.load(Ordering::SeqCst), 0, "never switched mid-line");
-        assert_eq!(*m.started.lock().unwrap(), ["one"]);
+        assert!(daemon_says(&d).is_empty());
         // When it ends, "two" (and later lines) go to the daemon.
         m.hold.store(false, Ordering::SeqCst);
-        wait_until(|| d.commands().iter().filter(|c| *c == "say").count() == 1);
+        wait_until(|| daemon_says(&d).len() == 1);
         v.say_at("three", Urgency::Normal, 3.0).unwrap();
-        wait_until(|| d.commands().iter().filter(|c| *c == "say").count() == 2);
-        let seen = d.seen.lock().unwrap().clone();
-        let says: Vec<_> = seen
-            .iter()
-            .filter(|r| crate::daemon::request_command(r) == "say")
-            .map(|r| r["text"].as_str().unwrap_or_default().to_string())
-            .collect();
-        assert_eq!(says, ["two", "three"]);
+        wait_until(|| daemon_says(&d).len() == 2);
+        assert_eq!(daemon_says(&d), ["two", "three"]);
         assert_eq!(
             *m.started.lock().unwrap(),
             ["one"],
             "fallback no longer used"
         );
+        let st = v.stats();
+        assert_eq!((st.fallback_warnings, st.daemon_switches), (1, 1));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_say_rechecks_the_daemon_and_speaks_that_line_on_it() {
+        let c = daemon_cfg("say-kick");
+        let m = Mock::default();
+        let mut v = Voice::with_engine(c.clone(), Box::new(m.clone()), Box::new(NoLines));
+        v.start_reprobe(c, Arc::new(crate::engine::ping_daemon), fast(50, HOUR));
+        let d = say_ok_daemon("say-kick");
+        std::thread::sleep(Duration::from_millis(80));
+        v.say_at("hi", Urgency::Normal, 1.0).unwrap();
+        wait_until(|| daemon_says(&d) == ["hi"]);
+        assert!(m.started.lock().unwrap().is_empty());
+        assert_eq!(v.stats().daemon_switches, 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_dies_then_returns_fallback_speaks_and_switch_back_between_lines() {
+        let c = daemon_cfg("die-return");
+        let m = Mock::default();
+        let d = say_ok_daemon("die-return");
+        let (client, info) = crate::engine::ping_daemon(&c).expect("up");
+        let daemon = crate::engine::DaemonEngine::new(client, &info, c.preset());
+        let mut v = Voice::with_engines(
+            c.clone(),
+            Box::new(m.clone()),
+            Some(Box::new(daemon)),
+            Box::new(NoLines),
+        );
+        v.start_reprobe(c, Arc::new(crate::engine::ping_daemon), fast(150, HOUR));
+        assert_eq!(v.engine_name(), "voiced");
+        assert_eq!(v.voice_warning(), None);
+        v.say_at("one", Urgency::Normal, 1.0).unwrap();
+        wait_until(|| daemon_says(&d) == ["one"]);
+        // The daemon dies (crash: no socket owner).
+        drop(d);
+        v.say_at("two", Urgency::Normal, 2.0).unwrap();
+        wait_until(|| *m.started.lock().unwrap() == ["two"]);
+        assert_eq!(v.engine_name(), "mock");
+        assert!(v.voice_warning().unwrap().contains("unreachable"));
+        v.say_at("three", Urgency::Normal, 3.0).unwrap();
+        wait_until(|| m.started.lock().unwrap().len() == 2);
+        assert_eq!(
+            *m.started.lock().unwrap(),
+            ["two", "three"],
+            "no line dropped"
+        );
+        let st = v.stats();
+        // start-up was on the daemon: the only WARN is this transition.
+        assert_eq!((st.fallback_warnings, st.daemon_switches), (1, 0));
+        // It comes back: the next line (past the gap) re-checks and goes to it.
+        let d = say_ok_daemon("die-return");
+        std::thread::sleep(Duration::from_millis(200));
+        m.hold.store(true, Ordering::SeqCst);
+        v.say_at("four", Urgency::Normal, 4.0).unwrap();
+        wait_until(|| daemon_says(&d) == ["four"]);
+        assert_eq!(v.engine_name(), "voiced");
+        assert_eq!(v.voice_warning(), None);
+        v.say_at("five", Urgency::Normal, 5.0).unwrap();
+        wait_until(|| daemon_says(&d) == ["four", "five"]);
+        assert_eq!(m.started.lock().unwrap().len(), 2, "fallback idle again");
+        let st = v.stats();
+        assert_eq!(
+            (st.fallback_warnings, st.daemon_switches),
+            (1, 1),
+            "one per transition"
+        );
+        // The safeword / stop still cuts whatever speaks.
+        v.stop();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stop_cuts_the_fallback_after_a_fallover() {
+        let c = daemon_cfg("die-stop");
+        let m = Mock::default();
+        let d = say_ok_daemon("die-stop");
+        let (client, info) = crate::engine::ping_daemon(&c).expect("up");
+        let daemon = crate::engine::DaemonEngine::new(client, &info, c.preset());
+        let mut v = Voice::with_engines(
+            c.clone(),
+            Box::new(m.clone()),
+            Some(Box::new(daemon)),
+            Box::new(NoLines),
+        );
+        v.start_reprobe(c, Arc::new(crate::engine::ping_daemon), fast(HOUR, HOUR));
+        drop(d);
+        m.hold.store(true, Ordering::SeqCst);
+        v.say_at("long one", Urgency::Normal, 1.0).unwrap();
+        wait_until(|| m.started.lock().unwrap().len() == 1);
+        v.stop();
+        wait_until(|| m.stops.load(Ordering::SeqCst) == 1);
+        wait_until(|| !v.speaking());
     }
 
     #[cfg(unix)]
@@ -1210,7 +1538,7 @@ mod tests {
             c,
             &lookup,
             Arc::new(crate::engine::ping_daemon),
-            fast(3_600_000, 40),
+            fast(HOUR, 40),
         );
         assert_eq!(v.engine_name(), "none");
         assert!(!v.has_engine());
@@ -1220,7 +1548,7 @@ mod tests {
         wait_until(|| v.engine_name() == "voiced");
         assert!(v.has_engine());
         v.say_at("hello", Urgency::Normal, 2.0).unwrap();
-        wait_until(|| d.commands().contains(&"say".to_string()));
+        wait_until(|| daemon_says(&d) == ["hello"]);
     }
 
     #[cfg(unix)]
@@ -1239,7 +1567,7 @@ mod tests {
             c,
             &lookup,
             Arc::new(crate::engine::ping_daemon),
-            fast(20, 3_600_000),
+            fast(HOUR, 20),
         );
         assert!(
             t.elapsed() < Duration::from_secs(2),
@@ -1249,16 +1577,14 @@ mod tests {
         assert_eq!(v.engine_name(), "espeak-ng");
         assert!(v.voice_warning().unwrap().contains("espeak-ng"));
         v.set_muted(true); // don't run the (fake) espeak-ng binary
-        std::thread::sleep(Duration::from_millis(30));
         let t = Instant::now();
         let _ = v.say_at("x", Urgency::Normal, 1.0);
         assert!(
             t.elapsed() < Duration::from_millis(50),
             "say never waits on the ping"
         );
-        // The re-check pings, times out, and she stays on the fallback.
+        // The timer re-pings, times out, and she stays on the fallback.
         wait_until(|| d.commands().iter().filter(|c| *c == "ping").count() >= 2);
-        std::thread::sleep(crate::daemon::PING_TIMEOUT + Duration::from_millis(200));
         assert_eq!(v.engine_name(), "espeak-ng");
         assert!(
             d.commands().iter().all(|c| c == "ping"),

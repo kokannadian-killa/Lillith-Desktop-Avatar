@@ -36,6 +36,11 @@ pub trait Playback: Send {
     fn poll(&mut self) -> bool;
     /// Stops it now (interrupt / mute / shutdown).
     fn stop(&mut self);
+    /// Once finished: why it failed mid-line (e.g. the daemon died), so
+    /// the line can be spoken by the fallback. `None` = played or stopped.
+    fn failure(&self) -> Option<String> {
+        None
+    }
 }
 
 /// A TTS backend. Runs on the speech worker thread only.
@@ -288,6 +293,9 @@ struct DaemonPlayback {
     done: std::sync::Arc<std::sync::atomic::AtomicBool>,
     reply: std::sync::mpsc::Receiver<Result<SayReply, String>>,
     finished: bool,
+    /// Why the say failed (connection lost, error reply, hung past the
+    /// deadline); `None` when it played or was stopped by us.
+    failure: Option<String>,
     /// Past this the daemon is treated as hung: stop and drop the line.
     deadline: std::time::Instant,
     /// The reply reader (a blocked Windows pipe read is cancelled on stop).
@@ -315,14 +323,19 @@ impl Playback for DaemonPlayback {
             Ok(r) => {
                 if let Err(e) = r {
                     tracing::debug!("voice daemon say: {e}");
+                    self.failure = Some(e);
                 }
                 self.finished = true;
             }
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => self.finished = true,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.failure = Some("say reader gone".into());
+                self.finished = true;
+            }
             Err(std::sync::mpsc::TryRecvError::Empty) => {
                 if std::time::Instant::now() >= self.deadline {
-                    tracing::warn!("voice daemon: say did not finish in time; line dropped");
+                    tracing::warn!("voice daemon: say did not finish in time; line stopped");
                     self.stop();
+                    self.failure = Some("say did not finish in time".into());
                 }
             }
         }
@@ -339,6 +352,10 @@ impl Playback for DaemonPlayback {
         }
         self.finished = true;
         self.release_reader();
+    }
+
+    fn failure(&self) -> Option<String> {
+        self.failure.clone()
     }
 }
 
@@ -393,6 +410,7 @@ impl Engine for DaemonEngine {
             done,
             reply: rx,
             finished: false,
+            failure: None,
             deadline,
             reader: Some(reader),
         }))
@@ -658,6 +676,16 @@ pub fn ping_daemon(cfg: &VoiceConfig) -> Option<(DaemonClient, PingInfo)> {
 /// A daemon probe for [`detect_full`] ([`ping_daemon`], or a fake in tests).
 pub type DaemonProbe = dyn Fn(&VoiceConfig) -> Option<(DaemonClient, PingInfo)>;
 
+/// `engine`, plus why the engines before it (the daemon first) were not
+/// used, e.g. "espeak-ng (fallback: voice daemon not running; piper not on PATH)".
+fn with_why(engine: &str, why: &[String]) -> String {
+    if why.is_empty() {
+        engine.to_string()
+    } else {
+        format!("{engine} (fallback: {})", why.join("; "))
+    }
+}
+
 /// [`detect`] with an injectable binary lookup and no daemon (tests).
 pub fn detect_with(cfg: &VoiceConfig, lookup: &dyn Fn(&str) -> Option<PathBuf>) -> Detected {
     detect_full(cfg, lookup, &|_| None)
@@ -733,7 +761,10 @@ pub fn detect_full(
                 };
                 let sample_rate = piper_sample_rate(&model);
                 return Detected {
-                    reason: format!("piper ({}, {sample_rate} Hz, {player:?})", model.display()),
+                    reason: with_why(
+                        &format!("piper ({}, {sample_rate} Hz, {player:?})", model.display()),
+                        &why,
+                    ),
                     engine: Box::new(Piper {
                         bin,
                         model,
@@ -745,7 +776,7 @@ pub fn detect_full(
             EngineChoice::EspeakNg => match lookup("espeak-ng") {
                 Some(bin) => {
                     return Detected {
-                        reason: "espeak-ng".into(),
+                        reason: with_why("espeak-ng", &why),
                         engine: Box::new(EspeakNg { bin }),
                     }
                 }
@@ -754,7 +785,7 @@ pub fn detect_full(
             EngineChoice::SpdSay => match lookup("spd-say") {
                 Some(bin) => {
                     return Detected {
-                        reason: "spd-say".into(),
+                        reason: with_why("spd-say", &why),
                         engine: Box::new(SpdSay { bin }),
                     }
                 }
@@ -768,7 +799,7 @@ pub fn detect_full(
     if matches!(cfg.engine, EngineChoice::Auto | EngineChoice::Daemon) {
         if let Some(bin) = lookup("powershell") {
             return Detected {
-                reason: "sapi (Windows built-in voices)".into(),
+                reason: with_why("sapi (Windows built-in voices)", &why),
                 engine: Box::new(Sapi { bin }),
             };
         }

@@ -1077,12 +1077,24 @@ fn start_voice(
     // One mute flag for SFX and voice (the brain starts from `muted`).
     vcfg.mute |= cfg.muted;
     let voice = lillith_voice::Voice::from_config(vcfg);
-    tracing::info!(
-        engine = voice.engine_name(),
-        active = voice.is_active(),
-        muted = voice.muted(),
-        "voice ready"
-    );
+    // A fallback voice (daemon down) is a warning, like every other
+    // degraded start-up (stderr / log file, never stdout). Later
+    // daemon <-> fallback switches are logged by the voice itself.
+    match voice.voice_warning() {
+        Some(w) => tracing::warn!(
+            engine = voice.engine_name(),
+            active = voice.is_active(),
+            muted = voice.muted(),
+            warning = %w,
+            "voice ready (fallback voice)"
+        ),
+        None => tracing::info!(
+            engine = voice.engine_name(),
+            active = voice.is_active(),
+            muted = voice.muted(),
+            "voice ready"
+        ),
+    }
     voice
 }
 
