@@ -537,20 +537,21 @@
     "height": 400,
     "frame_count": 59,
     "fps": 12.0,
-    "bytes": 692908,
+    "bytes": 693347,
     "quality": {
-      "edge_mae": 2.487,
-      "edge_p99": 18.74,
-      "halo_dark": 0.046,
-      "halo_light": -0.149,
-      "alpha_mae": 0.0668
+      "edge_mae": 2.502,
+      "edge_p99": 19.53,
+      "halo_dark": 0.049,
+      "halo_light": -0.15,
+      "alpha_mae": 0.067
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 1,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "50d90f2822fd8b50d928790c77ea7aa968a5b4edd07a6b72c38c9168582ad781",
-    "hand_pass": "white background pockets cleared (newbot handfix.py)"
+    "sheet_sha256": "69e1559f106fef95df389b8219756cae6fda8f4cc888694cfe1ab3d153976a06",
+    "hand_pass": "white background pockets cleared (newbot handfix.py)",
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
   }
 }
