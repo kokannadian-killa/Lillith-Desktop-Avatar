@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lillith-py"
+version = "0.1.0"
+description = "Local-only attachments and bot deployment for the Lillith desktop AI (DemonOS - Phantomcore)"
+requires-python = ">=3.11"  # tomllib
+dependencies = []
+
+[project.optional-dependencies]
+images = ["pillow"]
+ocr = ["pytesseract"]
+test = ["pytest"]
+
+[project.scripts]
+lillith-attach = "lillith_py.attachments.cli:main"
+lillith-bot = "lillith_py.bots.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["lillith_py*"]
+
+[tool.setuptools.package-data]
+lillith_py = ["templates/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
