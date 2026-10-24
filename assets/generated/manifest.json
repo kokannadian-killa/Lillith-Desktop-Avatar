@@ -6765,6 +6765,41 @@
    "video": "halloween_cape_swirl_arch/halloween_cape_swirl_arch.mp4",
    "season": "halloween",
    "outfit": "halloween"
+  },
+  {
+   "name": "halloween_pumpkin_hug_candy",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "halloween_pumpkin_hug_candy/",
+   "sheet": "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy_sheet.png",
+   "manifest": "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy.json",
+   "preview": "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "outfit:halloween",
+    "season:halloween",
+    "seasonal"
+   ],
+   "allure": true,
+   "video": "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy.mp4",
+   "season": "halloween",
+   "outfit": "halloween"
   }
  ]
 }
