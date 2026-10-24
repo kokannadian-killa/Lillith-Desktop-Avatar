@@ -83,20 +83,20 @@
     [
       110,
       298,
-      21,
-      391
+      20,
+      392
     ],
     [
-      105,
+      104,
       286,
       20,
-      391
+      392
     ],
     [
       107,
-      272,
+      273,
       20,
-      391
+      392
     ],
     [
       116,
@@ -123,26 +123,26 @@
       392
     ],
     [
-      118,
+      117,
       257,
       20,
       392
     ],
     [
       116,
-      272,
+      273,
       20,
-      391
+      392
     ],
     [
       115,
       295,
       20,
-      391
+      392
     ],
     [
       116,
-      311,
+      312,
       21,
       392
     ],
@@ -243,14 +243,21 @@
     "height": 400,
     "frame_count": 13,
     "fps": 12.0,
-    "bytes": 155511,
+    "bytes": 154998,
     "quality": {
-      "edge_mae": 1.973,
-      "edge_p99": 13.54,
-      "halo_dark": 0.03,
-      "halo_light": -0.08,
-      "alpha_mae": 0.0782
+      "edge_mae": 1.992,
+      "edge_p99": 13.1,
+      "halo_dark": 0.025,
+      "halo_light": -0.095,
+      "alpha_mae": 0.0754
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 2,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "5fd6f7f69f834b598e5a6f945d8302f7305bf6c9957e05108e7dbc1accfb9de5",
+    "source_sha256": "cea07650170322a16e6ddb3c59e7e3e02a12c17a842d9a682df4c3642100b20d",
+    "hand_pass": "sz_polish (white-fringe s-z hand pass, see commit message)"
   }
 }
