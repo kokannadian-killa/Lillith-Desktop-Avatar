@@ -11,7 +11,9 @@
 use crate::config::{Backend, ConfigError, LlmConfig};
 use crate::http::{self, HttpError};
 use crate::local::LocalUrl;
-use crate::modelfile::LILY_SYSTEM_PROMPT;
+use crate::modelfile::{
+    LILY_MIN_P, LILY_REPEAT_LAST_N, LILY_REPEAT_PENALTY, LILY_SYSTEM_PROMPT, LILY_TOP_P,
+};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -243,6 +245,43 @@ impl Default for ChatTestOptions {
     }
 }
 
+/// llama-server `/v1/chat/completions` body with Lily's sampling
+/// (`top_p`, `min_p`, `repeat_penalty`, `repeat_last_n`).
+fn llama_chat_body(temperature: f32, system: &str, prompt: &str, max_tokens: u32) -> Value {
+    json!({
+        "model": "local",
+        "messages": [
+            { "role": "system", "content": system },
+            { "role": "user", "content": prompt },
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "top_p": LILY_TOP_P,
+        "min_p": LILY_MIN_P,
+        "repeat_penalty": LILY_REPEAT_PENALTY,
+        "repeat_last_n": LILY_REPEAT_LAST_N,
+        "stream": false,
+    })
+}
+
+/// Ollama `/api/chat` body; sampling goes in `options`.
+fn ollama_chat_body(cfg: &LlmConfig, messages: Vec<Value>, max_tokens: u32) -> Value {
+    json!({
+        "model": cfg.ollama_model,
+        "messages": messages,
+        "stream": false,
+        "options": {
+            "temperature": cfg.temperature,
+            "top_p": LILY_TOP_P,
+            "min_p": LILY_MIN_P,
+            "repeat_penalty": LILY_REPEAT_PENALTY,
+            "repeat_last_n": LILY_REPEAT_LAST_N,
+            "num_predict": max_tokens,
+            "num_ctx": cfg.ctx_size,
+        },
+    })
+}
+
 /// One short, non-streaming chat turn with the configured local model;
 /// returns the reply text.
 pub fn test_chat(cfg: &LlmConfig, prompt: &str) -> Result<String, CheckError> {
@@ -264,16 +303,7 @@ pub fn test_chat_with(
                 .clone()
                 .or(custom)
                 .unwrap_or_else(|| LILY_SYSTEM_PROMPT.into());
-            let body = json!({
-                "model": "local",
-                "messages": [
-                    { "role": "system", "content": system },
-                    { "role": "user", "content": prompt },
-                ],
-                "max_tokens": o.max_tokens,
-                "temperature": cfg.temperature,
-                "stream": false,
-            });
+            let body = llama_chat_body(cfg.temperature, &system, prompt, o.max_tokens);
             let v = post(&base, "/v1/chat/completions", &body, o)?;
             v.pointer("/choices/0/message/content")
                 .and_then(Value::as_str)
@@ -287,12 +317,7 @@ pub fn test_chat_with(
                 messages.push(json!({ "role": "system", "content": s }));
             }
             messages.push(json!({ "role": "user", "content": prompt }));
-            let body = json!({
-                "model": cfg.ollama_model,
-                "messages": messages,
-                "stream": false,
-                "options": { "temperature": cfg.temperature, "num_predict": o.max_tokens, "num_ctx": cfg.ctx_size },
-            });
+            let body = ollama_chat_body(cfg, messages, o.max_tokens);
             match post(&base, "/api/chat", &body, o) {
                 Err(CheckError::Status { status: 404, .. }) => {
                     let available = http::get(&base, "/api/tags", PING_TIMEOUT)
@@ -370,6 +395,26 @@ mod tests {
             ollama_host: format!("127.0.0.1:{port}"),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn chat_bodies_carry_lily_sampling() {
+        let b = llama_chat_body(0.95, "sys", "hi", 64);
+        assert!((b["temperature"].as_f64().unwrap() - 0.95).abs() < 1e-6);
+        assert!((b["top_p"].as_f64().unwrap() - 0.95).abs() < 1e-6);
+        assert!((b["min_p"].as_f64().unwrap() - 0.1).abs() < 1e-6);
+        assert!((b["repeat_penalty"].as_f64().unwrap() - 1.1).abs() < 1e-6);
+        assert_eq!(b["repeat_last_n"], 256);
+        assert_eq!(b["max_tokens"], 64);
+        let cfg = LlmConfig::default();
+        let o = ollama_chat_body(&cfg, vec![], 160);
+        let opt = &o["options"];
+        assert!((opt["temperature"].as_f64().unwrap() - 0.95).abs() < 1e-6);
+        assert!((opt["top_p"].as_f64().unwrap() - 0.95).abs() < 1e-6);
+        assert!((opt["min_p"].as_f64().unwrap() - 0.1).abs() < 1e-6);
+        assert!((opt["repeat_penalty"].as_f64().unwrap() - 1.1).abs() < 1e-6);
+        assert_eq!(opt["repeat_last_n"], 256);
+        assert_eq!(opt["num_predict"], 160);
     }
 
     #[test]

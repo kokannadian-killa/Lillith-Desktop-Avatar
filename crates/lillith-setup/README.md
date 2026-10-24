@@ -47,7 +47,7 @@ Extra scan dirs: `--dir DIR` (repeatable) or `[llm] scan_paths`.
 | `server_url` | `"http://127.0.0.1:8080"` | llama-server base URL, loopback only (same form as `[chat] endpoint`) |
 | `ollama_host` | `"http://127.0.0.1:11434"` | Ollama base URL, loopback only |
 | `ollama_model` | `"lily"` | Name for `ollama create` |
-| `temperature` | `0.85` | 0–2 (Lily's default, `LILY_TEMPERATURE`) |
+| `temperature` | `0.95` | 0–2 (Lily's default, `LILY_TEMPERATURE`) |
 | `ctx_size` | `4096` | `-c` / `num_ctx` (old Aether key `num_ctx` is read and migrated) |
 | `chat_template` | `"chatml"` | Ollama `TEMPLATE`/stop tokens (`chatml`, `llama3`, `gemma`, `phi3`, `mistral-v1`); llama-server uses the GGUF's own template via `--jinja` |
 | `llama_server_bin` | `""` | Path to llama-server (empty = PATH) |
@@ -94,12 +94,12 @@ explicit content is allowed and encouraged; the hard limit is adult-only (never 
 anyone young-seeming); out-of-character safeword `red` (or `OOC: stop`), which she obeys at
 once. Every prompt the wizard writes carries `modelfile::READ_ALOUD_RULE` ("Your replies
 are also read aloud, so say it in words; never let an emoji or emoticon carry the
-meaning."); custom prompts get it appended if missing. Short bullet rules plus two example lines, tuned for a ~3B model; replies are 1–3
+meaning."); custom prompts get it appended if missing. Dominance is written as behaviour (orders, teasing, making him wait, "mine", present-tense narration, rising heat), with six emoji-free example exchanges (one shows `red` stopping her at once) and a one-line reminder at the end, tuned for a ~3B model; replies are 1–3
 short sentences.
 
-Default Modelfile sampling (`LilyParams::default()`): `temperature 0.85`
-(`LILY_TEMPERATURE`), `top_p 0.9` (`LILY_TOP_P`), `repeat_penalty 1.1`
-(`LILY_REPEAT_PENALTY`), `num_predict 160` (`LILY_NUM_PREDICT`), `num_ctx 4096`, and the
+Default Modelfile sampling (`LilyParams::default()`): `temperature 0.95`
+(`LILY_TEMPERATURE`), `top_p 0.95` (`LILY_TOP_P`), `min_p 0.1` (`LILY_MIN_P`), `repeat_penalty 1.1`
+(`LILY_REPEAT_PENALTY`), `repeat_last_n 256` (`LILY_REPEAT_LAST_N`), `num_predict 160` (`LILY_NUM_PREDICT`), `num_ctx 4096`, and the
 chat template's stop tokens (ChatML: `<|im_start|>`, `<|im_end|>`).
 
 ## GUI helpers (additive, for the settings panel)
