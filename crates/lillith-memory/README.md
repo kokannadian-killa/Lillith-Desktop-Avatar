@@ -10,13 +10,14 @@ no embedding model, **no network code, no telemetry**. Design: `docs/MEMORY.md`.
 ```toml
 [memory]
 enabled = true          # false = no reads, no writes, no file
-db_path = ""            # default $XDG_DATA_HOME/lillith/memory.db (~/.local/share/...)
+db_path = ""            # default $XDG_DATA_HOME/lillith/memory.db (~/.local/share/...; Windows %LOCALAPPDATA%)
 half_life_days = 14.0
 top_k = 6
 max_context_tokens = 300
 prune_below = 0.05
 max_nodes = 5000
 max_events = 5000
+max_errors = 1000
 ```
 
 ## API
@@ -47,8 +48,11 @@ let rec = brain.record_error(&err_text, "chat.server", &ctx)?;      // count + k
 brain.record_fix(&err_text, "set threads = 2", FixOutcome::Worked, &ctx)?;
 let fix = brain.known_fix(&err_text);
 
-// Forget (deletes rows, then VACUUM + WAL truncate).
-if let Some(cmd) = parse_forget("forget the last 30 minutes") { brain.forget(&cmd, &ctx)?; }
+// Forget (deletes rows, then VACUUM + checked WAL truncate). Whole-word
+// topic matching; `forget_preview` counts without deleting.
+if let Some(cmd) = parse_forget("forget the last 30 minutes") {
+    let report = brain.forget(&cmd, &ctx)?;   // counts + `scrubbed`
+}
 ```
 
 - `is_safeword(text)`: the canonical `lillith-core` kill-switch check plus
@@ -64,7 +68,8 @@ if let Some(cmd) = parse_forget("forget the last 30 minutes") { brain.forget(&cm
 - `lillith-mind::ChatSession::with_memory(&MemoryConfig)` attaches a brain:
   the system prompt gets the `[Memory]` block, replies feed
   `observe_interaction`, and "forget ..." messages are answered locally
-  (also pruning matching chat history). The bare safeword is still handled
+  ("forget everything" / "forget about X" need a "yes"; chat history is
+  pruned too, under a lock file). The bare safeword is still handled
   first by the kill switch in `ChatSession::send`.
 - `lillith chat` and `lillith chat-bubble` pass `Config::memory` through.
 
@@ -83,5 +88,7 @@ if let Some(cmd) = parse_forget("forget the last 30 minutes") { brain.forget(&cm
 
 `cargo test -p lillith-memory` (in-memory and temp-file DBs): decay math,
 retrieval ranking, neighbour expansion, token budget, forget (all / topic /
-last N minutes, file scrubbed), opt-out, safeword short-circuit, error-fix
-recall, habit prediction, migrations.
+last N minutes incl. rewritten rows; rows, FTS and file bytes scrubbed; 2-char
+topics; whole words only; busy WAL reported), two-connection locking, file
+and folder permissions, error cap, opt-out, safeword short-circuit (incl.
+`record_fix`), error-fix recall, habit prediction, migrations (v1 → v2).

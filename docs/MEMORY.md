@@ -78,11 +78,28 @@ To forget from chat (handled locally, no model call):
 
 - "forget everything" / "wipe your memory": deletes every memory, event and
   error record (and clears the chat history).
-- "forget about <topic>": deletes memories mentioning the topic, the
-  preferences hanging off it, and matching events/errors (and chat-history
-  messages containing it).
-- "forget the last 30 minutes" / "forget the last hour": deletes what was
-  created in that window (and the most recent chat turns).
+- "forget about <topic>": deletes memories whose key/label/detail contain one
+  of the topic's *content words* as a whole word (stopwords like
+  my/your/the/about/it are stripped; "forget about my ex" matches `ex`, never
+  "next" or "text"), the preferences hanging off a matched entity, the value
+  of a matched attribute ("my ex is Sarah" → also events/entities `sarah`),
+  matching events/errors, and chat-history messages containing those words.
+  If nothing matches she says so ("I don't have anything about X").
+- "forget the last 30 minutes" / "the last hour" / "the last week" / "the
+  last thing I said" (= 5 minutes): deletes rows created **or rewritten**
+  (`updated_at`, schema v2) in that window (and the most recent chat turns).
+
+"forget everything" and "forget about X" only *ask* first; Ko's next message
+must be "yes" (y / yes please / confirm / do it) to run it. Anything else
+cancels (the safeword too); "no" is answered locally. "Forget the last N
+minutes" runs at once. Casual sentences are not commands: "forget it",
+"forget about it, let's go", anything with a comma, more than six words, or a
+topic without content words. Every forget logs one audit line
+(`target: lillith_memory::audit`, kind + counts, never content). The chat
+history is only rewritten after the DB forget succeeded, under
+`chat_history.json.lock`, merged with what other windows wrote (a stale window
+only appends its new turns, so it cannot bring forgotten messages back);
+a failure to rewrite it is said in the reply.
 
 ## Privacy and safety
 
@@ -90,9 +107,17 @@ To forget from chat (handled locally, no model call):
   created, every read returns nothing, every write is a no-op.
 - Safeword ⇒ `observe_interaction` returns `Observed::Stop` before touching
   the DB; the chat path already short-circuits with the kill switch first.
-- `forget` (from chat: "forget everything", "forget about <topic>",
-  "forget the last 30 minutes") actually `DELETE`s the rows (nodes, edges,
-  FTS rows, events, errors) and runs `VACUUM` so nothing lingers in free pages.
+- `forget` actually `DELETE`s the rows (nodes, edges, events, errors),
+  rebuilds the FTS index, then `VACUUM`s and checkpoints + truncates the WAL
+  (`secure_delete = ON`), checking the checkpoint result. If another
+  connection (a second window) keeps the WAL busy, the reply says the rows
+  are gone but the file is not scrubbed yet (`ForgetReport::scrubbed`).
+- Every write path runs in one `BEGIN IMMEDIATE` transaction with a 2 s
+  `busy_timeout`, so two processes serialize instead of failing half-way.
+- The DB folder is created 0700 and the file 0600 *before* SQLite opens it
+  (unix); errors propagate. Windows: default path is
+  `%LOCALAPPDATA%\lillith\memory.db` (then `%APPDATA%`), default ACLs.
+- Caps: `max_nodes`, `max_events`, `max_errors` (least recently seen first).
 - No network code, no telemetry. The crate has no HTTP dependency.
 
 ## Not done / for the lead
