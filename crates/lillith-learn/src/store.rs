@@ -385,22 +385,16 @@ impl NoteStore {
             n.body.truncate(keep);
             text = n.render();
         }
-        let tmp = path.with_extension("md.tmp");
-        let _ = std::fs::remove_file(&tmp);
-        {
-            let mut o = std::fs::OpenOptions::new();
-            o.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                o.mode(0o600);
-            }
-            let mut f = o.open(&tmp)?;
-            f.write_all(text.as_bytes())?;
-            f.sync_all()?;
-        }
-        std::fs::rename(&tmp, &path)?;
+        write_atomic(&path, text.as_bytes())?;
         Ok(path)
+    }
+
+    /// Puts `bytes` back at `path` (inside the root) the same atomic way
+    /// [`write`](Self::write) does. Used to undo a merge whose DB step
+    /// failed. The caller holds [`lock`](Self::lock).
+    pub fn restore(&self, _lock: &WriteLock, path: &Path, bytes: &[u8]) -> io::Result<()> {
+        self.check_inside(path)?;
+        write_atomic(path, bytes)
     }
 
     /// Reads the note at `rel` (relative to the root).
@@ -456,6 +450,25 @@ impl NoteStore {
             .to_string_lossy()
             .replace('\\', "/")
     }
+}
+
+/// 0600 tmp file next to `path`, synced, then renamed over it.
+fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let tmp = path.with_extension("md.tmp");
+    let _ = std::fs::remove_file(&tmp);
+    {
+        let mut o = std::fs::OpenOptions::new();
+        o.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            o.mode(0o600);
+        }
+        let mut f = o.open(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+    }
+    std::fs::rename(&tmp, path)
 }
 
 #[cfg(test)]
