@@ -21,9 +21,51 @@
 //! everything, other words only fill the chat input, and nothing heard can
 //! ever answer a Soul Contract.
 
-use lillith_voice::daemon::{DaemonClient, Transcript};
+use lillith_voice::daemon::{DaemonClient, DaemonError, HeldPress, Transcript};
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+/// How long dropping the bubble mid press waits for its `listen stop`.
+pub const DROP_STOP_TIMEOUT: Duration = Duration::from_secs(1);
+/// Tries of a `listen stop` that fails to reach the daemon (I/O error or
+/// no answer), and the waits between them.
+pub const STOP_TRIES: usize = 3;
+const STOP_BACKOFF: [Duration; 2] = [Duration::from_millis(150), Duration::from_millis(450)];
+
+/// The connection that owns the current press (`listen start hold:true`):
+/// closing it releases the press on the daemon, so the mic never stays
+/// open for a bubble that is gone.
+type HeldSlot = Arc<Mutex<Option<HeldPress>>>;
+
+fn release_held(held: &HeldSlot) {
+    let h = held.lock().map(|mut g| g.take()).unwrap_or(None);
+    drop(h);
+}
+
+/// `listen stop`, tried up to [`STOP_TRIES`] times while it fails to reach
+/// the daemon. A reply from the daemon (even `ok:false`) is final.
+fn stop_with_retry(
+    c: &DaemonClient,
+    timeout: Duration,
+    sleep: impl Fn(Duration),
+) -> Result<Transcript, DaemonError> {
+    let mut last = None;
+    for i in 0..STOP_TRIES {
+        match c.listen_stop(timeout) {
+            Ok(t) => return Ok(t),
+            Err(e @ DaemonError::Daemon(_)) => return Err(e),
+            Err(e) => {
+                tracing::debug!("listen stop try {} failed: {e}", i + 1);
+                last = Some(e);
+            }
+        }
+        if let Some(d) = STOP_BACKOFF.get(i) {
+            sleep(*d);
+        }
+    }
+    Err(last.unwrap_or(DaemonError::Closed))
+}
 
 /// What the mic threads report back to the bubble.
 #[derive(Debug, Clone, PartialEq)]
@@ -44,6 +86,11 @@ pub enum MicEvent {
     Heard(Transcript),
     /// A request failed (shown as a short note).
     Failed(String),
+    /// `listen stop` never reached the daemon after [`STOP_TRIES`] tries:
+    /// the mic may still be open. The button shows a warning (never idle)
+    /// until a stop gets through. (The press's own connection was closed
+    /// as well, which a current daemon treats as a release.)
+    StopFailed(String),
 }
 
 #[derive(Debug, PartialEq)]
@@ -66,11 +113,17 @@ pub enum MicState {
     Listening,
     /// `listen stop` sent: waiting for the transcript (or the cancel).
     Busy,
+    /// The stop could not reach the daemon: the mic may still be open. A
+    /// click tries the stop again; no new press starts from here.
+    Stuck,
 }
 
 /// The bubble's handle on the mic threads.
 pub struct Mic {
     cmd: Sender<MicCmd>,
+    /// For the synchronous stop when the bubble goes away mid press.
+    client: Option<DaemonClient>,
+    held: HeldSlot,
     rx: Receiver<MicEvent>,
     /// The daemon answered: the button shows.
     pub ready: bool,
@@ -115,10 +168,27 @@ pub fn load_voice_config(config_path: Option<&std::path::Path>) -> lillith_voice
 
 impl Drop for Mic {
     fn drop(&mut self) {
-        // Bubble closed mid press: cancel the card / close the mic.
-        if matches!(self.state, MicState::Waiting | MicState::Listening) {
-            let _ = self.cmd.send(MicCmd::Stop);
+        // Bubble closed mid press: cancel the card / close the mic now, on
+        // this thread and its own connection (the worker threads may never
+        // run again once the process exits), waiting about a second.
+        let mid_press = self.active()
+            || matches!(self.state, MicState::Busy | MicState::Stuck)
+            || self.start_inflight;
+        if !mid_press {
+            return;
         }
+        match &self.client {
+            Some(c) => {
+                if let Err(e) = c.listen_stop(DROP_STOP_TIMEOUT) {
+                    tracing::debug!("listen stop on close: {e}");
+                }
+            }
+            None => {
+                let _ = self.cmd.send(MicCmd::Stop);
+            }
+        }
+        // And close the press's own connection: the daemon releases it too.
+        release_held(&self.held);
     }
 }
 
@@ -180,6 +250,9 @@ impl Mic {
             }
         };
         let (send_r, send_a, send_o) = (sender(&tx), sender(&tx), sender(&tx));
+        let held: HeldSlot = Arc::default();
+        let (held_a, held_o) = (Arc::clone(&held), Arc::clone(&held));
+        let me = client.clone();
         let spawned = std::thread::Builder::new()
             .name("lillith-mic".into())
             .spawn(move || {
@@ -196,16 +269,29 @@ impl Mic {
                 let (hush_tx, hush_rx) = channel::<String>();
                 let c = client.clone();
                 worker("lillith-mic-start", start_rx, move |()| {
-                    match c.listen_start() {
-                        Ok(()) => send_a(MicEvent::Listening),
+                    match c.listen_start_held() {
+                        Ok(h) => {
+                            if let Ok(mut g) = held_a.lock() {
+                                *g = Some(h);
+                            }
+                            send_a(MicEvent::Listening);
+                        }
                         Err(e) => send_a(MicEvent::StartFailed(format!("mic: {e}"))),
                     }
                 });
                 let c = client.clone();
                 worker("lillith-mic-stop", stop_rx, move |()| {
-                    match c.listen_stop(timeout) {
+                    let r = stop_with_retry(&c, timeout, std::thread::sleep);
+                    // The press is over either way: close its connection
+                    // (a release for the daemon even when the stop never
+                    // got through).
+                    release_held(&held_o);
+                    match r {
                         Ok(t) => send_o(MicEvent::Heard(t)),
-                        Err(e) => send_o(MicEvent::Failed(format!("mic: {e}"))),
+                        Err(e @ DaemonError::Daemon(_)) => {
+                            send_o(MicEvent::Failed(format!("mic: {e}")))
+                        }
+                        Err(e) => send_o(MicEvent::StopFailed(format!("mic: {e}"))),
                     }
                 });
                 let c = client;
@@ -229,12 +315,17 @@ impl Mic {
         if let Err(e) = spawned {
             tracing::warn!("mic thread: {e}");
         }
-        Self::with_channels(cmd, rx)
+        let mut m = Self::with_channels(cmd, rx);
+        m.client = Some(me);
+        m.held = held;
+        m
     }
 
     fn with_channels(cmd: Sender<MicCmd>, rx: Receiver<MicEvent>) -> Self {
         Self {
             cmd,
+            client: None,
+            held: Arc::default(),
             rx,
             ready: false,
             state: MicState::Idle,
@@ -272,7 +363,7 @@ impl Mic {
                 let _ = self.cmd.send(MicCmd::Start);
                 true
             }
-            MicState::Waiting | MicState::Listening => {
+            MicState::Waiting | MicState::Listening | MicState::Stuck => {
                 self.stop();
                 false
             }
@@ -287,7 +378,7 @@ impl Mic {
     }
 
     fn stop_as(&mut self, discard: bool) {
-        if self.active() {
+        if self.active() || self.state == MicState::Stuck {
             self.state = MicState::Busy;
             self.send_stop(discard);
         }
@@ -340,6 +431,13 @@ impl Mic {
                         continue; // cancelled by us: not a failure
                     }
                     self.state = MicState::Idle;
+                }
+                MicEvent::StopFailed(_) => {
+                    self.stops.pop_front();
+                    if self.stops.is_empty() {
+                        // The mic may still be open: never show idle.
+                        self.state = MicState::Stuck;
+                    }
                 }
                 MicEvent::Heard(_) | MicEvent::Failed(_) => {
                     let discard = self.stops.pop_front().unwrap_or(false);
@@ -533,6 +631,13 @@ mod tests {
             pub seen: Vec<(String, Instant)>,
             pub stopped: bool,
             pub start_replied: Option<Instant>,
+            /// Every `listen start` asked for `hold:true`.
+            pub all_held: bool,
+            /// A held start's connection was closed by the client.
+            pub held_closed: Option<Instant>,
+            /// `listen stop`s still to fail (connection dropped, no reply);
+            /// `usize::MAX`: all of them.
+            pub fail_stops: usize,
         }
 
         pub struct Fake {
@@ -547,6 +652,10 @@ mod tests {
         }
 
         pub fn start(tag: &str, yes: bool) -> (Fake, DaemonClient) {
+            start_with(tag, yes, 0)
+        }
+
+        pub fn start_with(tag: &str, yes: bool, fail_stops: usize) -> (Fake, DaemonClient) {
             let dir =
                 std::env::temp_dir().join(format!("lillith-mic-fake-{tag}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
@@ -554,6 +663,11 @@ mod tests {
             let sock = dir.join("voiced.sock");
             let listener = UnixListener::bind(&sock).unwrap();
             let log: Arc<(Mutex<Log>, Condvar)> = Arc::default();
+            {
+                let mut g = log.0.lock().unwrap();
+                g.fail_stops = fail_stops;
+                g.all_held = true;
+            }
             let l = Arc::clone(&log);
             std::thread::spawn(move || {
                 for s in listener.incoming() {
@@ -561,7 +675,8 @@ mod tests {
                     let l = Arc::clone(&l);
                     std::thread::spawn(move || {
                         let mut line = String::new();
-                        if BufReader::new(&s).read_line(&mut line).is_err() {
+                        let mut rd = BufReader::new(s.try_clone().unwrap());
+                        if rd.read_line(&mut line).is_err() {
                             return;
                         }
                         let v: serde_json::Value =
@@ -569,8 +684,15 @@ mod tests {
                         let cmd = v.get("cmd").and_then(|c| c.as_str()).unwrap_or("");
                         let act = v.get("action").and_then(|c| c.as_str()).unwrap_or("");
                         let what = format!("{cmd} {act}").trim().to_string();
+                        let hold = v.get("hold").and_then(|h| h.as_bool()) == Some(true);
                         let (m, cv) = &*l;
-                        m.lock().unwrap().seen.push((what.clone(), Instant::now()));
+                        {
+                            let mut g = m.lock().unwrap();
+                            g.seen.push((what.clone(), Instant::now()));
+                            if what == "listen start" && !hold {
+                                g.all_held = false;
+                            }
+                        }
                         cv.notify_all();
                         let reply = match what.as_str() {
                             "ping" => r#"{"ok":true,"protocol":2}"#.to_string(),
@@ -589,7 +711,15 @@ mod tests {
                                     .to_string()
                             }
                             "listen stop" => {
-                                m.lock().unwrap().stopped = true;
+                                let mut g = m.lock().unwrap();
+                                if g.fail_stops > 0 {
+                                    if g.fail_stops != usize::MAX {
+                                        g.fail_stops -= 1;
+                                    }
+                                    return; // hang up without a reply
+                                }
+                                g.stopped = true;
+                                drop(g);
                                 cv.notify_all();
                                 if yes {
                                     r#"{"ok":true,"text":"hello there"}"#.to_string()
@@ -600,6 +730,13 @@ mod tests {
                             _ => r#"{"ok":true}"#.to_string(),
                         };
                         let _ = s.write_all(format!("{reply}\n").as_bytes());
+                        if what == "listen start" && hold && yes {
+                            // The press's own connection: wait for the client to close it.
+                            let mut rest = String::new();
+                            while matches!(rd.read_line(&mut rest), Ok(n) if n > 0) {}
+                            m.lock().unwrap().held_closed = Some(Instant::now());
+                            cv.notify_all();
+                        }
                     });
                 }
             });
@@ -635,6 +772,15 @@ mod tests {
             panic!("timed out: {m:?} {evs:?}");
         }
 
+        pub fn wait_held_closed(f: &Fake) -> Option<Instant> {
+            let (m, cv) = &*f.log;
+            let g = m.lock().unwrap();
+            let (g, _) = cv
+                .wait_timeout_while(g, Duration::from_secs(5), |g| g.held_closed.is_none())
+                .unwrap();
+            g.held_closed
+        }
+
         pub fn count(f: &Fake, what: &str) -> usize {
             f.log
                 .0
@@ -645,6 +791,125 @@ mod tests {
                 .filter(|(w, _)| w == what)
                 .count()
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn closing_the_bubble_while_the_card_waits_sends_stop_before_drop_returns() {
+        use fake_daemon::*;
+        let (f, client) = start("dropcard", false);
+        let mut m = Mic::spawn(client, Duration::from_secs(5), || {});
+        poll_until(&mut m, |m| m.ready);
+        m.toggle();
+        wait_for(&f, "listen start");
+        std::thread::sleep(Duration::from_millis(100)); // the card is up
+        let t0 = std::time::Instant::now();
+        drop(m);
+        let took = t0.elapsed();
+        assert!(took < Duration::from_millis(1500), "drop took {took:?}");
+        let n = count(&f, "listen stop");
+        assert_eq!(
+            n, 1,
+            "the stop went out synchronously, before drop returned"
+        );
+        assert!(
+            f.log.0.lock().unwrap().all_held,
+            "the press is owned by its connection"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn closing_the_bubble_while_listening_stops_and_closes_the_press() {
+        use fake_daemon::*;
+        let (f, client) = start("droplisten", true);
+        let mut m = Mic::spawn(client, Duration::from_secs(5), || {});
+        poll_until(&mut m, |m| m.ready);
+        m.toggle();
+        poll_until(&mut m, |m| m.state == MicState::Listening);
+        assert!(
+            f.log.0.lock().unwrap().held_closed.is_none(),
+            "held while listening"
+        );
+        let t0 = std::time::Instant::now();
+        drop(m);
+        assert!(t0.elapsed() < Duration::from_millis(1500));
+        assert_eq!(count(&f, "listen stop"), 1);
+        assert!(
+            wait_held_closed(&f).is_some(),
+            "the press's connection closed"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_stop_that_fails_is_retried() {
+        use fake_daemon::*;
+        let (f, client) = start_with("retry", true, 2);
+        let mut m = Mic::spawn(client, Duration::from_secs(5), || {});
+        poll_until(&mut m, |m| m.ready);
+        m.toggle();
+        poll_until(&mut m, |m| m.state == MicState::Listening);
+        m.toggle();
+        let evs = poll_until(&mut m, |m| m.state != MicState::Busy);
+        assert_eq!(m.state, MicState::Idle, "{evs:?}");
+        assert!(evs
+            .iter()
+            .any(|e| matches!(e, MicEvent::Heard(t) if t.text == "hello there")));
+        assert_eq!(count(&f, "listen stop"), STOP_TRIES);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_stop_that_never_gets_through_is_never_shown_as_idle() {
+        use fake_daemon::*;
+        let (f, client) = start_with("stuck", true, usize::MAX);
+        let mut m = Mic::spawn(client, Duration::from_secs(5), || {});
+        poll_until(&mut m, |m| m.ready);
+        m.toggle();
+        poll_until(&mut m, |m| m.state == MicState::Listening);
+        m.toggle();
+        let evs = poll_until(&mut m, |m| m.state != MicState::Busy);
+        assert_eq!(m.state, MicState::Stuck, "{evs:?}");
+        assert!(evs.iter().any(|e| matches!(e, MicEvent::StopFailed(_))));
+        assert!(!m.can_start());
+        assert_eq!(count(&f, "listen stop"), STOP_TRIES);
+        // Last resort: the press's own connection was closed (a release).
+        assert!(wait_held_closed(&f).is_some());
+        // A click tries the stop again; once it gets through, idle.
+        f.log.0.lock().unwrap().fail_stops = 0;
+        assert!(!m.toggle());
+        assert_eq!(m.state, MicState::Busy);
+        poll_until(&mut m, |m| m.state == MicState::Idle);
+        assert_eq!(count(&f, "listen stop"), STOP_TRIES + 1);
+    }
+
+    #[test]
+    fn stuck_is_left_only_by_a_stop_that_gets_through() {
+        let (mut m, cmds, ev) = ready();
+        m.toggle();
+        ev.send(MicEvent::Listening).unwrap();
+        m.poll();
+        m.toggle();
+        let _ = (cmds.try_recv(), cmds.try_recv());
+        ev.send(MicEvent::StopFailed("mic: gone".into())).unwrap();
+        assert_eq!(m.poll(), [MicEvent::StopFailed("mic: gone".into())]);
+        assert_eq!(m.state, MicState::Stuck);
+        assert!(!m.toggle(), "no new press from stuck");
+        assert_eq!(cmds.try_recv(), Ok(MicCmd::Stop), "it retries the stop");
+        ev.send(MicEvent::Heard(Transcript::default())).unwrap();
+        m.poll();
+        assert_eq!(m.state, MicState::Idle);
+        // The safeword from stuck also retries the stop.
+        let (mut m, cmds, ev) = ready();
+        m.toggle();
+        m.toggle();
+        let _ = (cmds.try_recv(), cmds.try_recv());
+        ev.send(MicEvent::StopFailed("x".into())).unwrap();
+        m.poll();
+        m.hush("safeword");
+        assert_eq!(cmds.try_recv(), Ok(MicCmd::Hush("safeword".into())));
+        assert_eq!(cmds.try_recv(), Ok(MicCmd::Stop));
     }
 
     #[cfg(unix)]

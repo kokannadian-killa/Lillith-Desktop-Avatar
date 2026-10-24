@@ -157,6 +157,24 @@ target, then detail lines; stdout: `yes` / `no` / `timeout` / `cancelled` / `no_
     ⏳ while the card waits, ⏹ once listening), a second click sends `listen stop` (cancelling a card that
     is still up), and the stop is sent on its own connection and thread, never queued behind the pending
     start. At most one `listen start` is in flight; every click is its own card.
+  - **The press belongs to its client's connection** (disconnect = release). If the connection that sent
+    `listen start` (or `listen` once) closes, or its reply can't be written, while the card waits, the card
+    is closed (`CANCELLED`), unused tokens are revoked (`REVOKED`, kind `mic_revoke_owner_gone`) and the mic
+    **never** opens for that press, even if Yes is clicked later. With `{"cmd":"listen","action":"start",
+    "hold":true}` the client keeps that connection open for the whole press (send nothing more on it; send
+    `listen stop` on another connection) and closing it later also stops an open mic (`CANCELLED`, the audio
+    is dropped: nothing transcribed or broadcast). A press without `hold` (one request per connection) has
+    no owner once the mic is open, so the daemon closes it itself after `LILLITH_PTT_MAX_S` seconds (default
+    300; `CANCELLED`, audio dropped).
+  - The chat bubble's talk button uses `hold:true`. When the bubble closes or crashes during a press it
+    sends `listen stop` on its own connection (waiting at most about 1 s) and closes the held connection,
+    so the daemon releases the press either way. A `listen stop` that errors or times out is retried (3
+    tries, with backoff); if it still doesn't get through, the button shows ⚠ ("the mic may still be open",
+    click to try again), never the idle 🎤.
+  - `{"cmd":"stop","reason":"safeword"}` while the mic is open (push-to-talk or listen once) ends the
+    capture and **drops** its audio daemon-side: nothing is transcribed or broadcast, and a transcription
+    already in flight is discarded. The pending `listen stop` / `listen` reply is
+    `{"ok":true,"text":"","cancelled":true,"dropped":true,...}`.
 - **Always listening** (`kind:"always"`): every switch-on needs its own Yes (inline card or token). Turning it
   off (`"on":false`) is never gated.
 - Refusals: No, timeout, a closed card, no card UI (no display, or no `lillith` binary), or a bad, used,

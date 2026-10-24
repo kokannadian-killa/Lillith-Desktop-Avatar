@@ -333,6 +333,11 @@ fn mic_button_look(state: MicState) -> (&'static str, bool, &'static str) {
         ),
         MicState::Listening => ("⏹", true, "Listening. Click to stop."),
         MicState::Busy => ("…", false, "Hearing you…"),
+        MicState::Stuck => (
+            "⚠",
+            true,
+            "The mic may still be open: the stop didn't reach the voice daemon. Click to try again.",
+        ),
     }
 }
 
@@ -1173,6 +1178,15 @@ impl Bubble {
                     self.lines.push(Line {
                         me: false,
                         text: "🎙 The mic didn't open (no Yes on the card).".into(),
+                    });
+                }
+                MicEvent::StopFailed(why) => {
+                    tracing::warn!("{why}");
+                    self.lines.push(Line {
+                        me: false,
+                        text: "⚠ The mic may still be open: the stop didn't reach the voice \
+                               daemon. Click ⚠ to try again."
+                            .into(),
                     });
                 }
                 MicEvent::Ready | MicEvent::Unavailable | MicEvent::Listening => {}
@@ -2074,12 +2088,17 @@ mod tests {
             MicState::Waiting,
             MicState::Listening,
             MicState::Busy,
+            MicState::Stuck,
         ]
         .into_iter()
         .map(mic_button_look)
         .collect();
         let labels: std::collections::HashSet<_> = looks.iter().map(|l| l.0).collect();
-        assert_eq!(labels.len(), 4, "every state looks different");
+        assert_eq!(labels.len(), 5, "every state looks different");
+        assert!(
+            looks[4].1 && looks[4].2.contains("may still be open"),
+            "stuck is never idle"
+        );
         assert!(looks[1].2.contains("Waiting for Yes on the mic card"));
         assert!(looks[1].2.contains("cancel"));
         assert!(looks[2].1, "listening is lit");
