@@ -55,8 +55,8 @@ def main(argv=None):
     ap.add_argument("--system", default="You are Lillith, a playful, flirty desktop companion. "
                                         "Reply in short, spoken-style sentences. No emoji, no markdown.")
     ap.add_argument("-p", "--preset")
-    ap.add_argument("--temperature", type=float, default=0.8)
-    ap.add_argument("--max-tokens", type=int, default=300)
+    ap.add_argument("--temperature", type=float, default=0.95)  # same as the app (lillith-mind ChatOptions)
+    ap.add_argument("--max-tokens", type=int, default=160)  # same cap as the app; short spoken replies
     ap.add_argument("--mute", action="store_true", help="print only")
     mic = ap.add_mutually_exclusive_group()
     mic.add_argument("--mic", action="store_true", help="talk to her: always-listening voice loop (VAD, barge-in)")

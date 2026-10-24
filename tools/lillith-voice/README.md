@@ -200,6 +200,13 @@ lillith-chat --mic              # always listening: just talk; she answers; talk
 
 ## 4. Hooking it to llama-server (127.0.0.1:8080)
 
+Start llama-server the same way the app's setup wizard does: loopback only, `--jinja` always, 4k context,
+`-t` = physical cores (2 on the i5-7200U):
+```fish
+llama-server -m ~/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf --jinja --host 127.0.0.1 --port 8080 -c 4096 -t 2
+```
+Never `--host 0.0.0.0`. `lillith-chat` refuses any non-loopback `--url`.
+
 **A. The bridge (simplest).** It streams `/v1/chat/completions` and speaks each sentence as soon as it
 completes:
 ```fish
@@ -222,7 +229,7 @@ curl -sN http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application
 socket for each finished sentence, then send a final one with `"wait":true`. It returns after everything
 queued before it has finished playing. `lillith_voice/chat.py` is a 100-line reference.
 
-Tip: on a 2-core i5, llama-server and the voice compete for the same cores. Give llama-server `-t 2` or `-t 3`.
+Tip: on a 2-core i5, llama-server and the voice compete for the same cores. Keep llama-server at `-t 2` (physical cores).
 Speech for sentence 1 then renders while the LLM is still writing sentence 2. With both busy, expect
 gaps between sentences (see §5).
 
@@ -250,7 +257,7 @@ Published reference: Kyutai report Pocket TTS at about 6× real time on 2 cores 
 **Honest estimate for the i5-7200U** (2 cores / 4 threads, AVX2, thermal throttling): RTF ≈ 0.6–1.0 for
 `lillith` on an idle laptop with the daemon, slightly better for `lillith_fast`. That is borderline: replies start
 after 1–2 s and long replies may get short pauses between sentences, especially while llama-server generates
-on the same cores. Mitigations: `LILLITH_VOICE_PRESET=lillith_fast`, give llama-server `-t 2` or `-t 3`, keep
+on the same cores. Mitigations: `LILLITH_VOICE_PRESET=lillith_fast`, keep llama-server at `-t 2` (physical cores), keep
 replies short. ONNX Runtime's memory arena is off by default to save RAM (`LILLITH_ORT_ARENA=1` re-enables).
 Measured daemon RSS (arena off): 0.67 GB idle after start, 0.79 GB after a `lillith` reply, 1.25 GB with every engine loaded (`lillith`, `lillith_fast`, `p1`, `bella`). That leaves plenty of room on 8 GB next to the LLM.
 
