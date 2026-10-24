@@ -375,15 +375,21 @@ pub fn clip_pool(clip: &str) -> Option<&'static [&'static str]> {
         | "shoulder_shimmy"
         | "idle_flirt_hip_lean"
         | "sway_dance"
-        | "slow_turn_spin_tease" => HIPS,
+        | "slow_turn_spin_tease"
+        | "hip_sway_slow" => HIPS,
         "stretch_arch" | "idle_flirt_stretch" | "hair_lift_stretch" => STRETCH,
         "cheeky_tongue_wink"
         | "over_shoulder_look"
         | "hair_flip"
         | "hair_twirl"
-        | "arch_back_over_shoulder" => LOOKS,
-        "dom_beckon_finger" | "seduce_beckon_finger" | "kiss_then_come_here" => BECKON,
-        "dom_point_down" => COMMAND,
+        | "arch_back_over_shoulder"
+        | "taskbar_lounge_lie" => LOOKS,
+        "dom_beckon_finger"
+        | "seduce_beckon_finger"
+        | "kiss_then_come_here"
+        | "come_hither_crawl"
+        | "kneel_sit_back_beckon" => BECKON,
+        "dom_point_down" | "dom_throne_lean" => COMMAND,
         "dom_arms_crossed_demand" => DEMAND,
         "smug_smirk" => SMUG,
         "stalk_prowl_right" | "stalk_prowl_left" => PROWL,
@@ -607,6 +613,11 @@ mod tests {
             "seduce_lean_to_screen_whisper",
             "seduce_blow_kiss_screen",
             "seduce_tap_glass",
+            "hip_sway_slow",
+            "come_hither_crawl",
+            "taskbar_lounge_lie",
+            "kneel_sit_back_beckon",
+            "dom_throne_lean",
         ] {
             assert!(clip_pool(c).is_some(), "{c}");
         }
