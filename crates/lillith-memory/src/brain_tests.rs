@@ -61,7 +61,7 @@ fn opt_out_means_no_file_no_reads_no_writes() {
     assert!(b.context_block("synthwave", &at(MON)).is_none());
     assert!(b.predict(&at(MON), 3).is_empty());
     assert_eq!(b.record_error("boom", "x", &at(MON)).unwrap(), None);
-    assert_eq!(b.forget(&ForgetCmd::All, &at(MON)).unwrap(), 0);
+    assert_eq!(b.forget(&ForgetCmd::All, &at(MON)).unwrap().total(), 0);
     assert_eq!(b.stats(), Stats::default());
     assert!(!path.exists(), "a disabled brain never creates the file");
     // Brain::open with the default-path config also stays file-less.
@@ -351,8 +351,9 @@ fn forget_all_deletes_rows_and_vacuums_the_file() {
     b.record_error("zanzibarite crash", "test", &at(MON))
         .unwrap();
     assert!(b.stats().nodes > 0);
-    let n = b.forget(&ForgetCmd::All, &at(MON + 100.0)).unwrap();
-    assert!(n > 0);
+    let r = b.forget(&ForgetCmd::All, &at(MON + 100.0)).unwrap();
+    assert!(r.total() > 0);
+    assert!(r.scrubbed, "{r:?}");
     assert_eq!(b.stats(), Stats::default());
     assert!(b
         .retrieve("zanzibarite", &at(MON + 101.0), 5)
@@ -382,7 +383,8 @@ fn forget_topic_only_removes_that_topic() {
             &parse_forget("forget about pineapple").unwrap(),
             &at(MON + 5.0),
         )
-        .unwrap();
+        .unwrap()
+        .total();
     assert!(n >= 3, "entity + preference + event ({n})");
     assert!(b
         .retrieve("pineapple", &at(MON + 6.0), 5)
@@ -407,7 +409,8 @@ fn forget_last_minutes_keeps_older_memories() {
             &parse_forget("forget the last 30 minutes").unwrap(),
             &at(MON + 3700.0),
         )
-        .unwrap();
+        .unwrap()
+        .total();
     assert!(n >= 2);
     assert!(b
         .strength_of(Kind::Preference, "likes:new shiny trance", &at(MON))
@@ -571,4 +574,252 @@ fn custom_extractor_hook() {
     let b = brain().with_extractor(Box::new(Always));
     b.observe_interaction("whatever", "", &at(MON));
     assert!(b.strength_of(Kind::Entity, "attr:mood", &at(MON)).is_some());
+}
+
+/// The DB + WAL bytes, lowercased (for "nothing lingers on disk" checks).
+fn file_text(path: &std::path::Path) -> String {
+    let mut bytes = std::fs::read(path).unwrap();
+    let wal = path.with_file_name(format!(
+        "{}-wal",
+        path.file_name().unwrap().to_string_lossy()
+    ));
+    if let Ok(w) = std::fs::read(wal) {
+        bytes.extend(w);
+    }
+    String::from_utf8_lossy(&bytes).to_lowercase()
+}
+
+/// Rows + FTS hits for `word` in a closed DB file.
+fn residue(path: &std::path::Path, word: &str) -> i64 {
+    let c = rusqlite::Connection::open(path).unwrap();
+    let pat = format!("%{word}%");
+    let q = |sql: &str| -> i64 { c.query_row(sql, [&pat], |r| r.get(0)).unwrap() };
+    q("SELECT count(*) FROM nodes WHERE lower(label || ' ' || detail || ' ' || key) LIKE ?1")
+        + q("SELECT count(*) FROM events WHERE lower(subject) LIKE ?1")
+        + q("SELECT count(*) FROM errors WHERE lower(sample || context || coalesce(fix,'') || failed_fixes) LIKE ?1")
+        + c.query_row(
+            "SELECT count(*) FROM nodes_fts WHERE nodes_fts MATCH ?1",
+            [format!("\"{word}\"")],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap()
+}
+
+#[test]
+fn forget_my_ex_leaves_no_sarah_in_rows_fts_or_file_bytes() {
+    let d = tmp("forget-ex");
+    let path = d.join("memory.db");
+    let b = Brain::open_path(&path, &cfg()).unwrap();
+    b.observe_interaction("My ex is Sarah", "ok", &at(MON));
+    b.observe_interaction("I love dark synthwave", "ok", &at(MON + 1.0));
+    b.observe_interaction(
+        "I love text editors and the next song",
+        "ok",
+        &at(MON + 2.0),
+    );
+    assert!(b.strength_of(Kind::Entity, "attr:ex", &at(MON)).is_some());
+    let cmd = parse_forget("forget about my ex").unwrap();
+    assert_eq!(cmd, ForgetCmd::Topic("my ex".into()));
+    let preview = b.forget_preview(&cmd, &at(MON + 5.0)).unwrap();
+    assert!(preview.nodes >= 1, "{preview:?}");
+    assert!(
+        b.strength_of(Kind::Entity, "attr:ex", &at(MON)).is_some(),
+        "preview deletes nothing"
+    );
+    let r = b.forget(&cmd, &at(MON + 5.0)).unwrap();
+    assert!(r.nodes >= 1 && r.scrubbed, "{r:?}");
+    assert!(b.strength_of(Kind::Entity, "attr:ex", &at(MON)).is_none());
+    // Whole words only: "text"/"next" are not "ex"; "my"/"about" match nothing.
+    assert!(b
+        .strength_of(Kind::Preference, "likes:dark synthwave", &at(MON))
+        .is_some());
+    assert!(b
+        .retrieve("text editors", &at(MON + 6.0), 5)
+        .unwrap()
+        .iter()
+        .any(|m| m.label.contains("text editors")));
+    drop(b);
+    assert_eq!(residue(&path, "sarah"), 0);
+    assert!(
+        !file_text(&path).contains("sarah"),
+        "no 'sarah' in the db/wal bytes"
+    );
+    assert!(file_text(&path).contains("synthwave"), "the rest survives");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn forget_unknown_topic_reports_zero() {
+    let b = brain();
+    b.observe_interaction("I love dark synthwave", "", &at(MON));
+    let before = b.stats();
+    let r = b
+        .forget(
+            &parse_forget("forget about dragons").unwrap(),
+            &at(MON + 1.0),
+        )
+        .unwrap();
+    assert_eq!(r.total(), 0, "{r:?}");
+    assert_eq!(b.stats().nodes, before.nodes);
+    // Only stopwords: nothing to match, nothing deleted.
+    let r = b
+        .forget(&ForgetCmd::Topic("about my the it".into()), &at(MON + 2.0))
+        .unwrap();
+    assert_eq!(r.total(), 0);
+    assert_eq!(b.stats().nodes, before.nodes);
+}
+
+#[test]
+fn forget_last_minutes_removes_rows_updated_recently_and_their_bytes() {
+    let d = tmp("forget-updated");
+    let path = d.join("memory.db");
+    let b = Brain::open_path(&path, &cfg()).unwrap();
+    b.observe_interaction("I love old school jazz", "", &at(MON));
+    b.observe_interaction("my favorite band is Ghost", "", &at(MON));
+    b.record_error("zorblax daemon crashed", "test", &at(MON))
+        .unwrap();
+    // An hour later the old rows are rewritten with new content.
+    b.observe_interaction("my favorite band is Quuxtronic", "", &at(MON + 3600.0));
+    b.record_fix(
+        "zorblax daemon crashed",
+        "flurbify the cache",
+        FixOutcome::Worked,
+        &at(MON + 3600.0),
+    )
+    .unwrap();
+    let r = b
+        .forget(
+            &parse_forget("forget the last 30 minutes").unwrap(),
+            &at(MON + 3700.0),
+        )
+        .unwrap();
+    assert!(r.nodes >= 1 && r.errors == 1 && r.scrubbed, "{r:?}");
+    assert!(b
+        .strength_of(Kind::Entity, "attr:favorite band", &at(MON))
+        .is_none());
+    assert!(b.lookup_error("zorblax daemon crashed").is_none());
+    assert!(b
+        .strength_of(Kind::Preference, "likes:old school jazz", &at(MON))
+        .is_some());
+    drop(b);
+    for w in ["quuxtronic", "flurbify"] {
+        assert_eq!(residue(&path, w), 0, "{w}");
+        assert!(!file_text(&path).contains(w), "{w} lingers on disk");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn forget_reports_when_another_reader_keeps_the_wal() {
+    let d = tmp("forget-busy");
+    let path = d.join("memory.db");
+    let b = Brain::open_path(&path, &cfg()).unwrap();
+    b.observe_interaction("I love glimmerwick candles", "", &at(MON));
+    let reader = rusqlite::Connection::open(&path).unwrap();
+    reader.execute_batch("BEGIN").unwrap();
+    let _: i64 = reader
+        .query_row("SELECT count(*) FROM nodes", [], |r| r.get(0))
+        .unwrap();
+    let r = b.forget(&ForgetCmd::All, &at(MON + 1.0)).unwrap();
+    assert!(r.total() > 0);
+    assert_eq!(b.stats(), Stats::default(), "rows are deleted regardless");
+    assert!(
+        !r.scrubbed && r.note.is_some(),
+        "honest about the WAL: {r:?}"
+    );
+    reader.execute_batch("COMMIT").unwrap();
+    drop(reader);
+    assert!(b.vacuum().unwrap(), "scrubs once the reader is gone");
+    drop(b);
+    assert!(!file_text(&path).contains("glimmerwick"));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn writes_wait_for_another_process_holding_the_lock() {
+    let d = tmp("busy-writer");
+    let path = d.join("memory.db");
+    let b = Brain::open_path(&path, &cfg()).unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let p2 = path.clone();
+    let h = std::thread::spawn(move || {
+        let other = rusqlite::Connection::open(&p2).unwrap();
+        other.execute_batch("BEGIN IMMEDIATE").unwrap();
+        tx.send(()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        other.execute_batch("COMMIT").unwrap();
+    });
+    rx.recv().unwrap();
+    assert!(matches!(
+        b.observe_interaction("I love quiet rain", "", &at(MON)),
+        Observed::Learned { .. }
+    ));
+    h.join().unwrap();
+    assert!(b
+        .strength_of(Kind::Preference, "likes:quiet rain", &at(MON))
+        .is_some());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[cfg(unix)]
+#[test]
+fn db_file_and_folder_are_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = tmp("perms");
+    let dir = d.join("nested").join("lillith");
+    let path = dir.join("memory.db");
+    let b = Brain::open_path(&path, &cfg()).unwrap();
+    b.observe_interaction("I love tea", "", &at(MON));
+    let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&dir), 0o700);
+    assert_eq!(mode(&path), 0o600);
+    // An existing loose file is tightened on open.
+    drop(b);
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let _b = Brain::open_path(&path, &cfg()).unwrap();
+    assert_eq!(mode(&path), 0o600);
+    // A folder that cannot be created is an error, not a silent default.
+    let blocker = d.join("file");
+    std::fs::write(&blocker, b"x").unwrap();
+    assert!(Brain::open_path(&blocker.join("memory.db"), &cfg()).is_err());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn record_fix_never_stores_the_safeword_and_does_not_recurse() {
+    let b = brain();
+    b.record_fix("red", "restart", FixOutcome::Worked, &at(MON))
+        .unwrap();
+    b.record_fix("boom", "OOC: stop", FixOutcome::Worked, &at(MON))
+        .unwrap();
+    assert_eq!(b.stats(), Stats::default());
+    // A fix for an unseen error records it once.
+    b.record_fix("wibble exploded", "restart", FixOutcome::Worked, &at(MON))
+        .unwrap();
+    assert_eq!(b.stats().errors, 1);
+    assert_eq!(b.known_fix("wibble exploded").as_deref(), Some("restart"));
+}
+
+#[test]
+fn errors_table_is_capped() {
+    let mut c = cfg();
+    c.max_errors = 3;
+    let b = Brain::open_in_memory(&c).unwrap();
+    for (i, e) in ["alpha", "bravo", "charlie", "delta", "echo"]
+        .iter()
+        .enumerate()
+    {
+        b.record_error(&format!("{e} module failed"), "t", &at(MON + i as f64))
+            .unwrap();
+    }
+    assert_eq!(b.stats().errors, 3);
+    assert!(b.lookup_error("alpha module failed").is_none());
+    assert!(b.lookup_error("echo module failed").is_some());
+    let error_nodes = b
+        .retrieve("module failed", &at(MON + 10.0), 10)
+        .unwrap()
+        .iter()
+        .filter(|m| m.kind == Kind::Error)
+        .count();
+    assert!(error_nodes <= 3);
 }

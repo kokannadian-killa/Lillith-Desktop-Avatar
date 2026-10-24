@@ -3,13 +3,13 @@
 use crate::decay::{decayed, recency, reinforce};
 use crate::errors::{signature, ErrorRecord, FixOutcome, KnownFix};
 use crate::extract::{intent_key, keywords, Extractor, Fact, Polarity, RuleExtractor};
-use crate::forget::{parse_forget, ForgetCmd};
+use crate::forget::{content_words, mentions_any, parse_forget, ForgetCmd};
 use crate::habits::{self, EventRow, Prediction};
 use crate::safeword::{is_safeword, mentions_safeword};
 use crate::{schema, Error, Kind};
 use lillith_core::config::MemoryConfig;
 use lillith_core::event::Event;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -38,6 +38,8 @@ const INITIAL: f64 = 0.6;
 const MAINTAIN_EVERY_S: f64 = 3600.0;
 /// Events older than this are ignored by the habit miner.
 const HABIT_WINDOW_S: f64 = 60.0 * 86_400.0;
+/// How long a write waits for another process holding the DB lock.
+const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(2000);
 /// Most failed fixes remembered per error.
 const MAX_FAILED_FIXES: usize = 8;
 
@@ -122,6 +124,29 @@ pub struct Stats {
     pub errors: u64,
 }
 
+/// What a forget removed, and whether the file was scrubbed afterwards.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ForgetReport {
+    pub nodes: usize,
+    pub edges: usize,
+    pub events: usize,
+    pub errors: usize,
+    /// `true` when VACUUM ran and the WAL was checkpointed + truncated, so
+    /// the deleted text is gone from the file bytes too. `false` = the rows
+    /// are deleted but another connection (a second Lillith window) kept
+    /// old pages alive; see `note`.
+    pub scrubbed: bool,
+    /// Why scrubbing did not finish (no memory content in it).
+    pub note: Option<String>,
+}
+
+impl ForgetReport {
+    /// Rows removed (nodes + events + errors; edges ride along).
+    pub fn total(&self) -> usize {
+        self.nodes + self.events + self.errors
+    }
+}
+
 /// Lillith's memory. `Send` (move it to the chat worker), not `Sync`.
 pub struct Brain {
     conn: Option<Connection>,
@@ -158,15 +183,8 @@ impl Brain {
         if !cfg.enabled {
             return Ok(Self::disabled(cfg));
         }
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
+        prepare_private_file(path)?;
         let conn = Connection::open(path)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
-        }
         let mut b = Self::init(conn, cfg)?;
         b.path = Some(path.to_path_buf());
         Ok(b)
@@ -197,7 +215,7 @@ impl Brain {
     }
 
     fn init(mut conn: Connection, cfg: &MemoryConfig) -> Result<Self> {
-        conn.busy_timeout(std::time::Duration::from_millis(2000))?;
+        conn.busy_timeout(BUSY_TIMEOUT)?;
         // WAL (in-memory DBs report "memory"), small cache, real deletes.
         let _: String = conn.query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))?;
         conn.execute_batch(
@@ -322,16 +340,16 @@ impl Brain {
                 )?;
                 if old_label != label || old_detail != detail {
                     c.execute(
-                        "UPDATE nodes SET label = ?2, detail = ?3 WHERE id = ?1",
-                        params![id, label, detail],
+                        "UPDATE nodes SET label = ?2, detail = ?3, updated_at = ?4 WHERE id = ?1",
+                        params![id, label, detail, ctx.now],
                     )?;
                 }
                 Ok(Some(id))
             }
             None => {
                 c.execute(
-                    "INSERT INTO nodes(kind, key, label, detail, strength, access_count, created_at, last_seen)
-                     VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)",
+                    "INSERT INTO nodes(kind, key, label, detail, strength, access_count, created_at, last_seen, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?6)",
                     params![kind.as_str(), key, label, detail, initial, ctx.now],
                 )?;
                 Ok(Some(c.last_insert_rowid()))
@@ -515,9 +533,9 @@ impl Brain {
             let mut st = c.prepare_cached(
                 "SELECT id, kind, label, detail, strength, last_seen FROM nodes
                  WHERE kind IN ('preference', 'habit') OR (kind = 'entity' AND key LIKE 'attr:%')
-                 ORDER BY strength DESC LIMIT 4",
+                 ORDER BY strength DESC LIMIT 32",
             )?;
-            let rows: Vec<(i64, String, String, String, f64, f64)> = st
+            let mut rows: Vec<(i64, String, String, String, f64, f64)> = st
                 .query_map([], |r| {
                     Ok((
                         r.get(0)?,
@@ -529,6 +547,13 @@ impl Brain {
                     ))
                 })?
                 .collect::<rusqlite::Result<_>>()?;
+            // Rank by *decayed* strength (raw strength would let a stale but
+            // once-strong fact crowd out fresh ones), then keep 4.
+            let hl = self.half_life_s();
+            rows.sort_by(|a, b| {
+                decayed(b.4, ctx.now - b.5, hl).total_cmp(&decayed(a.4, ctx.now - a.5, hl))
+            });
+            rows.truncate(4);
             for (id, kind, label, detail, s, seen) in rows {
                 let Some(kind) = Kind::parse(&kind) else {
                     continue;
@@ -682,8 +707,11 @@ impl Brain {
     }
 
     fn observe_inner(&self, user: &str, reply: &str, ctx: &Ctx) -> Result<(usize, usize)> {
+        self.write_tx(|| self.observe_rows(user, reply, ctx))
+    }
+
+    fn observe_rows(&self, user: &str, reply: &str, ctx: &Ctx) -> Result<(usize, usize)> {
         let c = self.conn.as_ref().expect("enabled");
-        let tx = c.unchecked_transaction()?;
         let facts = self.extractor.extract(user, reply);
         let ko = self
             .upsert_node_rate(Kind::Entity, "ko", "Ko", "the user", ctx, RATE_WEAK, 0.9)?
@@ -715,7 +743,6 @@ impl Brain {
             used
         };
         let reinforced = self.reinforce_ids(&used, RATE_USED, ctx)?;
-        tx.commit()?;
         Ok((facts.len(), reinforced))
     }
 
@@ -849,15 +876,17 @@ impl Brain {
     pub fn log_event(&self, kind: &str, subject: &str, ctx: &Ctx) -> Result<()> {
         let Some(c) = &self.conn else { return Ok(()) };
         let (hour, weekday) = habits::local_hour_weekday(ctx.now, self.offset(ctx));
-        c.execute(
-            "INSERT INTO events(ts, kind, subject, hour, weekday) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![ctx.now, kind, subject.to_lowercase(), hour, weekday],
-        )?;
-        c.execute(
-            "DELETE FROM events WHERE id <= (SELECT max(id) FROM events) - ?1",
-            [self.cfg.max_events.max(1) as i64],
-        )?;
-        Ok(())
+        self.write_tx(|| {
+            c.execute(
+                "INSERT INTO events(ts, kind, subject, hour, weekday) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![ctx.now, kind, subject.to_lowercase(), hour, weekday],
+            )?;
+            c.execute(
+                "DELETE FROM events WHERE id <= (SELECT max(id) FROM events) - ?1",
+                [self.cfg.max_events.max(1) as i64],
+            )?;
+            Ok(())
+        })
     }
 
     // ----- anticipation -----------------------------------------------------
@@ -950,16 +979,27 @@ impl Brain {
         context: &str,
         ctx: &Ctx,
     ) -> Result<Option<ErrorRecord>> {
-        let Some(c) = &self.conn else { return Ok(None) };
-        if mentions_safeword(text) {
+        if self.conn.is_none() || mentions_safeword(text) || mentions_safeword(context) {
             return Ok(None);
         }
+        self.write_tx(|| self.record_error_rows(text, context, ctx))
+    }
+
+    fn record_error_rows(
+        &self,
+        text: &str,
+        context: &str,
+        ctx: &Ctx,
+    ) -> Result<Option<ErrorRecord>> {
+        let c = self.conn.as_ref().expect("enabled");
         let sig = signature(text);
         let sample: String = text.chars().take(300).collect();
         c.execute(
-            "INSERT INTO errors(signature, sample, context, count, first_seen, last_seen)
-             VALUES (?1, ?2, ?3, 1, ?4, ?4)
+            "INSERT INTO errors(signature, sample, context, count, first_seen, last_seen, updated_at)
+             VALUES (?1, ?2, ?3, 1, ?4, ?4, ?4)
              ON CONFLICT(signature) DO UPDATE SET count = count + 1, last_seen = ?4,
+               updated_at = CASE WHEN sample IS NOT excluded.sample
+                   OR context IS NOT excluded.context THEN ?4 ELSE updated_at END,
                context = excluded.context, sample = excluded.sample",
             params![sig, sample, context, ctx.now],
         )?;
@@ -975,6 +1015,7 @@ impl Brain {
                 .unwrap_or_default(),
             ctx,
         )?;
+        self.enforce_error_cap()?;
         Ok(Some(ErrorRecord {
             signature: sig,
             count: rec.recurrences,
@@ -982,14 +1023,47 @@ impl Brain {
         }))
     }
 
+    /// Keeps at most `max_errors` errors (least recently seen dropped, with
+    /// their graph nodes). Returns how many were dropped.
+    fn enforce_error_cap(&self) -> Result<usize> {
+        let Some(c) = &self.conn else { return Ok(0) };
+        let cap = self.cfg.max_errors.max(1) as i64;
+        let over =
+            "SELECT signature FROM errors ORDER BY last_seen DESC, signature LIMIT -1 OFFSET ?1";
+        c.execute(
+            &format!("DELETE FROM nodes WHERE kind = 'error' AND key IN ({over})"),
+            [cap],
+        )?;
+        Ok(c.execute(
+            &format!("DELETE FROM errors WHERE signature IN ({over})"),
+            [cap],
+        )?)
+    }
+
     /// Records the result of applying `fix` to the error `text`.
+    /// Text carrying the safeword is never stored.
     pub fn record_fix(&self, text: &str, fix: &str, outcome: FixOutcome, ctx: &Ctx) -> Result<()> {
-        let Some(c) = &self.conn else { return Ok(()) };
+        if self.conn.is_none() || mentions_safeword(text) || mentions_safeword(fix) {
+            return Ok(());
+        }
+        self.write_tx(|| self.record_fix_rows(text, fix, outcome, ctx))
+    }
+
+    fn record_fix_rows(&self, text: &str, fix: &str, outcome: FixOutcome, ctx: &Ctx) -> Result<()> {
+        let c = self.conn.as_ref().expect("enabled");
         let sig = signature(text);
-        let Some(cur) = self.lookup_signature(&sig)? else {
-            // Fix for an error never recorded: record it first.
-            self.record_error(text, "fix", ctx)?;
-            return self.record_fix(text, fix, outcome, ctx);
+        let cur = match self.lookup_signature(&sig)? {
+            Some(cur) => cur,
+            None => {
+                // Fix for an error never recorded: record it first (once).
+                if self.record_error_rows(text, "fix", ctx)?.is_none() {
+                    return Ok(());
+                }
+                match self.lookup_signature(&sig)? {
+                    Some(cur) => cur,
+                    None => return Ok(()),
+                }
+            }
         };
         let stored: Option<String> =
             c.query_row("SELECT fix FROM errors WHERE signature = ?1", [&sig], |r| {
@@ -1006,7 +1080,7 @@ impl Brain {
                 let failed: Vec<&String> = cur.failed_fixes.iter().filter(|f| *f != fix).collect();
                 c.execute(
                     "UPDATE errors SET fix = ?2, outcome = 'worked', fix_ok = ?3, fix_fail = ?4,
-                     failed_fixes = ?5 WHERE signature = ?1",
+                     failed_fixes = ?5, updated_at = ?6 WHERE signature = ?1",
                     params![
                         sig,
                         fix,
@@ -1016,7 +1090,8 @@ impl Brain {
                             .iter()
                             .map(|s| s.as_str())
                             .collect::<Vec<_>>()
-                            .join("\n")
+                            .join("\n"),
+                        ctx.now
                     ],
                 )?;
             }
@@ -1030,13 +1105,14 @@ impl Brain {
                 if same {
                     c.execute(
                         "UPDATE errors SET outcome = 'failed', fix_fail = fix_fail + 1,
-                         failed_fixes = ?2 WHERE signature = ?1",
-                        params![sig, failed],
+                         failed_fixes = ?2, updated_at = ?3 WHERE signature = ?1",
+                        params![sig, failed, ctx.now],
                     )?;
                 } else {
                     c.execute(
-                        "UPDATE errors SET outcome = 'failed', failed_fixes = ?2 WHERE signature = ?1",
-                        params![sig, failed],
+                        "UPDATE errors SET outcome = 'failed', failed_fixes = ?2, updated_at = ?3
+                         WHERE signature = ?1",
+                        params![sig, failed, ctx.now],
                     )?;
                 }
             }
@@ -1044,8 +1120,13 @@ impl Brain {
         // Keep the error node's detail in sync.
         if let Some(k) = self.lookup_signature(&sig)? {
             c.execute(
-                "UPDATE nodes SET detail = ?2 WHERE kind = 'error' AND key = ?1",
-                params![sig, k.fix.map(|f| format!("fix: {f}")).unwrap_or_default()],
+                "UPDATE nodes SET detail = ?2, updated_at = ?3
+                 WHERE kind = 'error' AND key = ?1 AND detail IS NOT ?2",
+                params![
+                    sig,
+                    k.fix.map(|f| format!("fix: {f}")).unwrap_or_default(),
+                    ctx.now
+                ],
             )?;
         }
         let _ = outcome.as_str();
@@ -1093,7 +1174,10 @@ impl Brain {
     // ----- maintenance ------------------------------------------------------
 
     fn maybe_maintain(&self, ctx: &Ctx) -> Result<()> {
-        if ctx.now - self.last_maintain.get() >= MAINTAIN_EVERY_S {
+        let last = self.last_maintain.get();
+        // A clock that went backwards (or a DB from a skewed machine) must
+        // not postpone maintenance forever.
+        if last > ctx.now || ctx.now - last >= MAINTAIN_EVERY_S {
             self.maintain(ctx)?;
         }
         Ok(())
@@ -1106,7 +1190,12 @@ impl Brain {
         let Some(c) = &self.conn else { return Ok(0) };
         let hl = self.half_life_s();
         let floor = self.cfg.prune_below as f64;
-        let tx = c.unchecked_transaction()?;
+        let pruned = self.write_tx(|| self.maintain_rows(c, hl, floor, ctx))?;
+        self.last_maintain.set(ctx.now);
+        Ok(pruned)
+    }
+
+    fn maintain_rows(&self, c: &Connection, hl: f64, floor: f64, ctx: &Ctx) -> Result<usize> {
         let mut all: Vec<(i64, f64)> = {
             let mut st =
                 c.prepare("SELECT id, strength, last_seen FROM nodes WHERE key != 'ko'")?;
@@ -1170,111 +1259,265 @@ impl Brain {
             "DELETE FROM events WHERE ts < ?1",
             [ctx.now - 2.0 * HABIT_WINDOW_S],
         )?;
-        tx.commit()?;
+        self.enforce_error_cap()?;
         self.refresh_habits(ctx)?;
         c.execute(
             "INSERT INTO meta(key, value) VALUES ('last_maintain', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             [ctx.now.to_string()],
         )?;
-        self.last_maintain.set(ctx.now);
         Ok(doomed.len())
+    }
+
+    /// Runs `f` inside one `BEGIN IMMEDIATE` transaction (the write lock is
+    /// taken up front, waiting `busy_timeout` for another process instead of
+    /// failing half-way). Already inside a transaction: just runs `f`.
+    /// An error rolls everything back.
+    fn write_tx<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        let Some(c) = &self.conn else { return f() };
+        if !c.is_autocommit() {
+            return f();
+        }
+        let tx = Transaction::new_unchecked(c, TransactionBehavior::Immediate)?;
+        let out = f()?;
+        tx.commit()?;
+        Ok(out)
     }
 
     // ----- forget -----------------------------------------------------------
 
-    /// Deletes memories for `cmd` and VACUUMs so nothing lingers on disk.
-    /// Returns how many rows (nodes + events + errors) were removed.
-    pub fn forget(&self, cmd: &ForgetCmd, ctx: &Ctx) -> Result<usize> {
-        let Some(c) = &self.conn else { return Ok(0) };
+    /// Deletes memories for `cmd`, then VACUUMs and checkpoints + truncates
+    /// the WAL so nothing lingers in the file bytes. Topic matching is on
+    /// whole content words only (stopwords stripped, see
+    /// [`content_words`]); nothing is deleted on a substring. The report
+    /// says what went and whether the file was fully scrubbed. Logs an
+    /// audit line (kind + counts, never content).
+    pub fn forget(&self, cmd: &ForgetCmd, ctx: &Ctx) -> Result<ForgetReport> {
+        if self.conn.is_none() {
+            return Ok(ForgetReport {
+                scrubbed: true,
+                ..ForgetReport::default()
+            });
+        }
         self.last_retrieved.borrow_mut().clear();
-        let tx = c.unchecked_transaction()?;
-        let n = match cmd {
+        let mut r = self.write_tx(|| self.forget_rows(cmd, ctx))?;
+        match self.vacuum() {
+            Ok(true) => r.scrubbed = true,
+            Ok(false) => {
+                r.note = Some("the memory file is still open elsewhere (another Lillith window?), so the WAL could not be truncated".into());
+            }
+            Err(e) => r.note = Some(format!("compacting the file failed: {e}")),
+        }
+        tracing::info!(
+            target: "lillith_memory::audit",
+            kind = forget_kind(cmd),
+            nodes = r.nodes,
+            edges = r.edges,
+            events = r.events,
+            errors = r.errors,
+            scrubbed = r.scrubbed,
+            "forget"
+        );
+        Ok(r)
+    }
+
+    /// What [`forget`](Self::forget) would delete, without deleting anything
+    /// (the deletes run in a transaction that is rolled back).
+    pub fn forget_preview(&self, cmd: &ForgetCmd, ctx: &Ctx) -> Result<ForgetReport> {
+        let Some(c) = &self.conn else {
+            return Ok(ForgetReport::default());
+        };
+        let tx = Transaction::new_unchecked(c, TransactionBehavior::Immediate)?;
+        let r = self.forget_rows(cmd, ctx);
+        tx.rollback()?;
+        r
+    }
+
+    fn forget_rows(&self, cmd: &ForgetCmd, ctx: &Ctx) -> Result<ForgetReport> {
+        let c = self.conn.as_ref().expect("enabled");
+        let edges_before = self.stats().edges as usize;
+        let mut r = ForgetReport::default();
+        let (nodes, sigs, events): (Vec<i64>, Vec<String>, Vec<i64>) = match cmd {
             ForgetCmd::All => {
                 let s = self.stats();
                 c.execute_batch(
                     "DELETE FROM edges; DELETE FROM nodes; DELETE FROM events;
-                     DELETE FROM errors; DELETE FROM meta;
-                     INSERT INTO nodes_fts(nodes_fts) VALUES ('rebuild');",
+                     DELETE FROM errors; DELETE FROM meta;",
                 )?;
-                (s.nodes + s.events + s.errors) as usize
+                r.nodes = s.nodes as usize;
+                r.events = s.events as usize;
+                r.errors = s.errors as usize;
+                (Vec::new(), Vec::new(), Vec::new())
             }
             ForgetCmd::LastSecs(secs) => {
                 let cut = ctx.now - *secs as f64;
+                let ids = c
+                    .prepare(
+                        "SELECT id FROM nodes WHERE key != 'ko' AND (created_at >= ?1 OR updated_at >= ?1)",
+                    )?
+                    .query_map([cut], |r| r.get(0))?
+                    .collect::<rusqlite::Result<Vec<i64>>>()?;
+                let sigs = c
+                    .prepare(
+                        "SELECT signature FROM errors WHERE first_seen >= ?1 OR updated_at >= ?1",
+                    )?
+                    .query_map([cut], |r| r.get(0))?
+                    .collect::<rusqlite::Result<Vec<String>>>()?;
+                let ev = c
+                    .prepare("SELECT id FROM events WHERE ts >= ?1")?
+                    .query_map([cut], |r| r.get(0))?
+                    .collect::<rusqlite::Result<Vec<i64>>>()?;
                 c.execute("DELETE FROM edges WHERE created_at >= ?1", [cut])?;
-                c.execute("DELETE FROM nodes WHERE created_at >= ?1", [cut])?
-                    + c.execute("DELETE FROM events WHERE ts >= ?1", [cut])?
-                    + c.execute("DELETE FROM errors WHERE first_seen >= ?1", [cut])?
+                (ids, sigs, ev)
             }
             ForgetCmd::Topic(topic) => {
-                let mut words = keywords(topic, 6);
+                let words = content_words(topic);
                 if words.is_empty() {
-                    words = topic
-                        .to_lowercase()
-                        .split(|ch: char| !ch.is_alphanumeric())
-                        .filter(|w| w.len() >= 2)
-                        .map(str::to_string)
-                        .collect();
+                    return Ok(r);
                 }
-                if words.is_empty() {
-                    0
-                } else {
-                    let expr = words
-                        .iter()
-                        .map(|w| format!("\"{w}\"*"))
-                        .collect::<Vec<_>>()
-                        .join(" AND ");
-                    let mut ids: Vec<i64> = Vec::new();
-                    {
-                        let mut st =
-                            c.prepare("SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?1")?;
-                        for id in st.query_map([expr], |r| r.get(0))? {
-                            ids.push(id?);
+                // Whole-word matches on key, label and detail (no FTS prefix
+                // or LIKE substring: "ex" never hits "next" or "text").
+                let mut ids: Vec<i64> = Vec::new();
+                // Values of matched attributes ("my ex" → "sarah"): the raw
+                // event log and a bare entity of that name go too.
+                let mut values: Vec<String> = Vec::new();
+                {
+                    let mut st =
+                        c.prepare("SELECT id, key, label, detail FROM nodes WHERE key != 'ko'")?;
+                    let rows = st.query_map([], |r| {
+                        Ok((
+                            r.get::<_, i64>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                            r.get::<_, String>(3)?,
+                        ))
+                    })?;
+                    for row in rows {
+                        let (id, key, label, detail) = row?;
+                        if mentions_any(&key, &words)
+                            || mentions_any(&label, &words)
+                            || mentions_any(&detail, &words)
+                        {
+                            ids.push(id);
+                            if key.starts_with("attr:") && !detail.trim().is_empty() {
+                                values.push(detail.trim().to_lowercase());
+                            }
                         }
                     }
-                    // Preferences/attributes hanging off a matched entity.
-                    let mut extra = Vec::new();
-                    for id in &ids {
-                        let mut st = c.prepare_cached(
-                            "SELECT e.src FROM edges e JOIN nodes n ON n.id = e.src
-                             WHERE e.dst = ?1 AND e.relation = 'about'",
-                        )?;
-                        let r = st
-                            .query_map([id], |r| r.get::<_, i64>(0))?
-                            .collect::<rusqlite::Result<Vec<_>>>()?;
-                        extra.extend(r);
-                    }
-                    ids.extend(extra);
-                    ids.sort_unstable();
-                    ids.dedup();
-                    let mut n = 0;
-                    for id in ids {
-                        n += c.execute("DELETE FROM nodes WHERE id = ?1 AND key != 'ko'", [id])?;
-                    }
-                    for w in &words {
-                        let pat = format!("%{w}%");
-                        n += c.execute("DELETE FROM events WHERE subject LIKE ?1", [&pat])?;
-                        n += c.execute(
-                            "DELETE FROM errors WHERE sample LIKE ?1 OR context LIKE ?1 OR fix LIKE ?1",
-                            [&pat],
-                        )?;
-                    }
-                    n
                 }
+                // Preferences/attributes hanging off a matched entity.
+                let mut extra = Vec::new();
+                for id in &ids {
+                    let mut st = c.prepare_cached(
+                        "SELECT src FROM edges WHERE dst = ?1 AND relation = 'about'",
+                    )?;
+                    let found = st
+                        .query_map([id], |r| r.get::<_, i64>(0))?
+                        .collect::<rusqlite::Result<Vec<_>>>()?;
+                    extra.extend(found);
+                }
+                ids.extend(extra);
+                for v in &values {
+                    let mut st = c.prepare_cached(
+                        "SELECT id FROM nodes WHERE kind = 'entity' AND key = ?1",
+                    )?;
+                    let found = st
+                        .query_map([v], |r| r.get::<_, i64>(0))?
+                        .collect::<rusqlite::Result<Vec<_>>>()?;
+                    ids.extend(found);
+                }
+                let mut event_words = words.clone();
+                for v in &values {
+                    event_words.extend(content_words(v));
+                }
+                let sigs = {
+                    let mut st = c.prepare(
+                        "SELECT signature, sample, context, coalesce(fix, ''), failed_fixes FROM errors",
+                    )?;
+                    let rows = st.query_map([], |r| {
+                        Ok((
+                            r.get::<_, String>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                            r.get::<_, String>(3)?,
+                            r.get::<_, String>(4)?,
+                        ))
+                    })?;
+                    let mut sigs = Vec::new();
+                    for row in rows {
+                        let (sig, a, b, f, ff) = row?;
+                        if [a, b, f, ff].iter().any(|t| mentions_any(t, &words)) {
+                            sigs.push(sig);
+                        }
+                    }
+                    sigs
+                };
+                let ev = {
+                    let mut st = c.prepare("SELECT id, subject FROM events")?;
+                    let rows =
+                        st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+                    let mut ev = Vec::new();
+                    for row in rows {
+                        let (id, subject) = row?;
+                        if mentions_any(&subject, &event_words) {
+                            ev.push(id);
+                        }
+                    }
+                    ev
+                };
+                (ids, sigs, ev)
             }
         };
-        c.execute_batch("INSERT INTO nodes_fts(nodes_fts) VALUES ('optimize');")?;
-        tx.commit()?;
-        self.vacuum()?;
-        Ok(n)
+        if !matches!(cmd, ForgetCmd::All) {
+            // An error goes with its graph node and vice versa.
+            let mut sigs = sigs;
+            for id in &nodes {
+                let key: Option<String> = c
+                    .query_row(
+                        "SELECT key FROM nodes WHERE id = ?1 AND kind = 'error'",
+                        [id],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                sigs.extend(key);
+            }
+            sigs.sort_unstable();
+            sigs.dedup();
+            for sig in &sigs {
+                r.nodes +=
+                    c.execute("DELETE FROM nodes WHERE kind = 'error' AND key = ?1", [sig])?;
+                r.errors += c.execute("DELETE FROM errors WHERE signature = ?1", [sig])?;
+            }
+            for id in &nodes {
+                r.nodes += c.execute("DELETE FROM nodes WHERE id = ?1 AND key != 'ko'", [id])?;
+            }
+            for id in &events {
+                r.events += c.execute("DELETE FROM events WHERE id = ?1", [id])?;
+            }
+        }
+        // Rebuild the FTS index from what is left so no deleted token
+        // survives in an index segment.
+        c.execute_batch("INSERT INTO nodes_fts(nodes_fts) VALUES ('rebuild');")?;
+        r.edges = edges_before.saturating_sub(self.stats().edges as usize);
+        Ok(r)
     }
 
-    /// Compacts the file and truncates the WAL so deleted data is gone.
-    pub fn vacuum(&self) -> Result<()> {
-        let Some(c) = &self.conn else { return Ok(()) };
-        c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
-        let _ = c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()));
-        Ok(())
+    /// Compacts the file and checkpoints + truncates the WAL so deleted
+    /// data is gone from disk. `Ok(false)` when another connection kept the
+    /// WAL busy (rows are deleted, but old pages may linger until it closes).
+    pub fn vacuum(&self) -> Result<bool> {
+        let Some(c) = &self.conn else { return Ok(true) };
+        // A reader elsewhere makes TRUNCATE wait on the busy handler: keep
+        // that short here (the result is reported, not hidden).
+        c.busy_timeout(std::time::Duration::from_millis(250))?;
+        let r = (|| -> Result<bool> {
+            let ok1 = checkpoint_truncate(c)?;
+            c.execute_batch("VACUUM;")?;
+            let ok2 = checkpoint_truncate(c)?;
+            Ok(ok1 && ok2)
+        })();
+        c.busy_timeout(BUSY_TIMEOUT)?;
+        r
     }
 
     /// Row counts (zeros when disabled).
@@ -1338,4 +1581,105 @@ pub(crate) fn format_block(
         }
     }
     (lines > 0).then_some(out)
+}
+
+/// `PRAGMA wal_checkpoint(TRUNCATE)`, retried once; `true` when every frame
+/// was checkpointed and the WAL truncated (or the DB is not in WAL mode).
+fn checkpoint_truncate(c: &Connection) -> Result<bool> {
+    for attempt in 0..2 {
+        let (busy, log, done): (i64, i64, i64) =
+            c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })?;
+        if busy == 0 && (log <= 0 || done == log) {
+            return Ok(true);
+        }
+        tracing::debug!(
+            busy,
+            log,
+            done,
+            attempt,
+            "memory: WAL checkpoint incomplete"
+        );
+        if attempt == 0 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+    Ok(false)
+}
+
+/// The audit name of a forget command (never its topic text).
+fn forget_kind(cmd: &ForgetCmd) -> &'static str {
+    match cmd {
+        ForgetCmd::All => "all",
+        ForgetCmd::Topic(_) => "topic",
+        ForgetCmd::LastSecs(_) => "last_secs",
+    }
+}
+
+/// Creates the DB's folder (0700 on unix) and the file itself (0600 on
+/// unix, before SQLite opens it, so it is never world-readable even for a
+/// moment). An existing file is tightened to 0600. Errors propagate.
+fn prepare_private_file(path: &Path) -> Result<()> {
+    if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(dir)?;
+        }
+        #[cfg(not(unix))]
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    drop(o.open(path)?);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod internal_tests {
+    use super::*;
+
+    #[test]
+    fn maintenance_recovers_from_a_future_last_maintain() {
+        let b = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
+        let t = 1_792_368_000.0;
+        b.last_maintain.set(t + 1.0e9); // clock was skewed far ahead
+        b.observe_interaction("I love tea", "", &Ctx::at(t).with_utc_offset(0));
+        assert_eq!(
+            b.last_maintain.get(),
+            t,
+            "maintenance ran and reset the clock"
+        );
+    }
+
+    #[test]
+    fn write_tx_nests_and_rolls_back() {
+        let b = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
+        let ctx = Ctx::at(10.0);
+        let r: Result<()> = b.write_tx(|| {
+            b.write_tx(|| b.upsert_node(Kind::Entity, "x", "x", "", &ctx).map(|_| ()))?;
+            Err(Error::NoDataDir)
+        });
+        assert!(r.is_err());
+        assert_eq!(
+            b.stats().nodes,
+            0,
+            "inner write rolled back with the outer tx"
+        );
+        assert!(b.conn.as_ref().unwrap().is_autocommit());
+    }
 }

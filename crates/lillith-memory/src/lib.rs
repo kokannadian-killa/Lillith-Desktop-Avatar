@@ -23,10 +23,10 @@ pub mod schema;
 
 mod brain;
 
-pub use brain::{Brain, Ctx, Memory, Observed, Stats};
+pub use brain::{Brain, Ctx, ForgetReport, Memory, Observed, Stats};
 pub use errors::{ErrorRecord, FixOutcome, KnownFix};
 pub use extract::{Extractor, Fact, Polarity, RuleExtractor};
-pub use forget::{parse_forget, ForgetCmd};
+pub use forget::{content_words, mentions_any, parse_forget, ForgetCmd};
 pub use habits::Prediction;
 pub use lillith_core::config::MemoryConfig;
 pub use safeword::{is_safeword, mentions_safeword};
