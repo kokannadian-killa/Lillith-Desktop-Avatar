@@ -43,6 +43,9 @@ pub trait Playback: Send {
     }
 }
 
+/// [`Playback::failure`] of a daemon `say` that hit its deadline (hung).
+pub(crate) const SAY_TIMED_OUT: &str = "say did not finish in time";
+
 /// A TTS backend. Runs on the speech worker thread only.
 pub trait Engine: Send {
     fn name(&self) -> &'static str;
@@ -335,7 +338,7 @@ impl Playback for DaemonPlayback {
                 if std::time::Instant::now() >= self.deadline {
                     tracing::warn!("voice daemon: say did not finish in time; line stopped");
                     self.stop();
-                    self.failure = Some("say did not finish in time".into());
+                    self.failure = Some(SAY_TIMED_OUT.into());
                 }
             }
         }

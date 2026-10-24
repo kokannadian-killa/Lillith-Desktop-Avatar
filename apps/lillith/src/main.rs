@@ -1271,6 +1271,25 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
 mod tests {
     use super::*;
 
+    /// Voice e2e (reprobe ec9e1c5): daemon deaths the fallback speaks
+    /// through are not engine errors (lillith-voice tests pin that
+    /// `Stats::engine_errors` stays put), so the recovery ladder never
+    /// rests (drops replies for 30 s) or turns the speakers off.
+    #[test]
+    fn handled_voice_failovers_never_hold_or_turn_speakers_off() {
+        use memory_wiring::{VoiceRecovery, VoiceStep};
+        let mem = lillith_memory::MemoryBridge::disabled();
+        let t = std::time::Instant::now();
+        let mut r = VoiceRecovery::new("voiced", 0, 0);
+        // Two deaths, two returns, a cut hung say: errors stay 0, lines
+        // keep being spoken (by the fallback, then the daemon).
+        for spoken in 0..8 {
+            assert_eq!(r.poll(0, spoken, t, &mem), VoiceStep::Speak);
+        }
+        // A real failure (no engine could speak) still rests.
+        assert_eq!(r.poll(1, 8, t, &mem), VoiceStep::Hold);
+    }
+
     fn tmp(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("lillith-main-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
