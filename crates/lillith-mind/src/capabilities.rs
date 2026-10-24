@@ -115,7 +115,7 @@ Every launch is a plan step Ko approves.\n\
 - run_cmd_admin / run_powershell_admin <command> — elevated through the admin helper; the card shows ELEVATED (admin) and Ko's Yes is the only approval (voice never confirms)\n\
 - list_programs [filter] — Start Menu + App Paths + Uninstall (Windows)\n\
 - launch_program <app> — same as open\n\
-Every command, even a harmless one, waits for Ko's approval in the plan. Anything that changes something, uses sudo/pkexec, kills processes, writes with > or changes system config is marked risky there. Deleting files is never a command: I use delete. Commands stop after {}s. Ko saying the safeword (\"red\" / \"OOC: stop\") kills every running command and the admin helper.\n",
+Every command, even a harmless one, waits for Ko's approval in the plan. Anything that changes something, uses sudo/pkexec, kills processes, writes with > or changes system config is marked risky there. Deleting files is never a command: I use delete. Commands stop after {}s. Ko saying the safeword (\"red\" / \"OOC: stop\") stops my talking and cancels open cards; it does not kill running commands or the admin helper (Ctrl-C / shutdown does).\n",
             a.command_timeout_s
         ));
     }

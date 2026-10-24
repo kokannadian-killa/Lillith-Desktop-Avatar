@@ -373,8 +373,8 @@ pub fn is_spoken_safeword(text: &str) -> bool {
 /// a plan or a deletion; only a real click / keypress can.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VoiceRoute {
-    /// The safeword: stop speech, kill every running command, end the
-    /// scene. The transcript is NOT sent to the model as chat.
+    /// The safeword: stop speech and end the scene (it kills nothing:
+    /// running commands stop only on Ctrl-C / shutdown). The transcript is NOT sent to the model as chat.
     Safeword,
     /// Ordinary words: put them in the chat input (Ko still presses Enter).
     /// Leading `/` is removed so a transcript can never form a typed
