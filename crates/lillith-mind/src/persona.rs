@@ -200,6 +200,14 @@ pub fn forget_line(
             lillith_memory::ForgetCmd::All => {
                 "Done. Wiped clean, every last memory of you. Start fresh with me?".into()
             }
+            lillith_memory::ForgetCmd::Topic(t) if report.total() == 0 => {
+                // Only chat lines went: say so, never "Gone".
+                let n = history_removed as u64;
+                format!(
+                    "Nothing in my memory matched {t}. I cleared {n} chat message{} that mentioned it.",
+                    plural(n)
+                )
+            }
             lillith_memory::ForgetCmd::Topic(t) => {
                 format!("Gone. I don't remember anything about {t} now.")
             }
@@ -228,6 +236,29 @@ pub fn forget_line(
 #[cfg(test)]
 mod persona_prompt_tests {
     use super::*;
+
+    #[test]
+    fn topic_forget_with_no_memory_rows_never_says_gone() {
+        let cmd = lillith_memory::ForgetCmd::Topic("my cat".into());
+        let none = lillith_memory::ForgetReport {
+            scrubbed: true,
+            ..Default::default()
+        };
+        let l = forget_line(&cmd, &none, 2, None);
+        assert!(!l.contains("Gone"), "{l}");
+        assert!(l.contains("Nothing in my memory matched my cat"), "{l}");
+        assert!(l.contains("2 chat messages"), "{l}");
+        let l = forget_line(&cmd, &none, 1, None);
+        assert!(l.contains("1 chat message that"), "{l}");
+        let l = forget_line(&cmd, &none, 0, None);
+        assert!(l.contains("don't have anything"), "{l}");
+        let some = lillith_memory::ForgetReport {
+            nodes: 1,
+            scrubbed: true,
+            ..Default::default()
+        };
+        assert!(forget_line(&cmd, &some, 0, None).starts_with("Gone."));
+    }
 
     #[test]
     fn forget_windows_read_naturally() {
