@@ -93,7 +93,7 @@ The build fails if the models aren't found (set `LILLITH_VOICE_MODELS`); `LILLIT
 | env | default | what |
 |---|---|---|
 | `LILLITH_VOICE_FLAVOR` | `quality` | fp32 `flow_lm_main` (recommended by `ANDROID_ASSETS.md`); `small` = int8 (experimental: can cut lines short) |
-| `LILLITH_VOICE_STT` | `1` | whisper tiny.en int8 + silero VAD for the mic |
+| `LILLITH_VOICE_STT` | `0` | `1` also packs whisper tiny.en int8 + silero VAD for the mic. Off by default: the app is speaking-only (no mic permission, no STT runtime) |
 | `LILLITH_VOICE_KOKORO` | `0` | also ship the Kokoro p1 fallback (+353 MB). Off by default: Android has no Kokoro runtime or espeak-ng G2P yet, so the planned fallback is Android `TextToSpeech` |
 | `STAGE_ONLY=1` | | stage clips + voice into `$OUT/stage/assets`, list them, stop (no SDK/NDK/cargo needed) |
 

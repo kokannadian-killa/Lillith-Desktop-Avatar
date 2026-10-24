@@ -17,7 +17,7 @@
 #   (needs python3 for zip packaging)
 #   CARGO            cargo with the aarch64-linux-android std installed
 #                    (rustup target add aarch64-linux-android)   [cargo]
-# Voice (Ko's cloned voice + offline STT, from the lillith-voice kit; see
+# Voice (Ko's cloned voice, optional offline STT, from the lillith-voice kit; see
 # tools/lillith-voice/android/ANDROID_ASSETS.md). Everything ships inside the
 # APK under assets/voice/; nothing is downloaded at runtime.
 #   LILLITH_VOICE         1 = bundle the voice models (required), 0 = build without voice  [1]
@@ -26,7 +26,8 @@
 #                         ~/.local/share/lillith-voice/models that has SHA256SUMS]
 #   LILLITH_VOICE_FLAVOR  quality = fp32 flow_lm_main (recommended, ANDROID_ASSETS.md)
 #                         small   = int8 flow_lm_main (experimental: can cut lines short)  [quality]
-#   LILLITH_VOICE_STT     1 = whisper tiny.en + silero VAD for the mic, 0 = none   [1]
+#   LILLITH_VOICE_STT     1 = also pack whisper tiny.en + silero VAD (mic STT; the app has
+#                         no mic permission or STT runtime yet), 0 = none   [0]
 #   LILLITH_VOICE_KOKORO  1 = also ship the Kokoro p1 fallback (+353 MB; no Android
 #                         runtime or espeak-ng G2P for it yet)   [0]
 #   ORT_AAR               onnxruntime-android-$ORT_VERSION.aar for the voice runtime (ONNX
@@ -75,7 +76,7 @@ fi
 # ── voice: locate + verify the kit models before any long build step ──
 VOICE="${LILLITH_VOICE:-1}"
 VOICE_FLAVOR="${LILLITH_VOICE_FLAVOR:-quality}"
-VOICE_STT="${LILLITH_VOICE_STT:-1}"
+VOICE_STT="${LILLITH_VOICE_STT:-0}"
 VOICE_KOKORO="${LILLITH_VOICE_KOKORO:-0}"
 LINK_ASSETS="$REPO/tools/lillith-voice/android/link_assets.sh"
 VOICE_MODELS=""
@@ -126,7 +127,7 @@ if [ "$VOICE" != 1 ]; then
   echo "==> 4/7 voice: skipped (LILLITH_VOICE=0): the app will log that it has no voice models"
   return
 fi
-echo "==> 4/7 voice (assets/voice: cloned 'lillith' Pocket TTS, STT; stored uncompressed)"
+echo "==> 4/7 voice (assets/voice: cloned 'lillith' Pocket TTS$([ "$VOICE_STT" = 1 ] && echo ', STT'); stored uncompressed)"
 local stt_flag=""; [ "$VOICE_STT" = 1 ] || stt_flag="--no-stt"
 LILLITH_VOICE_MODELS="$VOICE_MODELS" LINK_KOKORO="$VOICE_KOKORO" \
   bash "$LINK_ASSETS" "$STAGE/assets" "$VOICE_FLAVOR" $stt_flag

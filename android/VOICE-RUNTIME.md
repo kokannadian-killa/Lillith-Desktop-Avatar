@@ -88,6 +88,22 @@ phone. At temperature 0 the output matches the desktop sample for sample (see th
 
 The Google SDK zips also matched the sha1s in `repository2-3.xml`.
 
+## APK size
+
+`LILLITH_VOICE_STT` now defaults to `0`: the whisper/silero STT models are packed only with
+`LILLITH_VOICE_STT=1`. The app is speaking-only and has no mic permission or STT runtime.
+
+| Build (quality flavor, Kokoro off, debug-signed arm64) | APK size |
+|---|---|
+| `LILLITH_VOICE_STT=1` (previous default) | 988,303,995 B (942.5 MiB) |
+| `LILLITH_VOICE_STT=0` (new default) | 884,502,828 B (843.5 MiB) |
+
+The difference is 103,801,167 B (99.0 MiB), the four stored `assets/voice/stt/*` files. Both builds
+have the same `aapt dump permissions`. Of the STT=0 size, the voice runtime itself adds about
+13.0 MB: the ONNX Runtime `.so` files deflate to 12,887,720 + 35,935 B, and `classes.dex` grows
+from 23,940 to 109,520 B compressed. Installed, the runtime is about +34.3 MB once the native
+libraries are extracted.
+
 ## Tests (JVM, offline)
 
 ```
