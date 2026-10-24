@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_usb_eject_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -155,37 +155,37 @@
   "bbox_per_frame": [
     [
       131,
-      306,
+      309,
       27,
       392
     ],
     [
       142,
-      338,
+      339,
       25,
       392
     ],
     [
-      139,
-      337,
+      138,
+      338,
       22,
       392
     ],
     [
       117,
-      335,
+      336,
       22,
       392
     ],
     [
-      119,
+      118,
       334,
       26,
       392
     ],
     [
       127,
-      333,
+      334,
       27,
       392
     ],
@@ -197,13 +197,13 @@
     ],
     [
       125,
-      337,
+      338,
       20,
       392
     ],
     [
       120,
-      338,
+      339,
       22,
       392
     ],
@@ -223,14 +223,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 10.0,
-    "bytes": 145586,
+    "fps": 8.0,
+    "bytes": 162558,
     "quality": {
-      "edge_mae": 2.556,
-      "edge_p99": 19.0,
-      "halo_dark": 0.07,
-      "halo_light": -0.166,
-      "alpha_mae": 0.09
+      "edge_mae": 2.475,
+      "edge_p99": 18.93,
+      "halo_dark": 0.058,
+      "halo_light": -0.153,
+      "alpha_mae": 0.0814
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

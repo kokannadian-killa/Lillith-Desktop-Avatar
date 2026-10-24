@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "pose_vsign_sheet.png",
   "frames_dir": "frames/",
-  "fps": 12.0,
+  "fps": 9.5,
   "loop": true,
   "baseline_y": 392,
   "anchor": [
@@ -121,7 +121,7 @@
       392
     ],
     [
-      126,
+      127,
       276,
       22,
       392
@@ -164,8 +164,8 @@
     ],
     [
       126,
-      280,
-      29,
+      279,
+      30,
       392
     ],
     [
@@ -176,7 +176,7 @@
     ],
     [
       128,
-      281,
+      280,
       41,
       392
     ],
@@ -184,7 +184,7 @@
       128,
       285,
       25,
-      392
+      391
     ],
     [
       128,
@@ -218,7 +218,7 @@
     ],
     [
       127,
-      281,
+      280,
       35,
       392
     ],
@@ -256,14 +256,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 24,
-    "fps": 12.0,
-    "bytes": 253363,
+    "fps": 9.5,
+    "bytes": 290397,
     "quality": {
-      "edge_mae": 2.521,
+      "edge_mae": 2.427,
       "edge_p99": 18.0,
-      "halo_dark": 0.053,
-      "halo_light": -0.201,
-      "alpha_mae": 0.071
+      "halo_dark": 0.044,
+      "halo_light": -0.189,
+      "alpha_mae": 0.0657
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

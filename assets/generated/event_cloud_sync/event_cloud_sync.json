@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_cloud_sync_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -154,62 +154,62 @@
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
-      140,
-      325,
-      23,
+      132,
+      319,
+      22,
       392
     ],
     [
-      138,
-      324,
-      23,
+      130,
+      318,
+      22,
       392
     ],
     [
-      141,
-      324,
+      134,
+      317,
       25,
       392
     ],
     [
-      151,
-      324,
+      144,
+      317,
       26,
       392
     ],
     [
-      150,
-      324,
+      143,
+      318,
       32,
       392
     ],
     [
-      154,
-      332,
+      146,
+      325,
       29,
       392
     ],
     [
-      141,
-      327,
-      26,
+      133,
+      321,
+      25,
       392
     ],
     [
-      126,
-      329,
+      119,
+      322,
       27,
       392
     ],
     [
-      88,
-      333,
-      28,
+      81,
+      326,
+      27,
       392
     ],
     [
-      108,
-      333,
+      101,
+      326,
       23,
       392
     ]
@@ -223,14 +223,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 10.0,
-    "bytes": 154834,
+    "fps": 8.0,
+    "bytes": 172493,
     "quality": {
-      "edge_mae": 2.438,
-      "edge_p99": 18.0,
-      "halo_dark": 0.086,
-      "halo_light": -0.192,
-      "alpha_mae": 0.094
+      "edge_mae": 2.4,
+      "edge_p99": 19.0,
+      "halo_dark": 0.072,
+      "halo_light": -0.178,
+      "alpha_mae": 0.0848
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

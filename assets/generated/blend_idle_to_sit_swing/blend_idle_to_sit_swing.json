@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "blend_idle_to_sit_swing_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10.0,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -70,13 +70,13 @@
       387
     ],
     [
-      131,
+      132,
       251,
       16,
       383
     ],
     [
-      100,
+      101,
       275,
       25,
       379
@@ -96,7 +96,7 @@
     [
       45,
       274,
-      17,
+      18,
       369
     ]
   ],
@@ -109,14 +109,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 6,
-    "fps": 10.0,
-    "bytes": 100796,
+    "fps": 8.0,
+    "bytes": 108078,
     "quality": {
-      "edge_mae": 2.21,
-      "edge_p99": 14.33,
-      "halo_dark": 0.057,
-      "halo_light": -0.189,
-      "alpha_mae": 0.0829
+      "edge_mae": 2.166,
+      "edge_p99": 15.45,
+      "halo_dark": 0.035,
+      "halo_light": -0.187,
+      "alpha_mae": 0.0763
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

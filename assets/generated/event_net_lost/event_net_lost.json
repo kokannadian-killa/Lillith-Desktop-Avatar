@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_net_lost_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 10.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -179,37 +179,37 @@
     ],
     [
       131,
-      330,
-      34,
+      331,
+      33,
       392
     ],
     [
       130,
-      336,
+      338,
       22,
       392
     ],
     [
       136,
-      332,
+      334,
       22,
       392
     ],
     [
-      140,
-      331,
+      139,
+      333,
       22,
       392
     ],
     [
       138,
-      330,
+      332,
       22,
       392
     ],
     [
       137,
-      330,
+      332,
       22,
       392
     ]
@@ -224,13 +224,13 @@
     "height": 400,
     "frame_count": 10,
     "fps": 10.0,
-    "bytes": 124758,
+    "bytes": 132850,
     "quality": {
-      "edge_mae": 2.257,
-      "edge_p99": 18.96,
-      "halo_dark": 0.033,
-      "halo_light": -0.178,
-      "alpha_mae": 0.0769
+      "edge_mae": 2.31,
+      "edge_p99": 19.0,
+      "halo_dark": 0.013,
+      "halo_light": -0.149,
+      "alpha_mae": 0.0777
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

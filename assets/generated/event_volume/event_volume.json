@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "event_volume_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10,
+  "fps": 8.0,
   "loop": false,
   "baseline_y": 392,
   "anchor": [
@@ -191,7 +191,7 @@
     ],
     [
       30,
-      287,
+      288,
       28,
       392
     ],
@@ -223,14 +223,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 10,
-    "fps": 10.0,
-    "bytes": 149806,
+    "fps": 8.0,
+    "bytes": 169021,
     "quality": {
-      "edge_mae": 2.425,
-      "edge_p99": 18.01,
-      "halo_dark": 0.081,
-      "halo_light": -0.163,
-      "alpha_mae": 0.0834
+      "edge_mae": 2.348,
+      "edge_p99": 18.0,
+      "halo_dark": 0.064,
+      "halo_light": -0.137,
+      "alpha_mae": 0.075
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "wave_sheet.png",
   "frames_dir": "frames/",
-  "fps": 12.0,
+  "fps": 8.5,
   "loop": true,
   "baseline_y": 392,
   "anchor": [
@@ -97,13 +97,13 @@
       392
     ],
     [
-      123,
+      124,
       277,
       22,
       392
     ],
     [
-      116,
+      117,
       275,
       22,
       392
@@ -116,7 +116,7 @@
     ],
     [
       127,
-      279,
+      278,
       27,
       392
     ],
@@ -133,7 +133,7 @@
       392
     ],
     [
-      124,
+      125,
       288,
       20,
       392
@@ -145,7 +145,7 @@
       392
     ],
     [
-      125,
+      126,
       286,
       27,
       392
@@ -160,14 +160,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 12,
-    "fps": 12.0,
-    "bytes": 159103,
+    "fps": 8.5,
+    "bytes": 183238,
     "quality": {
-      "edge_mae": 2.62,
-      "edge_p99": 19.0,
-      "halo_dark": 0.07,
-      "halo_light": -0.174,
-      "alpha_mae": 0.0824
+      "edge_mae": 2.428,
+      "edge_p99": 18.91,
+      "halo_dark": 0.054,
+      "halo_light": -0.142,
+      "alpha_mae": 0.0722
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }

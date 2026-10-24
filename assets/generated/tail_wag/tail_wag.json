@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "tail_wag_sheet.png",
   "frames_dir": "frames/",
-  "fps": 12.0,
+  "fps": 8.0,
   "loop": true,
   "baseline_y": 392,
   "anchor": [
@@ -78,12 +78,12 @@
   "bbox_per_frame": [
     [
       131,
-      273,
+      272,
       24,
       392
     ],
     [
-      129,
+      130,
       257,
       35,
       392
@@ -91,7 +91,7 @@
     [
       132,
       262,
-      43,
+      44,
       392
     ],
     [
@@ -113,7 +113,7 @@
       392
     ],
     [
-      129,
+      130,
       269,
       31,
       392
@@ -121,11 +121,11 @@
     [
       130,
       257,
-      42,
+      43,
       392
     ],
     [
-      134,
+      135,
       270,
       40,
       392
@@ -152,14 +152,14 @@
     "width": 800,
     "height": 400,
     "frame_count": 11,
-    "fps": 12.0,
-    "bytes": 146379,
+    "fps": 8.0,
+    "bytes": 173237,
     "quality": {
-      "edge_mae": 2.529,
-      "edge_p99": 18.0,
-      "halo_dark": 0.085,
-      "halo_light": -0.183,
-      "alpha_mae": 0.0837
+      "edge_mae": 2.333,
+      "edge_p99": 17.0,
+      "halo_dark": 0.059,
+      "halo_light": -0.136,
+      "alpha_mae": 0.0713
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   }
