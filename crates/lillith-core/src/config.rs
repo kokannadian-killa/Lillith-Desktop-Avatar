@@ -712,6 +712,69 @@ impl Default for AvatarConfig {
     }
 }
 
+/// `[memory]`: Lillith's local learning memory graph (`lillith-memory`).
+///
+/// On by default (Ko's call). `enabled = false` turns it fully off: no
+/// database is opened, nothing is read or written. Everything stays in one
+/// local SQLite file; there is no network code. Say "forget everything",
+/// "forget about <topic>" or "forget the last 30 minutes" in chat to delete
+/// memories (rows are deleted and the file is vacuumed). Messages that are
+/// the safeword ("red", "OOC: stop") are never stored.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MemoryConfig {
+    /// Master switch. `false` = no reads, no writes, no file.
+    pub enabled: bool,
+    /// Database file. Empty = `<data>/lillith/memory.db`
+    /// (`$XDG_DATA_HOME/lillith/memory.db`, else `~/.local/share/...`).
+    /// `~` is expanded.
+    pub db_path: String,
+    /// Half-life of a memory's strength, in days (unused memories fade).
+    pub half_life_days: f32,
+    /// How many memories are injected into a chat turn at most.
+    pub top_k: usize,
+    /// Rough token budget for the injected memory block (~4 chars/token).
+    pub max_context_tokens: usize,
+    /// Memories whose decayed strength falls below this are pruned.
+    pub prune_below: f32,
+    /// Hard cap on stored memory nodes (weakest pruned first).
+    pub max_nodes: usize,
+    /// Hard cap on the raw event log used for habit mining (oldest pruned).
+    pub max_events: usize,
+}
+
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            // Opt-out (Ko's decision): flip to `false` to make memory opt-in.
+            enabled: true,
+            db_path: String::new(),
+            half_life_days: 14.0,
+            top_k: 6,
+            max_context_tokens: 300,
+            prune_below: 0.05,
+            max_nodes: 5000,
+            max_events: 5000,
+        }
+    }
+}
+
+impl MemoryConfig {
+    /// Resolved database path: the configured override (`~` expanded), else
+    /// `<data>/lillith/memory.db` (`None` only if no data dir can be found).
+    pub fn resolved_db_path(&self) -> Option<PathBuf> {
+        expand_tilde(&self.db_path).or_else(|| data_dir().map(|d| d.join("memory.db")))
+    }
+
+    /// A disabled config (tests and `--no-memory`-style callers).
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            ..Self::default()
+        }
+    }
+}
+
 /// The default overlay scale (and the one used when an older config has
 /// `scale = 1.0`, the previous default):
 /// ~220 px tall from the 400 px cells (Ko's choice).
@@ -771,6 +834,8 @@ pub struct Config {
     pub mind: MindConfig,
     /// Local project scaffolding/building (`[build]`, Phase 3).
     pub build: BuildConfig,
+    /// Local learning memory graph (`[memory]`).
+    pub memory: MemoryConfig,
 }
 
 impl Default for Config {
@@ -807,6 +872,7 @@ impl Default for Config {
             anim: AnimConfig::default(),
             mind: MindConfig::default(),
             build: BuildConfig::default(),
+            memory: MemoryConfig::default(),
         }
     }
 }
@@ -999,6 +1065,22 @@ pub fn set_autostart(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn memory_is_on_by_default_and_can_be_turned_off() {
+        let d = Config::default();
+        assert!(d.memory.enabled, "memory defaults to on (Ko's decision)");
+        assert_eq!(d.memory.max_context_tokens, 300);
+        let off: Config = toml::from_str("[memory]\nenabled = false\n").unwrap();
+        assert!(!off.memory.enabled);
+        assert_eq!(off.memory.top_k, MemoryConfig::default().top_k);
+        let custom: Config = toml::from_str("[memory]\ndb_path = \"/tmp/x/mem.db\"\n").unwrap();
+        assert_eq!(
+            custom.memory.resolved_db_path().unwrap(),
+            PathBuf::from("/tmp/x/mem.db")
+        );
+        assert!(!MemoryConfig::disabled().enabled);
+    }
 
     #[test]
     fn icon_key_parses_defaults_and_saves() {

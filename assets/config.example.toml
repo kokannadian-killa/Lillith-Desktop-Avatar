@@ -27,3 +27,20 @@
 # queue = 3
 # max_chars = 240
 # player = "auto"        # auto | aplay | paplay  (piper only)
+
+# Learning memory (local SQLite graph, no network). ON by default: she learns
+# what you like, your habits and which fixes worked, and slips a short
+# "[Memory]" note (~300 tokens max) into each chat prompt.
+# Turn it OFF with `enabled = false` (then nothing is read or written).
+# Forget from chat: "forget everything", "forget about <topic>",
+# "forget the last 30 minutes" (rows are deleted and the file vacuumed).
+# The safeword ("red" / "OOC: stop") is never stored.
+# [memory]
+# enabled = true
+# db_path = ""            # empty = ~/.local/share/lillith/memory.db ($XDG_DATA_HOME aware)
+# half_life_days = 14.0   # unused memories fade by half every N days
+# top_k = 6               # memories injected per chat turn
+# max_context_tokens = 300
+# prune_below = 0.05      # memories weaker than this are deleted
+# max_nodes = 5000
+# max_events = 5000       # habit-mining event log cap
