@@ -811,15 +811,17 @@ impl lillith_overlay::ActionSink for VoiceSink {
         let Some(r) = &self.lipsync else {
             return false;
         };
-        let msgs = r.drain();
-        // Speakers off / muted: her mouth does not follow audio she isn't
-        // supposed to be playing.
-        let quiet = !self.voice.enabled() || self.voice.muted();
-        let mut gone = quiet && !msgs.is_empty();
-        for m in msgs {
+        // Speakers off / muted: nothing of hers is playing, so her mouth
+        // stays still. The events are still read and thrown away (the
+        // reader's queue must not grow) and any audio mouth is dropped.
+        if !self.voice.enabled() || self.voice.muted() {
+            r.discard();
+            return true;
+        }
+        let mut gone = false;
+        for m in r.drain() {
             match m {
-                LipsyncMsg::Line(l) if !quiet => out.push(l),
-                LipsyncMsg::Line(_) => {}
+                LipsyncMsg::Line(l) => out.push(l),
                 LipsyncMsg::Disconnected => {
                     out.clear();
                     gone = true;

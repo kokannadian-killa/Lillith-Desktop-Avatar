@@ -21,7 +21,7 @@
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
@@ -397,6 +397,86 @@ fn my_uid() -> Option<u32> {
     None
 }
 
+#[cfg(windows)]
+#[link(name = "kernel32")]
+extern "system" {
+    fn CancelSynchronousIo(thread: *mut std::ffi::c_void) -> i32;
+}
+
+/// Unblocks a thread stuck in a synchronous pipe read/write (Windows pipe
+/// handles have no read timeout). A no-op elsewhere: Unix sockets use
+/// read timeouts instead.
+fn cancel_blocking_io<T>(thread: &std::thread::JoinHandle<T>) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        // SAFETY: the JoinHandle keeps the thread handle open; cancelling
+        // I/O on it only makes that thread's pending call fail.
+        unsafe {
+            CancelSynchronousIo(thread.as_raw_handle() as *mut std::ffi::c_void);
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = thread;
+}
+
+/// Timed-out requests whose helper thread has not returned yet.
+static STUCK_REQUESTS: AtomicUsize = AtomicUsize::new(0);
+/// More stuck requests than this: the daemon is treated as hung and new
+/// requests fail at once (callers fall back) instead of piling up threads.
+pub const MAX_STUCK_REQUESTS: usize = 2;
+
+/// Whether the daemon looks healthy (no request is stuck past its timeout).
+pub fn daemon_healthy() -> bool {
+    STUCK_REQUESTS.load(Ordering::SeqCst) == 0
+}
+
+/// Runs `work` on a helper thread and waits at most `timeout`. On timeout
+/// the helper's blocking I/O is cancelled and it is counted as stuck until
+/// it returns; with [`MAX_STUCK_REQUESTS`] stuck, no thread is started.
+/// (Used for Windows pipes, which have no read timeout.)
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn run_with_deadline(
+    timeout: Duration,
+    work: impl FnOnce() -> Result<Value, DaemonError> + Send + 'static,
+) -> Result<Value, DaemonError> {
+    if STUCK_REQUESTS.load(Ordering::SeqCst) >= MAX_STUCK_REQUESTS {
+        return Err(DaemonError::Io(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "voice daemon is hung (earlier requests never returned)",
+        )));
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let timed_out = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&timed_out);
+    let h = std::thread::Builder::new()
+        .name("lillith-voiced-req".into())
+        .spawn(move || {
+            let r = work();
+            // Counted stuck only if the caller gave up on us.
+            if flag.swap(true, Ordering::SeqCst) {
+                STUCK_REQUESTS.fetch_sub(1, Ordering::SeqCst);
+            }
+            let _ = tx.send(r);
+        })?;
+    match rx.recv_timeout(timeout) {
+        Ok(r) => r,
+        Err(_) => {
+            if !timed_out.swap(true, Ordering::SeqCst) {
+                STUCK_REQUESTS.fetch_add(1, Ordering::SeqCst);
+                cancel_blocking_io(&h);
+            }
+            // The helper may have finished in between.
+            rx.try_recv().unwrap_or_else(|_| {
+                Err(DaemonError::Io(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "voice daemon did not answer",
+                )))
+            })
+        }
+    }
+}
+
 /// Windows `ERROR_PIPE_BUSY`: every pipe instance is taken right now.
 pub const ERROR_PIPE_BUSY: i32 = 231;
 /// Windows `ERROR_FILE_NOT_FOUND`: no daemon (fall back to the local engine).
@@ -541,23 +621,11 @@ impl DaemonClient {
 
     /// Sends `req` and returns its one reply.
     pub fn request(&self, req: &Request, timeout: Option<Duration>) -> Result<Value, DaemonError> {
-        if cfg!(windows) {
-            if let Some(t) = timeout {
-                // Pipe handles have no read timeout: wait on a helper thread.
-                let (tx, rx) = std::sync::mpsc::channel();
-                let (me, req) = (self.clone(), req.clone());
-                std::thread::Builder::new()
-                    .name("lillith-voiced-req".into())
-                    .spawn(move || {
-                        let _ = tx.send(me.request_blocking(&req, None));
-                    })?;
-                return rx.recv_timeout(t).unwrap_or_else(|_| {
-                    Err(DaemonError::Io(std::io::Error::new(
-                        std::io::ErrorKind::TimedOut,
-                        "voice daemon did not answer",
-                    )))
-                });
-            }
+        #[cfg(windows)]
+        if let Some(t) = timeout {
+            // Pipe handles have no read timeout: bounded helper thread.
+            let (me, req) = (self.clone(), req.clone());
+            return run_with_deadline(t, move || me.request_blocking(&req, None));
         }
         self.request_blocking(req, timeout)
     }
@@ -628,6 +696,7 @@ pub enum LipsyncMsg {
 pub struct LipsyncReader {
     rx: Receiver<LipsyncMsg>,
     stop: Arc<AtomicBool>,
+    thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl std::fmt::Debug for LipsyncReader {
@@ -647,21 +716,56 @@ impl LipsyncReader {
         let (tx, rx) = std::sync::mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&stop);
-        std::thread::Builder::new()
+        let thread = std::thread::Builder::new()
             .name("lillith-lipsync".into())
             .spawn(move || lipsync_loop(&client, &tx, &flag))?;
-        Ok(Self { rx, stop })
+        Ok(Self {
+            rx,
+            stop,
+            thread: Some(thread),
+        })
     }
 
     /// Everything received so far (never blocks).
     pub fn drain(&self) -> Vec<LipsyncMsg> {
         self.rx.try_iter().collect()
     }
+
+    /// Throws away everything received so far; returns whether the daemon
+    /// disconnected meanwhile (speakers off / muted: nothing to animate,
+    /// but the queue must not grow).
+    pub fn discard(&self) -> bool {
+        self.rx
+            .try_iter()
+            .fold(false, |gone, m| gone || m == LipsyncMsg::Disconnected)
+    }
+
+    /// Stops the thread and waits briefly for it (a blocked Windows pipe
+    /// read is cancelled; Unix reads time out every [`SUB_POLL`]).
+    /// Returns whether it exited.
+    pub fn shutdown(&mut self, wait: Duration) -> bool {
+        self.stop.store(true, Ordering::SeqCst);
+        let Some(t) = self.thread.take() else {
+            return true;
+        };
+        let deadline = std::time::Instant::now() + wait;
+        while !t.is_finished() {
+            if std::time::Instant::now() >= deadline {
+                self.thread = Some(t);
+                return false;
+            }
+            cancel_blocking_io(&t);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let _ = t.join();
+        true
+    }
 }
 
 impl Drop for LipsyncReader {
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::SeqCst);
+        // Don't hang the caller; the flag alone ends the thread later.
+        let _ = self.shutdown(Duration::from_millis(if cfg!(windows) { 200 } else { 0 }));
     }
 }
 
@@ -1067,6 +1171,41 @@ mod tests {
     }
 
     #[test]
+    fn hung_daemon_requests_time_out_and_never_pile_up_threads() {
+        let release = Arc::new(AtomicBool::new(false));
+        let started = Arc::new(AtomicUsize::new(0));
+        let hang = || {
+            let (r, s) = (Arc::clone(&release), Arc::clone(&started));
+            move || {
+                s.fetch_add(1, Ordering::SeqCst);
+                while !r.load(Ordering::SeqCst) {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Ok(Value::Null)
+            }
+        };
+        // A quick answer passes through.
+        assert!(run_with_deadline(Duration::from_secs(2), || Ok(json!({"ok": true}))).is_ok());
+        assert!(daemon_healthy());
+        for _ in 0..MAX_STUCK_REQUESTS {
+            let e = run_with_deadline(Duration::from_millis(30), hang()).unwrap_err();
+            assert!(e.to_string().contains("did not answer"), "{e}");
+        }
+        assert!(!daemon_healthy(), "marked unhealthy");
+        // Now refused at once: no new thread.
+        let e = run_with_deadline(Duration::from_secs(5), hang()).unwrap_err();
+        assert!(e.to_string().contains("hung"), "{e}");
+        assert_eq!(started.load(Ordering::SeqCst), MAX_STUCK_REQUESTS);
+        // The daemon recovers: healthy again once the stuck calls return.
+        release.store(true, Ordering::SeqCst);
+        let t0 = std::time::Instant::now();
+        while !daemon_healthy() && t0.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(daemon_healthy());
+    }
+
+    #[test]
     fn oversized_request_is_refused_before_sending() {
         let c = DaemonClient::new(std::env::temp_dir().join("lillith-no-such.sock")).unwrap();
         let big = Request::Say {
@@ -1199,5 +1338,15 @@ mod tests {
         }
         assert!(disc, "disconnect reported");
         wait(1);
+        // Speakers off / muted: lines are thrown away, nothing queues up.
+        let mut reader = reader;
+        for i in 0..50 {
+            d.push(&format!(r#"{{"ev":"chunk_end","utt":7,"chunk":{i}}}"#));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(!reader.discard(), "no disconnect in there");
+        assert!(reader.drain().is_empty(), "queue emptied");
+        // Stopping is prompt (reads poll the stop flag every SUB_POLL).
+        assert!(reader.shutdown(SUB_POLL * 3), "reader thread exits");
     }
 }

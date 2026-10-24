@@ -56,6 +56,23 @@ impl std::fmt::Debug for Mic {
     }
 }
 
+/// `[voice]` of `config_path` (else the default config path); defaults when
+/// the file is missing or broken.
+pub fn load_voice_config(config_path: Option<&std::path::Path>) -> lillith_voice::VoiceConfig {
+    config_path
+        .map(std::path::Path::to_path_buf)
+        .or_else(lillith_core::config::Config::default_path)
+        .filter(|p| p.exists())
+        .and_then(|p| match lillith_voice::VoiceConfig::load(&p) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("[voice] in {}: {e}", p.display());
+                None
+            }
+        })
+        .unwrap_or_default()
+}
+
 impl Drop for Mic {
     fn drop(&mut self) {
         // Bubble closed mid push-to-talk: close the mic.
@@ -66,17 +83,25 @@ impl Drop for Mic {
 }
 
 impl Mic {
-    /// From config.toml `[voice]` (`daemon_socket`, `[voice.stt]`).
-    /// `None` when STT is switched off or no local endpoint resolves.
-    pub fn from_config(repaint: impl Fn() + Send + 'static) -> Option<Self> {
-        let cfg = lillith_core::config::Config::default_path()
-            .filter(|p| p.exists())
-            .and_then(|p| lillith_voice::VoiceConfig::load(&p).ok())
-            .unwrap_or_default();
+    /// From the `[voice]` section (`daemon_socket`, `[voice.stt]`) of the
+    /// config file the app runs with (`--config`; `None` = the default
+    /// path). `None` when STT is switched off or no local endpoint resolves.
+    pub fn from_config(
+        config_path: Option<&std::path::Path>,
+        repaint: impl Fn() + Send + 'static,
+    ) -> Option<Self> {
+        Self::from_voice_config(&load_voice_config(config_path), repaint)
+    }
+
+    /// [`Mic::from_config`] for an already loaded `[voice]`.
+    pub fn from_voice_config(
+        cfg: &lillith_voice::VoiceConfig,
+        repaint: impl Fn() + Send + 'static,
+    ) -> Option<Self> {
         if !cfg.stt.enabled {
             return None;
         }
-        let client = DaemonClient::from_config(&cfg)?;
+        let client = DaemonClient::from_config(cfg)?;
         let timeout = Duration::from_secs_f32(cfg.stt.timeout_s);
         Some(Self::spawn(client, timeout, repaint))
     }
@@ -176,5 +201,31 @@ impl Mic {
             }
         }
         evs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_config_the_app_runs_with_is_used() {
+        let dir = std::env::temp_dir().join(format!("lillith-mic-cfg-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("custom.toml");
+        std::fs::write(
+            &p,
+            "[voice]\ndaemon_socket = \"/run/custom/voiced.sock\"\n[voice.stt]\nenabled = false\n",
+        )
+        .unwrap();
+        let v = load_voice_config(Some(&p));
+        assert_eq!(
+            v.daemon_socket.as_deref(),
+            Some(std::path::Path::new("/run/custom/voiced.sock"))
+        );
+        assert!(!v.stt.enabled);
+        // STT off in that file: no mic, whatever the default config says.
+        assert!(Mic::from_voice_config(&v, || {}).is_none());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

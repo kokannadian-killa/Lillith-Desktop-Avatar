@@ -805,7 +805,12 @@ impl Bubble {
         // The safeword works right now, on the UI thread: the chat worker
         // may be blocked running the very command it has to stop, so a
         // queued "red" would only land after the command ended by itself.
-        if stop_now_if_safeword(&text) && self.streaming.is_some() {
+        let safeword = stop_now_if_safeword(&text);
+        if safeword {
+            // Her voice stops too (the overlay cuts it on this event).
+            (self.emit)("chat.safeword", None);
+        }
+        if safeword && self.streaming.is_some() {
             self.lines.push(Line {
                 me: true,
                 text: text.clone(),
@@ -821,10 +826,6 @@ impl Bubble {
             return;
         }
         let from_voice = self.voice_text.take().is_some_and(|v| v.trim() == text);
-        if lillith_core::access::kill_switch::is_safeword(&text) {
-            // Her voice stops too (the overlay cuts it on this event).
-            (self.emit)("chat.safeword", None);
-        }
         if text == "/clear" && !from_voice {
             self.lines.clear();
             let _ = self.tx.send(Req::Clear);
@@ -966,7 +967,16 @@ impl Bubble {
             me: true,
             text: "red".into(),
         });
-        self.streaming = Some(String::new());
+        if self.streaming.is_some() {
+            // The worker may be stuck in the command just killed: say so
+            // now; the queued "red" clears its pending state once it's free.
+            self.lines.push(Line {
+                me: false,
+                text: SAFEWORD_STOPPED.to_string(),
+            });
+        } else {
+            self.streaming = Some(String::new());
+        }
         let _ = self.tx.send(Req::Send("red".into()));
     }
 
@@ -1392,7 +1402,7 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
                     None
                 } else {
                     let ctx = cc.egui_ctx.clone();
-                    Mic::from_config(move || ctx.request_repaint())
+                    Mic::from_config(opts.config_path.as_deref(), move || ctx.request_repaint())
                 },
                 voice_text: None,
                 kill_switch: kill_everything,
