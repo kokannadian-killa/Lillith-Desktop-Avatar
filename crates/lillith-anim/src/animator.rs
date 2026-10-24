@@ -294,13 +294,20 @@ pub fn kick_for(name: &str) -> Kick {
     }
 }
 
-/// Walk/run cycles (`walk*`, `run*` and the `strut_*` walk takes, see
-/// [`SULTRY_WALK_TAKES`], including skips and drawn variants) and the
+/// Walk/run cycles (`walk_*`, `run_*` and the `strut_*` walk takes, see
+/// [`SULTRY_WALK_TAKES`], including skips and drawn variants; a bare `walk`,
+/// `run` or `strut` too, though the manifest has none) and the
 /// `blend_*` transitions into or out of them (e.g. `blend_idle_to_walk_right`,
 /// frame-pair IoU 0.39-0.79): smooth mode switches their frames hard instead
 /// of cross-fading.
 pub fn is_locomotion_cycle(name: &str) -> bool {
-    let gait = |n: &str| n.starts_with("walk") || n.starts_with("run") || n.starts_with("strut");
+    // Underscore forms so e.g. `running_hug` or `strutter` never match.
+    let gait = |n: &str| {
+        ["walk", "run", "strut"].iter().any(|g| {
+            n.strip_prefix(g)
+                .is_some_and(|r| r.is_empty() || r.starts_with('_'))
+        })
+    };
     gait(name)
         || name
             .strip_prefix("blend_")
@@ -1838,6 +1845,10 @@ mod tests {
         assert!(!is_locomotion_cycle("blend_idle_to_sit_swing"));
         assert!(!is_locomotion_cycle("blend_drag_held_to_perch_sit"));
         assert!(!is_locomotion_cycle("idle_flirt_hands_behind_sway"));
+        assert!(is_locomotion_cycle("walk") && is_locomotion_cycle("strut"));
+        assert!(!is_locomotion_cycle("running_hug"), "run_ prefix only");
+        assert!(!is_locomotion_cycle("strutter"), "strut_ prefix only");
+        assert!(!is_locomotion_cycle("blend_idle_to_running_hug"));
     }
 
     #[test]
