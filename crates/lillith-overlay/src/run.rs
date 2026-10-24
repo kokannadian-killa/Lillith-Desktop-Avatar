@@ -1530,7 +1530,7 @@ impl Controller {
         if let Ok(rx) = feed.lock() {
             self.feed_backlog.extend(rx.try_iter());
         }
-        let (urgent, rest): (Vec<Event>, std::collections::VecDeque<Event>) =
+        let (urgent, rest): (std::collections::VecDeque<Event>, _) =
             std::mem::take(&mut self.feed_backlog)
                 .into_iter()
                 .partition(|ev| ev.name == CHAT_SAFEWORD || ev.name == CHAT_BARGE_IN);
