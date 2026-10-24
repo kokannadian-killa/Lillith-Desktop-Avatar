@@ -6975,6 +6975,41 @@
    "video": "newyear_champagne_rim_lick/newyear_champagne_rim_lick.mp4",
    "season": "newyear",
    "outfit": "newyear"
+  },
+  {
+   "name": "newyear_strawberry_bite",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "newyear_strawberry_bite/",
+   "sheet": "newyear_strawberry_bite/newyear_strawberry_bite_sheet.png",
+   "manifest": "newyear_strawberry_bite/newyear_strawberry_bite.json",
+   "preview": "newyear_strawberry_bite/newyear_strawberry_bite_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:newyear",
+    "outfit:newyear"
+   ],
+   "allure": true,
+   "video": "newyear_strawberry_bite/newyear_strawberry_bite.mp4",
+   "season": "newyear",
+   "outfit": "newyear"
   }
  ]
 }
