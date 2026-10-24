@@ -608,7 +608,7 @@ fn grime(p: &Painter, c: Pos2, radius: f32, strength: f32) {
 pub fn death_skull(p: &Painter, c: Pos2, s: f32, eye: Rgba, pulse: f32) {
     let k = geom::death_skull([c.x, c.y], s);
     let ink = Rgba::hex(0x070103);
-    let edge_w = (s * 0.03).max(1.0);
+    let edge_w = (s * 0.02).max(0.9);
     let fine = (s * 0.018).max(0.7);
     let shift =
         |v: &[Pt], d: f32| -> Vec<Pt> { v.iter().map(|q| [q[0] + d, q[1] + d * 1.3]).collect() };
@@ -624,7 +624,7 @@ pub fn death_skull(p: &Painter, c: Pos2, s: f32, eye: Rgba, pulse: f32) {
     fan(p, sm, &shift(&k.mandible, 1.5), sh, sh);
 
     // horns: dark keratin, ringed, burnt black at the tips
-    let horn_base = Rgba::hex(0x6a5a4b);
+    let horn_base = Rgba::hex(0x564738);
     let horn_mid = Rgba::hex(0x2e2420);
     for h in &k.horns {
         let quads = geom::tapered_quads(h, k.horn_width, k.horn_tip);
@@ -655,12 +655,12 @@ pub fn death_skull(p: &Painter, c: Pos2, s: f32, eye: Rgba, pulse: f32) {
             &h[..h.len() * 3 / 4],
             k.horn_width * 0.22,
             0.3,
-            c32(Rgba::hex(0xb8a68f).alpha(70)),
+            c32(Rgba::hex(0xb8a68f).alpha(35)),
         );
         // segment ridges
         for (i, q) in quads.iter().enumerate().take(quads.len() - 2) {
             let w = if i % 2 == 0 { fine * 1.2 } else { fine * 0.7 };
-            p.line_segment([p2(q[0]), p2(q[3])], Stroke::new(w, c32(ink.alpha(210))));
+            p.line_segment([p2(q[0]), p2(q[3])], Stroke::new(w, c32(ink.alpha(170))));
         }
         let mut ring: Vec<Pt> = quads.iter().map(|q| q[0]).collect();
         ring.push(quads[quads.len() - 1][1]);
@@ -692,7 +692,7 @@ pub fn death_skull(p: &Painter, c: Pos2, s: f32, eye: Rgba, pulse: f32) {
         c + Vec2::new(-0.07 * s, -0.36 * s),
         0.2 * s,
         Rgba::hex(0xfff1dc),
-        0.55,
+        0.3,
     );
     for (x, y, r, a) in [
         (-0.33, -0.12, 0.09, 0.9),
@@ -739,8 +739,8 @@ pub fn death_skull(p: &Painter, c: Pos2, s: f32, eye: Rgba, pulse: f32) {
         );
         outline(p, ring, fine, c32(ink));
         let e = p2(cc) + Vec2::new(0.0, 0.012 * s);
-        glow_blob(p, e, 0.1 * s, pal::BLOOD_NEON, 0.6 + 0.4 * pulse);
-        p.circle_filled(e, (0.024 * s).max(0.8), c32(eye));
+        glow_blob(p, e, 0.075 * s, pal::BLOOD_NEON, 0.35 + 0.25 * pulse);
+        p.circle_filled(e, (0.016 * s).max(0.7), c32(eye));
     }
 
     // inverted-heart nasal cavity
