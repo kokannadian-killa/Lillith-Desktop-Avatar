@@ -306,6 +306,7 @@ const PRANKS: &[&str] = &[
     "dom_arms_crossed_demand",
     "seduce_tap_glass",
     "kneel_pout_beg",
+    "dom_throne_lean",
     "dom_chin_tilt_summon",
 ];
 /// The pool for an event, with a `'static` key for the no-repeat memory.

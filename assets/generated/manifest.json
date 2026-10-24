@@ -5680,6 +5680,161 @@
    "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)"
   },
   {
+   "name": "hip_sway_slow",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "hip_sway_slow/",
+   "sheet": "hip_sway_slow/hip_sway_slow_sheet.png",
+   "manifest": "hip_sway_slow/hip_sway_slow.json",
+   "preview": "hip_sway_slow/hip_sway_slow_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "idle_variant",
+    "variant_of:idle"
+   ],
+   "allure": true,
+   "video": "hip_sway_slow/hip_sway_slow.mp4",
+   "idle_variant": true
+  },
+  {
+   "name": "dom_throne_lean",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "dom_throne_lean/",
+   "sheet": "dom_throne_lean/dom_throne_lean_sheet.png",
+   "manifest": "dom_throne_lean/dom_throne_lean.json",
+   "preview": "dom_throne_lean/dom_throne_lean_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "dom"
+   ],
+   "allure": true,
+   "video": "dom_throne_lean/dom_throne_lean.mp4"
+  },
+  {
+   "name": "kneel_sit_back_beckon",
+   "frame_count": 72,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "kneel_sit_back_beckon/",
+   "sheet": "kneel_sit_back_beckon/kneel_sit_back_beckon_sheet.png",
+   "manifest": "kneel_sit_back_beckon/kneel_sit_back_beckon.json",
+   "preview": "kneel_sit_back_beckon/kneel_sit_back_beckon_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "kneel_sit_back_beckon/kneel_sit_back_beckon.mp4"
+  },
+  {
+   "name": "taskbar_lounge_lie",
+   "frame_count": 60,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.43,
+   "body_anchor_x": 200,
+   "facing": "side (lying on her side along the bottom edge, head left)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "taskbar_lounge_lie/",
+   "sheet": "taskbar_lounge_lie/taskbar_lounge_lie_sheet.png",
+   "manifest": "taskbar_lounge_lie/taskbar_lounge_lie.json",
+   "preview": "taskbar_lounge_lie/taskbar_lounge_lie_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "taskbar_lounge_lie/taskbar_lounge_lie.mp4",
+   "seat_y": 391,
+   "seat_x_range": [
+    180,
+    377
+   ],
+   "feet_lowest_y": 391
+  },
+  {
+   "name": "come_hither_crawl",
+   "frame_count": 72,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "come_hither_crawl/",
+   "sheet": "come_hither_crawl/come_hither_crawl_sheet.png",
+   "manifest": "come_hither_crawl/come_hither_crawl.json",
+   "preview": "come_hither_crawl/come_hither_crawl_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion"
+   ],
+   "allure": true,
+   "video": "come_hither_crawl/come_hither_crawl.mp4"
+  },
+  {
    "name": "hair_twirl_lip_bite",
    "frame_count": 60,
    "frame_width": 400,

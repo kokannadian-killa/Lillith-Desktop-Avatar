@@ -67,6 +67,12 @@ const ALLURE: &[&str] = &[
     "seduce_lean_to_screen_whisper",
     "seduce_blow_kiss_screen",
     "seduce_tap_glass",
+    // Bold allure set (batch 17): hip/body motion + gaze/gesture, canonical outfit.
+    "hip_sway_slow",
+    "come_hither_crawl",
+    "taskbar_lounge_lie",
+    "kneel_sit_back_beckon",
+    "dom_throne_lean",
     // Bold allure set (batch 18): gaze, gesture, hair/tail play, canonical outfit.
     "leg_cross_slow_sit",
     "hair_twirl_lip_bite",
@@ -187,6 +193,8 @@ mod tests {
         assert_eq!(category_of("body_roll_slow"), 0);
         assert_eq!(category_of("bend_forward_wink"), 0);
         assert_eq!(category_of("dom_beckon_finger"), 0);
+        assert_eq!(category_of("dom_throne_lean"), 0);
+        assert_eq!(category_of("hip_sway_slow"), 0);
         assert_eq!(category_of("dom_chin_tilt_summon"), 0);
         assert_eq!(category_of("leg_cross_slow_sit"), 0);
         assert_eq!(category_of("body_roll_slow_long"), 0);

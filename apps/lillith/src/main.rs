@@ -291,16 +291,18 @@ async fn main() -> Result<()> {
         tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| "lillith=info".into()),
     );
+    // Logs never go to stdout: `chat-bubble` and `settings` use stdout as
+    // their JSON event pipe to the overlay, and CLI output is println!.
     #[cfg(windows)]
     match windows_log_file() {
         Some(f) => log
             .with_ansi(false)
             .with_writer(std::sync::Mutex::new(f))
             .init(),
-        None => log.init(),
+        None => log.with_writer(std::io::stderr).init(),
     }
     #[cfg(not(windows))]
-    log.init();
+    log.with_writer(std::io::stderr).init();
 
     let cli = Cli::parse();
     let rules = RuleSet::bundled();
@@ -378,6 +380,7 @@ async fn main() -> Result<()> {
             chat::cli_chat(
                 cfg,
                 full.mind,
+                full.memory,
                 config_path,
                 message.clone(),
                 spawn_server,
@@ -482,6 +485,7 @@ async fn main() -> Result<()> {
             chat::bubble_main(
                 full.chat,
                 full.mind,
+                full.memory,
                 config_path,
                 pos,
                 offline || cli.no_llm,

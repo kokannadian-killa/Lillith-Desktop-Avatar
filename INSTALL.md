@@ -127,7 +127,54 @@ kwriteconfig6 --file kwinrc --group Plugins --key lillith-bridgeEnabled true
 qdbus6 org.kde.KWin /KWin reconfigure
 ```
 
-### 6. Autostart
+### 6. Optional: her cloned voice and the mic (offline voice kit)
+
+Without the kit she speaks with piper, espeak-ng or spd-say if one is
+installed, or stays silent. The **voice kit** gives her Ko's cloned voice,
+lip-sync from the audio and a push-to-talk mic in the chat bubble. It runs a
+local daemon (`lillith-voiced`) that she finds on her own (`[voice] engine =
+"auto"` tries the daemon first). It talks only over a Unix socket, and its
+network guard blocks everything that isn't loopback.
+
+The kit's source is in the repo at `tools/lillith-voice/`. The **models and
+Python wheels are not in the repo or the app zip**. They come in the separate
+full kit tarball `lillith-voice-kit.tar.gz` (about 731 MiB). That tarball
+isn't published as a release asset yet, so get it from Ko. With it, in a git
+checkout of the repo:
+
+```fish
+tar xzf lillith-voice-kit.tar.gz lillith-voice-kit/models lillith-voice-kit/wheels
+mv lillith-voice-kit/models lillith-voice-kit/wheels tools/lillith-voice/
+cd tools/lillith-voice
+bash install.sh --systemd      # offline: ./models + ./wheels only, no sudo; --systemd also starts the daemon
+```
+
+What the installer does:
+- It never downloads anything by default. Without the wheels it stops. You
+  can opt in to `--online-pip` (PyPI, at install time only) and `--pacman`
+  (installs `python ffmpeg rubberband espeak-ng pipewire …` with sudo).
+- It puts `lillith-say`, `lillith-listen`, `lillith-chat` and
+  `lillith-voiced` in `~/.local/bin`.
+- It adds fish shortcuts (`say`, `hush`, `lil`, `lil-talk`, `hear`, …). Open a
+  new fish shell to get them.
+
+Check that it works:
+
+```fish
+lillith-say --status
+lillith-say "Hiii, it's me."
+hear --setup                    # pick and test the microphone
+```
+
+- If the cloned-voice files (`models/pocket/`) are missing, she speaks with
+  the `p1` voice and the log says
+  `using fallback voice p1 (cloned 'lillith' voice unavailable)`.
+- Without `models/stt/`, the mic is off.
+- Saying **"red"** into the mic is the safeword too. A spoken "yes" never
+  approves a Soul Contract.
+- Model list, sizes, sha256 and tests: `tools/lillith-voice/INSTALL.md`.
+
+### 7. Autostart
 
 To start her with your desktop session, set `autostart = true` in
 `~/.config/lillith/config.toml`, or use the setting in her right-click menu or
@@ -209,6 +256,10 @@ tokens, 160 reply tokens) are sent with every chat request, so they aren't on
 the command line. If you use Ollama instead (`backend = "ollama"`), it must be
 on `http://127.0.0.1:11434`. The **kill switch** on Windows is the same safeword
 (see below), and it also shuts down the elevated `lillith-admin` helper.
+**Voice on Windows:** she uses the built-in Windows (SAPI) voice. The offline
+voice kit's Windows notes are in `tools/lillith-voice/windows/INSTALL-windows.md`.
+Only its named-pipe transport has been tested, and only under wine. It has
+not run on real Windows, and no Windows installer bundles it yet.
 More detail: `source/windows/INSTALL-windows.md` in the release zip
 ([`windows/INSTALL-windows.md`](windows/INSTALL-windows.md) in the repo).
 
@@ -269,6 +320,10 @@ install steps, see `source/android/INSTALL-android.md`.
 
 Keep `--host 127.0.0.1` so nothing else on the network can reach the server.
 
+**Voice on Android:** the cloned voice in the APK is only a plan so far
+(`tools/lillith-voice/android/INSTALL-android.md`, untested), and no APK has
+it.
+
 ---
 
 ## Configuration
@@ -294,6 +349,8 @@ The keys people change most are `mode`, `scale`, `[overlay] auto_fix_kwin`
 (the KDE blur fix at start-up), `[voice] enabled` (the **Speak out loud**
 toggle), `[behavior.tease]` (the "come closer" tease) and `[mind.access]`
 (what she may do on your machine, always behind the Soul Contract).
+For the voice kit, `[voice] daemon_socket`, `preset` and `[voice.stt]` (the
+push-to-talk mic) are optional; the defaults find the local daemon.
 `lillith setup` (and the setup wizard) writes `[llm]`, `[chat]` and, for
 llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--jinja"]`).
 
@@ -302,9 +359,11 @@ llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--
 ## The safeword (kill switch)
 
 To stop everything she's doing, type the safeword in her chat: **`red`** on
-its own, or a message that starts with **`OOC: stop`**. It works right away,
-even in the middle of a reply. It kills every running command's process tree,
-and on Windows it also shuts down the elevated admin helper.
+its own, or a message that starts with **`OOC: stop`**. With the voice kit's
+mic you can also say "red". It works right away, even in the middle of a
+reply. Her voice stops, and the rest of the reply it cut off is dropped: it
+isn't shown or spoken. It kills every running command's process tree, and on
+Windows it also shuts down the elevated admin helper.
 
 Every file change, command and program launch is a **Soul Contract** plan
 that you approve with Yes or No. Nothing runs before you approve it, and every
@@ -334,7 +393,8 @@ included; get any you need yourself.
   `http://127.0.0.1:8080` and that `[llm] gguf_path` points at a file in
   `~/models/`. Re-run `lillith setup`. A non-loopback URL is refused on
   purpose.
-- **No voice.** Install `espeak-ng` or piper, and tick **Speak out loud
-  (speakers)** in the right-click menu. `--no-voice` starts her with the
-  speakers off.
+- **No voice.** Tick **Speak out loud (speakers)** in the right-click menu
+  (`--no-voice` starts her with the speakers off). Then either start the
+  voice kit's daemon (`systemctl --user start lillith-voice`, check with
+  `lillith-say --status`) or install `espeak-ng` or piper.
 - **Debug log:** `env RUST_LOG=info,lillith=debug ./run.fish 2>&1 | tee ~/lillith.log`

@@ -232,6 +232,12 @@ pub fn draw_cell_mix(
 /// that moved between the two frames at ~50 % alpha mid-fade, so the desktop
 /// shows through it (a white ghost/halo around her while she walks or is
 /// dragged on a light wallpaper).
+///
+/// Frames that barely overlap (an art hard cut, a big jump) still read as a
+/// double body however the coverage fades, so the fade is shortened by how
+/// little the two drawn frames overlap ([`alpha_iou`],
+/// [`overlap_fade_weight`]) and dropped entirely (a hard switch) below
+/// [`XFADE_IOU_HARD`].
 #[allow(clippy::too_many_arguments)]
 pub fn draw_cell_crossfade(
     canvas: &mut Canvas,
@@ -250,7 +256,58 @@ pub fn draw_cell_crossfade(
     };
     draw_cell(&mut ca, a.0, a.1, origin, flip, t, scale);
     draw_cell(&mut cb, b.0, b.1, origin, flip, t, scale);
+    let w = overlap_fade_weight(w, alpha_iou(&ca, &cb));
     coverage_mix(canvas, &ca, &cb, w);
+}
+
+/// Below this IoU of the two frames' opaque masks a cross-fade is a hard
+/// switch. Measured on the shipped manifest (5541 adjacent frame pairs,
+/// anchors aligned): median 0.92, p5 0.63; walk cycles ~0.57; the
+/// `dom_arms_crossed_demand` f35→36→37 art cut 0.06–0.07 (a 62 px jump);
+/// the worst `arch_back_over_shoulder_long` cut frames 0.06–0.34.
+pub const XFADE_IOU_HARD: f32 = 0.5;
+/// At or above this IoU the cross-fade runs at its full length; between
+/// [`XFADE_IOU_HARD`] and this it shortens linearly towards the frame
+/// switch.
+pub const XFADE_IOU_FULL: f32 = 0.95;
+
+/// Intersection-over-union of the `alpha >= 128` masks of two same-size
+/// canvases (1.0 when both are empty). One pass over the alpha bytes: cheap
+/// next to drawing the two frames.
+pub fn alpha_iou(a: &Canvas, b: &Canvas) -> f32 {
+    let (mut inter, mut union) = (0u32, 0u32);
+    for (pa, pb) in a.data().chunks_exact(4).zip(b.data().chunks_exact(4)) {
+        let (ia, ib) = (pa[3] >= 128, pb[3] >= 128);
+        inter += u32::from(ia && ib);
+        union += u32::from(ia || ib);
+    }
+    if union == 0 {
+        1.0
+    } else {
+        inter as f32 / union as f32
+    }
+}
+
+/// The cross-fade weight to actually use for fade weight `w` between two
+/// frames whose masks overlap by `iou`: unchanged at [`XFADE_IOU_FULL`] or
+/// more, 0 (stay on frame `a`, a hard switch at the frame boundary) below
+/// [`XFADE_IOU_HARD`], and in between the fade squeezed into the last
+/// `k = (iou - HARD) / (FULL - HARD)` of its window, so it still ends
+/// exactly on `b` (no pop) but the double-exposed part is `k` times shorter.
+pub fn overlap_fade_weight(w: f32, iou: f32) -> f32 {
+    let w = w.clamp(0.0, 1.0);
+    let k = ((iou - XFADE_IOU_HARD) / (XFADE_IOU_FULL - XFADE_IOU_HARD)).clamp(0.0, 1.0);
+    if k >= 1.0 {
+        w
+    } else if k <= 0.0 {
+        if w >= 1.0 {
+            1.0
+        } else {
+            0.0
+        }
+    } else {
+        ((w - (1.0 - k)) / k).clamp(0.0, 1.0)
+    }
 }
 
 /// Per-pixel cross-fade of premultiplied `a` and `b` into `dst` (all the
@@ -429,6 +486,92 @@ mod tests {
         assert_eq!(&out.data()[..4], &[200, 100, 50, 255]);
         coverage_mix(&mut out, &a, &c, 1.0);
         assert_eq!(&out.data()[..4], &[0, 0, 200, 255]);
+    }
+
+    /// A `w`×`h` canvas with an opaque `bw`-wide block at `x0`.
+    fn block(w: u32, h: u32, x0: u32, bw: u32) -> Canvas {
+        let mut c = Canvas::new(w, h).unwrap();
+        for y in 0..h {
+            for x in x0..x0 + bw {
+                let i = ((y * w + x) * 4) as usize;
+                c.data_mut()[i..i + 4].copy_from_slice(&[90, 40, 30, 255]);
+            }
+        }
+        c
+    }
+
+    #[test]
+    fn alpha_iou_measures_mask_overlap() {
+        let a = block(100, 4, 10, 40);
+        assert_eq!(alpha_iou(&a, &a), 1.0);
+        // 4 px shift (normal motion is <= ~3.6 px/frame): 36/44.
+        let near = block(100, 4, 14, 40);
+        assert!((alpha_iou(&a, &near) - 36.0 / 44.0).abs() < 1e-6);
+        // Disjoint (a 62 px jump): no overlap.
+        let far = block(100, 4, 55, 40);
+        assert_eq!(alpha_iou(&a, &far), 0.0);
+        let empty = Canvas::new(100, 4).unwrap();
+        assert_eq!(alpha_iou(&empty, &empty), 1.0);
+    }
+
+    #[test]
+    fn low_overlap_shortens_or_skips_the_fade() {
+        // Well-overlapping frames keep the full fade.
+        for w in [0.0, 0.3, 0.5, 0.9, 1.0] {
+            assert_eq!(overlap_fade_weight(w, 0.97), w);
+            assert_eq!(overlap_fade_weight(w, XFADE_IOU_FULL), w);
+        }
+        // A hard cut (IoU 0.06) or a walk-sized step below the floor: stay
+        // on frame a until the switch, never a mix.
+        for iou in [0.0, 0.06, XFADE_IOU_HARD] {
+            for w in [0.0, 0.2, 0.5, 0.99] {
+                assert_eq!(overlap_fade_weight(w, iou), 0.0);
+            }
+            assert_eq!(overlap_fade_weight(1.0, iou), 1.0);
+        }
+        // Halfway: the fade squeezed into the last half of its window.
+        let mid = (XFADE_IOU_HARD + XFADE_IOU_FULL) / 2.0;
+        assert_eq!(overlap_fade_weight(0.4, mid), 0.0);
+        assert!((overlap_fade_weight(0.75, mid) - 0.5).abs() < 1e-5);
+        assert!((overlap_fade_weight(1.0, mid) - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn crossfade_of_a_hard_cut_never_draws_a_double_body() {
+        let (a, b) = (block(100, 4, 10, 30), block(100, 4, 62, 30));
+        for w in [0.25, 0.5, 0.75] {
+            let mut out = Canvas::new(100, 4).unwrap();
+            draw_cell_crossfade(
+                &mut out,
+                (&a, (0, 0)),
+                (&b, (0, 0)),
+                (0.0, 0.0),
+                false,
+                &Transform::IDENTITY,
+                1.0,
+                w,
+            );
+            assert_eq!(out.data(), a.data(), "w {w}: still exactly frame a");
+        }
+        // Overlapping frames still blend: mid-fade both blocks are opaque.
+        let near = block(100, 4, 12, 30);
+        let mut out = Canvas::new(100, 4).unwrap();
+        draw_cell_crossfade(
+            &mut out,
+            (&a, (0, 0)),
+            (&near, (0, 0)),
+            (0.0, 0.0),
+            false,
+            &Transform::IDENTITY,
+            1.0,
+            0.5,
+        );
+        assert!((alpha_iou(&a, &near) - 28.0 / 32.0).abs() < 1e-6);
+        // IoU 0.875: a shortened fade, but a real one. Frame a's coverage
+        // holds while b's comes in.
+        let alpha = |x: usize| out.data()[x * 4 + 3];
+        assert_eq!(alpha(10), 255, "a stays opaque");
+        assert!(alpha(41) > 0, "b is fading in");
     }
 
     #[test]

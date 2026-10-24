@@ -48,7 +48,7 @@ use crate::voice_mic::{Mic, MicEvent};
 use eframe::egui;
 use lillith_core::access::deletion::{DeleteMode, DeletionManifest, DeletionSignature};
 use lillith_core::access::plan::{ChangePlan, PlanApproval};
-use lillith_core::config::{ChatConfig, MindConfig};
+use lillith_core::config::{ChatConfig, MemoryConfig, MindConfig};
 use lillith_core::soul_contract::{
     ContractError, ContractPrompt, PendingAction, RequestId, SoulContract,
 };
@@ -80,6 +80,8 @@ pub struct BubbleOptions {
     pub chat: ChatConfig,
     /// Knowledge + skills folders and the skill-authoring gate (`[mind]`).
     pub mind: MindConfig,
+    /// The learning memory graph (`[memory]`; disabled = no reads/writes).
+    pub memory: MemoryConfig,
     /// The config file in use (`--config`, else the default path). Its
     /// `[llm] system_prompt` applies unless `[chat] system_prompt` is set
     /// (`None` = only the default config path is consulted).
@@ -336,7 +338,7 @@ pub fn new_session(opts: &BubbleOptions) -> ChatSession {
     if let Some(p) = &opts.config_path {
         session = session.with_config_file(&opts.chat.system_prompt, p);
     }
-    session.with_mind(&opts.mind)
+    session.with_mind(&opts.mind).with_memory(&opts.memory)
 }
 
 fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Receiver<Ui>) {
@@ -1735,6 +1737,7 @@ mod tests {
             pos: None,
             chat: ChatConfig::default(),
             mind: MindConfig::default(),
+            memory: MemoryConfig::disabled(),
             config_path: None,
             offline: true,
             history: Some(path),
@@ -1761,6 +1764,7 @@ mod tests {
             pos: None,
             chat: ChatConfig::default(),
             mind: MindConfig::default(),
+            memory: MemoryConfig::disabled(),
             config_path: Some(cfg.clone()),
             offline: true,
             history: None,

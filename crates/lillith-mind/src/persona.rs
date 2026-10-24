@@ -82,6 +82,86 @@ pub fn pick(lines: &'static [&'static str], salt: usize) -> &'static str {
     lines[salt % lines.len()]
 }
 
+/// Her line when Ko says "no" to (or cancels) a pending forget.
+pub const FORGET_KEPT_LINE: &str = "Okay. I'll keep it, then.";
+
+/// Her question before "forget everything" / "forget about X" runs.
+pub fn forget_confirm_line(cmd: &lillith_memory::ForgetCmd) -> String {
+    match cmd {
+        lillith_memory::ForgetCmd::Topic(t) => format!(
+            "Forget everything about {t}? Say yes and it's gone for good. Anything else and I keep it."
+        ),
+        _ => "Forget everything I know about you? Say yes and it's gone for good. Anything else and I keep it."
+            .into(),
+    }
+}
+
+/// Her line when there was nothing to forget.
+pub fn forget_nothing_line(cmd: &lillith_memory::ForgetCmd) -> String {
+    match cmd {
+        lillith_memory::ForgetCmd::Topic(t) => {
+            format!("I don't have anything about {t} to forget, love.")
+        }
+        lillith_memory::ForgetCmd::All => {
+            "There's nothing to wipe. I don't remember anything yet.".into()
+        }
+        lillith_memory::ForgetCmd::LastSecs(s) => {
+            let m = (*s / 60).max(1);
+            format!(
+                "I didn't learn anything in the last {m} minute{} to forget.",
+                plural(m)
+            )
+        }
+    }
+}
+
+fn plural(n: u64) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
+/// Her line after a forget ran: what went (honestly, including "nothing"),
+/// plus a note when the file could not be fully scrubbed or the chat log
+/// could not be rewritten.
+pub fn forget_line(
+    cmd: &lillith_memory::ForgetCmd,
+    report: &lillith_memory::ForgetReport,
+    history_removed: usize,
+    history_error: Option<String>,
+) -> String {
+    let mut line = if report.total() == 0 && history_removed == 0 {
+        forget_nothing_line(cmd)
+    } else {
+        match cmd {
+            lillith_memory::ForgetCmd::All => {
+                "Done. Wiped clean, every last memory of you. Start fresh with me?".into()
+            }
+            lillith_memory::ForgetCmd::Topic(t) => {
+                format!("Gone. I don't remember anything about {t} now.")
+            }
+            lillith_memory::ForgetCmd::LastSecs(s) => {
+                let m = (*s / 60).max(1);
+                format!(
+                    "Forgotten. The last {m} minute{} never happened.",
+                    plural(m)
+                )
+            }
+        }
+    };
+    if !report.scrubbed {
+        line.push_str(
+            " (It's deleted, but another Lillith window still has my memory file open, so the old copy isn't scrubbed from disk yet. Close it and ask me again.)",
+        );
+    }
+    if let Some(e) = history_error {
+        line.push_str(&format!(" (I couldn't rewrite the chat log, though: {e}.)"));
+    }
+    line
+}
+
 #[cfg(test)]
 mod persona_prompt_tests {
     use super::*;
