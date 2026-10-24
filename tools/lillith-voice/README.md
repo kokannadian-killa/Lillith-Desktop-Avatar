@@ -117,7 +117,8 @@ lillith-say -v "..."                                       # JSON timing (RTF, f
 - **Text cleanup.** For LLM output it drops ```` ```code``` ````, URLs (spoken as "link"), emoji, markdown, and
   `<think>…</think>`. `*giggles*`-style actions are dropped by default; use `--actions read` to speak them.
 - **Players.** Tried in order: `pw-play` → `paplay` → `aplay` → `ffplay`. Override with
-  `LILLITH_PLAYER="pw-play --volume 0.8 {}"` (`{}` = wav path) or `LILLITH_PLAYER=none`.
+  `LILLITH_PLAYER="/usr/bin/pw-play --volume 0.8 {}"` (`{}` = wav path; the program must be an absolute path)
+  or `LILLITH_PLAYER=none`.
 - **Custom presets.** Create `~/.config/lillith-voice/presets.json`:
   ```json
   {"default": "bella80_nicole20",
@@ -168,6 +169,8 @@ lillith-chat --mic              # always listening: just talk; she answers; talk
 ```
 
 - **Capture:** `pw-record` → `parec` → `arecord` (or `LILLITH_MIC_CMD`, `LILLITH_MIC_DEVICE`), 16 kHz mono.
+  `LILLITH_MIC_CMD` must be an allowlisted recorder at an absolute path (see PROTOCOL.md "Programs from the
+  environment"). The mic only starts after a mouse-click Yes on a Soul Contract card (PROTOCOL.md "Mic gate").
 - **Echo safety:** while she is talking the mic is *not* transcribed (`"echo":"mute"`, default), so laptop
   speakers can't make her answer herself. A 250 ms hangover covers the speaker tail.
 - **Barge-in:** if you talk loudly over her (> −32 dBFS for 300 ms, tune `barge_in_dbfs` in `mic.json`) she

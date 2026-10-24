@@ -1,6 +1,7 @@
 """Simulated microphone for tests: writes s16le 16 kHz mono to stdout in real time.
 Silence (faint noise) until a WAV is dropped at <dir>/mic_play.wav; then that WAV is "spoken" once.
-Used as LILLITH_MIC_CMD="python fake_mic.py DIR"."""
+Run through a shim named `arecord` (tests/e2e.sh), since $LILLITH_MIC_CMD only accepts an allowlisted recorder:
+  <OUT>/bin/arecord = `exec python fake_mic.py DIR`;  LILLITH_MIC_CMD=<OUT>/bin/arecord"""
 import os
 import sys
 import time

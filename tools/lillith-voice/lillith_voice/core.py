@@ -17,6 +17,8 @@ from dataclasses import dataclass, field, asdict
 
 import numpy as np
 
+from . import launchguard as G
+
 SR = 24000  # Kokoro's native sample rate
 
 # --------------------------------------------------------------------------- paths
@@ -116,6 +118,10 @@ def _load_overrides():
             global DEFAULT_PRESET
             DEFAULT_PRESET = d
             continue
+        if not isinstance(d, dict):
+            print(f"lillith-voice: ignoring preset {name!r} in {PRESETS_OVERRIDE}: not an object", file=sys.stderr)
+            continue
+        d = G.sanitize_override(name, d)   # numbers clamped, echo numbers-only: nothing odd reaches ffmpeg
         dflt = "bella" if ("mix" in d and "engine" not in d) else "lillith"
         base = asdict(PRESETS.get(name, PRESETS[dflt]))
         base.update(d)
@@ -189,7 +195,13 @@ def split_sentences(text: str, first_max: int = 120, max_len: int = 260):
 
 
 # --------------------------------------------------------------------------- ffmpeg
-FFMPEG = os.environ.get("LILLITH_FFMPEG") or shutil.which("ffmpeg")
+def _default_ffmpeg():
+    w = shutil.which("ffmpeg")
+    return G.checked_exe(w)[0] if w and os.path.isabs(w) else None
+
+
+# $LILLITH_FFMPEG only as an absolute path to an existing executable file (else logged + the default)
+FFMPEG = G.env_exe("LILLITH_FFMPEG") or _default_ffmpeg()
 _HAS_RB = None
 
 
@@ -199,6 +211,7 @@ def has_rubberband() -> bool:
         _HAS_RB = False
         if FFMPEG and os.environ.get("LILLITH_NO_RUBBERBAND") != "1":
             try:
+                G.audit_once("voice_ffmpeg_probe", [FFMPEG, "-hide_banner", "-filters"])
                 out = subprocess.run([FFMPEG, "-hide_banner", "-filters"], capture_output=True, text=True,
                                      timeout=20).stdout
                 _HAS_RB = bool(re.search(r"^\s*\S+\s+rubberband\s", out, re.M))
@@ -221,6 +234,7 @@ def _fft_resample(x: np.ndarray, n_out: int) -> np.ndarray:
 
 
 def _echo_np(x, spec: str):
+    spec = G.safe_echo(spec)
     if not spec:
         return x
     ig, og, delays, decays = spec.split(":")
@@ -305,14 +319,16 @@ def process(audio: np.ndarray, p: Preset, pitch: float, fx: bool = True, prepitc
         chain.append(f"highpass=f={p.highpass:g}")
     for f, w, g in p.eq:
         chain.append(f"equalizer=f={f:g}:t=q:w={w:g}:g={g:g}")
-    if p.echo:
-        chain.append(f"aecho={p.echo}")
+    echo = G.safe_echo(p.echo, f"preset {p.name}")   # numbers only, clamped (presets.json is user-editable)
+    if echo:
+        chain.append(f"aecho={echo}")
     if FFMPEG:
         chain.append("ebur128=peak=sample:framelog=quiet")
         cmd = [FFMPEG, "-hide_banner", "-nostdin", "-nostats", "-loglevel", "info",
                "-protocol_whitelist", "pipe,file",
                "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "pipe:0",
                "-af", ",".join(chain), "-f", "f32le", "-ar", str(SR), "-ac", "1", "pipe:1"]
+        G.audit_once("voice_ffmpeg_dsp", cmd)
         r = subprocess.run(cmd, input=x.tobytes(), capture_output=True, timeout=120)
         if r.returncode != 0:
             raise RuntimeError("ffmpeg DSP failed: " + r.stderr.decode(errors="replace")[-600:])
@@ -353,6 +369,7 @@ def _ffmpeg(chain, x, sr_in, sr_out=None, measure=None):
     cmd = [FFMPEG, "-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-protocol_whitelist", "pipe,file",
            "-f", "f32le", "-ar", str(sr_in), "-ac", "1", "-i", "pipe:0", "-af", ",".join(chain),
            "-f", "f32le", "-ar", str(sr_out or sr_in), "-ac", "1", "pipe:1"]
+    G.audit_once("voice_ffmpeg_dsp", cmd)
     r = subprocess.run(cmd, input=np.asarray(x, np.float32).tobytes(), capture_output=True, timeout=180)
     if r.returncode != 0:
         raise RuntimeError("ffmpeg DSP failed: " + r.stderr.decode(errors="replace")[-600:])
@@ -388,8 +405,9 @@ def process_p1(raw, p: Preset, fx=True):
         chain.append(f"equalizer=f={f:g}:t=q:w={w:g}:g={g:g}")
     if p.treble:
         chain.append(f"treble=g={p.treble[0]:g}:f={p.treble[1]:g}")
-    if p.echo:
-        chain.append(f"aecho={p.echo}")
+    echo = G.safe_echo(p.echo, f"preset {p.name}")   # numbers only, clamped (presets.json is user-editable)
+    if echo:
+        chain.append(f"aecho={echo}")
     pad = np.zeros(int(0.15 * SR), np.float32)
     x = np.concatenate([raw, pad])
     y, _ = _ffmpeg(chain, x, SR, rate)
@@ -597,15 +615,18 @@ def write_wav(path: str, a: np.ndarray, rate: int = SR, src_rate: int = SR):
 def player_cmd():
     """Command (list, with '{}' for the wav path) used to play a file."""
     env = os.environ.get("LILLITH_PLAYER")
+    if env == "none":
+        return None
     if env:
-        if env == "none":
-            return None
-        import shlex
-        return shlex.split(env)
+        # shlex (never a shell); the program must be an absolute path to an executable file, else the default
+        argv = G.env_command("LILLITH_PLAYER")
+        if argv:
+            return argv
     for c in (["pw-play", "{}"], ["paplay", "{}"], ["aplay", "-q", "{}"],
               ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", "{}"]):
-        if shutil.which(c[0]):
-            return c
+        w = shutil.which(c[0])
+        if w and os.path.isabs(w) and G.checked_exe(w)[0]:
+            return [w] + c[1:]
     return None
 
 
@@ -686,6 +707,7 @@ class Player:
                     if gen != self.gen:
                         os.unlink(path)
                         continue
+                    G.audit_once("voice_player", self.cmd)
                     self.proc = subprocess.Popen([path if a == "{}" else a for a in self.cmd],
                                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                                  stderr=subprocess.DEVNULL)
