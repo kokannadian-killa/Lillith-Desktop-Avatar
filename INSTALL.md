@@ -42,8 +42,9 @@ bash ~/Downloads/Lillith-main-linux/install.sh
 2. **Install:** the bundled programs and art, as below (steps 4 and 5).
 3. **Brain:** `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf`, else
    `~/models/*.gguf`, else it searches your home folder. The model is never
-   in the zip and never downloaded (`bundle/models/README.txt`). A bundled
-   `bundle/llama-server/` is used if present, else your system `llama-server`.
+   in the zip and never downloaded (`bundle/models/README.txt`). The
+   bundled `bundle/llama/linux-x64/llama-server` (copied to
+   `~/.local/share/lillith/llama/`) is used if present, else your system `llama-server`.
 4. **Voice:** a venv in `~/.local/share/lillith-voice` installed offline from
    the bundled wheels (`pip --no-index`, Python 3.13 or 3.14). With another
    Python it says so and carries on without voice.

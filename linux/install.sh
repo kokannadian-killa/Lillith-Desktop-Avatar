@@ -630,12 +630,10 @@ else
       warn "and run: lillith setup --gguf /path/to/model.gguf --llama-server /usr/bin/llama-server"
     fi
   fi
-  # The all-in-one zip may carry its own llama-server (bundle/llama-server/):
-  # copy it next to her data and use it; otherwise use the system one.
-  if [[ -z $LLAMA && -x $ROOT/bundle/llama-server/llama-server ]]; then
-    mkdir -p "$DATA_DIR/llama-server"
-    cp -a "$ROOT/bundle/llama-server/." "$DATA_DIR/llama-server/"
-    LLAMA="$DATA_DIR/llama-server/llama-server"
+  # The all-in-one zip carries its own llama-server (bundle/llama/, copied to
+  # $LLAMA_DIR above): use that copy; otherwise pick the system one.
+  if [[ -z $LLAMA && -x $LLAMA_DIR/linux-x64/llama-server ]]; then
+    LLAMA="$LLAMA_DIR/linux-x64/llama-server"
     ok "using the bundled llama-server ($LLAMA)"
   fi
   if [[ -z $LLAMA ]]; then
