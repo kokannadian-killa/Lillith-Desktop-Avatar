@@ -81,7 +81,10 @@ impl CompanionTab {
                     }
                     let _ = std::fs::write(&path, lillith_core::menu::settings_template());
                 }
-                match lillith_core::menu::open_settings_command(&path).spawn() {
+                match lillith_core::menu::spawn_open_settings(
+                    &path,
+                    lillith_core::config::audit_log_path(),
+                ) {
                     Ok(_) => shared.toast("opening config.toml in your editor", pal::NEON_BLUE),
                     Err(e) => shared.toast(format!("xdg-open failed: {e}"), pal::BLOOD_SHEEN),
                 }

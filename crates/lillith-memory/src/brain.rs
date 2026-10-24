@@ -684,7 +684,7 @@ impl Brain {
         Ok(out)
     }
 
-    /// The compact block to prepend to the system prompt for `query`, within
+    /// The compact block for the chat reference message for `query`, within
     /// `max_context_tokens` (~4 chars/token). `None` when there is nothing
     /// to say, memory is off, or `query` is the safeword.
     pub fn context_block(&self, query: &str, ctx: &Ctx) -> Option<String> {

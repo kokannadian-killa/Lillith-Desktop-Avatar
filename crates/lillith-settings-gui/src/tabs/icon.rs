@@ -4,11 +4,20 @@
 //! to the desktop ([`lillith_core::icons::apply`], on a worker thread):
 //! Linux menu entry + desktop shortcut, Windows Start-menu / Desktop
 //! shortcuts. This window's own icon changes right away.
+//!
+//! Windows: re-pointing the shortcuts runs PowerShell, so it needs Ko's
+//! Yes on a Soul Contract card first (mouse only: the popup's Yes reacts
+//! to a primary click alone). The tab first shows the whole command and
+//! script (the popup itself shows only 9 lines), then the card. No, Esc
+//! or leaving it unanswered changes nothing; every decision is audited
+//! (`PROPOSED` / `CONFIRM` / `DENY`, `card=<id>`).
 
 use super::{SettingsTab, Shared};
 use crate::chrome;
 use egui::{pos2, vec2, Align2, RichText, Sense};
 use lillith_core::icons::{self, IconInfo};
+use lillith_core::launch_audit;
+use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView};
 use lillith_theme::egui_theme::{self as th, c32};
 use lillith_theme::geom;
 use lillith_theme::palette::{self as pal, Rgba};
@@ -24,6 +33,29 @@ pub struct IconTab {
     root: Option<PathBuf>,
     thumbs: HashMap<String, Option<egui::TextureHandle>>,
     job: Option<Job>,
+    /// The Windows shortcut rewrite waiting for Ko's Yes.
+    card: Option<ShortcutCard>,
+}
+
+/// A pending Windows shortcut card.
+struct ShortcutCard {
+    id: String,
+    card: String,
+    detail: String,
+    /// The full command was read: show the popup.
+    reviewed: bool,
+}
+
+fn audit(tag: &str, card: &str) {
+    if let Some(log) = lillith_core::config::audit_log_path() {
+        launch_audit::record_to(
+            &log,
+            tag,
+            icons::ICON_CARD_KIND,
+            &icons::windows_shortcut_argv(),
+            Some(card),
+        );
+    }
 }
 
 impl IconTab {
@@ -32,6 +64,7 @@ impl IconTab {
             root: icons::icons_dir(),
             thumbs: HashMap::new(),
             job: None,
+            card: None,
         }
     }
 
@@ -73,6 +106,17 @@ impl IconTab {
             );
             return;
         };
+        if cfg!(windows) {
+            let card = lillith_core::card_process::new_card_id("icon");
+            audit("PROPOSED", &card);
+            self.card = Some(ShortcutCard {
+                id: info.id.clone(),
+                detail: icons::windows_shortcut_detail(&icons::ico_path(&root, &info.id)),
+                card,
+                reviewed: false,
+            });
+            return;
+        }
         let (tx, rx) = mpsc::channel();
         let id = info.id.clone();
         std::thread::spawn(move || {
@@ -80,6 +124,73 @@ impl IconTab {
             let _ = tx.send((id, r));
         });
         self.job = Some(rx);
+    }
+
+    /// The Windows card: full command first, then the mouse-only popup.
+    fn shortcut_card(&mut self, ui: &mut egui::Ui, shared: &mut Shared) {
+        let Some(c) = &mut self.card else { return };
+        if !c.reviewed {
+            let mut go_on = false;
+            let mut cancel = false;
+            chrome::section(
+                ui,
+                "SOUL CONTRACT · SHORTCUTS",
+                Some("needs your Yes"),
+                |ui| {
+                    chrome::hint(
+                        ui,
+                        "Changing the Windows shortcuts runs this PowerShell command:",
+                    );
+                    egui::ScrollArea::both().max_height(260.0).show(ui, |ui| {
+                        ui.add(egui::Label::new(RichText::new(&c.detail).monospace()).extend());
+                    });
+                    ui.horizontal(|ui| {
+                        // Only moves on to the card; approves nothing.
+                        go_on = chrome::stone_button(ui, "Continue to the contract").clicked();
+                        cancel = chrome::stone_button(ui, "Keep the old shortcuts").clicked();
+                    });
+                },
+            );
+            if go_on {
+                c.reviewed = true;
+            }
+            if cancel {
+                audit("DENY", &c.card);
+                self.card = None;
+            }
+            return;
+        }
+        let detail = format!("{}\n(the full script was shown before this card)", c.detail);
+        let view = ContractView {
+            title: "CHANGE SHORTCUTS",
+            summary: "re-point the Start-menu / Desktop shortcuts at the new icon (PowerShell)",
+            target: Some("Start menu, Desktop, Startup: lillith*.lnk"),
+            detail: Some(&detail),
+            initiator: lillith_theme::egui_contract::Initiator::You,
+            ..Default::default()
+        };
+        match soul_contract_popup(ui.ctx(), egui::Id::new("icon-soul-contract"), &view) {
+            Some(ContractChoice::Yes) => {
+                let Some(c) = self.card.take() else { return };
+                audit("CONFIRM", &c.card);
+                let Some(root) = self.root.clone() else {
+                    return;
+                };
+                let (tx, rx) = mpsc::channel();
+                std::thread::spawn(move || {
+                    let r = icons::apply_windows_shortcuts(&root, &c.id, &c.card);
+                    let _ = tx.send((c.id, r));
+                });
+                self.job = Some(rx);
+            }
+            Some(ContractChoice::No) => {
+                if let Some(c) = self.card.take() {
+                    audit("DENY", &c.card);
+                }
+                shared.toast("icon saved; shortcuts left as they were", pal::WARN);
+            }
+            None => {}
+        }
     }
 }
 
@@ -100,7 +211,7 @@ impl SettingsTab for IconTab {
         9
     }
     fn busy(&self) -> bool {
-        self.job.is_some()
+        self.job.is_some() || self.card.is_some()
     }
     fn tick(&mut self, _ctx: &egui::Context, shared: &mut Shared) {
         let Some(rx) = &self.job else { return };
@@ -164,8 +275,11 @@ impl SettingsTab for IconTab {
             );
         });
         if let Some(info) = picked {
-            self.pick(&ctx, shared, info);
+            if self.card.is_none() {
+                self.pick(&ctx, shared, info);
+            }
         }
+        self.shortcut_card(ui, shared);
     }
 }
 

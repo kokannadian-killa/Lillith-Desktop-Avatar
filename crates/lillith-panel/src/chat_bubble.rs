@@ -112,6 +112,25 @@ pub struct BubbleOptions {
 /// clicked Yes on the model-server Soul Contract card (audited `CONFIRM`).
 pub const SERVER_APPROVED_EVENT: &str = "chat.server_approved";
 
+/// The detail of [`SERVER_APPROVED_EVENT`]: `{"card": <id>, "argv": [...]}`,
+/// the approved card and the command line it showed.
+pub fn approval_detail(card: &str, argv: &[String]) -> String {
+    serde_json::json!({ "card": card, "argv": argv }).to_string()
+}
+
+/// Parses [`approval_detail`]: `(card, argv)`.
+pub fn parse_approval_detail(detail: &str) -> Option<(String, Vec<String>)> {
+    let v: serde_json::Value = serde_json::from_str(detail).ok()?;
+    let card = v.get("card")?.as_str()?.to_string();
+    let argv = v
+        .get("argv")?
+        .as_array()?
+        .iter()
+        .map(|a| a.as_str().map(String::from))
+        .collect::<Option<Vec<_>>>()?;
+    (!card.is_empty()).then_some((card, argv))
+}
+
 /// Event telling the app a model-server card went up; the detail is its
 /// card id. If the bubble then dies without an answer (killed), the app
 /// audits `CANCELLED` for that id unless the log already has a decision.
@@ -602,13 +621,26 @@ impl Worker {
         }
         (self.emit)("chat.contract_confirmed", Some("start_model_server"));
         self.note("✅ Starting her local model server (loading can take a minute)…".into());
+        let epoch = lillith_core::access::kill_switch::epoch();
+        let stopped = move || lillith_core::access::kill_switch::stopped_since(epoch);
         let ok = if self.app_server {
-            (self.emit)(SERVER_APPROVED_EVENT, None);
-            self.rt
-                .block_on(self.session.wait_for_approved_server(RESTART_WAIT_MAX))
+            // The app re-checks both against the audit log and its config.
+            let detail = self
+                .session
+                .approved_server_card()
+                .map(|(card, argv)| approval_detail(&card, &argv));
+            (self.emit)(SERVER_APPROVED_EVENT, detail.as_deref());
+            self.rt.block_on(
+                self.session
+                    .wait_for_approved_server_or(RESTART_WAIT_MAX, stopped),
+            )
         } else {
             self.rt.block_on(self.session.start_approved_server())
         };
+        if stopped() {
+            // The safeword was said meanwhile: nothing is resent.
+            return;
+        }
         if !ok {
             self.note("The model server didn't come up; text-only for now.".into());
             return;
@@ -1127,6 +1159,7 @@ impl Bubble {
             busy: false,
             // Chat contracts are Lillith's own proposals.
             initiator: Initiator::Her,
+            scroll_detail: p.scrolls(),
         };
         if let Some(choice) =
             soul_contract_popup(ctx, egui::Id::new("lillith-soul-contract"), &view)
@@ -1139,6 +1172,11 @@ impl Bubble {
     /// routes a click; an unanswered card times out as No.
     fn server_popup(&mut self, ctx: &egui::Context) {
         if self.contract.is_some() || self.deletion.is_some() || self.plan.is_some() {
+            // Hidden behind another popup: its timeout only runs while
+            // Ko can actually see it.
+            if let Some((_, since)) = &mut self.server_card {
+                *since = Instant::now();
+            }
             return;
         }
         let Some((p, since)) = &self.server_card else {
@@ -1157,6 +1195,8 @@ impl Bubble {
             detail: p.detail.as_deref(),
             busy: false,
             initiator: Initiator::Her,
+            // The whole argv, one arg per line, scrolling, never cut.
+            scroll_detail: p.scrolls(),
         };
         if let Some(choice) =
             soul_contract_popup(ctx, egui::Id::new("lillith-server-contract"), &view)

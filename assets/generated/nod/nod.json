@@ -175,7 +175,7 @@
       392
     ],
     [
-      144,
+      147,
       243,
       70,
       392
@@ -257,14 +257,37 @@
     "height": 400,
     "frame_count": 24,
     "fps": 11.5,
-    "bytes": 289688,
+    "bytes": 298510,
     "quality": {
-      "edge_mae": 2.49,
-      "edge_p99": 19.4,
-      "halo_dark": 0.047,
-      "halo_light": -0.149,
-      "alpha_mae": 0.066
+      "edge_mae": 2.526,
+      "edge_p99": 20.0,
+      "halo_dark": 0.038,
+      "halo_light": -0.142,
+      "alpha_mae": 0.0679
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean_prev": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "fe661de694414dbbb070f33bf0b10585df4f69d00baf93503cf408ee6a891318",
+    "hand_fix": "scratch nrcheck/handfix: white background pockets, light edge px, white pinholes (fix/no-white-fringe-nr)"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "a3678a969fab62041b7c8aafa0eee80441ce73dcdcbb0dc3ca499754d3f18e90",
+    "source_sha256": "fe661de694414dbbb070f33bf0b10585df4f69d00baf93503cf408ee6a891318"
+  },
+  "fringe_polish2": {
+    "tool": "/workspace/verify/polish2/fix_blobs.py (enclosed opaque backdrop blobs cleared)",
+    "px_cleared": 21,
+    "frames": [
+      [
+        15,
+        21
+      ]
+    ],
+    "px_new_edge_despilled": 4
   }
 }

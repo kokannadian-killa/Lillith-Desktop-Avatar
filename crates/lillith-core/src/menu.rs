@@ -946,6 +946,33 @@ pub fn open_settings_command(path: &Path) -> std::process::Command {
     c
 }
 
+/// Spawns [`open_settings_command`] for `path` after appending one
+/// `OPEN_SETTINGS_UNGATED` line (program and args, secrets masked) to the
+/// audit log `audit`. "Open settings" is not gated by a card; this only
+/// records the launch.
+pub fn spawn_open_settings(
+    path: &Path,
+    audit: Option<std::path::PathBuf>,
+) -> std::io::Result<std::process::Child> {
+    audited_open_settings_command(path, audit).spawn()
+}
+
+/// [`open_settings_command`] after its `OPEN_SETTINGS_UNGATED` audit line
+/// (not spawned; [`spawn_open_settings`] spawns it).
+pub fn audited_open_settings_command(
+    path: &Path,
+    audit: Option<std::path::PathBuf>,
+) -> std::process::Command {
+    let cmd = open_settings_command(path);
+    use crate::soul_contract as sc;
+    sc::SoulContract::new(audit).record_ungated_launch_as(
+        sc::OPEN_SETTINGS_UNGATED_TAG,
+        sc::OPEN_PATH_KIND,
+        &sc::command_argv(&cmd),
+    );
+    cmd
+}
+
 /// Text for a fresh config.toml (written before "Open settings" if the
 /// file does not exist yet).
 pub fn settings_template() -> String {
@@ -1500,6 +1527,24 @@ mod tests {
         };
         assert_eq!(c.get_program(), opener);
         assert_eq!(c.get_args().collect::<Vec<_>>(), ["/tmp/x/config.toml"]);
+        // The launch is audited (one card-less line) before it runs (the
+        // test doesn't spawn it).
+        let dir =
+            std::env::temp_dir().join(format!("lillith-open-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let log = dir.join("audit.log");
+        let c = audited_open_settings_command(&dir.join("config.toml"), Some(log.clone()));
+        assert_eq!(c.get_program(), opener);
+        let text = std::fs::read_to_string(&log).expect("audit line");
+        let cols: Vec<&str> = text.trim_end().split('\t').collect();
+        assert_eq!(text.lines().count(), 1, "{text}");
+        assert_eq!(cols[1], "OPEN_SETTINGS_UNGATED");
+        assert_eq!(cols[2], "open_path");
+        assert_eq!(cols[3], opener);
+        assert_eq!(cols[4], "no-card");
+        assert!(cols[5].starts_with(&format!("$ {opener} ")), "{text}");
+        assert!(cols[5].ends_with("config.toml"), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
         let t = settings_template();
         let parsed = crate::config::Config::from_toml_str(&t).expect("template parses");
         assert_eq!(parsed, crate::config::Config::default());

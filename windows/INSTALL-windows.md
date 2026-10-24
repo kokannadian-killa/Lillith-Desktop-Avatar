@@ -76,10 +76,14 @@ When chat is set up, Lillith starts llama-server herself (hidden, on
 - **Voice:** with `[voice] engine = "auto"` (the default) she speaks
   with Windows' built-in offline voices (SAPI). Use `engine = "none"` or
   `enabled = false` to keep her quiet.
-- **Her own voice (Ko's clone):** the `lillith-voice` kit can be bundled by the installer (embedded
-  Python + wheels + models, no downloads). It talks to the app over a local named pipe
+- **Her own voice (Ko's clone):** when the setup was built with the voice payload
+  (`VOICE_PAYLOAD=… windows/build.sh`), the section *Lillith's voice* installs it to
+  `%LOCALAPPDATA%\Lillith\voice\` (embedded Python + wheels + models + ffmpeg, no downloads, no admin)
+  and starts it hidden at sign-in. It talks to the app over a local named pipe
   `\\.\pipe\lillith-voice` (current user only, remote clients rejected), never TCP or `0.0.0.0`.
-  See the kit's `windows/INSTALL-windows.md`. *Documented, not yet tested on Windows.*
+  Mic: Start menu ▸ Lillith ▸ *Lillith voice - microphone setup*. Log:
+  `%LOCALAPPDATA%\Lillith\voice\logs\voiced.log`. See the kit's `windows/INSTALL-windows.md`.
+  *Tested under wine; not yet on real Windows.*
 
 ## Files
 
@@ -88,6 +92,7 @@ When chat is set up, Lillith starts llama-server herself (hidden, on
 | Program | `%LOCALAPPDATA%\Programs\Lillith\` |
 | Settings | `%APPDATA%\lillith\config.toml` (right-click ▸ settings, or Notepad) |
 | Chat history | `%LOCALAPPDATA%\lillith\chat_history.json` |
+| Voice (optional) | `%LOCALAPPDATA%\Lillith\voice\` (program, models, `logs\voiced.log`), `%APPDATA%\lillith-voice\` (mic settings) |
 | Log | `%LOCALAPPDATA%\lillith\lillith.log`. When started from a terminal she logs to the terminal instead; set `RUST_LOG=lillith=debug` for more detail |
 
 ## Uninstall

@@ -296,7 +296,7 @@
     ],
     [
       121,
-      254,
+      251,
       22,
       392
     ],
@@ -337,7 +337,7 @@
       392
     ],
     [
-      133,
+      134,
       262,
       24,
       392
@@ -379,7 +379,7 @@
       392
     ],
     [
-      128,
+      130,
       280,
       22,
       392
@@ -641,14 +641,55 @@
     "height": 400,
     "frame_count": 72,
     "fps": 11.0,
-    "bytes": 1013609,
+    "bytes": 1034757,
     "quality": {
-      "edge_mae": 2.488,
-      "edge_p99": 20.12,
+      "edge_mae": 2.512,
+      "edge_p99": 20.59,
       "halo_dark": 0.051,
-      "halo_light": -0.154,
-      "alpha_mae": 0.0756
+      "halo_light": -0.147,
+      "alpha_mae": 0.0768
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_protect": {
+    "tool": "tools/matte-clean/regress.py",
+    "base": "379900d",
+    "px_restored": 6
+  },
+  "matte_clean_prev": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "50129187b2b1c553714a5acd69c7ecf5f4fa694fa872dbbfd46584a44873fa0a",
+    "hand_pass": "white background pockets cleared (newbot handfix.py)",
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "caf1fbeb6ae41f87cafabe2467207b509a140ef6804ab793e221fee60452983d",
+    "source_sha256": "50129187b2b1c553714a5acd69c7ecf5f4fa694fa872dbbfd46584a44873fa0a"
+  },
+  "fringe_polish2": {
+    "tool": "/workspace/verify/polish2/fix_blobs.py (enclosed opaque backdrop blobs cleared)",
+    "px_cleared": 108,
+    "frames": [
+      [
+        6,
+        23
+      ],
+      [
+        34,
+        27
+      ],
+      [
+        35,
+        24
+      ],
+      [
+        38,
+        34
+      ]
+    ],
+    "px_new_edge_despilled": 23
   }
 }

@@ -28,8 +28,10 @@ pub fn desktop_dirs() -> Vec<PathBuf> {
             v.push(p);
         }
     };
-    if let Ok(out) = std::process::Command::new("xdg-user-dir")
-        .arg("DESKTOP")
+    let mut c = std::process::Command::new("xdg-user-dir");
+    c.arg("DESKTOP");
+    crate::launch_audit::record_command_once("skill_import_desktop", &c);
+    if let Ok(out) = c
         .stdin(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .output()

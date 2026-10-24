@@ -175,6 +175,7 @@ impl BuildTab {
             busy: self.busy(),
             // Every Build tab action comes from Ko's own button press.
             initiator: Initiator::You,
+            scroll_detail: prompt.scrolls(),
         };
         Some(f(&view))
     }
@@ -235,7 +236,7 @@ impl BuildTab {
             self.log_line(&format!("✕ {} does not exist yet", dir.display()));
             return;
         }
-        match std::process::Command::new("xdg-open").arg(&dir).spawn() {
+        match open_dir_command(&dir, lillith_core::config::audit_log_path()).spawn() {
             Ok(_) => self.log_line(&format!("⌂ opened {}", dir.display())),
             Err(e) => self.log_line(&format!("✕ couldn't open folder: {e}")),
         }
@@ -247,6 +248,20 @@ impl BuildTab {
         }
         self.log.push_str(line);
     }
+}
+
+/// `xdg-open <dir>` for "Open folder", after its one plain audit line
+/// (`OPEN_DIR_UNGATED`, no card: Ko exempted it). Not spawned here.
+fn open_dir_command(dir: &std::path::Path, audit: Option<PathBuf>) -> std::process::Command {
+    use lillith_core::soul_contract as sc;
+    let mut cmd = std::process::Command::new("xdg-open");
+    cmd.arg(dir);
+    SoulContract::new(audit).record_ungated_launch_as(
+        sc::OPEN_DIR_UNGATED_TAG,
+        sc::OPEN_PATH_KIND,
+        &sc::command_argv(&cmd),
+    );
+    cmd
 }
 
 /// Runs a confirmed action through a fresh Soul Contract (audits `CONFIRM`)
@@ -417,6 +432,22 @@ impl SettingsTab for BuildTab {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn open_folder_leaves_one_plain_audit_line() {
+        let dir = std::env::temp_dir().join(format!("lillith-open-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let log = dir.join("audit.log");
+        let c = open_dir_command(std::path::Path::new("/p/proj"), Some(log.clone()));
+        assert_eq!(c.get_program(), "xdg-open");
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(text.lines().count(), 1, "{text}");
+        assert!(
+            text.contains("\tOPEN_DIR_UNGATED\topen_path\txdg-open\tno-card\t$ xdg-open /p/proj"),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     use crate::tabs::tests::shared;
 
     #[test]

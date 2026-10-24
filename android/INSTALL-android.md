@@ -16,7 +16,7 @@ Everything Android-specific lives in this `android/` folder:
 | `app/src/…/MenuActivity.java` | Long-press menu (chat, kiss, wave, dance, settings, hide) |
 | `rust/` (`lillith-android` crate) | The desktop brain (`lillith-core`), animator and clips (`lillith-anim`) driven over JNI; gravity, drag, tap/long-press, LRU page cache. The JNI glue is behind `cfg(target_os = "android")`; the rest builds and is tested on Linux as part of the workspace |
 | `llm/` | `liblillith_llm.so`: a ~200-line C JNI shim over llama.cpp (pinned tag `b11829`), CPU-only |
-| `build-apk.sh` | One-shot build of the debug APK (no Gradle needed) |
+| `build-apk.sh` | One-shot build of the debug APK (no Gradle needed); bundles the voice models from the voice kit |
 
 ## Install (Ko)
 
@@ -34,7 +34,9 @@ Everything Android-specific lives in this `android/` folder:
    4. **Size**: 100% = the desktop default (0.55 × the 400 px clips, in dp, so the same apparent size).
    5. **Icon**: tap one of the 15 launcher icons (default *Phantomcore Red*). The home screen may reload
       for a moment while the launcher picks it up; some launchers only update after a restart of the launcher.
-   6. **Start Lillith**. The first start unpacks her clips (~270 MB, takes a few seconds).
+   6. **Start Lillith**. The first start unpacks her clips (~450 MB) and her voice models (~480 MB), checking
+      each voice file's SHA-256; it needs about 1 GB free and takes a little while. If a voice file is missing
+      or corrupt, setup says which one and stops.
 3. Using her:
    - **Tap** her: the same reactions as a desktop click (double tap etc. go through the same brain).
    - **Hold** (½ s): the menu.
@@ -66,15 +68,42 @@ sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;27.2.12479018" "cmak
 export ANDROID_HOME=/path/to/sdk JAVA_HOME=/path/to/jdk-17
 export CARGO_TARGET_DIR=/path/to/target-android      # optional
 export LLAMA_CPP_DIR=/path/to/llama.cpp              # optional; else cloned at tag b11829 at build time
+# Voice models: unpack the release voice kit once (models never go in git)
+tar -xJf lillith-voice-kit-<sha>.tar.xz -C /path/to/kit
+export LILLITH_VOICE_MODELS=/path/to/kit/tools/lillith-voice/models
 android/build-apk.sh
 # -> $CARGO_TARGET_DIR/apk/lillith-debug-arm64.apk
 ```
 
 What the script does: `cargo build --release --target aarch64-linux-android -p lillith-android` →
 CMake/NDK builds the llama.cpp shim → copies `assets/generated/manifest.toml` + every `*_sheet.png`
-(art and manifest unchanged) → `javac` + `d8` → `aapt2 link` → `zipalign` → `apksigner` with a generated
+(art and manifest unchanged) → stages the voice models into `assets/voice/` → `javac` + `d8` → `aapt2 link` → `zipalign` → `apksigner` with a generated
 debug key (`$OUT/debug.keystore`, not committed). The only network access is the optional one-time
 llama.cpp source clone, at build time.
+
+### Voice models in the APK
+
+`build-apk.sh` checks the kit's `models/SHA256SUMS` before building, then uses
+`tools/lillith-voice/android/link_assets.sh` to put the models under `assets/voice/` (hard links in the
+stage dir, so no extra disk), writes `assets/voice/SHA256SUMS` + `voice.properties`, and stores `.onnx`,
+`.bin`, `.npy` and `.model` **uncompressed** (`aapt2 -0`). On first run `AssetInstaller` copies every
+listed file to `filesDir/voice/` and checks its SHA-256; a missing or corrupt file fails setup with its name.
+The build fails if the models aren't found (set `LILLITH_VOICE_MODELS`); `LILLITH_VOICE=0` builds without voice.
+
+| env | default | what |
+|---|---|---|
+| `LILLITH_VOICE_FLAVOR` | `quality` | fp32 `flow_lm_main` (recommended by `ANDROID_ASSETS.md`); `small` = int8 (experimental: can cut lines short) |
+| `LILLITH_VOICE_STT` | `0` | `1` also packs whisper tiny.en int8 + silero VAD for the mic. Off by default: the app is speaking-only (no mic permission, no STT runtime) |
+| `LILLITH_VOICE_KOKORO` | `0` | also ship the Kokoro p1 fallback (+353 MB). Off by default: Android has no Kokoro runtime or espeak-ng G2P yet, so the planned fallback is Android `TextToSpeech` |
+| `STAGE_ONLY=1` | | stage clips + voice into `$OUT/stage/assets`, list them, stop (no SDK/NDK/cargo needed) |
+
+`assets/voice/` (quality, with STT): `pocket/{text_conditioner,flow_lm_main,flow_lm_flow,mimi_decoder}.onnx`,
+`pocket/{tokenizer.model,bundle.json,bos_before_voice.npy,voices/lillith.npy}`,
+`stt/{silero_vad,tiny.en-encoder.int8,tiny.en-decoder.int8}.onnx`, `stt/tiny.en-tokens.txt`: 12 files, 481 MiB.
+
+Size: the APK is about **0.95–1.0 GB** (clips 447 MiB + voice 481 MiB + native libs; +25–40 MB once the ONNX
+Runtime libs are added), and the phone needs about the same again for the unpacked copy. Fine for sideloading
+(well under the 4 GB zip limit). Google Play would need Play Asset Delivery (150 MB base limit).
 
 The Linux gate is unaffected: `lillith-android` is a workspace member whose JNI module only compiles for
 Android, so `cargo fmt --check`, `build --locked`, `test --locked` and `clippy -D warnings` cover its engine
@@ -85,7 +114,10 @@ and tests on Linux.
 - The overlay window is a rectangle around her. Touches on transparent pixels inside it are ignored, but
   Android doesn't pass them through to the app underneath.
 - No window perching (Android has no window list for other apps); she lands on the bottom of the screen.
-- No sound or voice yet. Plan for her voice (Ko's clone, in the APK, still no `INTERNET`): see the
+- No sound or voice yet: the voice **models** ship in the APK and are unpacked and verified, but there is no
+  Android voice runtime yet (ONNX Runtime / sherpa-onnx libs, the Pocket TTS port, `AudioTrack`/`AudioRecord`,
+  `RECORD_AUDIO`). `AssetInstaller.clonedVoiceReady()` / `fallbackVoice()` are there for it, and the log
+  (`lillith_voice` tag) says which voice she'd use. Plan for her voice (Ko's clone, in the APK, still no `INTERNET`): see the
   `lillith-voice` kit's `android/INSTALL-android.md` and `android/ANDROID_ASSETS.md` (asset list, sizes,
   SHA-256, ONNX Runtime ABIs, APK size ≈ 530–545 MB for the recommended quality flavour; the int8 small flavour is experimental). Android `TextToSpeech` is the
   fallback. The desktop sensors (CPU, Bluetooth, notifications…) aren't wired on Android.

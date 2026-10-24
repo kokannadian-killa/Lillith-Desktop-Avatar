@@ -122,8 +122,10 @@ impl Playback for ChildPlayback {
         }
         self.finish();
         if let Some((bin, args)) = self.on_stop.take() {
-            let _ = Command::new(bin)
-                .args(args)
+            let mut c = Command::new(bin);
+            c.args(args);
+            audit_once("tts_stop", &c, None);
+            let _ = c
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -136,6 +138,21 @@ impl Drop for ChildPlayback {
     fn drop(&mut self) {
         self.stop();
     }
+}
+
+/// One audit line per process for each engine program (legacy-launches
+/// #24–30: a line per spoken sentence would flood the log). The spoken
+/// text itself is never logged: it shows as `<text>`.
+fn audit_once(kind: &str, c: &Command, text: Option<&str>) {
+    let mut argv = lillith_core::launch_audit::argv_of_command(c);
+    if let Some(t) = text {
+        for a in argv.iter_mut().skip(1) {
+            if a == t {
+                *a = "<text>".into();
+            }
+        }
+    }
+    lillith_core::launch_audit::record_once(kind, &argv);
 }
 
 /// Removes control characters and leading dashes (so a line can never be
@@ -158,8 +175,9 @@ impl Engine for EspeakNg {
     }
     fn start(&mut self, text: &str, o: &SpeakOpts) -> std::io::Result<Box<dyn Playback>> {
         let voice = o.voice.clone().unwrap_or_else(|| "en+f3".into());
-        let child = Command::new(&self.bin)
-            .arg("-v")
+        let safe = arg_safe(text);
+        let mut c = Command::new(&self.bin);
+        c.arg("-v")
             .arg(voice)
             .arg("-s")
             .arg(format!("{}", (145.0 * o.rate).round() as i32))
@@ -167,7 +185,9 @@ impl Engine for EspeakNg {
             .arg("50")
             .arg("-a")
             .arg(format!("{}", (o.volume * 100.0).round() as i32))
-            .arg(arg_safe(text))
+            .arg(&safe);
+        audit_once("tts_engine", &c, Some(&safe));
+        let child = c
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -211,9 +231,10 @@ impl Engine for SpdSay {
         if let Some(v) = &o.voice {
             cmd.arg("-t").arg(v);
         }
+        let safe = arg_safe(text);
+        cmd.arg("--").arg(&safe);
+        audit_once("tts_engine", &cmd, Some(&safe));
         let child = cmd
-            .arg("--")
-            .arg(arg_safe(text))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -419,14 +440,15 @@ impl Engine for Piper {
             cmd.arg("--length_scale")
                 .arg(format!("{:.3}", 1.0 / o.rate.max(0.1)));
         }
+        audit_once("tts_engine", &cmd, None);
         let mut piper = cmd
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()?;
-        let mut player = match self
-            .player
-            .command(self.sample_rate)
+        let mut pc = self.player.command(self.sample_rate);
+        audit_once("tts_player", &pc, None);
+        let mut player = match pc
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -540,8 +562,10 @@ impl Engine for Sapi {
             Self::rate_arg(o.rate),
             (o.volume * 100.0).round().clamp(0.0, 100.0) as i32,
         );
-        let mut child = Command::new(&self.bin)
-            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        let mut c = Command::new(&self.bin);
+        c.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+        audit_once("tts_engine", &c, None);
+        let mut child = c
             .creation_flags(CREATE_NO_WINDOW)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())

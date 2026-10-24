@@ -122,8 +122,8 @@
 # pause_s = 2.0
 # shrink_s = 3.0
 # peak_scale = 1.6             # lowered automatically if she wouldn't fit on screen
-# approach_clips = ["idle_flirt_hands_behind_sway", "hip_sway", "hip_sway_slow", "hair_twirl_lip_bite"]
-# beat_clips = ["tease_closeup", "bend_forward_wink", "predator_lean_in", "kneel_sit_back_beckon", "dom_throne_lean", "tail_heart_wink", "trace_heart_on_glass", "dom_chin_tilt_summon", "lean_tease", "idle_flirt_lip_bite", "hip_pop_wink"]
+# approach_clips = ["idle_flirt_hands_behind_sway", "hip_sway", "hip_sway_slow", "hair_twirl_lip_bite", "lean_doorframe_smolder", "body_roll_to_viewer"]
+# beat_clips = ["tease_closeup", "bend_forward_wink", "predator_lean_in", "kneel_sit_back_beckon", "dom_throne_lean", "tail_heart_wink", "trace_heart_on_glass", "dom_chin_tilt_summon", "kiss_mark_on_glass", "finger_walk_on_glass", "dom_snap_kneel_order", "hip_pop_beckon", "dom_screen_edge_whisper", "lean_tease", "idle_flirt_lip_bite", "hip_pop_wink"]
 # pause_clips = ["blink_wink"]
 
 # ── System monitor (lillith --no-monitor turns it off) ───────────────────────
@@ -211,13 +211,17 @@
 # talk_jiggle = true
 # [chat.server]                # optional self-spawned llama-server (needs binary AND model_path)
 #                              # started only after a click on Yes on the Soul Contract card
-#                              # (`lillith chat --spawn-server` with no desktop: a typed y on the terminal)
+#                              # (a typed y never counts; `lillith chat --spawn-server` with no
+#                              # desktop refuses and prints the command to start it yourself)
 # binary = ""
 # model_path = ""
 # ctx_size = 4096
 # threads = 0                  # 0 = llama-server's own default; lillith setup writes your physical cores
 # gpu_layers = 99  # sample; default unset = no -ngl
-# extra_args = []             # lillith setup writes ["--jinja"]; keep it
+# extra_args = []             # lillith setup writes ["--jinja"]; keep it. Allowlist only (see
+#                              # docs/CHAT.md): tuning flags, -np/--parallel, -cb/--cont-batching,
+#                              # -mg/--main-gpu, --chat-template <built-in name, never a file>;
+#                              # anything else (e.g. --lora, --mmproj) stops the start (ARG_REFUSED)
 # startup_timeout_s = 90.0
 
 # ── Knowledge, skills and file access (everything gated by the Soul Contract) ─

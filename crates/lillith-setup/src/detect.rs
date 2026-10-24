@@ -126,9 +126,20 @@ pub fn detect(opts: &DetectOptions) -> RuntimeReport {
     }
 }
 
-/// `$PATH` + common install locations (+ `extra`), in search order.
+/// Search order: the bundled llama.cpp first ([`crate::bundle::llama_dirs`]:
+/// next to the exe, `bundle/llama/<platform>/`, the installed copy), then
+/// `$PATH` + common install locations (+ `extra`).
 pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
-    let mut roots: Vec<PathBuf> = extra.to_vec();
+    search_dirs_with(extra, &crate::bundle::llama_dirs())
+}
+
+/// [`search_dirs`] with the bundled folders given explicitly (testable).
+///
+/// Only absolute folders are searched: a relative `extra_bin_dirs` entry
+/// or `$PATH` entry (which would resolve against the current folder) is
+/// refused with a log line.
+pub fn search_dirs_with(extra: &[PathBuf], bundled: &[PathBuf]) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = absolute_only("extra_bin_dirs", extra.iter().cloned());
     if let Some(h) = paths::home_dir() {
         for d in [
             "llama.cpp",
@@ -156,9 +167,9 @@ pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
             }
         }
     }
-    let mut dirs = Vec::new();
+    let mut dirs: Vec<PathBuf> = bundled.to_vec();
     if let Some(p) = std::env::var_os("PATH") {
-        dirs.extend(std::env::split_paths(&p));
+        dirs.extend(absolute_only("PATH", std::env::split_paths(&p)));
     }
     if let Some(h) = paths::home_dir() {
         dirs.push(h.join(".local/bin"));
@@ -194,14 +205,32 @@ pub fn search_dirs(extra: &[PathBuf]) -> Vec<PathBuf> {
         }
     }
     let mut seen = std::collections::HashSet::new();
-    dirs.retain(|d| seen.insert(d.clone()));
+    dirs.retain(|d| d.is_absolute() && seen.insert(d.clone()));
     dirs
+}
+
+/// The absolute entries of `dirs`; each relative one is refused with a
+/// log line naming where it came from (empty `PATH` entries mean the
+/// current folder too).
+fn absolute_only(what: &str, dirs: impl Iterator<Item = PathBuf>) -> Vec<PathBuf> {
+    dirs.filter(|d| {
+        let ok = d.is_absolute();
+        if !ok {
+            eprintln!(
+                "lillith-setup: {what} entry {:?} refused: not an absolute folder (skipped)",
+                d.display().to_string()
+            );
+        }
+        ok
+    })
+    .collect()
 }
 
 /// First executable `name` in `dirs` (`name.exe` on Windows).
 pub fn find_binary(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
     let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
     dirs.iter()
+        .filter(|d| d.is_absolute())
         .map(|d| d.join(&file))
         .find(|p| is_executable(p))
 }
@@ -221,7 +250,17 @@ pub fn is_executable(p: &Path) -> bool {
 
 /// First non-empty line of `<bin> --version` (stdout or stderr), killed
 /// after `timeout`. Local process only.
+///
+/// `bin` must be an absolute path to an existing executable file (no
+/// `$PATH` / cwd lookup); anything else is refused with a log line.
 pub fn binary_version(bin: &Path, timeout: Duration) -> Option<String> {
+    if !bin.is_absolute() || !is_executable(bin) {
+        eprintln!(
+            "lillith-setup: --version probe of {:?} refused: needs an absolute path to an executable file",
+            bin.display().to_string()
+        );
+        return None;
+    }
     let mut child = Command::new(bin)
         .arg("--version")
         .stdin(Stdio::null())
@@ -439,6 +478,27 @@ mod tests {
     use super::*;
     use crate::http::tests::fake_server;
 
+    #[test]
+    fn relative_bin_dirs_and_bare_binaries_are_refused() {
+        let abs = std::env::temp_dir().join("lillith-abs-bin");
+        let dirs = search_dirs_with(&[PathBuf::from("rel/llama"), abs.clone()], &[]);
+        assert!(dirs.iter().all(|d| d.is_absolute()), "{dirs:?}");
+        assert!(dirs.iter().any(|d| d.starts_with(&abs)));
+        assert!(!dirs.iter().any(|d| d.starts_with("rel")));
+        assert_eq!(find_binary("sh", &[PathBuf::from("bin")]), None);
+        assert_eq!(
+            binary_version(Path::new("sh"), Duration::from_secs(1)),
+            None
+        );
+        assert_eq!(
+            binary_version(
+                Path::new("/nonexistent/llama-server"),
+                Duration::from_secs(1)
+            ),
+            None
+        );
+    }
+
     const TAGS: &str = r#"{"models":[{"name":"lily:latest","model":"lily:latest","size":2019393189,"details":{"family":"llama","parameter_size":"3.2B","quantization_level":"Q4_K_M"}}]}"#;
 
     #[test]
@@ -522,6 +582,45 @@ mod tests {
         assert_eq!(found, Some(bin));
         assert_eq!(ver.as_deref(), Some("version: 9999 (test)"));
         assert!(find_binary("definitely-not-a-binary-xyz", &dirs).is_none());
+    }
+
+    #[test]
+    #[cfg(unix)] // shell-script stand-ins for llama-server
+    fn bundled_llama_server_wins_over_path_and_extra_dirs() {
+        use std::os::unix::fs::PermissionsExt;
+        let root =
+            std::env::temp_dir().join(format!("lillith-setup-bundled-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let fake = |dir: &Path| {
+            std::fs::create_dir_all(dir).unwrap();
+            let bin = dir.join("llama-server");
+            std::fs::write(&bin, "#!/bin/sh\n").unwrap();
+            std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+            bin
+        };
+        // Portable layout: <pkg>/bin/lillith + <pkg>/bundle/llama/linux-x64/.
+        let pkg = root.join("Lillith");
+        let exe_dir = pkg.join("bin");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        let bundled = fake(&pkg.join("bundle/llama/linux-x64"));
+        let other = fake(&root.join("llama.cpp/build/bin"));
+        let roots = crate::bundle::install_roots_from(Some(&exe_dir), None, &[]);
+        let bdirs = crate::bundle::llama_dirs_from(&roots, Some("linux-x64"));
+        let dirs = search_dirs_with(&[root.join("llama.cpp")], &bdirs);
+        assert_eq!(find_binary("llama-server", &dirs), Some(bundled.clone()));
+        // Right next to the exe beats bundle/llama/<platform>/.
+        let beside = fake(&exe_dir);
+        assert_eq!(find_binary("llama-server", &dirs), Some(beside.clone()));
+        // No bundle: falls back to the existing detection ($PATH, then the
+        // extra llama.cpp root here).
+        std::fs::remove_file(&beside).unwrap();
+        std::fs::remove_file(&bundled).unwrap();
+        let found = find_binary("llama-server", &dirs).expect("fallback");
+        assert!(found == other || !found.starts_with(&root), "{found:?}");
+        std::fs::remove_dir_all(&root).ok();
+        // The bundled folders lead the default search order.
+        let d = search_dirs_with(&[], &bdirs);
+        assert_eq!(&d[..bdirs.len()], &bdirs[..]);
     }
 
     #[test]

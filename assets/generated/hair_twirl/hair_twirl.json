@@ -133,7 +133,7 @@
     [
       129,
       270,
-      21,
+      22,
       392
     ],
     [
@@ -177,14 +177,31 @@
     "height": 400,
     "frame_count": 14,
     "fps": 12.0,
-    "bytes": 176936,
+    "bytes": 178819,
     "quality": {
-      "edge_mae": 2.609,
-      "edge_p99": 19.74,
-      "halo_dark": 0.053,
-      "halo_light": -0.166,
-      "alpha_mae": 0.0733
+      "edge_mae": 2.613,
+      "edge_p99": 20.0,
+      "halo_dark": 0.049,
+      "halo_light": -0.156,
+      "alpha_mae": 0.0734
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "b738af5993f953ca9aaee8db29bde85354adfc8d895e9a363eeacdee6f4e2f9c",
+    "hand_pass": "white background pockets cleared (newbot handfix.py)",
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
+  },
+  "fringe_polish2": {
+    "tool": "/workspace/verify/polish2/fix_blobs.py (enclosed opaque backdrop blobs cleared)",
+    "px_cleared": 21,
+    "frames": [
+      [
+        8,
+        21
+      ]
+    ]
   }
 }

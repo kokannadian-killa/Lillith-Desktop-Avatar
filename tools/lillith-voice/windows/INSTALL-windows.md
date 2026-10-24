@@ -1,70 +1,81 @@
 # Lillith's voice on Windows (Ko's cloned voice, fully offline)
 
-> **Status: partly tested.** The build box is Linux.
-> - The named-pipe transport (`lillith_voice/transport.py`, stdlib ctypes) passes `tests/transport_test.py` under
->   **wine 10 + the official Python 3.13 embeddable build**. That covers framing, concurrent clients, stop from a
->   2nd connection, a lip-sync subscriber, the DACL read back from the live pipe, and the first-instance guard.
-> - It has **not** run on real Windows yet.
-> - The audio paths (`winsound` playback, `sounddevice` mic) and the full daemon with models are untested on Windows.
-> - Linux is the tested platform.
+> **Status: tested under wine, not yet on real Windows.** The build box is Linux. The complete payload this
+> folder builds (`build-voice-win.sh`) was run under **wine 10 with the network off** (`unshare -rn`, loopback only):
+> the embeddable Python imports onnxruntime 1.31 / sherpa-onnx 2.0, the daemon comes up on `\\.\pipe\lillith-voice`
+> and answers `ping`, `say` works with `lillith` (cloned voice) and `p1` (bundled ffmpeg + rubberband), STT
+> transcribes a wav, the safeword "red" is recognised, stop from a 2nd connection, second-start refusal,
+> `--stop` and `--start-app` all pass, and `tests/transport_test.py` passes 16/16.
+> Not tested: real Windows, `winsound` playback into real speakers, a real microphone. (Wine 10's own
+> `ucrtbase.dll` lacks `crealf`, which numpy needs, so the wine test used Microsoft's native `ucrtbase.dll`;
+> real Windows 10/11 ships it, so it is **not** bundled.)
 
 ## What the installer bundles (no downloads at install or run time)
 
-The Windows installer (`windows/installer.nsi` in the app repo) puts everything under
-`%LOCALAPPDATA%\Lillith\voice\`:
+`windows/installer.nsi` (section **Lillith's voice**, on by default) puts everything under
+`%LOCALAPPDATA%\Lillith\voice\` (per-user, no admin, no UAC prompt):
 
 | part | what | approx. size |
 |---|---|---:|
-| `python\` | **Python 3.13 embeddable** zip (python.org `python-3.13.x-embed-amd64.zip`), with `python313._pth` edited to add `Lib\site-packages` and `..\lib` | 11 MB |
-| `python\Lib\site-packages\` | the pins in `requirements.lock`, **win_amd64 / py3 wheels** pre-installed at *build* time (`pip install --no-index --find-links wheels-win -r requirements.lock --target ...`), plus `sounddevice` (mic + playback via PortAudio, bundled DLL). The named pipe needs **no** pywin32: it is stdlib ctypes | ~120 MB |
+| `python\` | **Python 3.13.17 embeddable** (python.org, sigstore-verified), `python313._pth` = `python313.zip`, `.`, `Lib\site-packages`, `..\lib`, `import site`; app-local **MSVC runtime** `msvcp140*.dll` (Microsoft-signed, from conda-forge `vc14_runtime`: onnxruntime, sentencepiece and espeak-ng need it, and the app-local copy avoids the admin-only vc_redist) | 188 MB with site-packages |
+| `python\Lib\site-packages\` | 20 win_amd64 wheels pinned in `voice-win.lock.json` (url + sha256), installed offline at *build* time: onnxruntime (CPU only), sherpa-onnx, numpy, soundfile (libsndfile), sounddevice (PortAudio), kokoro-onnx, phonemizer, espeakng-loader, sentencepiece … The named pipe needs no pywin32: it is stdlib ctypes | (above) |
 | `lib\lillith_voice\` | this kit's Python package | <1 MB |
-| `models\pocket\`, `models\stt\` | the same files and SHA-256 as `models/SHA256SUMS` (see `android/ANDROID_ASSETS.md` for the table). Kokoro (`kokoro-v1.0.onnx`, `voices-v1.0.bin`) only if the `p1`/bella presets are wanted | 604 MB (+338 MB Kokoro) |
-| `ffmpeg.exe` | optional; only for the `p1` preset and `--speed/--pitch` (rubberband). The default `lillith` preset's polish is pure numpy | 80–130 MB |
+| `models\` | pocket-tts + Ko's voice (`pocket\voices\lillith.npy`), Kokoro (`p1`/bella), whisper + VAD (`stt\`), checked against `models\SHA256SUMS` at build time | 941 MB |
+| `bin\ffmpeg.exe` | static ffmpeg 8.1 with rubberband (BtbN win64-gpl): the `p1` preset and `--speed/--pitch`. Without it `p1` falls back to a numpy approximation | 158 MB |
+| `tests\`, `licenses\`, `*.cmd`, `SHA256SUMS`, `PAYLOAD_ID` | self-tests, third-party licenses, launchers, the payload's own checksums | small |
 
-The packager fetches the win_amd64 wheels **once on the build machine** (`pip download --only-binary=:all:
---platform win_amd64 --python-version 3.13 -r requirements.lock -d wheels-win`); the user's machine never
-touches the network. `kokoro-onnx` and `espeakng-loader` are only needed for the Kokoro presets.
+Total ~1.3 GB unpacked (~790 MB zipped). Build it (Linux, network at build time only):
+
+```sh
+tools/lillith-voice/windows/build-voice-win.sh --kit-tarball lillith-voice-kit-<sha>.tar.xz --out <dir>
+# -> <dir>/voice/ and <dir>/lillith-voice-win-<id>.zip (+ .sha256)
+VOICE_PAYLOAD=<dir>/lillith-voice-win-<id>.zip windows/build.sh     # app installer + portable zip with voice
+```
+
+Every download is pinned by sha256 in `voice-win.lock.json` and cached (`CACHE=`); a mismatch stops the build.
+The launchers are checked to contain no download commands.
+
+## How it runs
+
+- **Autostart:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\LillithVoice` =
+  `"%LOCALAPPDATA%\Lillith\voice\python\pythonw.exe" -m lillith_voice.winlaunch` (hidden, no console). A second
+  start exits at once (the pipe is created with `FILE_FLAG_FIRST_PIPE_INSTANCE`). The installer also starts it
+  right away. Turn it off in Task Manager ▸ Startup apps, or untick the section.
+- If **Start Lillith when I sign in** is ticked too, that Startup shortcut goes through
+  `winlaunch --start-app "<install dir>\lillith.exe"`: it waits until the voice answers (≤ 60 s, starting it if the
+  Run entry is off), then starts Lillith. That way she does not fall back to SAPI because she started first.
+- The app finds the daemon on `\\.\pipe\lillith-voice` with no configuration (`[voice] engine = "auto"`); override
+  with `LILLITH_VOICE_PIPE` on both sides. The daemon finds its models next to its own `python\`, so the
+  portable copy (`Lillith\voice\` in the portable zip, start with `Start Lillith with voice.cmd`) works from any folder.
+- **Log:** `%LOCALAPPDATA%\Lillith\voice\logs\voiced.log` (rotated at 2 MB).
+- **Settings:** `%APPDATA%\lillith-voice\` (`mic.json`, `presets.json`); your own cloned voices:
+  `%LOCALAPPDATA%\Lillith\voice\voices\` (kept on upgrade; removed on uninstall only if you choose to delete settings).
+- **Upgrade / uninstall** stop it with `python.exe -m lillith_voice.winlaunch --stop` (a `shutdown` over the
+  pipe), never a taskkill on python, and remove the Run entry and the bundled files.
+- `netguard` runs first in every process and blocks every non-loopback socket; onnxruntime uses the CPU provider only.
 
 ## Transport: a local named pipe, never TCP
 
-- The daemon (`python -m lillith_voice.daemon`) listens on **`\\.\pipe\lillith-voice`** (override with
-  `LILLITH_VOICE_PIPE`).
-- It is created through stdlib ctypes (`CreateNamedPipeW`), with no pywin32:
-  - byte mode;
-  - `PIPE_REJECT_REMOTE_CLIENTS`;
-  - `FILE_FLAG_FIRST_PIPE_INSTANCE`, so the daemon won't start if the name is already taken (already running, or
-    squatted);
-  - one instance per client, so concurrent connections work;
-  - a protected DACL `D:P(D;;GA;;;NU)(A;;GA;;;<your SID>)`, which allows **only the current user** and denies network
-    logons.
+- `\\.\pipe\lillith-voice`, created through stdlib ctypes (`CreateNamedPipeW`): byte mode,
+  `PIPE_REJECT_REMOTE_CLIENTS`, `FILE_FLAG_FIRST_PIPE_INSTANCE`, one instance per client, protected DACL
+  `D:P(D;;GA;;;NU)(A;;GA;;;<your SID>)` (only the current user; network logons denied).
 - Nothing binds `0.0.0.0`, `127.0.0.1` or any TCP/UDP port.
-- Same JSON-lines protocol as Linux: see [`../PROTOCOL.md`](../PROTOCOL.md) ("Windows named pipe"). The Rust app
-  opens the pipe with `std::fs::OpenOptions` (read + write) and writes one JSON object per line.
-  - It should retry for about 1 s on `ERROR_PIPE_BUSY` (231).
-  - It should use separate connections for say, stop and subscribe.
-- Self-test on the Windows machine (no models needed):
-  run `%LOCALAPPDATA%\Lillith\voice\python\python.exe tests\transport_test.py` from an unpacked copy of this kit. It
-  should print `ALL PASSED`.
-- `netguard` still runs first in every process and blocks every non-loopback socket.
-
-Start it at logon from the app (spawn hidden: `pythonw.exe -m lillith_voice.daemon --threads 4`) or with a
-Startup shortcut. `windows\lillith-say.cmd "text"`, `lillith-listen.cmd` and `lillith-voiced.cmd` (in this
-folder) wrap `python -m lillith_voice.cli` / `.listen` / `.daemon`. (The embeddable Python ignores
-`PYTHONPATH`, so the `._pth` edit above is what makes `lib\` importable.)
+- Same JSON-lines protocol as Linux: see [`../PROTOCOL.md`](../PROTOCOL.md) ("Windows named pipe").
 
 ## Audio
 
-- Playback: built-in `winsound` (no extra DLLs), or `sounddevice` when installed (needed for gap-free
-  streaming and barge-in timing). `LILLITH_PLAYER` works as on Linux.
-- Mic: `sounddevice` (PortAudio, WASAPI). `lillith-listen --setup` picks the device and writes
-  `%APPDATA%\lillith-voice\mic.json`.
-- The Windows app's existing SAPI voice (`[voice] engine = "auto"`) stays as the fallback when the kit is
-  not installed. It doesn't sound like Ko.
+- Playback: built-in `winsound` (no extra DLLs) unless `LILLITH_PLAYER` is set.
+- Mic: `sounddevice` (PortAudio, WASAPI). Start menu ▸ Lillith ▸ *Lillith voice - microphone setup*
+  (`lillith-listen.cmd --setup`) picks the device and writes `%APPDATA%\lillith-voice\mic.json`.
+- Without the voice the app uses Windows' SAPI voice and says so. It doesn't sound like Ko.
 
-## Check after install (on the Windows machine)
+## Check after install (cmd, no network needed)
 
 ```bat
-%LOCALAPPDATA%\Lillith\voice\python\python.exe -m lillith_voice.cli --status
-%LOCALAPPDATA%\Lillith\voice\python\python.exe -m lillith_voice.cli --bench
-%LOCALAPPDATA%\Lillith\voice\python\python.exe -m lillith_voice.cli "Hiii, it's me, on Windows."
+cd /d %LOCALAPPDATA%\Lillith\voice
+lillith-voiced.cmd --ping
+lillith-say.cmd "Hiii, it's me, on Windows."
+lillith-say.cmd --preset p1 "And this is the backup voice."
+python\python.exe tests\win_smoke.py %TEMP%\lillith-smoke     &rem full self-test on a private pipe: ALL PASSED
+python\python.exe tests\transport_test.py                      &rem pipe transport only: ALL PASSED
 ```

@@ -32,7 +32,61 @@ impl LaunchCommand {
     pub fn to_command(&self) -> Command {
         let mut c = Command::new(&self.program);
         c.args(&self.args);
+        scrub_model_env(&mut c);
         c
+    }
+}
+
+/// Env var prefixes that would change what a model program does behind the
+/// card's back: llama.cpp reads every `LLAMA_ARG_*` as a flag (host, port,
+/// api key, model URL…), and `HF_*` points it at Hugging Face downloads.
+pub const SCRUBBED_ENV_PREFIXES: [&str; 2] = ["LLAMA_ARG_", "HF_"];
+
+/// Removes every inherited env var starting with [`SCRUBBED_ENV_PREFIXES`]
+/// from `cmd`, so the program runs exactly the argv the card showed.
+pub fn scrub_model_env(cmd: &mut Command) {
+    for (k, _) in std::env::vars_os() {
+        if k.to_str()
+            .is_some_and(|k| SCRUBBED_ENV_PREFIXES.iter().any(|p| k.starts_with(p)))
+        {
+            cmd.env_remove(k);
+        }
+    }
+}
+
+/// The program a launch really runs, as an absolute path: a path (more
+/// than one component, or an existing file) is made absolute; a bare name
+/// is looked up in `PATH` (`.exe` too on Windows). Unresolvable names come
+/// back unchanged (the spawn then fails as "missing"). The card shows and
+/// the spawn uses this same path, so `PATH` can't swap the binary between
+/// the click and the start.
+pub fn resolve_program(program: &str) -> PathBuf {
+    let p = Path::new(program.trim());
+    if p.as_os_str().is_empty() {
+        return p.to_path_buf();
+    }
+    if p.components().count() > 1 || p.is_absolute() || p.is_file() {
+        return std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+    }
+    let found = std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths).find_map(|d| {
+            let c = d.join(p);
+            if c.is_file() {
+                return Some(c);
+            }
+            #[cfg(windows)]
+            {
+                let e = d.join(format!("{}.exe", p.display()));
+                if e.is_file() {
+                    return Some(e);
+                }
+            }
+            None
+        })
+    });
+    match found {
+        Some(f) => std::path::absolute(&f).unwrap_or(f),
+        None => p.to_path_buf(),
     }
 }
 
@@ -221,6 +275,41 @@ pub fn ollama_create(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn launches_drop_llama_arg_and_hf_env() {
+        // Unique names: no other test reads them.
+        std::env::set_var("LLAMA_ARG_LILLITH_SCRUB_TEST", "0.0.0.0");
+        std::env::set_var("HF_LILLITH_SCRUB_TEST", "x");
+        std::env::set_var("LILLITH_KEEP_SCRUB_TEST", "y");
+        let c = LaunchCommand {
+            program: "llama-server".into(),
+            args: vec![],
+        }
+        .to_command();
+        let removed: Vec<String> = c
+            .get_envs()
+            .filter(|(_, v)| v.is_none())
+            .map(|(k, _)| k.to_string_lossy().into_owned())
+            .collect();
+        assert!(removed.iter().any(|k| k == "LLAMA_ARG_LILLITH_SCRUB_TEST"));
+        assert!(removed.iter().any(|k| k == "HF_LILLITH_SCRUB_TEST"));
+        assert!(!removed.iter().any(|k| k == "LILLITH_KEEP_SCRUB_TEST"));
+    }
+
+    #[test]
+    fn programs_resolve_to_absolute_paths() {
+        let rel = resolve_program("some/dir/llama-server");
+        assert!(rel.is_absolute(), "{rel:?}");
+        assert!(rel.ends_with("some/dir/llama-server"));
+        let none = resolve_program("no-such-program-lillith-xyz");
+        assert_eq!(none, PathBuf::from("no-such-program-lillith-xyz"));
+        #[cfg(unix)]
+        {
+            let sh = resolve_program("sh");
+            assert!(sh.is_absolute() && sh.is_file(), "{sh:?}");
+        }
+    }
 
     #[test]
     fn llama_server_line() {

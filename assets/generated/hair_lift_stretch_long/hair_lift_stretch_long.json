@@ -10217,14 +10217,115 @@
     "height": 400,
     "frame_count": 180,
     "fps": 12.0,
-    "bytes": 1678840,
+    "bytes": 1736086,
     "quality": {
-      "edge_mae": 1.75,
-      "edge_p99": 15.0,
-      "halo_dark": 0.05,
-      "halo_light": -0.094,
-      "alpha_mae": 0.0626
+      "edge_mae": 1.806,
+      "edge_p99": 15.84,
+      "halo_dark": 0.047,
+      "halo_light": -0.09,
+      "alpha_mae": 0.0637
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_protect": {
+    "tool": "tools/matte-clean/regress.py",
+    "base": "379900d",
+    "px_restored": 139
+  },
+  "matte_clean_prev": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "5ccf1ed36aea5673efc26c3047adea1462c1d2aa73fa50ff2b20d30aea397605",
+    "hand_pass": "white background pockets cleared (newbot handfix.py)",
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "832b09c9b0918735a7b1cb402508b67c4824836ecea47064d9ab74e5007fdc2f",
+    "source_sha256": "5ccf1ed36aea5673efc26c3047adea1462c1d2aa73fa50ff2b20d30aea397605"
+  },
+  "fringe_polish2": {
+    "tool": "/workspace/verify/polish2/fix_blobs.py (enclosed opaque backdrop blobs cleared)",
+    "px_cleared": 444,
+    "frames": [
+      [
+        25,
+        21
+      ],
+      [
+        26,
+        25
+      ],
+      [
+        29,
+        26
+      ],
+      [
+        30,
+        26
+      ],
+      [
+        45,
+        21
+      ],
+      [
+        54,
+        25
+      ],
+      [
+        59,
+        21
+      ],
+      [
+        67,
+        24
+      ],
+      [
+        83,
+        28
+      ],
+      [
+        93,
+        20
+      ],
+      [
+        97,
+        23
+      ],
+      [
+        107,
+        20
+      ],
+      [
+        116,
+        29
+      ],
+      [
+        125,
+        21
+      ],
+      [
+        129,
+        20
+      ],
+      [
+        130,
+        22
+      ],
+      [
+        131,
+        22
+      ],
+      [
+        145,
+        25
+      ],
+      [
+        147,
+        25
+      ]
+    ],
+    "px_new_edge_despilled": 137
   }
 }

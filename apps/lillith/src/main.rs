@@ -133,8 +133,10 @@ enum Cmd {
         /// Message to send (omit for an interactive loop; `/quit` ends it).
         message: Option<String>,
         /// Offer to start llama-server from `[chat.server]` first (and stop
-        /// it after). Starting it is a program launch: it waits for a Yes
-        /// on the Soul Contract card, or a typed y on the terminal.
+        /// it after). Starting it is a program launch: it waits for a
+        /// clicked Yes on the Soul Contract card. Without a display it is
+        /// refused and prints how to start llama-server by hand; a typed y
+        /// never counts.
         #[arg(long)]
         spawn_server: bool,
         /// Don't load or save the chat history file.
@@ -199,6 +201,17 @@ enum Cmd {
         /// Undo what `fix-kwin` / the start-up check changed in kwinrc.
         #[arg(long, conflicts_with = "check")]
         revert: bool,
+    },
+    /// Internal: show one stand-alone Soul Contract card (title, summary,
+    /// target and detail on stdin, see `lillith_core::card_process`) and
+    /// print `yes` / `no` / `timeout` / `cancelled`. Used by the KWin
+    /// pre-start check and the voice daemon's mic gate. Only a mouse click
+    /// on Yes prints `yes`.
+    #[command(hide = true)]
+    ContractCard {
+        /// Seconds before the card counts as unanswered.
+        #[arg(long, default_value_t = 60)]
+        timeout: u64,
     },
     /// Undo Lillith's last organize batch (moves go back, copies go to the
     /// Trash, empty folders she made are removed). Nothing is overwritten.
@@ -565,6 +578,7 @@ async fn main() -> Result<()> {
                 fix_kwin_cmd(check)?
             }
         }
+        Some(Cmd::ContractCard { timeout }) => contract_card_cmd(timeout),
         None => run_overlay(&cli, rules.rules.len()).await?,
     }
     Ok(())
@@ -582,6 +596,27 @@ fn kwin_pre_start(enabled: bool) {
             tracing::warn!("couldn't queue the KWin note for chat: {e}");
         }
     }
+}
+
+/// `lillith contract-card`: prints the answer word; no window = `no_ui`.
+fn contract_card_cmd(timeout: u64) {
+    use lillith_core::card_process::{decode, CardAnswer};
+    use std::io::Read;
+    let mut input = String::new();
+    // A bounded read: the card text is small.
+    let _ = std::io::stdin().take(256 * 1024).read_to_string(&mut input);
+    let text = decode(&input);
+    let answer = match lillith_panel::contract_card::run_contract_card(
+        text,
+        std::time::Duration::from_secs(timeout.clamp(1, 600)),
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!("Soul Contract card could not open: {e}");
+            CardAnswer::NoUi
+        }
+    };
+    println!("{}", answer.word());
 }
 
 /// `lillith fix-kwin`.
@@ -744,6 +779,11 @@ fn setup(
             anyhow::bail!("{} is not a llama-server program", b.display());
         }
         llm.llama_server_bin = b.display().to_string();
+    } else if llm.llama_server_bin.trim().is_empty() {
+        // All-in-one download: the bundled llama-server (bundle/llama/<platform>/).
+        if let Some(b) = lillith_setup::bundle::find_llama_server() {
+            llm.llama_server_bin = b.display().to_string();
+        }
     }
     if let Some(c) = ctx_size {
         llm.ctx_size = c;

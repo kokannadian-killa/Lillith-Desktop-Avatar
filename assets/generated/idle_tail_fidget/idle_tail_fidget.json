@@ -167,7 +167,7 @@
       392
     ],
     [
-      144,
+      145,
       242,
       21,
       392
@@ -197,7 +197,7 @@
       392
     ],
     [
-      146,
+      149,
       247,
       25,
       392
@@ -215,7 +215,7 @@
       392
     ],
     [
-      147,
+      149,
       319,
       23,
       392
@@ -239,7 +239,7 @@
       392
     ],
     [
-      138,
+      140,
       234,
       23,
       392
@@ -281,7 +281,7 @@
       392
     ],
     [
-      151,
+      152,
       311,
       23,
       392
@@ -324,7 +324,7 @@
     ],
     [
       123,
-      238,
+      235,
       22,
       392
     ],
@@ -341,7 +341,7 @@
       392
     ],
     [
-      147,
+      148,
       265,
       25,
       392
@@ -441,14 +441,43 @@
     "height": 400,
     "frame_count": 47,
     "fps": 11.5,
-    "bytes": 538661,
+    "bytes": 557343,
     "quality": {
-      "edge_mae": 2.383,
-      "edge_p99": 19.78,
-      "halo_dark": 0.043,
-      "halo_light": -0.151,
-      "alpha_mae": 0.0591
+      "edge_mae": 2.431,
+      "edge_p99": 21.0,
+      "halo_dark": 0.046,
+      "halo_light": -0.142,
+      "alpha_mae": 0.0601
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_protect": {
+    "tool": "tools/matte-clean/regress.py",
+    "base": "379900d",
+    "px_restored": 6
+  },
+  "matte_clean_prev": {
+    "version": 1,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "352fefe65437ee958071f6c3e4aac0bfd6b2401a2f6f690e2079eb489970aae5",
+    "hand_pass": "white background pockets cleared (newbot handfix.py)",
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "f64462981e2ad76789002cec1f180ceef4cb3333f603cadc6625e20ca70ac674",
+    "source_sha256": "352fefe65437ee958071f6c3e4aac0bfd6b2401a2f6f690e2079eb489970aae5"
+  },
+  "fringe_polish2": {
+    "tool": "/workspace/verify/polish2/fix_blobs.py (enclosed opaque backdrop blobs cleared)",
+    "px_cleared": 20,
+    "frames": [
+      [
+        31,
+        20
+      ]
+    ],
+    "px_new_edge_despilled": 3
   }
 }

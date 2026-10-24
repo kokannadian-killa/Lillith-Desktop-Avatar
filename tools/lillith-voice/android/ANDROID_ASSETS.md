@@ -1,6 +1,8 @@
 # Android assets for Lillith's voice (Ko's clone) — list only, nothing copied
 
-**Nothing in this file is copied into `android/assets/`.** The models are large, and the box has limited disk.
+**Wired:** `android/build-apk.sh` now stages this list into the APK's `assets/voice/` (quality flavour + STT by
+default; see `android/INSTALL-android.md` → *Voice models in the APK*), and `AssetInstaller` copies and
+SHA-256-checks it on first run. **Nothing in this file is copied into `android/assets/`.** The models are large, and the box has limited disk.
 This is the exact list the APK build needs, with source paths, sizes and SHA-256, so the Android build can
 copy (or symlink) them at build time. `link_assets.sh` in this folder creates **symlinks only** if you ask it to.
 

@@ -112,18 +112,18 @@
     ],
     [
       134,
-      274,
-      21,
+      273,
+      22,
       392
     ],
     [
       132,
       282,
-      21,
+      22,
       392
     ],
     [
-      121,
+      122,
       304,
       21,
       392
@@ -131,17 +131,17 @@
     [
       122,
       294,
-      19,
+      20,
       392
     ],
     [
       120,
       264,
-      20,
+      21,
       392
     ],
     [
-      127,
+      128,
       267,
       23,
       392
@@ -167,7 +167,7 @@
     [
       98,
       327,
-      21,
+      22,
       392
     ],
     [
@@ -178,19 +178,19 @@
     ],
     [
       105,
-      358,
+      357,
       20,
       392
     ],
     [
       105,
       333,
-      20,
+      21,
       392
     ],
     [
       105,
-      325,
+      324,
       21,
       392
     ],
@@ -201,7 +201,7 @@
       392
     ],
     [
-      104,
+      105,
       324,
       22,
       392
@@ -229,14 +229,40 @@
     "height": 400,
     "frame_count": 19,
     "fps": 12.0,
-    "bytes": 266122,
+    "bytes": 281570,
     "quality": {
-      "edge_mae": 2.719,
-      "edge_p99": 20.25,
-      "halo_dark": 0.089,
-      "halo_light": -0.201,
-      "alpha_mae": 0.0867
+      "edge_mae": 2.76,
+      "edge_p99": 22.0,
+      "halo_dark": 0.079,
+      "halo_light": -0.182,
+      "alpha_mae": 0.0872
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 5,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "f5f4db0dfd12be3f654422f49c3486ce09b30372f1633d5ba937f9bdc41036cf",
+    "source_sha256": "8d7429fc634a6c44774070b0a11f67156375303bec6cb5a46f09483d4b272f9c"
+  },
+  "matte_protect": {
+    "tool": "tools/matte-clean/regress.py",
+    "base": "379900d",
+    "px_restored": 3
+  },
+  "fringe_polish2": {
+    "tool": "/workspace/verify/polish2/fix_blobs.py (enclosed opaque backdrop blobs cleared)",
+    "px_cleared": 50,
+    "frames": [
+      [
+        5,
+        28
+      ],
+      [
+        9,
+        22
+      ]
+    ],
+    "px_new_edge_despilled": 7
   }
 }

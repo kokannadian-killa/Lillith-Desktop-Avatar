@@ -1,5 +1,9 @@
 # Installing Lillith
 
+**Downloaded the main zip** (GitHub's **Code ▸ Download ZIP**,
+`Lillith-Desktop-Avatar-main.zip`)? Use the one-step installer. See
+[From the main zip](#from-the-main-zip-github-download-zip) right below.
+
 How to install and start Lillith from the release zip. The zip ships **Linux
 binaries only**. On Windows you build from source with Rust 1.85. On Android you chat
 with her model in Termux (plus an experimental APK, see below).
@@ -8,6 +12,8 @@ Everything runs on your own machine. Lillith only talks to `127.0.0.1`
 (loopback), and nothing is downloaded while she runs. You get the model file
 yourself.
 
+- [From the all-in-one zip (recommended)](#from-the-all-in-one-zip-recommended)
+- [From the main zip (GitHub "Download ZIP")](#from-the-main-zip-github-download-zip)
 - [Linux (Garuda / Arch, KDE Plasma 6 Wayland)](#linux-garuda--arch-kde-plasma-6-wayland)
 - [Windows (build from source)](#windows-build-from-source)
 - [Android (Termux chat, experimental APK)](#android-termux-chat-experimental-apk)
@@ -15,6 +21,98 @@ yourself.
 - [Privacy: what she keeps on your machine](#privacy-what-she-keeps-on-your-machine)
 - [The safeword (kill switch)](#the-safeword-kill-switch)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## From the all-in-one zip (recommended)
+
+Download **`Lillith-main-linux.zip`** from the latest GitHub release. It has
+the ready-made programs (`bin/`), all her art and pose videos, the art kit and
+the offline voice kit (models and Python wheels), so nothing is downloaded or
+built.
+
+**Before you install (Garuda / Arch):**
+
+- **llama-server** (her brain's server) is now in the zip (`bundle/llama/`,
+  llama.cpp b11829) and the installer uses it first. Only if you use a zip
+  without it: `sudo pacman -S --needed llama-cpp` (Arch `extra`), or
+  `paru -S llama.cpp` from the AUR. Check with `command -s llama-server`.
+- **ffmpeg** (plays her MP4 poses, and her voice uses it):
+  `sudo pacman -S --needed ffmpeg`. The installer offers it too.
+- **Python 3.13 or 3.14** for her voice (`python` on Garuda is 3.14).
+- **Your `.gguf` model**, e.g. `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf`.
+
+If the release has the zip in parts (`.part1`, `.part2`, `.part3`), put all of the
+release files in one folder and run `bash join-and-verify.sh` first. It joins
+them and checks the sha256.
+
+```fish
+cd ~/Downloads
+unzip -o Lillith-main-linux.zip
+bash ~/Downloads/Lillith-main-linux/install.sh
+```
+
+1. **Packages:** it lists the missing runtime libraries (ffmpeg, Wayland/X11,
+   audio) and asks before `sudo pacman -S --needed`. No Rust or build tools.
+2. **Install:** the bundled programs and art, as below (steps 4 and 5).
+3. **Brain:** `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf`, else
+   `~/models/*.gguf`, else it searches your home folder. The model is never
+   in the zip and never downloaded (`bundle/models/README.txt`). The
+   bundled `bundle/llama/linux-x64/llama-server` (copied to
+   `~/.local/share/lillith/llama/`) is used if present, else your system `llama-server`.
+4. **Voice:** a venv in `~/.local/share/lillith-voice` installed offline from
+   the bundled wheels (`pip --no-index`, Python 3.13 or 3.14). With another
+   Python it says so and carries on without voice.
+
+## From the main zip (GitHub "Download ZIP")
+
+The main zip is the source code. It has no ready-made program, and on GitHub
+its art (PNG sheets, MP4 poses) is only small **Git LFS placeholders** unless
+the repo setting *Settings ▸ General ▸ Archives ▸ Include Git LFS objects in
+archives* is on. The installer handles both cases.
+
+**Linux (fish, bash or zsh):** paste only these lines, not the prompt in front of them:
+
+```fish
+cd ~/Downloads
+unzip -o Lillith-Desktop-Avatar-main.zip
+bash ~/Downloads/Lillith-Desktop-Avatar-main/install.sh
+```
+
+Run it with `bash` (it isn't a fish script), from any folder. Steps:
+
+1. **Art.** If the art is placeholders, it asks, then downloads about
+   530 MB from your GitHub repo and checks every file's sha256. The repo is
+   private, so it needs your GitHub login once. It offers to install
+   `github-cli` and run `gh auth login --web` (a browser window; log in and
+   type the code it shows). No token is saved by the installer.
+2. **Packages** with `sudo pacman -S --needed` (Rust, build tools, ffmpeg,
+   Wayland/X11 libraries). It asks first.
+3. **Build** (first time about 10–20 minutes on an i5 laptop).
+4. **Install** for your user: `~/.local/bin/lillith`, her animations in
+   `~/.local/share/lillith/generated/`, the app-menu entry, a desktop icon,
+   the KWin bridge and the KDE blur fix.
+5. **Brain.** It uses `~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf` if it's
+   there (else it searches your home folder), finds `llama-server`, and writes
+   `~/.config/lillith/config.toml` (127.0.0.1:8080, `-c 4096`, `--jinja`).
+   Lillith then starts llama-server herself. If you already have it running
+   on 127.0.0.1:8080 she uses that one.
+
+Other model: `bash install.sh --gguf /path/to/model.gguf`. All options:
+`bash install.sh --help`. Remove her: `bash install.sh --uninstall` (it also offers to remove her voice;
+`--purge` also deletes settings, chat history and her memory).
+
+**Windows:** double-click `install.bat` in the unzipped folder. It downloads
+the art the same way (GitHub CLI login), offers to install Rust and the C++
+Build Tools with `winget`, builds her, installs to
+`%LOCALAPPDATA%\Programs\Lillith` with Start-menu and desktop shortcuts, and
+runs `lillith setup` with the `.gguf` it finds in `%USERPROFILE%\AI\models`,
+`%USERPROFILE%\models` or `Downloads`. It hasn't been run on a real Windows PC yet.
+
+**Android:** the main zip has no APK. See [Android](#android-termux-chat-experimental-apk).
+
+**Not in any zip:** the `.gguf` model and llama.cpp (you install those
+yourself), and the voice kit's models (`lillith-voice-kit.tar.gz`, see below).
 
 ---
 
@@ -32,8 +130,9 @@ sudo pacman -S --needed unzip ffmpeg libxkbcommon wayland dbus libpulse systemd-
 `ffmpeg` decodes her MP4 poses. Without it she falls back to the PNG sheets.
 A normal Plasma desktop already has most of the rest.
 
-For chat you also need llama.cpp's `llama-server` (the `llama.cpp` package,
-from pacman or an AUR helper you run yourself).
+For chat you also need llama.cpp's `llama-server`. `Lillith-main-linux.zip`
+already has one (`bundle/llama/`, see step 3). Otherwise: `sudo pacman -S llama-cpp`
+(Arch `extra`), or the AUR's `llama.cpp` with a helper you run yourself.
 
 ### 2. Unzip and start her
 
@@ -63,6 +162,16 @@ To stop her, click her and press `Q` or `Esc`, or run `pkill lillith`.
 Lillith animates and reacts without a model. To **chat** with her you need a
 GGUF model and `llama-server`, both on your machine.
 
+**All-in-one zip:** `bundle/llama/linux-x64/` holds a prebuilt `llama-server`
+(llama.cpp release pinned in `bundle/llama/llama.lock`, CPU build that picks
+AVX2 etc. at run time). Setup and the Brain tab use it first, so you can skip
+installing llama.cpp: `./run.sh setup --gguf ~/AI/models/<model>.gguf` fills in
+the bundled server by itself. `bundle/llama/linux-x64-vulkan/` is the same
+plus the Vulkan GPU backend (needs `vulkan-icd-loader` and, for Intel HD
+graphics, `vulkan-intel`); pick its `llama-server` in the Brain tab to try it.
+No model is included: drop your `.gguf` into `bundle/models/` or `~/AI/models/`.
+`linux/install.sh` copies the bundled server to `~/.local/share/lillith/llama/`.
+
 1. **Get the model yourself.** Ko uses **Dolphin 3.0 Llama 3.2 3B
    Q4_K_M** (`dolphin3.0-llama3.2-3b-q4_k_m.gguf`). Download the `.gguf` file
    from the model's Hugging Face page in your browser. Lillith never downloads
@@ -90,7 +199,7 @@ GGUF model and `llama-server`, both on your machine.
 
    If you'd rather use the GUI, run `./bin/lillith-settings` and open the
    **Brain** tab. That's the setup wizard, and it can also scan your disks
-   for GGUF files (`~/models`, `~/AI/models`, `~/Downloads`,
+   for GGUF files (the bundle's `bundle/models/`, `~/AI/models`, `~/models`, `~/Downloads`,
    `~/.local/share/lillith/models`, `~/.cache/llama.cpp` and the LM Studio /
    Ollama folders). On a low-power CPU with 8–16 GB of RAM it recommends
    `dolphin3.0-llama3.2-3b-q4_k_m.gguf` and ranks uncensored models above
@@ -146,18 +255,20 @@ local daemon (`lillith-voiced`) that she finds on her own (`[voice] engine =
 "auto"` tries the daemon first). It talks only over a Unix socket, and its
 network guard blocks everything that isn't loopback.
 
-The kit's source is in the repo at `tools/lillith-voice/`. The **models and
-Python wheels are not in the repo or the app zip**. They come in the separate
-full kit tarball `lillith-voice-kit.tar.gz` (about 731 MiB). That tarball
-isn't published as a release asset yet, so get it from Ko. With it, in a git
-checkout of the repo:
+The kit's source is in the repo at `tools/lillith-voice/`. The models and
+Python wheels aren't in the git repo, but **the release's
+`Lillith-main-linux.zip` already contains them** (in
+`tools/lillith-voice/models/` and `wheels/`), so `bash install.sh` sets the
+voice up for you, offline. To (re)run only the voice part from the unzipped
+folder:
 
 ```fish
-tar xzf lillith-voice-kit.tar.gz lillith-voice-kit/models lillith-voice-kit/wheels
-mv lillith-voice-kit/models lillith-voice-kit/wheels tools/lillith-voice/
-cd tools/lillith-voice
+cd ~/Downloads/Lillith-main-linux/tools/lillith-voice
 bash install.sh --systemd      # offline: ./models + ./wheels only, no sudo; --systemd also starts the daemon
 ```
+
+Voice is Linux-only in release #3 (the bundled wheels are for Python 3.13
+and 3.14 on x86_64).
 
 What the installer does:
 - It never downloads anything by default. Without the wheels it stops. You
@@ -242,7 +353,10 @@ low-power CPU with 8–16 GB of RAM it recommends
 `dolphin3.0-llama3.2-3b-q4_k_m.gguf` (Dolphin 3.0 Llama 3.2 3B Q4_K_M), and
 it ranks uncensored models (Dolphin, abliterated, Hermes) above stock ones of
 the same size. A Mistral 7B GGUF still works as a fallback if it's the only one
-you have, but it's slow on that kind of CPU. Unzip a llama.cpp Windows release
+you have, but it's slow on that kind of CPU. The all-in-one installer / zip
+ships llama.cpp's `llama-server.exe` in `bundle\llama\windows-x64\` (CPU,
+AVX2) and pre-selects it; it needs the Microsoft Visual C++ 2015-2022
+Redistributable (x64), which most PCs already have. Otherwise unzip a llama.cpp Windows release
 into `C:\llama.cpp\` or `%LOCALAPPDATA%\Programs\llama.cpp\`, where the Brain
 tab finds it on its own (keep the DLLs next to `llama-server.exe`). Then run:
 
@@ -267,10 +381,40 @@ tokens, 160 reply tokens) are sent with every chat request, so they aren't on
 the command line. If you use Ollama instead (`backend = "ollama"`), it must be
 on `http://127.0.0.1:11434`. The **kill switch** on Windows is the same safeword
 (see below), and it also shuts down the elevated `lillith-admin` helper.
-**Voice on Windows:** she uses the built-in Windows (SAPI) voice. The offline
-voice kit's Windows notes are in `tools/lillith-voice/windows/INSTALL-windows.md`.
-Only its named-pipe transport has been tested, and only under wine. It has
-not run on real Windows, and no Windows installer bundles it yet.
+### Windows: her own voice (Ko's cloned voice, offline)
+
+The installer can carry her real voice, so she doesn't sound like SAPI. Build
+the voice payload once (Linux; it downloads pinned, sha256-checked files at
+*build* time only), then hand it to `windows/build.sh`:
+
+```sh
+tools/lillith-voice/windows/build-voice-win.sh \
+  --kit-tarball lillith-voice-kit-<sha>.tar.xz --out /tmp/voice-win
+VOICE_PAYLOAD=/tmp/voice-win/lillith-voice-win-<id>.zip windows/build.sh
+```
+
+- The setup then has a section **Lillith's voice** (on by default; `/NOVOICE`
+  skips it in a silent install). It installs about 1.3 GB to
+  `%LOCALAPPDATA%\Lillith\voice\`: embedded Python 3.13, onnxruntime,
+  sherpa-onnx, the models (Ko's cloned voice `lillith`, the `p1` backup voice,
+  whisper speech recognition), ffmpeg and the MSVC runtime. Nothing is
+  downloaded at install or run time.
+- It's per-user and needs no admin, so it adds no UAC prompt (the one prompt
+  per session stays for `lillith-admin`). It autostarts hidden at sign-in
+  (`HKCU\...\Run\LillithVoice`) and serves only the local named pipe
+  `\\.\pipe\lillith-voice`, where the app finds it on its own.
+- Start menu ▸ Lillith ▸ *Lillith voice - microphone setup* picks the mic.
+  The log is `%LOCALAPPDATA%\Lillith\voice\logs\voiced.log`.
+- Uninstall stops it and removes it.
+- In the portable zip it's `Lillith\voice\`: start with
+  `Start Lillith with voice.cmd`.
+- Without the voice section she uses the built-in Windows (SAPI) voice and
+  says so.
+
+Status: the whole payload passed its self-test under wine with the network
+off. It has not run on real Windows yet. Details are in
+`tools/lillith-voice/windows/INSTALL-windows.md`.
+
 More detail: `source/windows/INSTALL-windows.md` in the release zip
 ([`windows/INSTALL-windows.md`](windows/INSTALL-windows.md) in the repo).
 
@@ -369,7 +513,7 @@ toggle), `[behavior.tease]` (the "come closer" tease) and `[mind.access]`
 For the voice kit, `[voice] daemon_socket`, `preset` and `[voice.stt]` (the
 push-to-talk mic) are optional; the defaults find the local daemon.
 `lillith setup` (and the setup wizard) writes `[llm]`, `[chat]` and, for
-llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--jinja"]`).
+llama-server, `[chat.server]` (model path, ctx size, threads, `extra_args = ["--jinja"]`; only allowlisted flags pass, see docs/CHAT.md).
 
 ---
 

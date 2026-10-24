@@ -6,6 +6,9 @@ use super::{SettingsTab, Shared};
 use crate::chrome;
 use crate::task::Task;
 use egui::{pos2, vec2, Align2, RichText, Sense};
+use lillith_core::soul_contract::{
+    MODEL_SERVER_KIND, OLLAMA_CREATE_KIND, OLLAMA_CREATE_UNGATED_TAG, SETTINGS_UNGATED_TAG,
+};
 use lillith_setup::check::{self, ServerHealth};
 use lillith_setup::config::{self as llm, Backend, LlmConfig};
 use lillith_setup::modelfile::{
@@ -81,6 +84,10 @@ pub struct BrainTab {
     cfg: LlmConfig,
     saved: LlmConfig,
     load_error: Option<String>,
+    /// Names the `[chat.server] extra_args` llama-server would refuse (the
+    /// start is refused and logged as `ARG_REFUSED`), so nothing is
+    /// dropped silently. Re-read on load, save and revert.
+    args_notice: Option<String>,
     step: Step,
     // scan
     scan: Option<ScanHandle>,
@@ -120,6 +127,13 @@ fn params_of(m: &Modelfile) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The notice for refused `[chat.server] extra_args` in the config file
+/// at `path` (`None` when every arg passes or the file can't be read).
+fn extra_args_notice(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    lillith_setup::extra_args::notice(&lillith_setup::extra_args::from_config_toml(&text))
+}
+
 fn gb(b: u64) -> String {
     format!("{:.1} GB", b as f64 / 1e9)
 }
@@ -151,6 +165,7 @@ impl BrainTab {
             saved: cfg.clone(),
             cfg,
             load_error,
+            args_notice: extra_args_notice(config_path),
             step: Step::Runtime,
             scan: None,
             scan_status: String::new(),
@@ -1132,7 +1147,13 @@ impl BrainTab {
             rounded(&self.cfg),
         );
         self.create_result = None;
+        let audit = lillith_core::config::audit_log_path();
         self.create = Some(Task::spawn(ctx, "ollama-create", move || {
+            // No card (Ko exempted it): one plain audit line per launch. A
+            // command that fails its checks never runs, so it gets none.
+            if let Ok(c) = launch::ollama_create_command(&bin, &name, &path, &cfg) {
+                audit_ungated(audit, OLLAMA_CREATE_UNGATED_TAG, OLLAMA_CREATE_KIND, &c);
+            }
             launch::ollama_create(&bin, &name, &path, &cfg).map_err(|e| e.to_string())
         }));
     }
@@ -1163,6 +1184,7 @@ impl BrainTab {
                                     self.server_note = Some("stopped".into());
                                 }
                             } else if chrome::stone_button(ui, "▶ Start llama-server").clicked() {
+                                audit_settings_start(lillith_core::config::audit_log_path(), c);
                                 match c
                                     .to_command()
                                     .stdin(std::process::Stdio::null())
@@ -1376,6 +1398,22 @@ impl SettingsTab for BrainTab {
         4
     }
     fn tick(&mut self, ctx: &egui::Context, shared: &mut Shared) {
+        // All-in-one download: offer the bundled llama-server (a pending
+        // change, saved with the rest) when none is configured yet.
+        if self.cfg.llama_server_bin.trim().is_empty() {
+            if let Some(b) = shared
+                .runtime
+                .as_ref()
+                .and_then(|r| r.llama_server.as_ref())
+            {
+                if lillith_setup::bundle::llama_dirs()
+                    .iter()
+                    .any(|d| b.path.parent() == Some(d.as_path()))
+                {
+                    self.cfg.llama_server_bin = b.path.display().to_string();
+                }
+            }
+        }
         if let Some(h) = &mut self.scan {
             if let Some(p) = h.progress() {
                 self.scan_status =
@@ -1444,6 +1482,9 @@ impl SettingsTab for BrainTab {
                 .color(c32(pal::WARN)),
             );
         }
+        if let Some(n) = &self.args_notice {
+            ui.label(RichText::new(format!("⚠ {n}")).color(c32(pal::WARN)));
+        }
         self.steps_row(ui, shared);
         let i = self.step.index();
         ui.label(
@@ -1499,10 +1540,12 @@ impl SettingsTab for BrainTab {
         if self.mf_dirty {
             self.write_modelfile()?;
         }
+        self.args_notice = extra_args_notice(&self.config_path);
         Ok(())
     }
     fn revert(&mut self, _shared: &mut Shared) {
         self.cfg = self.saved.clone();
+        self.args_notice = extra_args_notice(&self.config_path);
         let m = Modelfile::from_file(&self.mf_path)
             .ok()
             .and_then(|r| r.ok())
@@ -1527,9 +1570,161 @@ impl BrainTab {
     }
 }
 
+/// The "Start llama-server" button runs without a card: it leaves one
+/// plain `SETTINGS_UNGATED` audit line with the command (api key masked).
+fn audit_settings_start(log: Option<PathBuf>, c: &launch::LaunchCommand) {
+    audit_ungated(log, SETTINGS_UNGATED_TAG, MODEL_SERVER_KIND, c);
+}
+
+/// One plain, card-less launch line (`tag`, kind `kind`) for `c`, secrets
+/// masked: `<ts>\t<tag>\t<kind>\t<program>\tno-card\t$ <argv>`.
+fn audit_ungated(log: Option<PathBuf>, tag: &str, kind: &str, c: &launch::LaunchCommand) {
+    let argv: Vec<String> = std::iter::once(c.program.clone())
+        .chain(c.args.iter().cloned())
+        .collect();
+    lillith_core::soul_contract::SoulContract::new(log).record_ungated_launch_as(tag, kind, &argv);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_wizard_writes_the_same_ollama_create_line_as_core() {
+        let dir = std::env::temp_dir().join(format!("lillith-wiz-fmt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (a, b) = (dir.join("core.log"), dir.join("setup.log"));
+        let argv: Vec<String> = [
+            "/usr/bin/ollama",
+            "create",
+            "lily",
+            "-f",
+            "/m/Model\tfile",
+            "--api-key",
+            "s3cret",
+        ]
+        .map(String::from)
+        .to_vec();
+        lillith_core::soul_contract::SoulContract::new(Some(a.clone())).record_ungated_launch_as(
+            OLLAMA_CREATE_UNGATED_TAG,
+            OLLAMA_CREATE_KIND,
+            &argv,
+        );
+        lillith_setup::audit::record_ungated_launch(
+            &b,
+            lillith_setup::audit::OLLAMA_CREATE_UNGATED_TAG,
+            lillith_setup::audit::OLLAMA_CREATE_KIND,
+            &argv,
+        )
+        .unwrap();
+        let cols = |p: &Path| -> Vec<String> {
+            let t = std::fs::read_to_string(p).unwrap();
+            assert_eq!(t.lines().count(), 1, "{t}");
+            assert!(t.ends_with('\n'));
+            let c: Vec<String> = t.trim_end().split('\t').map(String::from).collect();
+            assert_eq!(c[0].len(), "2026-10-24T10:00:00Z".len(), "{t}");
+            c[1..].to_vec()
+        };
+        assert_eq!(cols(&a), cols(&b));
+        assert!(!std::fs::read_to_string(&b).unwrap().contains("s3cret"));
+        assert_eq!(
+            lillith_setup::audit::OLLAMA_CREATE_UNGATED_TAG,
+            OLLAMA_CREATE_UNGATED_TAG
+        );
+        assert_eq!(lillith_setup::audit::OLLAMA_CREATE_KIND, OLLAMA_CREATE_KIND);
+        assert_eq!(
+            lillith_setup::audit::NO_CARD,
+            lillith_core::soul_contract::NO_CARD
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_refused_extra_arg_shows_a_notice_naming_it() {
+        let dir = std::env::temp_dir().join(format!("lillith-args-notice-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("config.toml");
+        std::fs::write(
+            &p,
+            "[chat.server]\nextra_args = [\"--jinja\", \"--chat-template\", \"./t.jinja\", \"-np\", \"2\"]\n",
+        )
+        .unwrap();
+        let n = extra_args_notice(&p).expect("a notice");
+        assert!(n.contains("`--chat-template ./t.jinja`"), "{n}");
+        assert!(n.contains("ARG_REFUSED"), "{n}");
+        std::fs::write(
+            &p,
+            "[chat.server]\nextra_args = [\"--chat-template\", \"llama3\", \"-cb\"]\n",
+        )
+        .unwrap();
+        assert!(extra_args_notice(&p).is_none());
+        assert!(extra_args_notice(&dir.join("missing.toml")).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ollama_create_leaves_one_plain_masked_audit_line() {
+        let dir = std::env::temp_dir().join(format!("lillith-ungated-oc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let c = launch::LaunchCommand {
+            program: "/usr/bin/ollama".into(),
+            args: ["create", "lily", "-f", "/m/Modelfile.lily"]
+                .map(String::from)
+                .to_vec(),
+        };
+        audit_ungated(
+            Some(log.clone()),
+            OLLAMA_CREATE_UNGATED_TAG,
+            OLLAMA_CREATE_KIND,
+            &c,
+        );
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(text.lines().count(), 1, "{text}");
+        assert!(text.contains(
+            "\tOLLAMA_CREATE_UNGATED\tollama_create\t/usr/bin/ollama\tno-card\t$ /usr/bin/ollama create lily -f /m/Modelfile.lily"
+        ), "{text}");
+        // It never opens or closes a card.
+        assert!(
+            lillith_core::soul_contract::SoulContract::new(Some(log.clone()))
+                .open_model_server_cards()
+                .is_empty()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_start_button_leaves_a_plain_masked_audit_line() {
+        let dir = std::env::temp_dir().join(format!("lillith-ungated-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let c = launch::LaunchCommand {
+            program: "/opt/llama/llama-server".into(),
+            args: [
+                "-m",
+                "/m.gguf",
+                "--api-key",
+                "sekrit",
+                "--host",
+                "127.0.0.1",
+            ]
+            .map(String::from)
+            .to_vec(),
+        };
+        audit_settings_start(Some(log.clone()), &c);
+        audit_settings_start(Some(log.clone()), &c);
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert!(!text.contains("sekrit"), "{text}");
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 2, "one line per click, appended");
+        assert!(lines[0].contains(
+            "\tSETTINGS_UNGATED\tstart_model_server\t/opt/llama/llama-server\tno-card\t$ /opt/llama/llama-server -m /m.gguf --api-key *** --host 127.0.0.1"
+        ), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn llm_round_trip_with_rounding() {

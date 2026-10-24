@@ -1,0 +1,15 @@
+# Alternative to lillith-py-scheduler.timer: a long-running loop. Enable ONE of the two.
+[Unit]
+Description=lillith-py bot routine scheduler (loop)
+After=graphical-session.target
+Conflicts=lillith-py-scheduler.timer
+
+[Service]
+ExecStart=%h/.local/bin/lillith-bot scheduler --interval 30
+Restart=on-failure
+IPAddressDeny=any
+IPAddressAllow=localhost
+Nice=10
+
+[Install]
+WantedBy=default.target

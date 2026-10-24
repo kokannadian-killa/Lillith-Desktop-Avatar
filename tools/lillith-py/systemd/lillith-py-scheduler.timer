@@ -1,0 +1,11 @@
+[Unit]
+Description=Run lillith-py bot routines every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+Persistent=true
+Unit=lillith-py-scheduler.service
+
+[Install]
+WantedBy=timers.target

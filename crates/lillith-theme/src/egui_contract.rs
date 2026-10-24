@@ -17,7 +17,9 @@
 //! `SoulContract::answer` (Yes → run + audit `CONFIRM`, No → discard + audit
 //! `DENY`). `Esc` counts as **No**; a click on the dimmed backdrop does
 //! nothing (a stray click must neither run nor silently drop the action);
-//! there is no keyboard shortcut for Yes.
+//! there is no keyboard shortcut for Yes. Yes is mouse-only: it is not
+//! focusable (Tab skips it) and only a primary-pointer click counts, never
+//! Enter/Space or an accessibility "fake" click.
 //!
 //! The text is plain strings ([`ContractView`]) so this crate stays free of
 //! `lillith-core`; `ContractPrompt` maps onto it field by field.
@@ -61,6 +63,21 @@ pub struct ContractView<'a> {
     pub busy: bool,
     /// Who asked for it (default: Lillith).
     pub initiator: Initiator,
+    /// Show `detail` whole instead of clipping it: every line wraps (never
+    /// cut off) and the slab scrolls past [`DETAIL_LINES`] rows. Program
+    /// launch cards set this so the full argv can always be read.
+    pub scroll_detail: bool,
+}
+
+/// The detail text the plate lays out: whole when `scroll_detail` is set,
+/// else clipped by [`clip_detail`].
+pub fn detail_text(view: &ContractView<'_>) -> Option<String> {
+    let d = view.detail.filter(|s| !s.trim().is_empty())?;
+    Some(if view.scroll_detail {
+        d.to_string()
+    } else {
+        clip_detail(d, DETAIL_LINES)
+    })
 }
 
 /// The sentence under the heading: "She wants to …." when Lillith proposed
@@ -345,13 +362,16 @@ fn plate(
         .target
         .filter(|s| !s.is_empty())
         .map(|p| painter.layout(format!("⛧ {p}"), f.mono.clone(), c32(pal::EMBER), inner_w));
-    let detail = view.detail.filter(|s| !s.trim().is_empty()).map(|d| {
-        painter.layout(
-            clip_detail(d, DETAIL_LINES),
-            f.mono.clone(),
-            c32(pal::BONE),
-            inner_w - 16.0,
-        )
+    let detail = detail_text(view)
+        .map(|d| painter.layout(d, f.mono.clone(), c32(pal::BONE), inner_w - 16.0));
+    // A scrolling slab is at most DETAIL_LINES rows tall; the rest scrolls.
+    let detail_max_h = ctx.fonts(|fo| fo.row_height(&f.mono)) * DETAIL_LINES as f32;
+    let detail_h = detail.as_ref().map(|g| {
+        if view.scroll_detail {
+            g.size().y.min(detail_max_h)
+        } else {
+            g.size().y
+        }
     });
     let oath = painter.layout(
         "Nothing happens without your mark. Every answer is written to the audit log.".into(),
@@ -365,8 +385,8 @@ fn plate(
     if let Some(g) = &target {
         h += g.size().y + 8.0;
     }
-    if let Some(g) = &detail {
-        h += g.size().y + 16.0 + 10.0;
+    if let Some(dh) = detail_h {
+        h += dh + 16.0 + 10.0;
     }
     h += oath.size().y + 12.0 + btn_h + pad * 0.8 + frame_t;
 
@@ -575,10 +595,28 @@ fn plate(
         p.galley(Pos2::new(lx, y), g.clone(), c32(pal::EMBER));
         y += g.size().y + 8.0;
     }
-    if let Some(g) = &detail {
-        let r = Rect::from_min_size(Pos2::new(lx, y), Vec2::new(inner_w, g.size().y + 16.0));
+    if let (Some(g), Some(dh)) = (&detail, detail_h) {
+        let r = Rect::from_min_size(Pos2::new(lx, y), Vec2::new(inner_w, dh + 16.0));
         terminal_slab(&p, r);
-        p.galley(r.min + Vec2::new(8.0, 8.0), g.clone(), c32(pal::BONE));
+        let text_r =
+            Rect::from_min_size(r.min + Vec2::new(8.0, 8.0), Vec2::new(inner_w - 16.0, dh));
+        if g.size().y > dh + 0.5 {
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(text_r)
+                    .id_salt(id.with("detail")),
+            );
+            egui::ScrollArea::vertical()
+                .id_salt(id.with("detail-scroll"))
+                .max_height(dh)
+                .auto_shrink([false, false])
+                .show(&mut child, |ui| {
+                    let (gr, _) = ui.allocate_exact_size(g.size(), Sense::hover());
+                    ui.painter().galley(gr.min, g.clone(), c32(pal::BONE));
+                });
+        } else {
+            p.galley(text_r.min, g.clone(), c32(pal::BONE));
+        }
         y += r.height() + 10.0;
     }
     p.galley(Pos2::new(lx, y), oath.clone(), c32(pal::TEXT_MUTE));
@@ -591,13 +629,16 @@ fn plate(
     let no_r = Rect::from_min_size(Pos2::new(lx, y), Vec2::new(no_w, btn_h));
     let yes_r = Rect::from_min_size(Pos2::new(lx + no_w + gap, y), Vec2::new(yes_w, btn_h));
     let no = ui.interact(no_r, id.with("no"), Sense::click());
+    // Yes is mouse-only: it senses clicks but is never focusable, so Tab
+    // can't reach it, and only a real primary-pointer click counts (egui's
+    // `clicked()` also fires for Enter/Space on a focused widget).
     let yes = ui.interact(
         yes_r,
         id.with("yes"),
         if view.busy {
             Sense::hover()
         } else {
-            Sense::click()
+            Sense::CLICK
         },
     );
     let (no_txt, yes_txt) = if narrow {
@@ -635,11 +676,19 @@ fn plate(
 
     if no.clicked() {
         Some(ContractChoice::No)
-    } else if yes.clicked() && !view.busy {
+    } else if yes_pointer_clicked(&yes) && !view.busy {
         Some(ContractChoice::Yes)
     } else {
         None
     }
+}
+
+/// Yes counts only for a primary mouse/pointer click on the plate, never for
+/// keyboard activation (Enter/Space), accessibility "fake" clicks or touch
+/// long-press. `clicked_by` needs egui's pointer CLICKED flag, which keyboard
+/// activation never sets.
+fn yes_pointer_clicked(yes: &egui::Response) -> bool {
+    yes.clicked_by(egui::PointerButton::Primary)
 }
 
 /// "Write skill …" → "write skill …" so it reads after "She wants to" /
@@ -799,6 +848,7 @@ mod tests {
             detail: Some("hello\nworld"),
             busy: false,
             initiator: Initiator::Her,
+            scroll_detail: false,
         }
     }
 
@@ -936,6 +986,31 @@ mod tests {
     }
 
     #[test]
+    fn a_scrolling_detail_is_never_cut() {
+        let long = (0..40)
+            .map(|i| format!("    --arg-{i} {}", "x".repeat(200)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let v = ContractView {
+            detail: Some(&long),
+            scroll_detail: true,
+            ..view()
+        };
+        assert_eq!(detail_text(&v).as_deref(), Some(long.as_str()));
+        let clipped = ContractView {
+            scroll_detail: false,
+            ..v
+        };
+        assert_ne!(detail_text(&clipped).as_deref(), Some(long.as_str()));
+        // Paints (with the inner scroll area) and still answers.
+        for size in [Vec2::new(300.0, 380.0), Vec2::new(1000.0, 700.0)] {
+            let ctx = Context::default();
+            assert_eq!(frame(&ctx, raw(size, vec![]), &v), None);
+            assert_eq!(frame(&ctx, raw(size, vec![]), &v), None);
+        }
+    }
+
+    #[test]
     fn paints_headless_with_default_and_themed_fonts() {
         for themed in [false, true] {
             let ctx = Context::default();
@@ -1006,6 +1081,62 @@ mod tests {
     fn plate_rect(ctx: &Context, which: &str) -> Rect {
         let id = Id::new("contract-test").with(which);
         ctx.read_response(id).expect("plate laid out").rect
+    }
+
+    fn key(k: egui::Key, pressed: bool) -> egui::Event {
+        egui::Event::Key {
+            key: k,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// Presses and releases `k` over two frames and returns any choice.
+    fn tap(
+        ctx: &Context,
+        size: Vec2,
+        v: &ContractView<'_>,
+        k: egui::Key,
+    ) -> Option<ContractChoice> {
+        let a = frame(ctx, raw(size, vec![key(k, true)]), v);
+        let b = frame(ctx, raw(size, vec![key(k, false)]), v);
+        a.or(b)
+    }
+
+    #[test]
+    fn keyboard_never_signs_yes() {
+        let size = Vec2::new(900.0, 700.0);
+        let v = view();
+        for activate in [egui::Key::Enter, egui::Key::Space] {
+            // Tab through every focus stop (and wrap around), pressing the
+            // activation key at each one: never Yes.
+            let ctx = Context::default();
+            warm(&ctx, size, &v);
+            for _ in 0..6 {
+                let t = tap(&ctx, size, &v, egui::Key::Tab);
+                assert_ne!(t, Some(ContractChoice::Yes));
+                let r = tap(&ctx, size, &v, activate);
+                assert_ne!(r, Some(ContractChoice::Yes), "Tab+{activate:?} signed");
+                if r == Some(ContractChoice::No) {
+                    break;
+                }
+            }
+            // Tab can't land on Yes at all.
+            let yes_id = Id::new("contract-test").with("yes");
+            assert!(!ctx.memory(|m| m.has_focus(yes_id)));
+            // Even with focus forced onto Yes, the key does nothing.
+            let ctx = Context::default();
+            warm(&ctx, size, &v);
+            ctx.memory_mut(|m| m.request_focus(yes_id));
+            let _ = frame(&ctx, raw(size, vec![]), &v);
+            assert_ne!(
+                tap(&ctx, size, &v, activate),
+                Some(ContractChoice::Yes),
+                "focused Yes + {activate:?} signed"
+            );
+        }
     }
 
     #[test]

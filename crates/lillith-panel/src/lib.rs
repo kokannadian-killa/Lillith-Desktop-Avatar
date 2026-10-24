@@ -17,6 +17,7 @@ use lillith_core::rules::RuleSet;
 use std::path::PathBuf;
 
 pub mod chat_bubble;
+pub mod contract_card;
 pub mod poses;
 pub mod server_card;
 pub mod settings;

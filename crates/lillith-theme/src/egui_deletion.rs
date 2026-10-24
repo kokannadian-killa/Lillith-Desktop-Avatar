@@ -6,7 +6,8 @@
 //! choice, and a field where the human types the exact phrase (e.g.
 //! `DELETE 12 ITEMS`). **SIGN IN BLOOD** only lights up when the phrase
 //! matches; **REFUSE** and `Esc` cancel. There is no keyboard shortcut for
-//! signing. The caller still verifies the phrase against the list
+//! signing: SIGN is mouse-only (never focusable, so Tab skips it, and only
+//! a primary-pointer click counts, never Enter/Space). The caller still verifies the phrase against the list
 //! (`DeletionSignature::sign`): this widget only reports the click.
 
 use crate::egui_theme::{additive, c32, skull};
@@ -167,19 +168,25 @@ pub fn deletion_contract_popup(
             } else {
                 "SIGN IN BLOOD — TRASH"
             };
+            // SIGN is mouse-only, like the Yes plate: it senses clicks but
+            // is never focusable (Tab skips it), and only a real primary
+            // pointer click counts (`clicked()` also fires for Enter/Space
+            // on a focused widget).
             let yes = ui.add_enabled(
                 ok,
                 egui::Button::new(RichText::new(label).strong().color(c32(pal::TEXT)))
                     .fill(c32(pal::BLOOD_DEEP))
-                    .stroke(Stroke::new(1.5, c32(pal::BLOOD_NEON))),
+                    .stroke(Stroke::new(1.5, c32(pal::BLOOD_NEON)))
+                    .sense(egui::Sense::CLICK),
             );
             ui.ctx().data_mut(|d| {
                 d.insert_temp(id.with("no-rect"), no.rect);
                 d.insert_temp(id.with("sign-rect"), yes.rect);
+                d.insert_temp(id.with("sign-id"), yes.id);
             });
             if no.clicked() {
                 out = Some(DeletionChoice::Cancel);
-            } else if yes.clicked() && ok {
+            } else if yes.clicked_by(egui::PointerButton::Primary) && ok {
                 out = Some(DeletionChoice::Sign {
                     typed: state.typed.clone(),
                     permanent: state.permanent,
@@ -261,6 +268,74 @@ mod tests {
         assert!(phrase_matches(" delete  3 items ", "DELETE 3 ITEMS"));
         assert!(!phrase_matches("DELETE 2 ITEMS", "DELETE 3 ITEMS"));
         assert!(!phrase_matches("", ""));
+    }
+
+    fn key(k: egui::Key, pressed: bool) -> egui::Event {
+        egui::Event::Key {
+            key: k,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// Presses and releases `k` over two frames and returns any choice.
+    fn tap(ctx: &Context, s: &mut DeletionState, k: egui::Key) -> Option<DeletionChoice> {
+        let a = frame(ctx, vec![key(k, true)], s);
+        let b = frame(ctx, vec![key(k, false)], s);
+        a.or(b)
+    }
+
+    #[test]
+    fn keyboard_never_signs() {
+        for activate in [egui::Key::Enter, egui::Key::Space] {
+            let ctx = Context::default();
+            // The phrase is typed, so SIGN is live: only a click may sign.
+            let mut s = DeletionState {
+                typed: "DELETE 3 ITEMS".into(),
+                permanent: false,
+            };
+            for _ in 0..3 {
+                assert_eq!(frame(&ctx, vec![], &mut s), None);
+            }
+            // Tab through every focus stop (and wrap), pressing the
+            // activation key at each one: never Sign.
+            for _ in 0..8 {
+                let t = tap(&ctx, &mut s, egui::Key::Tab);
+                assert!(!matches!(t, Some(DeletionChoice::Sign { .. })));
+                let r = tap(&ctx, &mut s, activate);
+                assert!(
+                    !matches!(r, Some(DeletionChoice::Sign { .. })),
+                    "Tab+{activate:?} signed"
+                );
+                if r == Some(DeletionChoice::Cancel) {
+                    // REFUSE took the key; keep tabbing from a fresh card.
+                    s.typed = "DELETE 3 ITEMS".into();
+                }
+            }
+            let sign_id = ctx
+                .data(|d| d.get_temp::<Id>(Id::new("del-test").with("sign-id")))
+                .expect("laid out");
+            assert!(
+                !ctx.memory(|m| m.has_focus(sign_id)),
+                "Tab can't land on SIGN"
+            );
+            // Even with focus forced onto SIGN, the key does nothing.
+            ctx.memory_mut(|m| m.request_focus(sign_id));
+            let _ = frame(&ctx, vec![], &mut s);
+            let r = tap(&ctx, &mut s, activate);
+            assert!(
+                !matches!(r, Some(DeletionChoice::Sign { .. })),
+                "focused SIGN + {activate:?} signed"
+            );
+            // A real click still signs.
+            let sign = rect(&ctx, "sign-rect");
+            assert!(matches!(
+                click(&ctx, &mut s, sign.center()),
+                Some(DeletionChoice::Sign { .. })
+            ));
+        }
     }
 
     #[test]
