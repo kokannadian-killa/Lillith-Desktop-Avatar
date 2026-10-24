@@ -12,7 +12,7 @@
 
 use anyhow::Result;
 use lillith_core::access::deletion::{DeleteMode, DeletionSignature};
-use lillith_core::config::{ChatConfig, MindConfig};
+use lillith_core::config::{ChatConfig, MemoryConfig, MindConfig};
 use lillith_core::soul_contract::{ContractError, PendingAction, RequestId, SoulContract};
 use lillith_core::Event;
 use lillith_mind::chat::{default_history_path, ChatSession, Outcome, MAX_TOOL_CHAIN};
@@ -261,13 +261,14 @@ async fn wait_for_signal() {
 fn new_session(
     cfg: &ChatConfig,
     mind: &MindConfig,
+    memory: &MemoryConfig,
     config_path: Option<&std::path::Path>,
 ) -> ChatSession {
     let mut session = ChatSession::new(cfg, false);
     if let Some(p) = config_path {
         session = session.with_config_file(&cfg.system_prompt, p);
     }
-    session.with_mind(mind)
+    session.with_mind(mind).with_memory(memory)
 }
 
 fn history_path(cfg: &ChatConfig) -> Option<PathBuf> {
@@ -290,6 +291,7 @@ pub fn stdout_emit() -> Emit {
 pub fn bubble_main(
     cfg: ChatConfig,
     mind: MindConfig,
+    memory: MemoryConfig,
     config_path: Option<PathBuf>,
     pos: Option<(i32, i32)>,
     offline: bool,
@@ -303,6 +305,7 @@ pub fn bubble_main(
         history: if demo { None } else { history_path(&cfg) },
         chat: cfg,
         mind,
+        memory,
         config_path,
         offline,
         emit,
@@ -318,6 +321,7 @@ pub fn bubble_main(
 pub async fn cli_chat(
     cfg: ChatConfig,
     mind: MindConfig,
+    memory: MemoryConfig,
     config_path: Option<PathBuf>,
     message: Option<String>,
     spawn_server: bool,
@@ -343,7 +347,7 @@ pub async fn cli_chat(
     } else {
         None
     };
-    let mut session = new_session(&cfg, &mind, config_path.as_deref());
+    let mut session = new_session(&cfg, &mind, &memory, config_path.as_deref());
     if !no_history {
         if let Some(p) = history_path(&cfg) {
             session = session.with_history_file(p);
@@ -804,11 +808,16 @@ mod tests {
         .unwrap();
         // Load it the way main.rs does for `--config <path>`.
         let full = lillith_core::config::Config::load(&path).unwrap();
-        let s = new_session(&full.chat, &full.mind, Some(&path));
+        let s = new_session(
+            &full.chat,
+            &full.mind,
+            &MemoryConfig::disabled(),
+            Some(&path),
+        );
         assert_eq!(s.system_prompt(), "Custom-path persona.");
         let mut chat = full.chat.clone();
         chat.system_prompt = "Chat wins.".into();
-        let s = new_session(&chat, &full.mind, Some(&path));
+        let s = new_session(&chat, &full.mind, &MemoryConfig::disabled(), Some(&path));
         assert_eq!(s.system_prompt(), "Chat wins.");
         let _ = std::fs::remove_dir_all(&dir);
     }
