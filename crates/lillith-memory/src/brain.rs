@@ -1224,14 +1224,14 @@ impl Brain {
                         .map(|w| format!("\"{w}\"*"))
                         .collect::<Vec<_>>()
                         .join(" AND ");
-                    let mut ids: Vec<i64> = {
+                    let mut ids: Vec<i64> = Vec::new();
+                    {
                         let mut st =
                             c.prepare("SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?1")?;
-                        let r = st
-                            .query_map([expr], |r| r.get(0))?
-                            .collect::<rusqlite::Result<Vec<i64>>>()?;
-                        r
-                    };
+                        for id in st.query_map([expr], |r| r.get(0))? {
+                            ids.push(id?);
+                        }
+                    }
                     // Preferences/attributes hanging off a matched entity.
                     let mut extra = Vec::new();
                     for id in &ids {
