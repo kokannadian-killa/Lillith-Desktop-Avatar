@@ -34,16 +34,22 @@ const ALLURE: &[&str] = &[
     "strut_left",
     // Bold set (generated_v2, approved): MP4-sourced.
     "body_roll_slow",
+    "arch_back_over_shoulder",
     "kneel_hands_on_thighs",
     "wall_lean_invisible",
     "blow_kiss_hip_pop",
     "hair_lift_stretch",
+    "slow_turn_spin_tease",
+    "bend_forward_wink",
     // 15 s variants: same moves with a ~10 s living peak hold.
     "body_roll_slow_long",
+    "arch_back_over_shoulder_long",
     "kneel_hands_on_thighs_long",
     "wall_lean_invisible_long",
     "blow_kiss_hip_pop_long",
     "hair_lift_stretch_long",
+    "slow_turn_spin_tease_long",
+    "bend_forward_wink_long",
     // Dominant-persona set (tag `dom`): expression/gaze/gesture aimed at the viewer.
     "dom_beckon_finger",
     "dom_point_down",
@@ -173,8 +179,12 @@ mod tests {
         assert_eq!(category_of("idle_flirt_lip_bite"), 0);
         assert_eq!(category_of("blow_kiss"), 0);
         assert_eq!(category_of("body_roll_slow"), 0);
+        assert_eq!(category_of("bend_forward_wink"), 0);
         assert_eq!(category_of("dom_beckon_finger"), 0);
         assert_eq!(category_of("body_roll_slow_long"), 0);
+        assert_eq!(category_of("arch_back_over_shoulder_long"), 0);
+        assert_eq!(category_of("bend_forward_wink_long"), 0);
+        assert_eq!(category_of("slow_turn_spin_tease_long"), 0);
         assert_eq!(category_of("hair_lift_stretch_long"), 0);
         assert_eq!(category_of("blow_kiss_hip_pop_long"), 0);
         assert_eq!(category_of("wall_lean_invisible_long"), 0);

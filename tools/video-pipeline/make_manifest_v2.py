@@ -19,8 +19,7 @@ VARIANT_OF = {'walk_sassy_right': 'walk_right', 'walk_skip_right': 'walk_right',
               'sit_bored_chin': 'sit_swing', 'sit_cross_legged_bob': 'sit_swing', 'sit_heel_kick': 'sit_swing', 'sit_stretch_yawn': 'sit_swing',
               'idle_bored_sigh': 'idle', 'idle_nail_check': 'idle', 'idle_tail_fidget': 'idle', 'idle_yawn_stretch': 'idle'}
 # batch 15/16: allure poses (pin-up + dom persona). DOM clips also get tag `dom` (dominant/thirsty persona
-# banter hooks). REJECTED folders failed the content review (back view / butt- or chest-focused framing) and stay
-# out of the manifest (raws kept in source/video/_rejected for reference).
+# banter hooks). REJECTED folders are skipped when building the manifest.
 PINUP = {'body_roll_slow', 'kneel_hands_on_thighs',
          'wall_lean_invisible', 'blow_kiss_hip_pop', 'hair_lift_stretch'}
 DOM = {'dom_beckon_finger', 'dom_point_down', 'dom_arms_crossed_demand', 'smug_smirk', 'hungry_lip_lick',
@@ -31,8 +30,9 @@ DOM = {'dom_beckon_finger', 'dom_point_down', 'dom_arms_crossed_demand', 'smug_s
 VARIANT_OF.update({'stalk_prowl_right': 'walk_right', 'stalk_prowl_left': 'walk_left'})
 # idle rotation picks (lillithTaskCompletionBot / parent, 2026-10-23): short gesture loops played once per pick (variant_play_once)
 VARIANT_OF.update({c: 'idle' for c in ('smug_smirk', 'hungry_lip_lick', 'tail_wrap_pull', 'hair_lift_stretch', 'body_roll_slow')})
-REJECTED = {'arch_back_over_shoulder', 'arch_back_over_shoulder_long', 'bend_forward_wink', 'bend_forward_wink_long',
-            'slow_turn_spin_tease', 'slow_turn_spin_tease_long'}
+# arch_back_over_shoulder / bend_forward_wink / slow_turn_spin_tease (+ _long) failed batch 15 review but stay
+# registered unchanged (lead, 2026-10-23) until a keep/remove decision; list folder names here to exclude them.
+REJECTED: set = set()
 ALIASES = {'finger_wag_tease': 'lean_tease', 'hands_behind_head_pose': 'idle_flirt_stretch', 'bounce_giggle': 'idle_flirt_shy_giggle'}
 def entry(name, folder, j, extra_tags=()):
     e = {k: j[k] for k in ('frame_count', 'frame_width', 'frame_height', 'fps', 'loop', 'baseline_y', 'anchor', 'scale',
