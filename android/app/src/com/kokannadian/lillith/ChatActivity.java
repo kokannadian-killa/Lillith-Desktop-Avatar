@@ -78,6 +78,12 @@ public final class ChatActivity extends Activity {
     private void sendNow() {
         String text = input.getText().toString().trim();
         String path = model();
+        if (LillithVoice.isSafeword(text)) { // before the "thinking" guard: works mid-reply
+            input.setText("");
+            append("user", text);
+            LillithVoice.get(this).stop("typed safeword");
+            return;
+        }
         if (text.isEmpty() || thinking) return;
         if (path == null) {
             append("lily", "No model picked yet. Open setup and choose a .gguf file.");
@@ -90,6 +96,7 @@ public final class ChatActivity extends Activity {
         thinking = true;
         send.setEnabled(false);
         send.setText("…");
+        final long voiceTicket = LillithVoice.get(this).ticket();
         new Thread(() -> {
             LocalLlm llm = LocalLlm.get(path);
             String reply = null;
@@ -109,6 +116,7 @@ public final class ChatActivity extends Activity {
                 append("lily", r);
                 if (llm != null) {
                     history.add(new String[]{"assistant", r});
+                    LillithVoice.get(this).sayIfCurrent(voiceTicket, r); // dropped if "red" came meanwhile
                     if (OverlayService.running) {
                         startService(new Intent(this, OverlayService.class)
                                 .setAction(OverlayService.ACTION_SAY)
