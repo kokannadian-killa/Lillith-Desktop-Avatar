@@ -50,10 +50,13 @@ use lillith_core::access::deletion::{DeleteMode, DeletionManifest, DeletionSigna
 use lillith_core::access::plan::{ChangePlan, PlanApproval};
 use lillith_core::config::{ChatConfig, MemoryConfig, MindConfig};
 use lillith_core::soul_contract::{
-    ContractError, ContractPrompt, PendingAction, RequestId, SoulContract,
+    Answer, ContractError, ContractPrompt, PendingAction, RequestId, SoulContract,
 };
 use lillith_mind::capabilities::RESULT_OPEN;
-use lillith_mind::chat::{ChatSession, Outcome, MAX_TOOL_CHAIN};
+use lillith_mind::chat::{
+    CardChoice, ChatSession, Outcome, ServerCardSlot, MAX_TOOL_CHAIN, RESTART_WAIT_MAX,
+    SERVER_CARD_TIMEOUT,
+};
 use lillith_mind::llm::Message;
 use lillith_voice::daemon::{route_transcript, Transcript, VoiceRoute};
 use std::path::PathBuf;
@@ -98,7 +101,43 @@ pub struct BubbleOptions {
     /// Show a sample Soul Contract popup (previews only: answering it just
     /// dismisses it; nothing is filed, run, or audited).
     pub demo_contract: bool,
+    /// The app (overlay) owns `[chat.server]`: after a clicked Yes on the
+    /// model-server card the bubble emits `chat.server_approved` and the
+    /// app spawns it (and stops it on exit). `false`: the bubble's session
+    /// spawns it itself.
+    pub app_server: bool,
 }
+
+/// Event asking the app to start `[chat.server]`: emitted only after a
+/// clicked Yes on the model-server Soul Contract card (audited `CONFIRM`).
+pub const SERVER_APPROVED_EVENT: &str = "chat.server_approved";
+
+/// The detail of [`SERVER_APPROVED_EVENT`]: `{"card": <id>, "argv": [...]}`,
+/// the approved card and the command line it showed.
+pub fn approval_detail(card: &str, argv: &[String]) -> String {
+    serde_json::json!({ "card": card, "argv": argv }).to_string()
+}
+
+/// Parses [`approval_detail`]: `(card, argv)`.
+pub fn parse_approval_detail(detail: &str) -> Option<(String, Vec<String>)> {
+    let v: serde_json::Value = serde_json::from_str(detail).ok()?;
+    let card = v.get("card")?.as_str()?.to_string();
+    let argv = v
+        .get("argv")?
+        .as_array()?
+        .iter()
+        .map(|a| a.as_str().map(String::from))
+        .collect::<Option<Vec<_>>>()?;
+    (!card.is_empty()).then_some((card, argv))
+}
+
+/// Event telling the app a model-server card went up; the detail is its
+/// card id. If the bubble then dies without an answer (killed), the app
+/// audits `CANCELLED` for that id unless the log already has a decision.
+pub const SERVER_CARD_EVENT: &str = "chat.server_card";
+
+/// Audit note when the bubble closes with the model-server card up.
+pub const CARD_CLOSED_NOTE: &str = "chat bubble closed before an answer";
 
 enum Req {
     Send(String),
@@ -119,6 +158,8 @@ enum Req {
     },
     /// Decline the whole plan.
     DeclinePlan,
+    /// The model-server card was closed (only a click on Yes approves).
+    ServerCard(CardChoice),
 }
 
 /// What the plan review shows.
@@ -185,6 +226,8 @@ enum Ui {
     Contract(ContractPrompt),
     /// A plan is waiting for review.
     Plan(PlanPrompt),
+    /// Raise the "Restart local model server?" card.
+    ServerCard(ContractPrompt),
 }
 
 /// Parses the bubble's Soul Contract answer: `/contract yes` (or `y`) →
@@ -232,6 +275,12 @@ struct Bubble {
     contract: Option<ContractPrompt>,
     /// The popup is the `--demo-contract` sample (answers aren't sent).
     contract_demo: bool,
+    /// The model-server card currently up, and when it went up (it times
+    /// out as a No after [`SERVER_CARD_TIMEOUT`]). Chat stays usable.
+    server_card: Option<(ContractPrompt, Instant)>,
+    /// The session's card slot: closing the window cancels a waiting card
+    /// (audited `CANCELLED`) right here, without the chat worker.
+    card_slot: ServerCardSlot,
     /// The deletion contract currently up.
     deletion: Option<DeletionPrompt>,
     deletion_state: DeletionState,
@@ -338,18 +387,27 @@ pub fn new_session(opts: &BubbleOptions) -> ChatSession {
     if let Some(p) = &opts.config_path {
         session = session.with_config_file(&opts.chat.system_prompt, p);
     }
-    session.with_mind(&opts.mind).with_memory(&opts.memory)
+    session
+        .with_mind(&opts.mind)
+        .with_memory(&opts.memory)
+        // The bubble can show the model-server card (previews can't).
+        .with_server_card(!opts.demo && opts.screenshot.is_none())
 }
 
-fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Receiver<Ui>) {
+fn spawn_worker(
+    opts: &BubbleOptions,
+    ctx: egui::Context,
+    card_slot: ServerCardSlot,
+) -> (Sender<Req>, Receiver<Ui>) {
     let (req_tx, req_rx) = channel::<Req>();
     let (ui_tx, ui_rx) = channel::<Ui>();
-    let mut session = new_session(opts);
+    let mut session = new_session(opts).with_server_card_slot(card_slot);
     if let Some(p) = &opts.history {
         session = session.with_history_file(p.clone());
     }
     let import = !opts.demo && opts.screenshot.is_none();
     let emit = opts.emit.clone();
+    let app_server = opts.app_server;
     std::thread::Builder::new()
         .name("lillith-chat".into())
         .spawn(move || {
@@ -372,6 +430,8 @@ fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Recei
                 pending: None,
                 deletion: None,
                 plan: None,
+                app_server,
+                last_sent: None,
             };
             if import {
                 // One-time notes from the app (e.g. the KWin start-up check).
@@ -395,9 +455,11 @@ fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Recei
                             w.deletion = None;
                             w.plan = None;
                         }
+                        w.last_sent = Some(text.clone());
                         let fb = w.turn(&text, false);
                         w.chain(fb);
                     }
+                    Req::ServerCard(choice) => w.server_card(choice),
                     Req::Confirm(yes) => w.confirm(yes),
                     Req::SignDeletion { typed, permanent } => w.sign(&typed, permanent),
                     Req::ApprovePlan {
@@ -426,6 +488,10 @@ struct Worker {
     deletion: Option<(SoulContract, RequestId)>,
     /// A plan awaiting review: its contract and request id.
     plan: Option<(SoulContract, RequestId)>,
+    /// The app spawns `[chat.server]` after a Yes ([`BubbleOptions::app_server`]).
+    app_server: bool,
+    /// Ko's last message (re-sent once the approved server is up).
+    last_sent: Option<String>,
 }
 
 impl Worker {
@@ -464,6 +530,7 @@ impl Worker {
             }
         }
         self.ui(Ui::Done(out));
+        self.raise_server_card();
         if let Some(out) = self.session.last_tool_output() {
             // Free tools ran (or a tool was refused).
             self.note(format!("🔎 {}", short(out)));
@@ -510,6 +577,79 @@ impl Worker {
             return true;
         }
         false
+    }
+
+    /// Recovery filed the model-server card: raise it (once). Chat goes on
+    /// text-only meanwhile; nothing starts until a click on Yes.
+    fn raise_server_card(&mut self) {
+        if let Some(a) = self.session.take_server_request() {
+            (self.emit)("chat.contract_proposed", Some(&a.summary()));
+            if let Some(id) = a.card_id() {
+                (self.emit)(SERVER_CARD_EVENT, Some(id));
+            }
+            self.note(
+                "📜 Soul Contract: she wants to restart her local model server. Click Yes on the card, or No to stay text-only (typing or saying yes doesn't count)."
+                    .into(),
+            );
+            self.ui(Ui::ServerCard(a.prompt()));
+        }
+    }
+
+    /// The model-server card was closed. Only a clicked Yes starts the
+    /// server (the app's, or this session's own); then her last message is
+    /// sent again (a plain retry, no card).
+    fn server_card(&mut self, choice: CardChoice) {
+        if !self.session.server_card_pending() {
+            return;
+        }
+        if !self.session.answer_server_card(choice) {
+            match choice {
+                CardChoice::Clicked(Answer::No) => {
+                    (self.emit)("chat.contract_denied", None);
+                    self.note("🚫 Not starting it; text-only for now.".into());
+                }
+                CardChoice::TimedOut => {
+                    (self.emit)("chat.contract_denied", None);
+                    self.note("⌛ No answer on the card; text-only for now.".into());
+                }
+                CardChoice::Clicked(Answer::Yes) => {
+                    self.note("Couldn't record the approval; not starting it.".into());
+                }
+                CardChoice::Cancelled => {}
+            }
+            return;
+        }
+        (self.emit)("chat.contract_confirmed", Some("start_model_server"));
+        self.note("✅ Starting her local model server (loading can take a minute)…".into());
+        let epoch = lillith_core::access::kill_switch::epoch();
+        let stopped = move || lillith_core::access::kill_switch::stopped_since(epoch);
+        let ok = if self.app_server {
+            // The app re-checks both against the audit log and its config.
+            let detail = self
+                .session
+                .approved_server_card()
+                .map(|(card, argv)| approval_detail(&card, &argv));
+            (self.emit)(SERVER_APPROVED_EVENT, detail.as_deref());
+            self.rt.block_on(
+                self.session
+                    .wait_for_approved_server_or(RESTART_WAIT_MAX, stopped),
+            )
+        } else {
+            self.rt.block_on(self.session.start_approved_server())
+        };
+        if stopped() {
+            // The safeword was said meanwhile: nothing is resent.
+            return;
+        }
+        if !ok {
+            self.note("The model server didn't come up; text-only for now.".into());
+            return;
+        }
+        self.note("🔥 Model server is up.".into());
+        if let Some(text) = self.last_sent.clone() {
+            let fb = self.turn(&text, true);
+            self.chain(fb);
+        }
     }
 
     fn plan_prompt(&self, note: Option<&str>) -> Option<PlanPrompt> {
@@ -815,6 +955,8 @@ impl Bubble {
             if let Some(m) = &self.mic {
                 m.hush("safeword");
             }
+            // The worker cancels (and audits) the model-server card too.
+            self.server_card = None;
         }
         if safeword && self.streaming.is_some() {
             self.lines.push(Line {
@@ -836,8 +978,21 @@ impl Bubble {
             self.lines.clear();
             let _ = self.tx.send(Req::Clear);
         } else if let Some(yes) = parse_confirm_command(&text).filter(|_| !from_voice) {
-            // Soul Contract answer: nothing runs unless this is a yes.
-            self.answer_contract(yes);
+            if self.server_card.is_some()
+                && self.contract.is_none()
+                && self.deletion.is_none()
+                && self.plan.is_none()
+            {
+                // The model-server card answers only to a click.
+                self.lines.push(Line {
+                    me: false,
+                    text: "Click Yes or No on the model-server card; typing doesn't answer it."
+                        .into(),
+                });
+            } else {
+                // Soul Contract answer: nothing runs unless this is a yes.
+                self.answer_contract(yes);
+            }
         } else {
             self.lines.push(Line {
                 me: true,
@@ -878,6 +1033,7 @@ impl Bubble {
                     self.plan = Some(p);
                     self.plan_state = PlanState::default();
                 }
+                Ui::ServerCard(p) => self.server_card = Some((p, Instant::now())),
             }
         }
     }
@@ -904,7 +1060,10 @@ impl Bubble {
 
     /// A Soul Contract, deletion or plan is waiting for Ko.
     fn gate_pending(&self) -> bool {
-        self.contract.is_some() || self.deletion.is_some() || self.plan.is_some()
+        self.contract.is_some()
+            || self.deletion.is_some()
+            || self.plan.is_some()
+            || self.server_card.is_some()
     }
 
     /// Mic button pressed: barge-in (her voice stops) and the mic opens.
@@ -961,6 +1120,7 @@ impl Bubble {
         (self.kill_switch)();
         self.contract = None;
         self.contract_demo = false;
+        self.server_card = None;
         self.deletion = None;
         self.plan = None;
         self.input.clear();
@@ -999,11 +1159,51 @@ impl Bubble {
             busy: false,
             // Chat contracts are Lillith's own proposals.
             initiator: Initiator::Her,
+            scroll_detail: p.scrolls(),
         };
         if let Some(choice) =
             soul_contract_popup(ctx, egui::Id::new("lillith-soul-contract"), &view)
         {
             self.answer_contract(choice == ContractChoice::Yes);
+        }
+    }
+
+    /// Draws the model-server card (after any other contract popup) and
+    /// routes a click; an unanswered card times out as No.
+    fn server_popup(&mut self, ctx: &egui::Context) {
+        if self.contract.is_some() || self.deletion.is_some() || self.plan.is_some() {
+            // Hidden behind another popup: its timeout only runs while
+            // Ko can actually see it.
+            if let Some((_, since)) = &mut self.server_card {
+                *since = Instant::now();
+            }
+            return;
+        }
+        let Some((p, since)) = &self.server_card else {
+            return;
+        };
+        if since.elapsed() >= SERVER_CARD_TIMEOUT {
+            self.server_card = None;
+            let _ = self.tx.send(Req::ServerCard(CardChoice::TimedOut));
+            return;
+        }
+        ctx.request_repaint_after(Duration::from_secs(1));
+        let view = ContractView {
+            title: p.title,
+            summary: &p.summary,
+            target: p.target.as_deref(),
+            detail: p.detail.as_deref(),
+            busy: false,
+            initiator: Initiator::Her,
+            // The whole argv, one arg per line, scrolling, never cut.
+            scroll_detail: p.scrolls(),
+        };
+        if let Some(choice) =
+            soul_contract_popup(ctx, egui::Id::new("lillith-server-contract"), &view)
+        {
+            self.server_card = None;
+            let answer = Answer::from_yes(choice == ContractChoice::Yes);
+            let _ = self.tx.send(Req::ServerCard(CardChoice::Clicked(answer)));
         }
     }
 
@@ -1112,6 +1312,10 @@ impl eframe::App for Bubble {
         }
         self.drain();
         self.drain_mic();
+        if ctx.input(|i| i.viewport().close_requested()) {
+            // Window manager / app close with the card up: audit it now.
+            self.cancel_server_card();
+        }
         // Esc, or a click outside (focus lost) closes the bubble, unless a
         // Soul Contract is up: then Esc means No (the popup handles it) and
         // the bubble waits for an answer.
@@ -1123,6 +1327,7 @@ impl eframe::App for Bubble {
         let lost = self.had_focus && focused == Some(false) && self.opened.elapsed() > FOCUS_GRACE;
         if self.screenshot.is_none()
             && self.contract.is_none()
+            && self.server_card.is_none()
             && self.deletion.is_none()
             && self.plan.is_none()
             && (esc || lost)
@@ -1258,12 +1463,14 @@ impl eframe::App for Bubble {
                 );
             });
         self.contract_popup(ctx);
+        self.server_popup(ctx);
         self.deletion_popup(ctx);
         self.plan_popup(ctx);
         self.screenshot(ctx);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.cancel_server_card();
         if self.screenshot.is_some() {
             return;
         }
@@ -1271,7 +1478,22 @@ impl eframe::App for Bubble {
     }
 }
 
+impl Drop for Bubble {
+    fn drop(&mut self) {
+        self.cancel_server_card();
+    }
+}
+
 impl Bubble {
+    /// The bubble is closing: a model-server card still waiting is audited
+    /// `CANCELLED` (once; a killed bubble is covered by the app).
+    fn cancel_server_card(&mut self) {
+        if self.card_slot.cancel(CARD_CLOSED_NOTE) {
+            tracing::info!("chat bubble closed with the model-server card up: CANCELLED");
+        }
+        self.server_card = None;
+    }
+
     /// `--screenshot`: after the first frames settle, save one and exit.
     fn screenshot(&mut self, ctx: &egui::Context) {
         let Some(path) = self.screenshot.clone() else {
@@ -1360,7 +1582,8 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
         Box::new(move |cc| {
             look::apply(&cc.egui_ctx);
             cc.egui_ctx.set_fonts(bubble_fonts());
-            let (tx, rx) = spawn_worker(&opts, cc.egui_ctx.clone());
+            let card_slot = ServerCardSlot::default();
+            let (tx, rx) = spawn_worker(&opts, cc.egui_ctx.clone(), card_slot.clone());
             if opts.screenshot.is_none() {
                 (opts.emit)("chat.opened", None);
             }
@@ -1400,6 +1623,8 @@ pub fn run_chat_bubble(opts: BubbleOptions) -> eframe::Result<()> {
                 shot_requested: false,
                 contract: opts.demo_contract.then(demo_contract),
                 contract_demo: opts.demo_contract,
+                server_card: None,
+                card_slot,
                 deletion: None,
                 deletion_state: DeletionState::default(),
                 plan: None,
@@ -1468,6 +1693,8 @@ mod tests {
             shot_requested: false,
             contract,
             contract_demo: demo,
+            server_card: None,
+            card_slot: ServerCardSlot::default(),
             deletion: None,
             deletion_state: DeletionState::default(),
             plan: None,
@@ -1499,6 +1726,137 @@ mod tests {
             repeat: false,
             modifiers: egui::Modifiers::NONE,
         }
+    }
+
+    fn server_prompt() -> ContractPrompt {
+        PendingAction::start_model_server(
+            vec!["/opt/llama-server".into(), "--port".into(), "8080".into()],
+            true,
+        )
+        .prompt()
+    }
+
+    fn server_frame(ctx: &egui::Context, b: &mut Bubble, events: Vec<egui::Event>) {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(BUBBLE_SIZE.0, BUBBLE_SIZE.1),
+            )),
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| b.server_popup(ctx));
+    }
+
+    #[test]
+    fn model_server_card_answers_only_to_the_card() {
+        let (mut b, req_rx) = test_bubble(None, false);
+        b.server_card = Some((server_prompt(), Instant::now()));
+        // Typed answers never reach it (and chat stays usable).
+        for typed in ["/contract yes", "/skill y"] {
+            b.input = typed.into();
+            b.send();
+            assert!(b.server_card.is_some(), "{typed:?}");
+        }
+        assert!(req_rx.try_recv().is_err(), "nothing reached the worker");
+        b.input = "yes".into();
+        b.send();
+        assert!(b.server_card.is_some());
+        assert!(matches!(req_rx.try_recv(), Ok(Req::Send(t)) if t == "yes"));
+        b.streaming = None;
+        // Voice can't answer it either.
+        let mut t = heard("yes, restart it");
+        t.affirmation = true;
+        b.on_transcript(&t);
+        assert!(b.server_card.is_some() && b.input.is_empty());
+        assert!(req_rx.try_recv().is_err());
+        // Esc on the card is a No.
+        let ctx = egui::Context::default();
+        ctx.set_fonts(bubble_fonts());
+        for _ in 0..3 {
+            server_frame(&ctx, &mut b, vec![]);
+        }
+        assert!(req_rx.try_recv().is_err(), "nothing answered yet");
+        server_frame(&ctx, &mut b, vec![esc()]);
+        assert!(b.server_card.is_none());
+        assert!(matches!(
+            req_rx.try_recv(),
+            Ok(Req::ServerCard(CardChoice::Clicked(Answer::No)))
+        ));
+    }
+
+    #[test]
+    fn closing_or_dropping_the_bubble_cancels_a_waiting_card_once() {
+        let dir = std::env::temp_dir().join(format!(
+            "lillith-bubble-card-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let card = |b: &mut Bubble| {
+            let a = PendingAction::start_model_server(vec!["/opt/llama-server".into()], true);
+            SoulContract::new(Some(log.clone())).record("PROPOSED", &a);
+            b.card_slot.hold(a.clone(), Some(log.clone()));
+            b.server_card = Some((a.prompt(), Instant::now()));
+            a.card_id().unwrap().to_string()
+        };
+        let cancelled = |id: &str| {
+            std::fs::read_to_string(&log)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| l.contains("\tCANCELLED\t") && l.contains(&format!("card={id}")))
+                .count()
+        };
+        // Window closed (eframe on_exit), then dropped: one CANCELLED.
+        let (mut b, _rx) = test_bubble(None, false);
+        let first = card(&mut b);
+        eframe::App::on_exit(&mut b, None);
+        assert!(b.server_card.is_none() && !b.card_slot.pending());
+        drop(b);
+        assert_eq!(cancelled(&first), 1);
+        assert!(std::fs::read_to_string(&log)
+            .unwrap()
+            .contains(CARD_CLOSED_NOTE));
+        // Dropped without on_exit (e.g. a panic unwinding): still audited.
+        let (mut b, _rx) = test_bubble(None, false);
+        let second = card(&mut b);
+        drop(b);
+        assert_eq!(cancelled(&second), 1);
+        // Nothing left open for the app or the next startup to close.
+        assert!(SoulContract::new(Some(log.clone()))
+            .open_model_server_cards()
+            .is_empty());
+        // No card: closing writes nothing.
+        let (mut b, _rx) = test_bubble(None, false);
+        let before = std::fs::read_to_string(&log).unwrap();
+        eframe::App::on_exit(&mut b, None);
+        drop(b);
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), before);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unanswered_model_server_card_times_out_as_no() {
+        let (mut b, req_rx) = test_bubble(None, false);
+        let old = Instant::now()
+            .checked_sub(SERVER_CARD_TIMEOUT + Duration::from_secs(1))
+            .expect("clock far enough from boot");
+        b.server_card = Some((server_prompt(), old));
+        let ctx = egui::Context::default();
+        ctx.set_fonts(bubble_fonts());
+        server_frame(&ctx, &mut b, vec![]);
+        assert!(b.server_card.is_none());
+        assert!(matches!(
+            req_rx.try_recv(),
+            Ok(Req::ServerCard(CardChoice::TimedOut))
+        ));
+        // Another contract popup goes first; the card waits behind it.
+        b.server_card = Some((server_prompt(), old));
+        b.contract = Some(demo_contract());
+        server_frame(&ctx, &mut b, vec![]);
+        assert!(b.server_card.is_some() && req_rx.try_recv().is_err());
     }
 
     #[test]
@@ -1745,6 +2103,7 @@ mod tests {
             screenshot: None,
             demo: false,
             demo_contract: false,
+            app_server: false,
         };
         let lines = history_lines(&opts);
         assert_eq!(lines.len(), 3);
@@ -1772,6 +2131,7 @@ mod tests {
             screenshot: None,
             demo: false,
             demo_contract: false,
+            app_server: false,
         };
         assert_eq!(
             new_session(&opts).system_prompt(),
@@ -1904,6 +2264,8 @@ mod tests {
             pending: None,
             deletion: None,
             plan: None,
+            app_server: false,
+            last_sent: None,
         };
         let file = |w: &mut Worker| {
             let (plan, _) = plan_prompt_for(&dir);

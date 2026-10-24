@@ -48,6 +48,7 @@ lillith-anim.workspace = true
 lillith-overlay.workspace = true
 lillith-sense.workspace = true
 lillith-mind.workspace = true
+lillith-memory.workspace = true
 # `lillith setup` (first-run model choice; loopback-only config writer).
 lillith-setup.workspace = true
 # `voice`: the speech worker + subprocess TTS engines (piper / espeak-ng /

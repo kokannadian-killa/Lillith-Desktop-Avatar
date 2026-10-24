@@ -19,7 +19,7 @@ Status: design + first implementation on `feat/memory-graph`.
 | --- | --- |
 | `lillith-core::config` | New `[memory]` table (`MemoryConfig`), **`enabled = true` by default** (Ko's decision, 2026-10-23). The default is one line in `MemoryConfig::default()`; set it to `false` to make memory opt-in. |
 | `lillith-core::access::kill_switch::is_safeword` | Canonical safeword ("red" / "OOC: stop"). `lillith-memory::is_safeword` wraps it and is *stricter* for storage: any message containing the standalone word "red" or "OOC stop" anywhere is never stored. |
-| `lillith-core::event::Event` | Desktop/sensor events (`window.opened.<app>`, `app.crash`, ...). `Brain::observe_event` turns them into app-usage / error memories. These come from `lillith-sense` (monitor, KWin bridge). |
+| `lillith-core::event::Event` | Desktop/sensor events (`window.opened.<app>`, `app.crash`, ...). `Brain::observe_event` turns them into app-usage / error memories. These come from `lillith-sense` (monitor, KWin bridge) through the bridge below. |
 | `lillith-mind::chat::ChatSession` | Chat path. `with_memory(&MemoryConfig)` attaches a `Brain`; the `[Memory]` block goes into a separate reference message, never the system prompt (see Privacy and safety); replies feed `observe_interaction`; "forget ..." commands are answered locally. |
 | `lillith-mind::memory` | Legacy profile store (`lillith_memory.db`, Python schema). Left untouched; the graph lives in a separate `memory.db`. |
 
@@ -58,6 +58,145 @@ Counts over the `events` ring: requests / app launches bucketed by
 (hour-of-day bucket of 3h, weekday class: weekday/weekend). The prediction for
 "now" ranks subjects by `count(bucket match) / total(bucket)` with Laplace
 smoothing, multiplied by a small-sample damping `n / (n + 3)`. O(events), no ML.
+
+## Desktop wiring (`lillith_memory::bridge`, `apps/lillith/src/memory_wiring.rs`)
+
+**Event bridge.** The overlay's one event feed (system monitor, KWin
+bridge, chat bubble) goes through a tee: every event is forwarded unchanged
+and also offered to `MemoryBridge::observe`, which never blocks the sender.
+A pure `EventFilter` runs in the caller, then a `try_send` on a bounded
+queue (64; a full queue drops the event). One dedicated thread
+(`lillith-memory`) owns its own SQLite connection (`Brain` is not `Sync`)
+and calls `Brain::observe_event`.
+
+| Incoming | Stored as | Debounce |
+| --- | --- | --- |
+| `window.focused` (KWin `WindowActivated`, detail = window class) | `window.opened.app` + app id only (`org.kde.konsole` → `konsole`, ≤32 chars `[a-z0-9-]`) | same app again within 10 min dropped |
+| `app.crash`, `*.crash`, `*.error` (not `chat.*`) | the kind plus the first word of the detail as an app id (`app.crash: steam`) | same text within 60 s dropped |
+| `window.private`, private windows, `window.opened` (carries the caption), notifications, anything else | nothing | — |
+| anything carrying the safeword | nothing | — |
+
+At most `events_per_minute` (default 20) admitted events per 60 s window.
+`chat.*` events are never stored; they only mark "Ko is chatting" (and
+`chat.safeword` marks the safeword). With `enabled = false` there is no
+thread, no queue and no file; the tee is the plain feed.
+
+**Proactive lines.** Every `proactive_interval_min` (default 12) the thread
+calls `Brain::predict` and a `Proactive` gate picks the first prediction
+with `confidence ≥ proactive_min_confidence` (default 0.5). It stays quiet:
+
+- for 30 min after the safeword (the kill-switch epoch changed, or
+  `chat.safeword` came through the feed);
+- for 5 min after any chat activity, and while `set_busy_for` is active
+  (no fullscreen sensor exists yet; the overlay also drops the line while
+  the monitor is paused, and an asleep Lillith ignores low-priority rules);
+- for an app used in the last 30 min (she does not suggest what Ko is
+  already doing);
+- per subject for `proactive_cooldown_min` (default 180) and beyond
+  `proactive_max_per_hour` (default 2).
+
+The line ("Mm, about now you usually open steam. Want it, darling?") goes
+out as `memory.suggest` with the line as detail; the bundled rule shows it
+in the normal speech bubble (`{summary}`, pose/clip `calendar`, priority 30,
+cooldown 10 min). `proactive = false` turns only this off; learning stays.
+
+**Error recovery (`lillith_memory::recovery`).** A failure is recorded with
+a *stable* text, then the built-in `SafeFix` list is ordered by error
+memory (the fix that worked first, untried next, failed ones last), tried,
+and each outcome is recorded with `record_fix`. Only these three fixes
+exist; a stored fix string that is not one of them is never applied:
+
+| Failure (signature text) | Fixes | Where |
+| --- | --- | --- |
+| `llm: server unreachable` (nothing streamed yet) | `retry_backoff` (0.4 s, 1.2 s; same loopback server, no card), then `restart_llama_server` **only through the Soul Contract card** (see below) | `ChatSession::send` |
+| `llm: server loading` (503) | `retry_backoff` | `ChatSession::send` |
+| `voice: engine error (<engine>)` | `retry_backoff` (spoken lines rest 30 s, then worked when a line is spoken without a new error), `text_only` (speakers off for this run, never saved) | overlay voice sink |
+| `llama-server: spawn failed`, `setup: ...` | none (recorded, recurrences counted) | `ServerHandle::spawn_approved`, `lillith setup` |
+| sensor crashes (`app.crash`, `*.error`) | none (recorded through the bridge) | feed |
+
+When nothing worked the chat answers with the usual in-character line for
+the *first* error. Recovery never contacts anything new: retries and the
+restart use the same loopback endpoint. With memory off the same fixes run
+in their default order and nothing is stored.
+
+**Restarting llama-server is a program launch: Soul Contract card only.**
+Recovery never spawns anything. When `[chat.server]` is configured, nothing
+answers and the plain retries failed, the session files one
+`start_model_server` request (`PendingAction::StartModelServer`, the exact
+command line with `--api-key` masked) and returns the text-only fallback at
+once; the chat stays usable while the card waits.
+
+| What happens | Result | Audit log (`audit.log`, also `commands.log`) |
+| --- | --- | --- |
+| Card filed | "Restart local model server?" card in the chat bubble ("Start …" before any reply this session) | `PROPOSED` |
+| **Click on Yes** (the only approval) | server started, then her last message is sent again (plain retry) | `CONFIRM` |
+| Click on No, or Esc on the card | text-only, 10 min cooldown | `DENY` |
+| No answer for 120 s | text-only, cooldown | `TIMEOUT` |
+| No card surface (`lillith chat` CLI, headless) | text-only straight away, cooldown | `NO_UI` |
+| Safeword (`red`) while it waits | dropped, cooldown | `CANCELLED` |
+| Bubble closed (Esc / focus loss / window manager) while it waits | dropped by the bubble's close handler (`on_exit`, close-requested, `Drop`) | `CANCELLED` + note `chat bubble closed before an answer` |
+| Bubble killed (SIGKILL, crash) while it waits | the overlay sees the bubble's stdout end with the card still open | `CANCELLED` + note `chat bubble gone before an answer (killed)` |
+| Card still open from an earlier run (app killed too) | closed when the overlay starts (or `lillith chat --spawn-server`), unless the card's process (the pid in its id) is still alive | `CANCELLED` + note `orphaned PROPOSED closed at startup` |
+| Overlay starts the server for a `CONFIRM` | once per card: the approval event carries the card id and argv; the argv must equal what `[chat.server]` runs now and the card must have an unused `CONFIRM` | `USED` |
+| Overlay won't start it (argv differs, no `CONFIRM`, card already used) | nothing starts; the bubble stops waiting | `SPAWN_REFUSED` + reason |
+| Approved start failed (spawn error, never came up) | cooldown, no resend | `SPAWN_FAILED` + reason |
+
+Every line of one card carries the same `card=<id>` column after the path
+(`<ts>\t<DECISION>\tstart_model_server\t<binary>\tcard=<id>[\t<note>]`),
+so a `PROPOSED` is matched to its decision by id. Lines are only ever
+appended: closing a card writes a new `CANCELLED` line, it never rewrites
+the `PROPOSED`. A `CANCELLED` is written only while the log still shows the
+card open, so the bubble's own close handler, the overlay's check and the
+startup scan never write it twice. (Older id-less `PROPOSED` lines pair with
+the next id-less decision; an orphaned one is closed with
+`proposed=<its timestamp>` instead of an id.) The bubble has no SIGTERM
+handler of its own; the overlay check and the startup scan cover it.
+
+- The card shows the whole command, one argument per line (`--api-key`
+  masked), scrolling when long, never cut off. The binary is resolved to
+  an absolute path for the card and the spawn alike, and the spawn drops
+  inherited `LLAMA_ARG_*` / `HF_*` env vars, so what runs is what was shown.
+- `USED`, `SPAWN_REFUSED` and `SPAWN_FAILED` come after the decision and
+  never open or close a card. Columns are sanitized (no tab or newline in a
+  path or note) and a torn last line is never glued to the next one.
+- Two launches have no card and only leave a plain audit line (append-only,
+  `no-card` in the id column, the command with `--api-key` masked; they
+  never open or close a card): the settings window's "Start llama-server"
+  button (`SETTINGS_UNGATED`) and runtime detection's `<binary> --version`
+  (`VERSION_PROBE`, one line per probed binary), both with kind
+  `start_model_server`.
+- Saying the safeword while the bubble waits for the approved server ends
+  the wait at once and nothing is resent.
+- Typed or spoken "yes" never approves: chat text (`yes`, `/contract yes`)
+  is just a message, the voice path is refused while a card is up, and the
+  start call (`start_approved_server` / `wait_for_approved_server`) does
+  nothing without the recorded click.
+- At most one card at a time; while it is pending or cooling down recovery
+  only retries. The restart is never retried in a loop: a failed approved
+  start also cools down. Its outcome is remembered as the
+  `restart_llama_server` fix.
+- Audited to `[mind]`'s `audit.log`, or the same default path in the data
+  dir when `[mind]` is off.
+- **Startup is gated the same way.** The overlay no longer starts
+  `[chat.server]` by itself: the config only says *which* server may be
+  asked for, it is not an approval. The first chat finds nothing answering
+  and raises the same card; a clicked Yes makes the bubble emit
+  `chat.server_approved`, and the overlay spawns the server (it owns it and
+  stops it on exit, Ctrl-C or SIGTERM). A standalone `lillith chat-bubble`
+  (no `--app-server`) starts it in its own session instead.
+- **`lillith chat --spawn-server` asks too** (the flag is a request, not an
+  approval; there is no `CLI_FLAG` consent any more). A server already
+  answering needs nothing. Otherwise, after `PROPOSED`:
+
+  | Surface | When | Approves | Audit |
+  | --- | --- | --- | --- |
+  | The same card, in its own window (`lillith server-card`) | a desktop is available (`WAYLAND_DISPLAY` / `DISPLAY`; always on Windows) | click on Yes only | `CONFIRM`, `DENY` (No / Esc), `TIMEOUT` (120 s), `CANCELLED` (window closed) |
+  | `Start local model server? [y/N]` on the controlling terminal | no card could be shown | exactly `y` / `yes` (any case); anything else, an empty line or end of input is No | `CONFIRM_TTY` / `DENY_TTY` |
+  | none | no card and no terminal (`/dev/tty` / `CONIN$` can't be opened) | never | `NO_UI` |
+
+  The terminal answer is read only from the controlling terminal
+  (`/dev/tty` on unix, `CONIN$` / `CONOUT$` on Windows), never from stdin,
+  so piped input can't answer it. Not approved: chat goes on text-only.
 
 ## On by default; turning it off; forgetting
 
@@ -162,8 +301,14 @@ says so).
 
 ## Not done / for the lead
 
-- Feeding `lillith-sense` events into `Brain::observe_event` from the overlay
-  main loop is documented in the crate README but not wired (it lives in the
-  app's event loop, which other branches are touching).
+- No fullscreen / "busy" sensor: `MemoryBridge::set_busy_for` is the hook
+  for one. Windows has no `window.focused` source yet (KWin only), so app
+  habits are learned on KDE only.
 - LLM-assisted extraction: `Extractor` trait hook exists; the default is the
   rule-based extractor.
+- Model-server card (lead's decisions, done): startup waits for the card on
+  the first chat; `--spawn-server` asks (card, else tty, else `NO_UI`);
+  a card that loses its window is closed `CANCELLED` (bubble close handler,
+  overlay check for a killed bubble, startup scan for orphans).
+- The orphan scan runs when the overlay starts, not for `lillith chat`
+  (an overlay bubble may have a live card up then).

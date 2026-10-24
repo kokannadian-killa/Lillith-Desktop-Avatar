@@ -124,9 +124,96 @@ pub enum PendingAction {
         argv: Vec<String>,
         app: Option<String>,
     },
+    /// (Re)start the configured local llama-server (`[chat.server]`,
+    /// loopback only). Always needs an explicit click on the card's Yes;
+    /// `argv` is shown with any `--api-key` value masked. Confirming only
+    /// records the approval: the app then spawns the server itself (it
+    /// owns and stops it), so nothing is started by the contract.
+    /// `card` correlates every audit line of one card (`card=<id>`, see
+    /// [`PendingAction::start_model_server`]).
+    StartModelServer {
+        argv: Vec<String>,
+        restart: bool,
+        card: String,
+    },
+}
+
+/// The `kind` column of model-server card lines in the audit log.
+pub const MODEL_SERVER_KIND: &str = "start_model_server";
+/// Card kinds whose `PROPOSED` lines are tracked until a decision (and
+/// closed as orphans at overlay start).
+pub const CARD_KINDS: &[&str] = &[MODEL_SERVER_KIND];
+/// Plain audit tag (no card): the settings window's "Start llama-server"
+/// button started it.
+pub const SETTINGS_UNGATED_TAG: &str = "SETTINGS_UNGATED";
+/// Plain audit tag (no card): runtime detection ran `<binary> --version`.
+pub const VERSION_PROBE_TAG: &str = "VERSION_PROBE";
+/// Plain audit tag (no card): the settings window ran `ollama create`
+/// (after writing its Modelfile). Exempt from the card by Ko's choice; this
+/// line only records it.
+pub const OLLAMA_CREATE_UNGATED_TAG: &str = "OLLAMA_CREATE_UNGATED";
+/// Plain audit tag (no card): the Build tab opened the project folder with
+/// `xdg-open`. Exempt from the card; this line only records it.
+pub const OPEN_DIR_UNGATED_TAG: &str = "OPEN_DIR_UNGATED";
+/// Plain audit tag (no card): the "Open settings" menu item opened
+/// config.toml in the desktop editor (`xdg-open` / Notepad). Not gated by a
+/// card; this line only records it.
+pub const OPEN_SETTINGS_UNGATED_TAG: &str = "OPEN_SETTINGS_UNGATED";
+/// Plain audit tag (no card): a llama-server extra arg was refused (it is
+/// not on the allowlist), so nothing was started.
+pub const ARG_REFUSED_TAG: &str = "ARG_REFUSED";
+/// Kind column of an `ollama create` launch line.
+pub const OLLAMA_CREATE_KIND: &str = "ollama_create";
+/// Kind column of a desktop "open" launch line (`xdg-open <path>`).
+pub const OPEN_PATH_KIND: &str = "open_path";
+/// Audit tags that never open or close a card: the ones written *after* a
+/// model-server card was decided (the overlay claiming or refusing a
+/// `CONFIRM`, or the spawn failing) and the card-less launch records.
+pub const AFTER_DECISION_TAGS: &[&str] = &[
+    "USED",
+    "SPAWN_REFUSED",
+    "SPAWN_FAILED",
+    SETTINGS_UNGATED_TAG,
+    VERSION_PROBE_TAG,
+    OLLAMA_CREATE_UNGATED_TAG,
+    OPEN_DIR_UNGATED_TAG,
+    OPEN_SETTINGS_UNGATED_TAG,
+    ARG_REFUSED_TAG,
+];
+
+/// The id column of a card-less launch line.
+pub const NO_CARD: &str = "no-card";
+
+/// A model-server card the audit log shows as `PROPOSED` with no decision.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenCard {
+    /// The `kind` column ([`CARD_KINDS`]).
+    pub kind: String,
+    /// `card=<id>`; `None` for a line written before cards had ids.
+    pub card: Option<String>,
+    /// Timestamp of the `PROPOSED` line.
+    pub ts: String,
+    /// Its path column (the llama-server binary).
+    pub path: String,
 }
 
 impl PendingAction {
+    /// A model-server card with a fresh, process-unique id.
+    pub fn start_model_server(argv: Vec<String>, restart: bool) -> Self {
+        PendingAction::StartModelServer {
+            argv,
+            restart,
+            card: fresh_card_id(),
+        }
+    }
+
+    /// The card id of a model-server card.
+    pub fn card_id(&self) -> Option<&str> {
+        match self {
+            PendingAction::StartModelServer { card, .. } => Some(card),
+            _ => None,
+        }
+    }
     /// Short machine tag used in the audit log.
     pub fn kind(&self) -> &'static str {
         match self {
@@ -143,6 +230,7 @@ impl PendingAction {
             PendingAction::DeletePaths { .. } => "delete_paths",
             PendingAction::RunCommand { .. } => "run_command",
             PendingAction::Launch { .. } => "launch",
+            PendingAction::StartModelServer { .. } => MODEL_SERVER_KIND,
             PendingAction::Plan { .. } => "plan",
         }
     }
@@ -164,6 +252,8 @@ impl PendingAction {
             | PendingAction::Organize { .. }
             | PendingAction::Plan { .. }
             | PendingAction::Launch { .. } => None,
+            // The binary, so the audit line names what would run.
+            PendingAction::StartModelServer { argv, .. } => argv.first().map(Path::new),
         }
     }
 
@@ -181,7 +271,8 @@ impl PendingAction {
             | PendingAction::Organize { .. }
             | PendingAction::Plan { .. }
             | PendingAction::RunCommand { .. }
-            | PendingAction::Launch { .. } => true,
+            | PendingAction::Launch { .. }
+            | PendingAction::StartModelServer { .. } => true,
             PendingAction::ListDir { .. }
             | PendingAction::ReadFile { .. }
             | PendingAction::SearchFiles { .. } => false,
@@ -228,6 +319,12 @@ impl PendingAction {
                 Some(a) => format!("Open {a}: {}", argv.join(" ")),
                 None => format!("Start program: {}", argv.join(" ")),
             },
+            PendingAction::StartModelServer { restart: true, .. } => {
+                "Restart local model server? (llama-server, loopback only)".into()
+            }
+            PendingAction::StartModelServer { restart: false, .. } => {
+                "Start local model server? (llama-server, loopback only)".into()
+            }
         }
     }
 
@@ -247,6 +344,7 @@ impl PendingAction {
             PendingAction::DeletePaths { .. } => "DELETE — SIGN THE LIST",
             PendingAction::RunCommand { .. } => "RUN COMMAND",
             PendingAction::Launch { .. } => "OPEN PROGRAM",
+            PendingAction::StartModelServer { .. } => "LOCAL MODEL SERVER",
             PendingAction::Plan { .. } => "REVIEW THE PLAN",
         }
     }
@@ -277,6 +375,11 @@ impl PendingAction {
                 Some(format!("$ {command}{why}"))
             }
             PendingAction::Launch { argv, .. } => Some(format!("$ {}", argv.join(" "))),
+            PendingAction::StartModelServer { argv, .. } => Some(format!(
+                "{}{}\n\nOnly a click on Yes starts it; typing or saying yes doesn't.",
+                argv_lines(&mask_secret_args(argv)),
+                LIBRARY_NOTE
+            )),
             PendingAction::Organize { plan, .. } => Some(plan.preview()),
             // The full listing: every file and folder, never elided.
             PendingAction::DeletePaths { manifest } => Some(manifest.listing()),
@@ -346,6 +449,11 @@ impl PendingAction {
                     Some(format!("started {} (pid {pid})", argv.join(" "))),
                 ))
             }
+            // The approval itself: the app spawns (and owns) the server.
+            PendingAction::StartModelServer { .. } => Ok((
+                None,
+                Some("approved: the app starts the local model server".into()),
+            )),
             PendingAction::Organize { plan, journal, .. } => {
                 let rep = crate::access::organize::execute(plan, journal, journal.parent())?;
                 Ok((None, Some(rep.text())))
@@ -397,6 +505,97 @@ fn refuse_removal(command: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+/// A process-unique card id: `{unix nanos:x}-{pid:x}-{seq}`. The pid lets
+/// the startup orphan scan skip cards of a process that is still running.
+fn fresh_card_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    format!("{nanos:x}-{:x}-{seq}", std::process::id())
+}
+
+/// The pid embedded in a card id ([`fresh_card_id`]).
+pub fn card_pid(card: &str) -> Option<u32> {
+    u32::from_str_radix(card.split('-').nth(1)?, 16).ok()
+}
+
+/// Whether process `pid` is still running (another process's card may
+/// still be on screen). Unknown platforms say `false` (closed as before).
+fn pid_alive(pid: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        Path::new("/proc").join(pid.to_string()).exists()
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+        use windows_sys::Win32::System::Threading::{
+            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        // SAFETY: plain handle query; the handle is closed before returning.
+        unsafe {
+            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if h.is_null() {
+                return false;
+            }
+            let mut code = 0u32;
+            let ok = GetExitCodeProcess(h, &mut code) != 0;
+            CloseHandle(h);
+            ok && code == STILL_ACTIVE as u32
+        }
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
+/// `argv` with every secret value masked: the argument after `--api-key`
+/// (or `--api-key-file`) and the value of `--api-key=…`.
+pub fn mask_secret_args(argv: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(argv.len());
+    let mut mask = false;
+    for a in argv {
+        if mask {
+            out.push("***".to_string());
+            mask = false;
+            continue;
+        }
+        match a.split_once('=') {
+            Some((flag, _)) if flag.starts_with("--api-key") => out.push(format!("{flag}=***")),
+            _ => {
+                mask = a.starts_with("--api-key");
+                out.push(a.clone());
+            }
+        }
+    }
+    out
+}
+
+/// A command for a card: `$ <program>` then one argument per line, never
+/// shortened (the card scrolls instead).
+pub fn argv_lines(argv: &[String]) -> String {
+    let mut it = argv.iter();
+    let mut s = format!("$ {}", it.next().map(String::as_str).unwrap_or(""));
+    for a in it {
+        s.push_str("\n    ");
+        s.push_str(a);
+    }
+    s
+}
+
+/// Linux: the server is started with its own folder first on
+/// `LD_LIBRARY_PATH` (prebuilt releases ship their libraries beside it).
+#[cfg(target_os = "linux")]
+const LIBRARY_NOTE: &str = "\n\n(shared libraries are loaded from the binary's own folder first)";
+#[cfg(not(target_os = "linux"))]
+const LIBRARY_NOTE: &str = "";
+
 /// Longest preview (bytes) a [`ContractPrompt`] carries for a body / command.
 pub const PROMPT_DETAIL_MAX: usize = 1200;
 
@@ -430,6 +629,12 @@ pub struct ContractPrompt {
 }
 
 impl ContractPrompt {
+    /// The preview is a full command line that must never be shortened:
+    /// the popup scrolls it instead of clipping it.
+    pub fn scrolls(&self) -> bool {
+        CARD_KINDS.contains(&self.kind)
+    }
+
     /// Replaces the preview (e.g. the Build tab's exact command list).
     pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
         let d = detail.into();
@@ -938,6 +1143,9 @@ impl SoulContract {
                 command.clone()
             }
             PendingAction::Launch { argv, .. } => format!("[launch] {}", argv.join(" ")),
+            PendingAction::StartModelServer { argv, .. } => {
+                format!("[model-server] {}", mask_secret_args(argv).join(" "))
+            }
             _ => return,
         };
         let Some(d) = self.data_dir() else { return };
@@ -947,6 +1155,256 @@ impl SoulContract {
             Err(e) => format!("error: {e}"),
         };
         crate::access::commands::log_command(&d.join("commands.log"), decision, &cmd, &result);
+    }
+
+    /// Audits `decision` for `action` without running it or touching the
+    /// queue: a card that was proposed (`PROPOSED`), timed out (`TIMEOUT`),
+    /// could not be shown (`NO_UI`) or was cancelled (`CANCELLED`).
+    pub fn record(&self, decision: &str, action: &PendingAction) {
+        self.audit(decision, action);
+        self.log_command(decision, action, &Ok((None, None)));
+    }
+
+    /// [`record`](Self::record) with a free-text note column.
+    pub fn record_note(&self, decision: &str, action: &PendingAction, note: &str) {
+        self.audit_with(decision, action, Some(note));
+        self.log_command(decision, action, &Ok((None, None)));
+    }
+
+    /// Cards ([`CARD_KINDS`]) the audit log shows as `PROPOSED` without a
+    /// decision (any later line of the same kind with the same `card=<id>`,
+    /// except the [`AFTER_DECISION_TAGS`]). Lines without an id (older
+    /// logs) pair up in order.
+    pub fn open_model_server_cards(&self) -> Vec<OpenCard> {
+        let Some(log) = &self.audit_log else {
+            return Vec::new();
+        };
+        let Ok(text) = std::fs::read_to_string(log) else {
+            return Vec::new();
+        };
+        let mut open: Vec<OpenCard> = Vec::new();
+        for line in text.lines() {
+            let cols: Vec<&str> = line.split('\t').collect();
+            if cols.len() < 4
+                || !CARD_KINDS.contains(&cols[2])
+                || AFTER_DECISION_TAGS.contains(&cols[1])
+            {
+                continue;
+            }
+            let field = |k: &str| {
+                cols[4..]
+                    .iter()
+                    .find_map(|c| c.strip_prefix(k))
+                    .map(str::to_string)
+            };
+            let card = field("card=");
+            if cols[1] == "PROPOSED" {
+                open.push(OpenCard {
+                    kind: cols[2].to_string(),
+                    card,
+                    ts: cols[0].to_string(),
+                    path: cols[3].to_string(),
+                });
+                continue;
+            }
+            let at = match (&card, field("proposed=")) {
+                (Some(id), _) => open.iter().rposition(|o| o.card.as_ref() == Some(id)),
+                (None, Some(ts)) => open
+                    .iter()
+                    .rposition(|o| o.card.is_none() && o.ts == ts && o.kind == cols[2]),
+                (None, None) => open
+                    .iter()
+                    .rposition(|o| o.card.is_none() && o.kind == cols[2]),
+            };
+            if let Some(i) = at {
+                open.remove(i);
+            }
+        }
+        open
+    }
+
+    /// Appends `CANCELLED` (with `note`) for card `id` if the audit log
+    /// still shows it open; `false` (nothing written) once it was decided.
+    /// Existing lines are never rewritten.
+    pub fn cancel_open_model_server_card(&self, id: &str, note: &str) -> bool {
+        let Some(card) = self
+            .open_model_server_cards()
+            .into_iter()
+            .find(|o| o.card.as_deref() == Some(id))
+        else {
+            return false;
+        };
+        self.cancel_open(&card, note);
+        true
+    }
+
+    /// Closes every open card with `CANCELLED` (startup: the process that
+    /// showed it is gone). A card whose process (the pid in its id) is
+    /// still running is left alone: it may still be on screen. Returns how
+    /// many were closed.
+    pub fn close_orphaned_model_server_cards(&self, note: &str) -> usize {
+        let me = std::process::id();
+        let mut n = 0;
+        for card in self.open_model_server_cards() {
+            let live = card
+                .card
+                .as_deref()
+                .and_then(card_pid)
+                .is_some_and(|pid| pid != me && pid_alive(pid));
+            if !live {
+                self.cancel_open(&card, note);
+                n += 1;
+            }
+        }
+        n
+    }
+
+    fn cancel_open(&self, card: &OpenCard, note: &str) {
+        let id = match &card.card {
+            Some(id) => format!("card={id}"),
+            None => format!("proposed={}", card.ts),
+        };
+        self.append_line("CANCELLED", &card.kind, &card.path, &id, note);
+    }
+
+    /// Appends `ts\tdecision\tkind\tpath\tidcol\tnote` (columns cleaned of
+    /// tabs and newlines).
+    fn append_line(&self, decision: &str, kind: &str, path: &str, idcol: &str, note: &str) {
+        let Some(log) = &self.audit_log else { return };
+        let ts = format_utc((self.clock)());
+        let line = format!(
+            "{ts}\t{decision}\t{kind}\t{}\t{}\t{}\n",
+            one_column(path),
+            one_column(idcol),
+            one_column(note)
+        );
+        if let Err(e) = append(log, &line) {
+            tracing::warn!(
+                "soul contract: could not write audit log {}: {e}",
+                log.display()
+            );
+        }
+    }
+
+    /// Appends a plain, card-less launch record:
+    /// `<ts>\t<tag>\tstart_model_server\t<argv[0]>\tno-card\t$ <argv>`,
+    /// the argv with `--api-key` values masked. For launches that are not
+    /// gated by a card ([`SETTINGS_UNGATED_TAG`], [`VERSION_PROBE_TAG`]):
+    /// it records, it approves nothing, and it never touches a card.
+    pub fn record_ungated_launch(&self, tag: &str, argv: &[String]) {
+        self.record_ungated_launch_as(tag, MODEL_SERVER_KIND, argv);
+    }
+
+    /// [`Self::record_ungated_launch`] with kind column `kind` (e.g.
+    /// [`OLLAMA_CREATE_KIND`], [`OPEN_PATH_KIND`]):
+    /// `<ts>\t<tag>\t<kind>\t<argv[0]>\tno-card\t$ <argv>`, secrets masked.
+    pub fn record_ungated_launch_as(&self, tag: &str, kind: &str, argv: &[String]) {
+        let bin = argv.first().cloned().unwrap_or_default();
+        let shown = format!("$ {}", mask_secret_args(argv).join(" "));
+        self.append_line(tag, kind, &bin, NO_CARD, &shown);
+    }
+
+    /// Records a refused llama-server extra arg (card-less):
+    /// `<ts>\tARG_REFUSED\tstart_model_server\t<binary>\tno-card\t<why>: <arg>`.
+    /// The caller masks secrets in `arg` first.
+    pub fn record_arg_refused(&self, binary: &str, arg: &str, why: &str) {
+        self.append_line(
+            ARG_REFUSED_TAG,
+            MODEL_SERVER_KIND,
+            binary,
+            NO_CARD,
+            &format!("{why}: {arg}"),
+        );
+    }
+
+    /// The overlay is about to start llama-server for model-server card
+    /// `card`, whose command starts with `binary`. Allowed only once per
+    /// card and only after its `CONFIRM` (a clicked Yes) with that binary
+    /// in the path column: then `USED` is appended, so the same card can't
+    /// start a second server. Otherwise `SPAWN_REFUSED` (with the reason)
+    /// is appended and the reason returned. Existing lines are never
+    /// rewritten.
+    pub fn claim_model_server_approval(&self, card: &str, binary: &str) -> Result<(), String> {
+        let binary = one_column(binary);
+        let verdict = self.claim_check(card, &binary);
+        match &verdict {
+            Ok(()) => self.append_line(
+                "USED",
+                MODEL_SERVER_KIND,
+                &binary,
+                &format!("card={card}"),
+                "approval used to start the server",
+            ),
+            Err(why) => self.refuse_model_server_card(card, &binary, why),
+        }
+        verdict
+    }
+
+    /// Appends `SPAWN_REFUSED` for model-server card `card` (`why`: the
+    /// reason): the overlay would not start it, and the card is used up.
+    pub fn refuse_model_server_card(&self, card: &str, binary: &str, why: &str) {
+        self.append_line(
+            "SPAWN_REFUSED",
+            MODEL_SERVER_KIND,
+            binary,
+            &format!("card={card}"),
+            why,
+        );
+    }
+
+    fn claim_check(&self, card: &str, binary: &str) -> Result<(), String> {
+        let lines = self.card_lines(MODEL_SERVER_KIND, card);
+        if lines
+            .iter()
+            .any(|(d, _)| d == "USED" || d == "SPAWN_REFUSED")
+        {
+            return Err("this card's approval was already used".into());
+        }
+        match lines.iter().find(|(d, _)| d == "CONFIRM") {
+            None => Err("no clicked Yes (CONFIRM) for this card".into()),
+            Some((_, path)) if path != binary => {
+                Err(format!("the card approved {path}, not {binary}"))
+            }
+            Some(_) => Ok(()),
+        }
+    }
+
+    /// Records that starting the server for card `card` failed (`note`:
+    /// why), so the bubble waiting for it can stop waiting.
+    pub fn record_model_server_failure(&self, card: &str, binary: &str, note: &str) {
+        self.append_line(
+            "SPAWN_FAILED",
+            MODEL_SERVER_KIND,
+            binary,
+            &format!("card={card}"),
+            note,
+        );
+    }
+
+    /// The overlay refused or failed to start the server for card `card`.
+    pub fn model_server_start_failed(&self, card: &str) -> bool {
+        self.card_lines(MODEL_SERVER_KIND, card)
+            .iter()
+            .any(|(d, _)| d == "SPAWN_REFUSED" || d == "SPAWN_FAILED")
+    }
+
+    /// `(decision, path)` of every `kind` line carrying `card=<card>`.
+    fn card_lines(&self, kind: &str, card: &str) -> Vec<(String, String)> {
+        let Some(text) = self
+            .audit_log
+            .as_ref()
+            .and_then(|l| std::fs::read_to_string(l).ok())
+        else {
+            return Vec::new();
+        };
+        let tag = format!("card={card}");
+        text.lines()
+            .filter_map(|line| {
+                let cols: Vec<&str> = line.split('\t').collect();
+                (cols.len() >= 5 && cols[2] == kind && cols[4..].contains(&tag.as_str()))
+                    .then(|| (cols[1].to_string(), cols[3].to_string()))
+            })
+            .collect()
     }
 
     /// Answers the popup: [`Answer::Yes`] is [`confirm`](Self::confirm),
@@ -960,14 +1418,29 @@ impl SoulContract {
 
     /// Appends `<rfc3339>\t<decision>\t<kind>\t<path>` to the audit log.
     /// A logging failure is reported but never blocks the decision.
+    /// Model-server cards add `\tcard=<id>` (and `\t<note>` when given).
     fn audit(&self, decision: &str, action: &PendingAction) {
+        self.audit_with(decision, action, None)
+    }
+
+    fn audit_with(&self, decision: &str, action: &PendingAction, note: Option<&str>) {
         let Some(log) = &self.audit_log else { return };
         let ts = format_utc((self.clock)());
+        // A tab or newline in a configured path must not forge columns or
+        // lines.
         let path = action
             .target_path()
-            .map(|p| p.display().to_string())
+            .map(|p| one_column(&p.display().to_string()))
             .unwrap_or_default();
-        let line = format!("{ts}\t{decision}\t{}\t{path}\n", action.kind());
+        let mut extra = String::new();
+        if let Some(id) = action.card_id() {
+            extra.push_str(&format!("\tcard={id}"));
+        }
+        if let Some(n) = note {
+            extra.push('\t');
+            extra.push_str(&one_column(n));
+        }
+        let line = format!("{ts}\t{decision}\t{}\t{path}{extra}\n", action.kind());
         if let Err(e) = append(log, &line) {
             tracing::warn!(
                 "soul contract: could not write audit log {}: {e}",
@@ -975,6 +1448,14 @@ impl SoulContract {
             );
         }
     }
+}
+
+/// A command's program and arguments as one argv (for a launch line).
+pub fn command_argv(cmd: &std::process::Command) -> Vec<String> {
+    std::iter::once(cmd.get_program())
+        .chain(cmd.get_args())
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect()
 }
 
 /// One-shot gate for a UI that held `action` behind the popup: files it with
@@ -1013,17 +1494,35 @@ fn tmp_sibling(path: &Path) -> PathBuf {
     }
 }
 
-/// Appends `line` to `path`, creating it and its parent directory.
+/// `s` as one audit column: tabs, CR and LF become spaces.
+fn one_column(s: &str) -> String {
+    s.replace(['\n', '\r', '\t'], " ")
+}
+
+/// Appends `line` to `path`, creating it and its parent directory. When the
+/// file ends mid-line (a writer died half-way), a newline goes first so the
+/// new line is never glued onto the partial one.
 fn append(path: &Path, line: &str) -> std::io::Result<()> {
-    use std::io::Write;
+    use std::io::{Read, Seek, SeekFrom, Write};
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
     let mut f = std::fs::OpenOptions::new()
         .create(true)
+        .read(true)
         .append(true)
         .open(path)?;
-    f.write_all(line.as_bytes())
+    let mut buf = String::with_capacity(line.len() + 1);
+    if f.seek(SeekFrom::End(0))? > 0 {
+        let mut last = [0u8; 1];
+        f.seek(SeekFrom::End(-1))?;
+        f.read_exact(&mut last)?;
+        if last[0] != b'\n' {
+            buf.push('\n');
+        }
+    }
+    buf.push_str(line);
+    f.write_all(buf.as_bytes())
 }
 
 /// Text file extensions [`search_files`] will open.
@@ -1226,6 +1725,303 @@ mod tests {
         assert_eq!(format_utc(UNIX_EPOCH), "1970-01-01T00:00:00Z");
         // A leap day.
         assert_eq!(civil_from_days(19_782), (2024, 2, 29));
+    }
+
+    #[test]
+    fn model_server_card_starts_nothing_and_audits_every_decision() {
+        let dir = tmpdir("model-server");
+        let log = dir.join("audit.log");
+        let mut sc = SoulContract::new(Some(log.clone())).with_clock(fixed(1_700_000_000));
+        let action = PendingAction::start_model_server(
+            vec!["/opt/llama-server".into(), "--port".into(), "8080".into()],
+            true,
+        );
+        let card = action.card_id().unwrap().to_string();
+        assert!(action.needs_confirmation());
+        let p = action.prompt();
+        assert_eq!(p.kind, "start_model_server");
+        assert!(
+            p.summary.starts_with("Restart local model server?"),
+            "{}",
+            p.summary
+        );
+        assert_eq!(p.target.as_deref(), Some("/opt/llama-server"));
+        // Reads-only path refuses it.
+        assert!(matches!(
+            sc.run_now(action.clone()),
+            Err(ContractError::NeedsConfirmation(_))
+        ));
+        sc.record("PROPOSED", &action);
+        let id = sc.request(action.clone());
+        let done = sc.confirm(id).unwrap();
+        assert!(done.output.unwrap().contains("approved"));
+        let id = sc.request(action.clone());
+        sc.deny(id).unwrap();
+        sc.record("TIMEOUT", &action);
+        let audit = std::fs::read_to_string(&log).unwrap();
+        for d in ["PROPOSED", "CONFIRM", "DENY", "TIMEOUT"] {
+            assert!(
+                audit.contains(&format!(
+                    "\t{d}\tstart_model_server\t/opt/llama-server\tcard={card}\n"
+                )),
+                "{d}: {audit}"
+            );
+        }
+        let cmds = std::fs::read_to_string(dir.join("commands.log")).unwrap();
+        assert!(
+            cmds.contains("[model-server] /opt/llama-server --port 8080"),
+            "{cmds}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn orphaned_model_server_cards_are_closed_by_id_without_rewriting() {
+        let dir = tmpdir("model-server-orphans");
+        let log = dir.join("audit.log");
+        std::fs::create_dir_all(&dir).unwrap();
+        let sc = SoulContract::new(Some(log.clone())).with_clock(fixed(1_700_000_000));
+        let argv = || vec!["/opt/llama-server".to_string()];
+        let answered = PendingAction::start_model_server(argv(), false);
+        let orphan = PendingAction::start_model_server(argv(), true);
+        let killed = PendingAction::start_model_server(argv(), true);
+        // An older id-less pair and an id-less orphan, then cards with ids.
+        std::fs::write(
+            &log,
+            "2023-01-01T00:00:00Z\tPROPOSED\tstart_model_server\t/old\n\
+             2023-01-01T00:00:01Z\tDENY\tstart_model_server\t/old\n\
+             2023-01-02T00:00:00Z\tPROPOSED\tstart_model_server\t/old\n\
+             2023-01-02T00:00:01Z\tCONFIRM\twrite_file\t/x\n",
+        )
+        .unwrap();
+        sc.record("PROPOSED", &answered);
+        sc.record("PROPOSED", &orphan);
+        sc.record("PROPOSED", &killed);
+        sc.record("TIMEOUT", &answered);
+        let open = sc.open_model_server_cards();
+        assert_eq!(open.len(), 3, "{open:?}");
+        assert_eq!(open[0].card, None);
+        assert_eq!(open[0].ts, "2023-01-02T00:00:00Z");
+
+        // The overlay noticed the killed bubble: only that card closes, once.
+        let killed_id = killed.card_id().unwrap();
+        assert!(sc.cancel_open_model_server_card(killed_id, "bubble gone"));
+        assert!(!sc.cancel_open_model_server_card(killed_id, "bubble gone"));
+        assert!(!sc.cancel_open_model_server_card(answered.card_id().unwrap(), "x"));
+
+        let before = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(
+            sc.close_orphaned_model_server_cards("orphaned PROPOSED closed at startup"),
+            2
+        );
+        let after = std::fs::read_to_string(&log).unwrap();
+        assert!(
+            after.starts_with(&before),
+            "existing lines are never rewritten"
+        );
+        let added: Vec<&str> = after[before.len()..].lines().collect();
+        assert_eq!(
+            added,
+            [
+                "2023-11-14T22:13:20Z\tCANCELLED\tstart_model_server\t/old\t\
+                 proposed=2023-01-02T00:00:00Z\torphaned PROPOSED closed at startup"
+                    .to_string(),
+                format!(
+                    "2023-11-14T22:13:20Z\tCANCELLED\tstart_model_server\t/opt/llama-server\t\
+                     card={}\torphaned PROPOSED closed at startup",
+                    orphan.card_id().unwrap()
+                ),
+            ]
+        );
+        assert!(after.contains(&format!(
+            "\tCANCELLED\tstart_model_server\t/opt/llama-server\tcard={killed_id}\tbubble gone\n"
+        )));
+        // Idempotent: a second startup finds nothing.
+        assert!(sc.open_model_server_cards().is_empty());
+        assert_eq!(sc.close_orphaned_model_server_cards("again"), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn model_server_card_shows_every_arg_on_its_own_line_masked() {
+        let argv: Vec<String> = [
+            "/opt/llama.cpp/build/bin/llama-server",
+            "-m",
+            "/home/ko/models/a-very-long-model-name-q4_k_m.gguf",
+            "--api-key",
+            "sekrit",
+            "--api-key=also-sekrit",
+            "--jinja",
+        ]
+        .map(String::from)
+        .to_vec();
+        let a = PendingAction::start_model_server(argv.clone(), false);
+        let p = a.prompt();
+        assert!(p.scrolls(), "a model-server card scrolls, never clips");
+        let d = p.detail.unwrap();
+        assert!(!d.contains("sekrit"), "{d}");
+        let lines: Vec<&str> = d.lines().collect();
+        assert_eq!(lines[0], "$ /opt/llama.cpp/build/bin/llama-server");
+        assert_eq!(
+            lines[1..7],
+            [
+                "    -m",
+                "    /home/ko/models/a-very-long-model-name-q4_k_m.gguf",
+                "    --api-key",
+                "    ***",
+                "    --api-key=***",
+                "    --jinja"
+            ]
+        );
+        assert!(!PendingAction::ListDir { path: "/x".into() }
+            .prompt()
+            .scrolls());
+    }
+
+    #[test]
+    fn ungated_launches_get_a_plain_masked_line_and_leave_cards_alone() {
+        let dir = tmpdir("ungated");
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let sc = SoulContract::new(Some(log.clone())).with_clock(fixed(1_700_000_000));
+        // An old id-less PROPOSED must stay open across these lines.
+        std::fs::write(&log, "t0\tPROPOSED\tstart_model_server\t/b\n").unwrap();
+        let argv: Vec<String> = ["/opt/llama-server", "--api-key", "sekrit", "--port", "8080"]
+            .map(String::from)
+            .to_vec();
+        sc.record_ungated_launch(SETTINGS_UNGATED_TAG, &argv);
+        sc.record_ungated_launch(
+            VERSION_PROBE_TAG,
+            &["/opt/llama-server".into(), "--version".into()],
+        );
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert!(!text.contains("sekrit"), "{text}");
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].starts_with("t0\tPROPOSED"), "append-only");
+        assert!(lines[1].ends_with(
+            "\tSETTINGS_UNGATED\tstart_model_server\t/opt/llama-server\tno-card\t$ /opt/llama-server --api-key *** --port 8080"
+        ), "{}", lines[1]);
+        assert!(lines[2].ends_with(
+            "\tVERSION_PROBE\tstart_model_server\t/opt/llama-server\tno-card\t$ /opt/llama-server --version"
+        ), "{}", lines[2]);
+        assert_eq!(
+            sc.open_model_server_cards().len(),
+            1,
+            "no card opened or closed"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn overlay_spawn_needs_one_unused_confirm_for_the_same_binary() {
+        let dir = tmpdir("claim");
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        let mut sc = SoulContract::new(Some(log.clone())).with_clock(fixed(1_700_000_000));
+        let bin = "/opt/llama-server";
+        let a = PendingAction::start_model_server(vec![bin.into(), "--jinja".into()], false);
+        let card = a.card_id().unwrap().to_string();
+        sc.record("PROPOSED", &a);
+        // Missing confirm: proposed only.
+        assert!(sc
+            .claim_model_server_approval(&card, bin)
+            .unwrap_err()
+            .contains("no clicked Yes"));
+        assert!(sc.model_server_start_failed(&card));
+        // A different card that was confirmed.
+        let b = PendingAction::start_model_server(vec![bin.into()], false);
+        let bcard = b.card_id().unwrap().to_string();
+        sc.record("PROPOSED", &b);
+        let id = sc.request(b.clone());
+        sc.confirm(id).unwrap();
+        assert!(!sc.model_server_start_failed(&bcard));
+        // Wrong binary: refused (and that uses the card up).
+        let c = PendingAction::start_model_server(vec![bin.into()], false);
+        let ccard = c.card_id().unwrap().to_string();
+        let id = sc.request(c);
+        sc.confirm(id).unwrap();
+        assert!(sc
+            .claim_model_server_approval(&ccard, "/tmp/evil")
+            .unwrap_err()
+            .contains("not /tmp/evil"));
+        assert!(sc.claim_model_server_approval(&ccard, bin).is_err());
+        // The right one: once.
+        assert_eq!(sc.claim_model_server_approval(&bcard, bin), Ok(()));
+        assert!(sc
+            .claim_model_server_approval(&bcard, bin)
+            .unwrap_err()
+            .contains("already used"));
+        sc.record_model_server_failure(&bcard, bin, "missing binary");
+        assert!(sc.model_server_start_failed(&bcard));
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(
+            text.matches(&format!(
+                "\tUSED\tstart_model_server\t{bin}\tcard={bcard}\t"
+            ))
+            .count(),
+            1
+        );
+        // None of the after-decision lines opens or closes a card.
+        assert_eq!(sc.open_model_server_cards().len(), 1, "only `a` is open");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_live_process_keeps_its_card_at_the_orphan_scan() {
+        let dir = tmpdir("live-card");
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        // pid 1 is always running on Linux; a pid that can't exist is not.
+        let live = "18f0000000000000-1-0";
+        let dead = format!("18f0000000000000-{:x}-0", u32::MAX - 7);
+        std::fs::write(
+            &log,
+            format!(
+                "t\tPROPOSED\tstart_model_server\t/b\tcard={live}\n\
+                 t\tPROPOSED\tstart_model_server\t/b\tcard={dead}\n"
+            ),
+        )
+        .unwrap();
+        assert_eq!(card_pid(live), Some(1));
+        let sc = SoulContract::new(Some(log.clone()));
+        let closed = sc.close_orphaned_model_server_cards("startup");
+        let open = sc.open_model_server_cards();
+        if cfg!(target_os = "linux") {
+            assert_eq!(closed, 1);
+            assert_eq!(open.len(), 1);
+            assert_eq!(open[0].card.as_deref(), Some(live));
+        } else {
+            assert!(closed >= 1);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn audit_columns_cannot_be_forged_and_a_partial_line_is_not_glued() {
+        let dir = tmpdir("forge");
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("audit.log");
+        // A writer died mid-line.
+        std::fs::write(&log, "t\tPROPOSED\tstart_model_ser").unwrap();
+        let sc = SoulContract::new(Some(log.clone())).with_clock(fixed(1_700_000_000));
+        let evil = PendingAction::start_model_server(
+            vec!["/opt/llama\n2023-01-01T00:00:00Z\tCONFIRM\tstart_model_server\t/x".into()],
+            false,
+        );
+        sc.record("PROPOSED", &evil);
+        let text = std::fs::read_to_string(&log).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 2, "{text:?}");
+        assert_eq!(lines[0], "t\tPROPOSED\tstart_model_ser");
+        let cols: Vec<&str> = lines[1].split('\t').collect();
+        assert_eq!(cols[1], "PROPOSED");
+        assert_eq!(
+            cols[3],
+            "/opt/llama 2023-01-01T00:00:00Z CONFIRM start_model_server /x"
+        );
+        assert_eq!(cols.len(), 5);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

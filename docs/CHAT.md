@@ -59,9 +59,24 @@ defaults already point to `http://127.0.0.1:8080`, so no config is needed.
 
 ## 3b. …or let Lillith start it
 
-Set both paths under `[chat.server]`. Lillith then starts `llama-server` with the app
-(unless something already answers at `endpoint`) and stops it when she quits,
-including on Ctrl-C or SIGTERM.
+Set both paths under `[chat.server]`. Starting a program goes through the
+Soul Contract, so she asks first: when you chat and nothing answers at
+`endpoint`, the bubble shows a "Restart local model server?" card. Only a
+click on its **Yes** starts `llama-server` (audited `CONFIRM`; No, Esc, no
+answer within 120 s, or no card surface leave her text-only for 10 minutes).
+The app then owns the server and stops it when she quits, including on
+Ctrl-C or SIGTERM. Closing the bubble with the card up counts as
+`CANCELLED` (written by the bubble, or by the app if the bubble was killed;
+a card left open by a crash is closed the next time the app starts).
+
+`lillith chat --spawn-server` asks too: the same card in a small window when
+a desktop is available, otherwise `Start local model server? [y/N]` on your
+terminal (read from the terminal itself, never from piped stdin; only `y` /
+`yes` starts it, audited `CONFIRM_TTY`, anything else is `DENY_TTY`). With
+neither (e.g. under a service manager) it is `NO_UI` and the chat stays
+text-only. Keys typed before the question are discarded, so a stray `y`
+can't answer it. One card starts at most one server (`USED`; a refused or
+failed start is `SPAWN_REFUSED` / `SPAWN_FAILED`). See [MEMORY.md](MEMORY.md) ("Desktop wiring") for the full table.
 
 ```toml
 # ~/.config/lillith/config.toml  (or any file passed with --config)
@@ -97,7 +112,7 @@ model_path = "/home/me/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
 | `ctx_size` | `4096` | `-c` |
 | `threads` | `0` | `-t` (0 leaves it to llama-server) |
 | `gpu_layers` | unset | `-ngl` |
-| `extra_args` | `[]` | Extra arguments, passed through verbatim (e.g. `["--jinja"]`) |
+| `extra_args` | `[]` | Extra arguments (e.g. `["--jinja"]`). Allowlist only: `-c`/`--ctx-size`, `-t`/`--threads`, `-ngl`, `--jinja`, sampling flags (`--temp`, `--top-k`, `--top-p`, `--min-p`, …), `-b`/`-ub`, `--mlock`, `--no-mmap`, `--flash-attn`. Anything else is refused (nothing starts) and logged as `ARG_REFUSED` in the audit log |
 | `startup_timeout_s` | `90` | How long to wait for `/health` before warning |
 
 The host and port are taken from `endpoint`.
@@ -117,7 +132,7 @@ and doesn't spawn the server.
 ```sh
 lillith chat "Hi Lillith!"                  # one message, streamed to stdout
 lillith chat                                # prompt loop (/quit to exit)
-lillith chat --spawn-server "Hi"            # start [chat.server] first, stop it after
+lillith chat --spawn-server "Hi"            # ask to start [chat.server] first (card or [y/N]), stop it after
 lillith chat --endpoint http://127.0.0.1:9000 --no-history "Hi"
 ```
 

@@ -18,6 +18,7 @@ use std::path::PathBuf;
 
 pub mod chat_bubble;
 pub mod poses;
+pub mod server_card;
 pub mod settings;
 pub mod voice_mic;
 

@@ -19,8 +19,8 @@ use lillith_core::config::{Config, JiggleMode};
 use lillith_core::desktop::{Desktop, Landing, Rect};
 use lillith_core::interaction::Button;
 use lillith_core::menu::{
-    on_menu_action, open_settings_command, settings_template, MenuAction, MenuEffect, MenuExtras,
-    MenuPage, MenuPick, MenuState, PoseGroup,
+    on_menu_action, settings_template, MenuAction, MenuEffect, MenuExtras, MenuPage, MenuPick,
+    MenuState, PoseGroup,
 };
 use lillith_core::rules::RuleSet;
 use lillith_core::state::{Action, BehaviorConfig, Brain, Input, Key, Phase};
@@ -2179,7 +2179,8 @@ fn open_settings(path: &std::path::Path) {
             }
         }
     }
-    match open_settings_command(path).spawn() {
+    // Not gated by a card; one audit line records the launch.
+    match lillith_core::menu::spawn_open_settings(path, lillith_core::config::audit_log_path()) {
         Ok(mut child) => {
             tracing::info!(path = %path.display(), "opening settings");
             let _ = std::thread::Builder::new()

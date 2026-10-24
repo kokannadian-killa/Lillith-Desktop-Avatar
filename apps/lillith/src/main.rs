@@ -30,7 +30,9 @@ use lillith_overlay::{Backend, OverlayOptions};
 use std::path::PathBuf;
 
 mod chat;
+mod memory_wiring;
 mod preview;
+mod server_consent;
 
 #[derive(Debug, Parser)]
 #[command(name = "lillith", version, about = "Lillith desktop companion")]
@@ -130,7 +132,9 @@ enum Cmd {
     Chat {
         /// Message to send (omit for an interactive loop; `/quit` ends it).
         message: Option<String>,
-        /// Start llama-server from `[chat.server]` first (and stop it after).
+        /// Offer to start llama-server from `[chat.server]` first (and stop
+        /// it after). Starting it is a program launch: it waits for a Yes
+        /// on the Soul Contract card, or a typed y on the terminal.
         #[arg(long)]
         spawn_server: bool,
         /// Don't load or save the chat history file.
@@ -237,6 +241,21 @@ enum Cmd {
         /// dismisses it, nothing runs).
         #[arg(long)]
         demo_contract: bool,
+        /// The overlay owns `[chat.server]`: a clicked Yes on the
+        /// model-server card asks it (over stdout) to start the server.
+        #[arg(long)]
+        app_server: bool,
+    },
+    /// The stand-alone model-server Soul Contract card (started by
+    /// `lillith chat --spawn-server`; prints yes / no / timeout / cancelled).
+    #[command(hide = true)]
+    ServerCard {
+        /// "Restart …" instead of "Start …".
+        #[arg(long)]
+        restart: bool,
+        /// The command line to show.
+        #[arg(last = true)]
+        argv: Vec<String>,
     },
 }
 
@@ -479,6 +498,7 @@ async fn main() -> Result<()> {
             ref screenshot,
             demo,
             demo_contract,
+            app_server,
         }) => {
             let (full, config_path) = load_config(&cli);
             let pos = x.zip(y);
@@ -492,7 +512,11 @@ async fn main() -> Result<()> {
                 screenshot.clone(),
                 demo,
                 demo_contract,
+                app_server,
             )?;
+        }
+        Some(Cmd::ServerCard { restart, ref argv }) => {
+            server_consent::card_main(argv.clone(), restart)?;
         }
         Some(Cmd::Setup {
             ref gguf,
@@ -504,7 +528,14 @@ async fn main() -> Result<()> {
                 .clone()
                 .or_else(Config::default_path)
                 .ok_or_else(|| anyhow::anyhow!("no config directory; pass --config"))?;
-            let msg = setup(&path, gguf.as_deref(), llama_server.as_deref(), ctx_size)?;
+            let msg = match setup(&path, gguf.as_deref(), llama_server.as_deref(), ctx_size) {
+                Ok(m) => m,
+                Err(e) => {
+                    let mem = Config::load(&path).map(|c| c.memory).unwrap_or_default();
+                    memory_wiring::record_setup_failure(&mem, &e.to_string());
+                    return Err(e);
+                }
+            };
             tracing::info!("{msg}");
             println!("{msg}");
         }
@@ -808,10 +839,17 @@ struct VoiceSink {
     daemon: Option<lillith_voice::daemon::DaemonClient>,
     /// Its `subscribe lipsync` stream (audio-driven mouth).
     lipsync: Option<lillith_voice::daemon::LipsyncReader>,
+    /// Error memory for the voice's recovery ladder.
+    memory: std::sync::Arc<lillith_memory::MemoryBridge>,
+    recovery: memory_wiring::VoiceRecovery,
 }
 
 impl VoiceSink {
-    fn new(voice: lillith_voice::Voice, config: Option<std::path::PathBuf>) -> Self {
+    fn new(
+        voice: lillith_voice::Voice,
+        config: Option<std::path::PathBuf>,
+        memory: std::sync::Arc<lillith_memory::MemoryBridge>,
+    ) -> Self {
         let daemon = lillith_voice::daemon::DaemonClient::from_config(voice.config());
         // Only subscribe when the daemon is the engine: espeak/piper have no
         // lip-sync stream (the text lip-flap stays).
@@ -825,21 +863,66 @@ impl VoiceSink {
                     None
                 }
             });
+        let st = voice.stats();
+        let recovery =
+            memory_wiring::VoiceRecovery::new(voice.engine_name(), st.engine_errors, st.spoken);
         Self {
             voice,
             config,
             daemon,
             lipsync,
+            memory,
+            recovery,
         }
+    }
+
+    /// Runs the voice recovery ladder; `false`: do not speak right now.
+    fn recover(&mut self) -> bool {
+        use memory_wiring::VoiceStep;
+        let st = self.voice.stats();
+        match self.recovery.poll(
+            st.engine_errors,
+            st.spoken,
+            std::time::Instant::now(),
+            &self.memory,
+        ) {
+            VoiceStep::Speak => true,
+            VoiceStep::Hold => false,
+            VoiceStep::TextOnly => {
+                if self.voice.enabled() {
+                    // Runtime only: never written to config.toml.
+                    self.voice.set_enabled(false);
+                }
+                false
+            }
+        }
+    }
+
+    fn reset_recovery(&mut self) {
+        let st = self.voice.stats();
+        self.recovery.reset(st.engine_errors, st.spoken);
     }
 }
 
 impl lillith_overlay::ActionSink for VoiceSink {
     fn on_actions(&mut self, actions: &[lillith_core::state::Action]) {
-        self.voice.on_actions(actions);
+        if self.recover() {
+            self.voice.on_actions(actions);
+        } else {
+            // Resting / text only: mute changes still apply, lines are not spoken.
+            let quiet: Vec<_> = actions
+                .iter()
+                .filter(|a| !matches!(a, lillith_core::state::Action::Say(_)))
+                .cloned()
+                .collect();
+            self.voice.on_actions(&quiet);
+        }
     }
 
     fn on_chat_reply(&mut self, reply: &str) {
+        if !self.recover() {
+            return;
+        }
         // Speakers off / muted / no engine: silently skipped (text shows).
         if let Err(why) = self.voice.say_reply(reply) {
             tracing::debug!(?why, "chat reply not spoken");
@@ -852,6 +935,9 @@ impl lillith_overlay::ActionSink for VoiceSink {
 
     fn set_speaker(&mut self, on: bool) {
         self.voice.set_enabled(on);
+        if on {
+            self.reset_recovery();
+        }
         if on && !self.voice.has_engine() {
             tracing::warn!(
                 "speakers on, but no TTS engine is installed (piper / espeak-ng / spd-say)"
@@ -869,6 +955,9 @@ impl lillith_overlay::ActionSink for VoiceSink {
             Ok(v) if v.enabled != self.voice.enabled() => {
                 tracing::info!(on = v.enabled, "speak out loud (speakers), from settings");
                 self.voice.set_enabled(v.enabled);
+                if v.enabled {
+                    self.reset_recovery();
+                }
             }
             Ok(_) => {}
             Err(e) => tracing::warn!("[voice]: {e}"),
@@ -1053,16 +1142,37 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         "Lillith overlay (M4): click/hover/drag her; keys while focused (G wander/stay, S sleep, Q/Esc quit)"
     );
     // One feed for the system monitor and the chat bubble.
-    let (tx, rx) = std::sync::mpsc::channel::<Event>();
+    let (feed, rx) = std::sync::mpsc::channel::<Event>();
+    // Memory learns app habits / errors from the same feed (a non-blocking
+    // tee) and speaks proactive lines back into it (`memory.suggest`).
+    let memory = memory_wiring::start(&cfg.memory, feed.clone());
+    let tx = memory_wiring::tee(feed, &memory);
     let monitor = start_monitor(cli, &cfg, tx.clone());
     let chat_on = cfg.chat.enabled;
-    let launcher = chat_on.then(|| chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm));
     // Optional self-spawned llama-server (`[chat.server]`), stopped on exit.
+    // Never started on its own: only after a clicked Yes on the bubble's
+    // Soul Contract card (see `ServerGuard::start`).
+    // A model-server card left PROPOSED by an earlier run (bubble or app
+    // killed before an answer) is closed now; existing lines stay as they are.
+    let orphans = lillith_core::soul_contract::SoulContract::new(cfg.mind.audit_log_path())
+        .close_orphaned_model_server_cards("orphaned PROPOSED closed at startup");
+    if orphans > 0 {
+        tracing::info!(orphans, "soul contract: closed orphaned model-server cards");
+    }
     let server = if chat_on && !cli.no_llm {
         chat::ServerGuard::start(&cfg.chat).await
     } else {
         chat::ServerGuard::default()
     };
+    let launcher = chat_on.then(|| {
+        let l = chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm)
+            .with_audit_log(cfg.mind.audit_log_path());
+        if !cli.no_llm && cfg.chat.server.should_spawn() {
+            l.with_server(server.handle(), cfg.chat.clone(), memory.clone())
+        } else {
+            l
+        }
+    });
     if chat_on {
         tracing::info!(
             endpoint = %cfg.chat.endpoint,
@@ -1081,6 +1191,7 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         sink: Some(lillith_overlay::SinkHandle::new(VoiceSink::new(
             voice,
             config_path.clone(),
+            memory.clone(),
         ))),
         ..opts
     };

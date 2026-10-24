@@ -2384,6 +2384,7 @@ dependencies = [
  "directories",
  "lillith-anim",
  "lillith-core",
+ "lillith-memory",
  "lillith-mind",
  "lillith-overlay",
  "lillith-panel",
