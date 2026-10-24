@@ -6216,14 +6216,17 @@
    "manifest": "tease_shoulder_glance_arch/tease_shoulder_glance_arch.json",
    "preview": "tease_shoulder_glance_arch/tease_shoulder_glance_arch_preview.gif",
    "tags": [
-    "baked_motion"
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "tease"
    ],
    "allure": true,
    "video": "tease_shoulder_glance_arch/tease_shoulder_glance_arch.mp4"
   },
   {
-   "name": "squeeze_kneel_press_wink",
-   "frame_count": 180,
+   "name": "squeeze_bent_over_cleavage",
+   "frame_count": 204,
    "frame_width": 400,
    "frame_height": 400,
    "fps": 12,
@@ -6235,19 +6238,60 @@
    ],
    "scale": 0.54,
    "body_anchor_x": 200,
-   "facing": "front (kneeling)",
+   "facing": "front",
    "canvas_compliant": true,
    "placeholder": false,
    "source": "grok-imagine-video",
-   "dir": "squeeze_kneel_press_wink/",
-   "sheet": "squeeze_kneel_press_wink/squeeze_kneel_press_wink_sheet.png",
-   "manifest": "squeeze_kneel_press_wink/squeeze_kneel_press_wink.json",
-   "preview": "squeeze_kneel_press_wink/squeeze_kneel_press_wink_preview.gif",
+   "dir": "squeeze_bent_over_cleavage/",
+   "sheet": "squeeze_bent_over_cleavage/squeeze_bent_over_cleavage_sheet.png",
+   "manifest": "squeeze_bent_over_cleavage/squeeze_bent_over_cleavage.json",
+   "preview": "squeeze_bent_over_cleavage/squeeze_bent_over_cleavage_preview.gif",
    "tags": [
-    "baked_motion"
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "squeeze"
    ],
    "allure": true,
-   "video": "squeeze_kneel_press_wink/squeeze_kneel_press_wink.mp4"
+   "video": "squeeze_bent_over_cleavage/squeeze_bent_over_cleavage.mp4"
+  },
+  {
+   "name": "squeeze_seated_lip_bite",
+   "frame_count": 204,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front (seated on an edge)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "squeeze_seated_lip_bite/",
+   "sheet": "squeeze_seated_lip_bite/squeeze_seated_lip_bite_sheet.png",
+   "manifest": "squeeze_seated_lip_bite/squeeze_seated_lip_bite.json",
+   "preview": "squeeze_seated_lip_bite/squeeze_seated_lip_bite_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "sit_base",
+    "squeeze"
+   ],
+   "allure": true,
+   "video": "squeeze_seated_lip_bite/squeeze_seated_lip_bite.mp4",
+   "seat_y": 244,
+   "seat_x_range": [
+    155,
+    244
+   ],
+   "feet_lowest_y": 392
   }
  ]
 }
