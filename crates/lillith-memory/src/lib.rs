@@ -21,6 +21,7 @@ pub mod errors;
 pub mod extract;
 pub mod forget;
 pub mod habits;
+pub mod notes;
 pub mod recovery;
 pub mod safeword;
 pub mod schema;
@@ -37,6 +38,7 @@ pub use forget::{
 };
 pub use habits::Prediction;
 pub use lillith_core::config::MemoryConfig;
+pub use notes::{NoteRow, SourceState};
 pub use recovery::SafeFix;
 pub use safeword::{is_safeword, mentions_safeword};
 
@@ -61,6 +63,10 @@ pub enum Kind {
     Preference,
     Habit,
     Error,
+    /// A learned note (`knowledge/<topic>/<slug>.md`, key = note id).
+    Note,
+    /// A proven skill (P4; reserved now).
+    Skill,
 }
 
 impl Kind {
@@ -71,6 +77,8 @@ impl Kind {
             Kind::Preference => "preference",
             Kind::Habit => "habit",
             Kind::Error => "error",
+            Kind::Note => "note",
+            Kind::Skill => "skill",
         }
     }
 
@@ -81,6 +89,8 @@ impl Kind {
             "preference" => Kind::Preference,
             "habit" => Kind::Habit,
             "error" => Kind::Error,
+            "note" => Kind::Note,
+            "skill" => Kind::Skill,
             _ => return None,
         })
     }
