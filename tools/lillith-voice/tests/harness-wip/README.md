@@ -1,0 +1,1 @@
+WIP backup of the voice-bot's e2e/safety test harnesses (real-daemon mic, safeword, reprobe, mic-owner tests) and per-SHA result summaries. Not wired into CI; paths assume /workspace/lillith/scratch on the build box.

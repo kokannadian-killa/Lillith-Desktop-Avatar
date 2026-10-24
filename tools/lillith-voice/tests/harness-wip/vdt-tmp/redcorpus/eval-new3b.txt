@@ -1,0 +1,307 @@
+ok  pos/bella_Red.wav                base   '"Red"'                            sw=True aff=False consent=False stt=0.88
+ok  pos/bella_Red.wav                quiet  'Red.'                             sw=True aff=False consent=False stt=0.42
+ok  pos/bella_Red.wav                loud   'Red.'                             sw=True aff=False consent=False stt=0.7
+ok  pos/bella_Red.wav                noise  'Right.'                           sw=True aff=False consent=False stt=0.64
+ok  pos/bella_Red.wav                tight  'Red.'                             sw=True aff=False consent=False stt=0.55
+ok  pos/bella_Red.wav                mic    '>> Red.'                          sw=True aff=False consent=False stt=0.37
+ok  pos/bella_RedX.wav               base   'Red.'                             sw=True aff=False consent=False stt=0.47
+ok  pos/bella_RedX.wav               quiet  'Red.'                             sw=True aff=False consent=False stt=0.58
+ok  pos/bella_RedX.wav               loud   'Red.'                             sw=True aff=False consent=False stt=0.69
+BAD pos/bella_RedX.wav               noise  'Round.'                           sw=False aff=False consent=False stt=0.56
+ok  pos/bella_RedX.wav               tight  'Red.'                             sw=True aff=False consent=False stt=0.33
+ok  pos/bella_RedX.wav               mic    'Red.'                             sw=True aff=False consent=False stt=0.39
+ok  pos/bella_ohohsee.wav            base   'Oh OC, stop.'                     sw=True aff=False consent=False stt=0.38
+ok  pos/bella_ohohsee.wav            quiet  'OOC, stop.'                       sw=True aff=False consent=False stt=0.44
+ok  pos/bella_ohohsee.wav            loud   "Oh, see, stop. 'O. '"             sw=True aff=False consent=False stt=0.55
+BAD pos/bella_ohohsee.wav            noise  'The Wosing Stop.'                 sw=False aff=False consent=False stt=0.7
+ok  pos/bella_ohohsee.wav            tight  'OOC, stop.'                       sw=True aff=False consent=False stt=0.77
+ok  pos/bella_ohohsee.wav            mic    'OOC, stop.'                       sw=True aff=False consent=False stt=0.73
+BAD pos/bella_ooc.wav                base   "You'll stop."                     sw=False aff=False consent=False stt=0.85
+BAD pos/bella_ooc.wav                quiet  "You'll stop."                     sw=False aff=False consent=False stt=1.33
+BAD pos/bella_ooc.wav                loud   'Woke stop!'                       sw=False aff=False consent=False stt=0.79
+BAD pos/bella_ooc.wav                noise  "You're excited."                  sw=False aff=False consent=False stt=1.4
+BAD pos/bella_ooc.wav                tight  "You'll stop."                     sw=False aff=False consent=False stt=1.71
+BAD pos/bella_ooc.wav                mic    "You'll stop."                     sw=False aff=False consent=False stt=2.93
+ok  pos/bella_p-3.wav                base   'Red.'                             sw=True aff=False consent=False stt=0.7
+ok  pos/bella_p-3.wav                quiet  'Red.'                             sw=True aff=False consent=False stt=0.66
+ok  pos/bella_p-3.wav                loud   'Red.'                             sw=True aff=False consent=False stt=0.76
+ok  pos/bella_p-3.wav                noise  'Red...'                           sw=True aff=False consent=False stt=1.19
+ok  pos/bella_p-3.wav                tight  'Red.'                             sw=True aff=False consent=False stt=0.59
+ok  pos/bella_p-3.wav                mic    'Red.'                             sw=True aff=False consent=False stt=1.15
+ok  pos/bella_p3.wav                 base   'Red.'                             sw=True aff=False consent=False stt=0.52
+ok  pos/bella_p3.wav                 quiet  'Red.'                             sw=True aff=False consent=False stt=0.6
+ok  pos/bella_p3.wav                 loud   'Red.'                             sw=True aff=False consent=False stt=0.45
+ok  pos/bella_p3.wav                 noise  'Right.'                           sw=True aff=False consent=False stt=0.53
+ok  pos/bella_p3.wav                 tight  'Red.'                             sw=True aff=False consent=False stt=0.78
+ok  pos/bella_p3.wav                 mic    'Red.'                             sw=True aff=False consent=False stt=1.21
+ok  pos/bella_red.wav                base   'Red.'                             sw=True aff=False consent=False stt=1.09
+ok  pos/bella_red.wav                quiet  'Red.'                             sw=True aff=False consent=False stt=0.62
+ok  pos/bella_red.wav                loud   'Red.'                             sw=True aff=False consent=False stt=0.7
+ok  pos/bella_red.wav                noise  'Red.'                             sw=True aff=False consent=False stt=0.94
+ok  pos/bella_red.wav                tight  'Red.'                             sw=True aff=False consent=False stt=0.47
+ok  pos/bella_red.wav                mic    'Red.'                             sw=True aff=False consent=False stt=0.89
+ok  pos/bella_s0.8.wav               base   'Red.'                             sw=True aff=False consent=False stt=0.37
+ok  pos/bella_s0.8.wav               quiet  'Red.'                             sw=True aff=False consent=False stt=0.49
+ok  pos/bella_s0.8.wav               loud   'Red.'                             sw=True aff=False consent=False stt=0.88
+ok  pos/bella_s0.8.wav               noise  'Right.'                           sw=True aff=False consent=False stt=1.67
+ok  pos/bella_s0.8.wav               tight  'Red.'                             sw=True aff=False consent=False stt=1.38
+ok  pos/bella_s0.8.wav               mic    'Red.'                             sw=True aff=False consent=False stt=1.72
+ok  pos/bella_s1.25.wav              base   'Red.'                             sw=True aff=False consent=False stt=1.53
+ok  pos/bella_s1.25.wav              quiet  'Red.'                             sw=True aff=False consent=False stt=0.45
+ok  pos/bella_s1.25.wav              loud   'Red.'                             sw=True aff=False consent=False stt=0.51
+ok  pos/bella_s1.25.wav              noise  'Right'                            sw=True aff=False consent=False stt=0.86
+ok  pos/bella_s1.25.wav              tight  'Red.'                             sw=True aff=False consent=False stt=0.87
+ok  pos/bella_s1.25.wav              mic    'Red.'                             sw=True aff=False consent=False stt=0.81
+ok  pos/lillith_Red.wav              base   'Red.'                             sw=True aff=False consent=False stt=1.07
+ok  pos/lillith_Red.wav              quiet  'Red.'                             sw=True aff=False consent=False stt=1.54
+ok  pos/lillith_Red.wav              loud   'Right.'                           sw=True aff=False consent=False stt=0.51
+ok  pos/lillith_Red.wav              noise  'Right.'                           sw=True aff=False consent=False stt=1.02
+ok  pos/lillith_Red.wav              tight  'Red.'                             sw=True aff=False consent=False stt=0.97
+ok  pos/lillith_Red.wav              mic    'Red.'                             sw=True aff=False consent=False stt=1.5
+ok  pos/lillith_RedX.wav             base   'Red!'                             sw=True aff=False consent=False stt=1.77
+ok  pos/lillith_RedX.wav             quiet  'Red.'                             sw=True aff=False consent=False stt=1.51
+ok  pos/lillith_RedX.wav             loud   'Red!'                             sw=True aff=False consent=False stt=5.63
+ok  pos/lillith_RedX.wav             noise  'Red.'                             sw=True aff=False consent=False stt=4.28
+ok  pos/lillith_RedX.wav             tight  'Red.'                             sw=True aff=False consent=False stt=1.32
+ok  pos/lillith_RedX.wav             mic    'Red!'                             sw=True aff=False consent=False stt=1.07
+ok  pos/lillith_ohohsee.wav          base   'Oh, see, stop.'                   sw=True aff=False consent=False stt=2.71
+ok  pos/lillith_ohohsee.wav          quiet  'Oh, oh, see stop.'                sw=True aff=False consent=False stt=3.1
+ok  pos/lillith_ohohsee.wav          loud   'Oh, oh, see, stop.'               sw=True aff=False consent=False stt=4.38
+ok  pos/lillith_ohohsee.wav          noise  'Oh, see stop.'                    sw=True aff=False consent=False stt=3.27
+ok  pos/lillith_ohohsee.wav          tight  'Oh, see, stop.'                   sw=True aff=False consent=False stt=5.14
+ok  pos/lillith_ohohsee.wav          mic    'Oh, see stop.'                    sw=True aff=False consent=False stt=3.39
+BAD pos/lillith_ooc.wav              base   'O-C. Start.'                      sw=False aff=False consent=False stt=6.63
+ok  pos/lillith_ooc.wav              quiet  'Oh, see, stop.'                   sw=True aff=False consent=False stt=3.98
+ok  pos/lillith_ooc.wav              loud   'Oh, see, stop!'                   sw=True aff=False consent=False stt=6.48
+ok  pos/lillith_ooc.wav              noise  'Oh, see, stop.'                   sw=True aff=False consent=False stt=5.29
+BAD pos/lillith_ooc.wav              tight  'Oh, see, start.'                  sw=False aff=False consent=False stt=4.54
+ok  pos/lillith_ooc.wav              mic    'Oh, see, stop'                    sw=True aff=False consent=False stt=7.89
+ok  pos/lillith_p-3.wav              base   'Right.'                           sw=True aff=False consent=False stt=1.28
+ok  pos/lillith_p-3.wav              quiet  'Right.'                           sw=True aff=False consent=False stt=2.81
+ok  pos/lillith_p-3.wav              loud   'Right.'                           sw=True aff=False consent=False stt=3.67
+ok  pos/lillith_p-3.wav              noise  'Right.'                           sw=True aff=False consent=False stt=2.59
+ok  pos/lillith_p-3.wav              tight  'Right.'                           sw=True aff=False consent=False stt=2.49
+ok  pos/lillith_p-3.wav              mic    'Red.'                             sw=True aff=False consent=False stt=4.33
+ok  pos/lillith_p3.wav               base   'Right.'                           sw=True aff=False consent=False stt=3.12
+ok  pos/lillith_p3.wav               quiet  '>> Red.'                          sw=True aff=False consent=False stt=2.58
+ok  pos/lillith_p3.wav               loud   'Right.'                           sw=True aff=False consent=False stt=1.64
+ok  pos/lillith_p3.wav               noise  'Red.'                             sw=True aff=False consent=False stt=2.29
+ok  pos/lillith_p3.wav               tight  'Red.'                             sw=True aff=False consent=False stt=4.01
+ok  pos/lillith_p3.wav               mic    'Red.'                             sw=True aff=False consent=False stt=6.11
+ok  pos/lillith_red.wav              base   'Red.'                             sw=True aff=False consent=False stt=5.23
+ok  pos/lillith_red.wav              quiet  'Red.'                             sw=True aff=False consent=False stt=5.21
+ok  pos/lillith_red.wav              loud   'Red!'                             sw=True aff=False consent=False stt=5.53
+ok  pos/lillith_red.wav              noise  'Red.'                             sw=True aff=False consent=False stt=11.23
+ok  pos/lillith_red.wav              tight  'Red.'                             sw=True aff=False consent=False stt=6.11
+ok  pos/lillith_red.wav              mic    'Red.'                             sw=True aff=False consent=False stt=6.24
+ok  pos/lillith_s0.8.wav             base   'Red.'                             sw=True aff=False consent=False stt=6.32
+ok  pos/lillith_s0.8.wav             quiet  'Red.'                             sw=True aff=False consent=False stt=6.49
+ok  pos/lillith_s0.8.wav             loud   'Red.'                             sw=True aff=False consent=False stt=5.11
+ok  pos/lillith_s0.8.wav             noise  'Right'                            sw=True aff=False consent=False stt=10.87
+ok  pos/lillith_s0.8.wav             tight  'Red.'                             sw=True aff=False consent=False stt=5.44
+ok  pos/lillith_s0.8.wav             mic    'Red.'                             sw=True aff=False consent=False stt=7.83
+ok  pos/lillith_s1.25.wav            base   'Red.'                             sw=True aff=False consent=False stt=4.62
+ok  pos/lillith_s1.25.wav            quiet  'Red.'                             sw=True aff=False consent=False stt=7.58
+ok  pos/lillith_s1.25.wav            loud   'Red.'                             sw=True aff=False consent=False stt=6.28
+ok  pos/lillith_s1.25.wav            noise  'Red'                              sw=True aff=False consent=False stt=3.63
+ok  pos/lillith_s1.25.wav            tight  'Red.'                             sw=True aff=False consent=False stt=7.83
+ok  pos/lillith_s1.25.wav            mic    'Right.'                           sw=True aff=False consent=False stt=3.04
+ok  pos/p1_Red.wav                   base   'Red.'                             sw=True aff=False consent=False stt=3.09
+BAD pos/p1_Red.wav                   quiet  "I'm"                              sw=False aff=False consent=False stt=4.14
+ok  pos/p1_Red.wav                   loud   'Red.'                             sw=True aff=False consent=False stt=4.11
+ok  pos/p1_Red.wav                   noise  'Right.'                           sw=True aff=False consent=False stt=1.19
+ok  pos/p1_Red.wav                   tight  'Red.'                             sw=True aff=False consent=False stt=2.73
+ok  pos/p1_Red.wav                   mic    'Red.'                             sw=True aff=False consent=False stt=4.9
+ok  pos/p1_RedX.wav                  base   'Red.'                             sw=True aff=False consent=False stt=1.52
+ok  pos/p1_RedX.wav                  quiet  'Red.'                             sw=True aff=False consent=False stt=4.22
+ok  pos/p1_RedX.wav                  loud   'Red.'                             sw=True aff=False consent=False stt=3.12
+ok  pos/p1_RedX.wav                  noise  'Right.'                           sw=True aff=False consent=False stt=2.63
+ok  pos/p1_RedX.wav                  tight  'red.'                             sw=True aff=False consent=False stt=2.62
+ok  pos/p1_RedX.wav                  mic    'Red.'                             sw=True aff=False consent=False stt=2.37
+ok  pos/p1_ohohsee.wav               base   'Oh, see, stop.'                   sw=True aff=False consent=False stt=2.36
+BAD pos/p1_ohohsee.wav               quiet  "Oh, I'll see. Stop."              sw=False aff=False consent=False stt=3.87
+ok  pos/p1_ohohsee.wav               loud   'Oh, see, stop.'                   sw=True aff=False consent=False stt=4.1
+BAD pos/p1_ohohsee.wav               noise  'I was in the start.'              sw=False aff=False consent=False stt=3.12
+ok  pos/p1_ohohsee.wav               tight  'Oh, see, stop!'                   sw=True aff=False consent=False stt=5.76
+BAD pos/p1_ohohsee.wav               mic    "Oh, I'll see, stop."              sw=False aff=False consent=False stt=3.06
+BAD pos/p1_ooc.wav                   base   'Yoke start.'                      sw=False aff=False consent=False stt=5.75
+BAD pos/p1_ooc.wav                   quiet  'Yolk stop.'                       sw=False aff=False consent=False stt=5.87
+BAD pos/p1_ooc.wav                   loud   'Next up.'                         sw=False aff=False consent=False stt=5.31
+BAD pos/p1_ooc.wav                   noise  'Next off'                         sw=False aff=False consent=False stt=3.72
+BAD pos/p1_ooc.wav                   tight  "You'll start."                    sw=False aff=False consent=False stt=3.82
+BAD pos/p1_ooc.wav                   mic    'You\'re like, "You\'re like a little bit of a little bit of a little bit of a little bit of a little bit of' sw=False aff=False consent=False stt=2.55
+ok  pos/p1_p-3.wav                   base   'Red.'                             sw=True aff=False consent=False stt=0.88
+ok  pos/p1_p-3.wav                   quiet  'Red.'                             sw=True aff=False consent=False stt=2.91
+ok  pos/p1_p-3.wav                   loud   'Red.'                             sw=True aff=False consent=False stt=2.0
+BAD pos/p1_p-3.wav                   noise  'Run.'                             sw=False aff=False consent=False stt=3.54
+ok  pos/p1_p-3.wav                   tight  'Red.'                             sw=True aff=False consent=False stt=3.49
+ok  pos/p1_p-3.wav                   mic    'Red.'                             sw=True aff=False consent=False stt=3.41
+ok  pos/p1_p3.wav                    base   'Red.'                             sw=True aff=False consent=False stt=1.94
+ok  pos/p1_p3.wav                    quiet  'Red.'                             sw=True aff=False consent=False stt=1.87
+ok  pos/p1_p3.wav                    loud   'red'                              sw=True aff=False consent=False stt=4.19
+BAD pos/p1_p3.wav                    noise  'Run.'                             sw=False aff=False consent=False stt=6.61
+ok  pos/p1_p3.wav                    tight  'Red.'                             sw=True aff=False consent=False stt=2.97
+ok  pos/p1_p3.wav                    mic    'Red.'                             sw=True aff=False consent=False stt=3.29
+ok  pos/p1_red.wav                   base   'Red.'                             sw=True aff=False consent=False stt=3.57
+ok  pos/p1_red.wav                   quiet  'Red.'                             sw=True aff=False consent=False stt=2.87
+ok  pos/p1_red.wav                   loud   'Red.'                             sw=True aff=False consent=False stt=2.92
+ok  pos/p1_red.wav                   noise  'Right.'                           sw=True aff=False consent=False stt=2.62
+ok  pos/p1_red.wav                   tight  'Red.'                             sw=True aff=False consent=False stt=3.4
+ok  pos/p1_red.wav                   mic    'red.'                             sw=True aff=False consent=False stt=8.58
+ok  pos/p1_s0.8.wav                  base   'Red.'                             sw=True aff=False consent=False stt=1.11
+ok  pos/p1_s0.8.wav                  quiet  'Red.'                             sw=True aff=False consent=False stt=1.97
+ok  pos/p1_s0.8.wav                  loud   'Red.'                             sw=True aff=False consent=False stt=2.63
+BAD pos/p1_s0.8.wav                  noise  "We're ready."                     sw=False aff=False consent=False stt=4.99
+ok  pos/p1_s0.8.wav                  tight  'Red.'                             sw=True aff=False consent=False stt=2.27
+ok  pos/p1_s0.8.wav                  mic    'Red Red'                          sw=True aff=False consent=False stt=4.31
+ok  pos/p1_s1.25.wav                 base   'Red.'                             sw=True aff=False consent=False stt=3.08
+ok  pos/p1_s1.25.wav                 quiet  'Red.'                             sw=True aff=False consent=False stt=1.53
+ok  pos/p1_s1.25.wav                 loud   'Red.'                             sw=True aff=False consent=False stt=0.78
+BAD pos/p1_s1.25.wav                 noise  'Ready?'                           sw=False aff=False consent=False stt=4.34
+ok  pos/p1_s1.25.wav                 tight  'Red.'                             sw=True aff=False consent=False stt=1.31
+ok  pos/p1_s1.25.wav                 mic    'Red.'                             sw=True aff=False consent=False stt=12.98
+ok  neg/bella_1.wav                  base   "That's right."                    sw=False aff=False consent=False stt=5.92
+ok  neg/bella_1.wav                  quiet  "That's right."                    sw=False aff=False consent=False stt=3.03
+ok  neg/bella_1.wav                  loud   "That's right."                    sw=False aff=False consent=False stt=4.4
+ok  neg/bella_1.wav                  noise  "That's right."                    sw=False aff=False consent=False stt=1.28
+ok  neg/bella_1.wav                  tight  "That's right."                    sw=False aff=False consent=False stt=1.82
+ok  neg/bella_1.wav                  mic    "That's right."                    sw=False aff=False consent=False stt=4.31
+ok  neg/bella_2.wav                  base   'I read it.'                       sw=False aff=False consent=False stt=0.9
+ok  neg/bella_2.wav                  quiet  'I read it.'                       sw=False aff=False consent=False stt=0.62
+ok  neg/bella_2.wav                  loud   'I read it.'                       sw=False aff=False consent=False stt=0.7
+ok  neg/bella_2.wav                  noise  'I read it.'                       sw=False aff=False consent=False stt=1.32
+ok  neg/bella_2.wav                  tight  'I read it.'                       sw=False aff=False consent=False stt=1.89
+ok  neg/bella_2.wav                  mic    'I read it.'                       sw=False aff=False consent=False stt=1.39
+ok  neg/bella_3.wav                  base   'Yes.'                             sw=False aff=True consent=False stt=1.93
+ok  neg/bella_3.wav                  quiet  'Yes.'                             sw=False aff=True consent=False stt=2.17
+ok  neg/bella_3.wav                  loud   'Yes.'                             sw=False aff=True consent=False stt=1.95
+ok  neg/bella_3.wav                  noise  'Yes.'                             sw=False aff=True consent=False stt=1.62
+ok  neg/bella_3.wav                  tight  'Yes.'                             sw=False aff=True consent=False stt=1.66
+ok  neg/bella_3.wav                  mic    'and he will he will he will he will he will he will he will he will he will he will' sw=False aff=False consent=False stt=1.71
+ok  neg/bella_4.wav                  base   'Stop reading.'                    sw=False aff=False consent=False stt=2.42
+ok  neg/bella_4.wav                  quiet  'Stop reading.'                    sw=False aff=False consent=False stt=1.86
+ok  neg/bella_4.wav                  loud   'Stop reading.'                    sw=False aff=False consent=False stt=2.19
+ok  neg/bella_4.wav                  noise  'Stop reading.'                    sw=False aff=False consent=False stt=1.87
+ok  neg/bella_4.wav                  tight  'Stop reading.'                    sw=False aff=False consent=False stt=2.7
+ok  neg/bella_4.wav                  mic    'Stop reading.'                    sw=False aff=False consent=False stt=2.69
+ok  neg/bella_5.wav                  base   "Right, let's go to the red room." sw=False aff=False consent=False stt=1.27
+ok  neg/bella_5.wav                  quiet  "Right, let's go to the red room." sw=False aff=False consent=False stt=1.99
+ok  neg/bella_5.wav                  loud   "Right, let… Let's go to the red room." sw=False aff=False consent=False stt=2.84
+ok  neg/bella_5.wav                  noise  "Right, let's go to the red room." sw=False aff=False consent=False stt=2.65
+ok  neg/bella_5.wav                  tight  "Right, let's go to the red room." sw=False aff=False consent=False stt=1.87
+ok  neg/bella_5.wav                  mic    "Right, let's go to the red room." sw=False aff=False consent=False stt=2.36
+ok  neg/bella_6.wav                  base   'Yes, I agree.'                    sw=False aff=True consent=False stt=0.55
+ok  neg/bella_6.wav                  quiet  'Yes, I agree.'                    sw=False aff=True consent=False stt=0.83
+ok  neg/bella_6.wav                  loud   'Yes, I agree.'                    sw=False aff=True consent=False stt=1.03
+ok  neg/bella_6.wav                  noise  'Yes, I agree.'                    sw=False aff=True consent=False stt=0.61
+ok  neg/bella_6.wav                  tight  'Yes, I agree.'                    sw=False aff=True consent=False stt=1.1
+ok  neg/bella_6.wav                  mic    'Yes, I agree.'                    sw=False aff=True consent=False stt=1.27
+ok  neg/bella_7.wav                  base   'Read Me A Story Read Me A Story Read Me A Story Read Me A Story' sw=False aff=False consent=False stt=1.02
+ok  neg/bella_7.wav                  quiet  'Read me a story.'                 sw=False aff=False consent=False stt=0.97
+ok  neg/bella_7.wav                  loud   'Read Me A Story Read Me A Story Read Me A Story Read Me A Story' sw=False aff=False consent=False stt=2.11
+ok  neg/bella_7.wav                  noise  'Read your story.'                 sw=False aff=False consent=False stt=1.79
+ok  neg/bella_7.wav                  tight  'Read Me a Story Read Me a Story Read Me a Story Read Me a' sw=False aff=False consent=False stt=2.18
+ok  neg/bella_7.wav                  mic    'Read Me a Story Read Me a Story Read Me a Story Read Me a Story Read Me a Story Read Me a Story Read Me a Story Read' sw=False aff=False consent=False stt=3.13
+ok  neg/bella_8.wav                  base   'Alright then.'                    sw=False aff=False consent=False stt=3.12
+ok  neg/bella_8.wav                  quiet  'All right then.'                  sw=False aff=False consent=False stt=0.91
+ok  neg/bella_8.wav                  loud   'Alright then.'                    sw=False aff=False consent=False stt=3.2
+ok  neg/bella_8.wav                  noise  'All right then.'                  sw=False aff=False consent=False stt=0.84
+ok  neg/bella_8.wav                  tight  'Alright then.'                    sw=False aff=False consent=False stt=2.35
+ok  neg/bella_8.wav                  mic    'Alright then.'                    sw=False aff=False consent=False stt=1.99
+ok  neg/lillith_1.wav                base   "That's right."                    sw=False aff=False consent=False stt=2.15
+ok  neg/lillith_1.wav                quiet  "That's right."                    sw=False aff=False consent=False stt=1.13
+ok  neg/lillith_1.wav                loud   "That's right."                    sw=False aff=False consent=False stt=1.55
+ok  neg/lillith_1.wav                noise  "That's right. That's"             sw=False aff=False consent=False stt=0.89
+ok  neg/lillith_1.wav                tight  "That's right."                    sw=False aff=False consent=False stt=2.23
+ok  neg/lillith_1.wav                mic    "That's right."                    sw=False aff=False consent=False stt=1.98
+ok  neg/lillith_2.wav                base   'I read it.'                       sw=False aff=False consent=False stt=0.69
+ok  neg/lillith_2.wav                quiet  'I read it.'                       sw=False aff=False consent=False stt=0.62
+ok  neg/lillith_2.wav                loud   'I read it.'                       sw=False aff=False consent=False stt=0.67
+ok  neg/lillith_2.wav                noise  'I read it.'                       sw=False aff=False consent=False stt=1.0
+ok  neg/lillith_2.wav                tight  'I read it.'                       sw=False aff=False consent=False stt=1.37
+ok  neg/lillith_2.wav                mic    'I read it.'                       sw=False aff=False consent=False stt=0.59
+ok  neg/lillith_3.wav                base   'Yeah.'                            sw=False aff=True consent=False stt=1.6
+ok  neg/lillith_3.wav                quiet  'Yes.'                             sw=False aff=True consent=False stt=1.17
+ok  neg/lillith_3.wav                loud   'Yes.'                             sw=False aff=True consent=False stt=1.08
+ok  neg/lillith_3.wav                noise  'Yes.'                             sw=False aff=True consent=False stt=2.12
+ok  neg/lillith_3.wav                tight  'Yes.'                             sw=False aff=True consent=False stt=1.63
+ok  neg/lillith_3.wav                mic    'Yes.'                             sw=False aff=True consent=False stt=2.06
+ok  neg/lillith_4.wav                base   'Stop reading.'                    sw=False aff=False consent=False stt=1.28
+ok  neg/lillith_4.wav                quiet  'Stop reading.'                    sw=False aff=False consent=False stt=3.1
+ok  neg/lillith_4.wav                loud   'Stop reading.'                    sw=False aff=False consent=False stt=2.08
+ok  neg/lillith_4.wav                noise  'Stop reading.'                    sw=False aff=False consent=False stt=3.06
+ok  neg/lillith_4.wav                tight  'Stop reading.'                    sw=False aff=False consent=False stt=2.53
+ok  neg/lillith_4.wav                mic    'Stop reading.'                    sw=False aff=False consent=False stt=1.37
+ok  neg/lillith_5.wav                base   "Right let's go to the red room."  sw=False aff=False consent=False stt=0.9
+ok  neg/lillith_5.wav                quiet  "Alright, let's go to the red room." sw=False aff=False consent=False stt=1.93
+ok  neg/lillith_5.wav                loud   "Right, let's go to the red room." sw=False aff=False consent=False stt=1.35
+ok  neg/lillith_5.wav                noise  "Alright, let's go to the red room." sw=False aff=False consent=False stt=2.88
+ok  neg/lillith_5.wav                tight  "Right, let's go to the red room." sw=False aff=False consent=False stt=2.17
+ok  neg/lillith_5.wav                mic    "All right, let's go to the red room." sw=False aff=False consent=False stt=1.67
+ok  neg/lillith_6.wav                base   'Yes, I agree.'                    sw=False aff=True consent=False stt=1.1
+ok  neg/lillith_6.wav                quiet  'Yes, I agree.'                    sw=False aff=True consent=False stt=0.91
+ok  neg/lillith_6.wav                loud   'Yes, I agree.'                    sw=False aff=True consent=False stt=1.59
+ok  neg/lillith_6.wav                noise  'Yes, I agree.'                    sw=False aff=True consent=False stt=1.72
+ok  neg/lillith_6.wav                tight  'Yes, I agree.'                    sw=False aff=True consent=False stt=2.42
+ok  neg/lillith_6.wav                mic    'Yes, I agree.'                    sw=False aff=True consent=False stt=1.8
+ok  neg/lillith_7.wav                base   'Read Me A Story'                  sw=False aff=False consent=False stt=1.25
+ok  neg/lillith_7.wav                quiet  'read me a story'                  sw=False aff=False consent=False stt=1.75
+ok  neg/lillith_7.wav                loud   'Read Me A Story'                  sw=False aff=False consent=False stt=1.1
+ok  neg/lillith_7.wav                noise  'Read Me a Story Read Me a Story Read Me a Story Read Me a Story Read Me a Story' sw=False aff=False consent=False stt=2.58
+ok  neg/lillith_7.wav                tight  'Read Me A Story.'                 sw=False aff=False consent=False stt=3.26
+ok  neg/lillith_7.wav                mic    'Read Me A Story.'                 sw=False aff=False consent=False stt=4.64
+ok  neg/lillith_8.wav                base   'Alright then.'                    sw=False aff=False consent=False stt=3.2
+ok  neg/lillith_8.wav                quiet  'Alright then.'                    sw=False aff=False consent=False stt=2.93
+ok  neg/lillith_8.wav                loud   'alright then'                     sw=False aff=False consent=False stt=1.59
+ok  neg/lillith_8.wav                noise  'Alright then.'                    sw=False aff=False consent=False stt=4.74
+ok  neg/lillith_8.wav                tight  'Alright then.'                    sw=False aff=False consent=False stt=3.64
+ok  neg/lillith_8.wav                mic    'Alright then.'                    sw=False aff=False consent=False stt=3.42
+ok  neg/p1_1.wav                     base   "That's right."                    sw=False aff=False consent=False stt=2.61
+ok  neg/p1_1.wav                     quiet  "That's right."                    sw=False aff=False consent=False stt=2.34
+ok  neg/p1_1.wav                     loud   "That's right."                    sw=False aff=False consent=False stt=2.84
+ok  neg/p1_1.wav                     noise  "That's right."                    sw=False aff=False consent=False stt=3.23
+ok  neg/p1_1.wav                     tight  "That's right."                    sw=False aff=False consent=False stt=2.08
+ok  neg/p1_1.wav                     mic    "That's right."                    sw=False aff=False consent=False stt=2.66
+ok  neg/p1_2.wav                     base   'I read it.'                       sw=False aff=False consent=False stt=0.62
+ok  neg/p1_2.wav                     quiet  'I read it.'                       sw=False aff=False consent=False stt=0.79
+ok  neg/p1_2.wav                     loud   'I read it.'                       sw=False aff=False consent=False stt=1.27
+ok  neg/p1_2.wav                     noise  "I'll read it."                    sw=False aff=False consent=False stt=0.82
+ok  neg/p1_2.wav                     tight  'I read it.'                       sw=False aff=False consent=False stt=0.47
+ok  neg/p1_2.wav                     mic    'I read it.'                       sw=False aff=False consent=False stt=1.08
+ok  neg/p1_3.wav                     base   'Yes.'                             sw=False aff=True consent=False stt=1.55
+ok  neg/p1_3.wav                     quiet  'Yes.'                             sw=False aff=True consent=False stt=0.96
+ok  neg/p1_3.wav                     loud   'Yes.'                             sw=False aff=True consent=False stt=2.72
+ok  neg/p1_3.wav                     noise  'Yes.'                             sw=False aff=True consent=False stt=3.49
+ok  neg/p1_3.wav                     tight  'Yes.'                             sw=False aff=True consent=False stt=2.06
+ok  neg/p1_3.wav                     mic    'Yes.'                             sw=False aff=True consent=False stt=2.32
+ok  neg/p1_4.wav                     base   'Stop reading.'                    sw=False aff=False consent=False stt=3.37
+ok  neg/p1_4.wav                     quiet  'Stop reading.'                    sw=False aff=False consent=False stt=2.85
+ok  neg/p1_4.wav                     loud   'Stop reading.'                    sw=False aff=False consent=False stt=1.92
+ok  neg/p1_4.wav                     noise  'Stop reading.'                    sw=False aff=False consent=False stt=1.89
+ok  neg/p1_4.wav                     tight  'Stop reading.'                    sw=False aff=False consent=False stt=1.49
+ok  neg/p1_4.wav                     mic    'Stop reading.'                    sw=False aff=False consent=False stt=1.86
+ok  neg/p1_5.wav                     base   "Right, let's go to the red room." sw=False aff=False consent=False stt=1.12
+ok  neg/p1_5.wav                     quiet  "Right, let's go to the red room." sw=False aff=False consent=False stt=2.44
+ok  neg/p1_5.wav                     loud   "Right, let's go to the red room." sw=False aff=False consent=False stt=2.26
+ok  neg/p1_5.wav                     noise  "Right, let's go to the red one."  sw=False aff=False consent=False stt=1.4
+ok  neg/p1_5.wav                     tight  "Right, let's go to the red room." sw=False aff=False consent=False stt=2.12
+ok  neg/p1_5.wav                     mic    "Right, let's go to the red room." sw=False aff=False consent=False stt=1.4
+ok  neg/p1_6.wav                     base   'Yes, I agree.'                    sw=False aff=True consent=False stt=0.97
+ok  neg/p1_6.wav                     quiet  'Yes, I agree.'                    sw=False aff=True consent=False stt=1.45
+ok  neg/p1_6.wav                     loud   'Yes, I agree.'                    sw=False aff=True consent=False stt=2.19
+ok  neg/p1_6.wav                     noise  'Yes, I will go.'                  sw=False aff=True consent=False stt=0.73
+ok  neg/p1_6.wav                     tight  'Yes, I agree.'                    sw=False aff=True consent=False stt=0.85
+ok  neg/p1_6.wav                     mic    'Yes, I agree.'                    sw=False aff=True consent=False stt=2.79
+ok  neg/p1_7.wav                     base   'Read Me A Story'                  sw=False aff=False consent=False stt=2.01
+ok  neg/p1_7.wav                     quiet  'Read me a story.'                 sw=False aff=False consent=False stt=2.2
+ok  neg/p1_7.wav                     loud   'Read Me A Story'                  sw=False aff=False consent=False stt=2.03
+ok  neg/p1_7.wav                     noise  'The reading is done.'             sw=False aff=False consent=False stt=1.72
+ok  neg/p1_7.wav                     tight  'Read Me A Story'                  sw=False aff=False consent=False stt=1.27
+ok  neg/p1_7.wav                     mic    'Read Me a Story'                  sw=False aff=False consent=False stt=2.9
+ok  neg/p1_8.wav                     base   'Alright then.'                    sw=False aff=False consent=False stt=1.42
+ok  neg/p1_8.wav                     quiet  'All right then.'                  sw=False aff=False consent=False stt=1.22
+ok  neg/p1_8.wav                     loud   'Alright then.'                    sw=False aff=False consent=False stt=3.57
+ok  neg/p1_8.wav                     noise  'Alright then.'                    sw=False aff=False consent=False stt=1.51
+ok  neg/p1_8.wav                     tight  'Alright then.'                    sw=False aff=False consent=False stt=3.34
+ok  neg/p1_8.wav                     mic    'All right then.'                  sw=False aff=False consent=False stt=2.92
+{"pos_total": 162, "neg_total": 144, "bad": 24, "pos_missed": 24, "neg_false": 0}

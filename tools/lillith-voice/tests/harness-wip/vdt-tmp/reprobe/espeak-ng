@@ -1,0 +1,8 @@
+#!/bin/bash
+# fake espeak-ng for the reprobe leg: logs START/END/KILLED with epoch times; "speaks" at ~5 chars/s (cap 40 s)
+LOG=${ESPEAK_SHIM_LOG:?}
+text="${@: -1}"; n=${#text}; d=$(awk -v n=$n 'BEGIN{d=n/3.5; if(d>45)d=45; if(d<1)d=1; printf "%.1f", d}')
+printf '%s START pid=%s dur=%s text=%s\n' "$(date +%s.%N)" $$ "$d" "${text:0:80}" >> "$LOG"
+trap 'printf "%s KILLED pid=%s\n" "$(date +%s.%N)" $$ >> "$LOG"; kill $sp 2>/dev/null; exit 143' TERM INT
+sleep "$d" & sp=$!; wait $sp
+printf '%s END pid=%s\n' "$(date +%s.%N)" $$ >> "$LOG"
