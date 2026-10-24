@@ -1,0 +1,2 @@
+bash zt.sh halloween_broom_sit_lollipop /workspace/lillith/assets/source/video/halloween_broom_sit_lollipop/chain.mp4 --stop 384 --zmax 2.3 --zoom 14,40,58,84,104,130,148,174 --focus-src 637,262 --facing front
+bash zt.sh halloween_cape_swirl_arch /workspace/lillith/assets/source/video/halloween_cape_swirl_arch/chain.mp4 --stop 384 --zmax 2.3 --zoom 14,40,58,84,104,130,148,174 --focus-src 635,235 --snap --facing front
