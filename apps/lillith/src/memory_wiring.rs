@@ -111,6 +111,12 @@ impl VoiceRecovery {
         }
     }
 
+    /// The voice switched engines at runtime (e.g. the daemon came up):
+    /// later errors are remembered under the live engine's name.
+    pub fn set_engine(&mut self, engine: &str) {
+        self.signature = format!("voice: engine error ({engine})");
+    }
+
     /// Speakers were switched on again by Ko: start over.
     pub fn reset(&mut self, errors: u64, spoken: u64) {
         self.errors = errors;
@@ -270,6 +276,16 @@ mod tests {
         assert!(matches!(r.st, St::Idle));
         // Back to normal; a later error rests again (retry is the known fix).
         assert_eq!(settle(&mut r, 5, 11, t1, &m), VoiceStep::Hold);
+    }
+
+    #[test]
+    fn set_engine_tracks_the_live_engine_name() {
+        let mut r = VoiceRecovery::new("espeak-ng", 0, 0);
+        assert_eq!(r.signature, "voice: engine error (espeak-ng)");
+        r.set_engine("voiced");
+        assert_eq!(r.signature, "voice: engine error (voiced)");
+        // Only the name changes; the ladder still starts idle.
+        assert!(matches!(r.st, St::Idle));
     }
 
     #[test]
