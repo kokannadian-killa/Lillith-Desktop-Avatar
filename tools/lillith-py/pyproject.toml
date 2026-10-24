@@ -11,7 +11,6 @@ dependencies = []
 
 [project.optional-dependencies]
 images = ["pillow"]
-ocr = ["pytesseract"]
 test = ["pytest"]
 
 [project.scripts]

@@ -268,5 +268,37 @@ check("data dir mirrors the Rust app", G.data_dir({"XDG_DATA_HOME": "/d"}, False
       and G.data_dir({"HOME": "/h"}, False) == "/h/.local/share/lillith"
       and G.data_dir({"LOCALAPPDATA": "C:/L", "HOME": "/h"}, True) == os.path.join("C:/L", "lillith"))
 
+# ------------------------------------------------------------------ core._find_ffmpeg (bundled Windows ffmpeg.exe)
+from lillith_voice import core as C  # noqa: E402
+
+vh = os.path.join(TMP, "voicehome")
+os.makedirs(os.path.join(vh, "bin"))
+bundled = os.path.join(vh, "bin", "ffmpeg.exe")
+saved = (C.WINDOWS, C.VOICE_HOME, os.environ.get("LILLITH_FFMPEG"), C.shutil.which)
+try:
+    C.WINDOWS, C.VOICE_HOME = True, vh
+    C.shutil.which = lambda name, *a, **k: None
+    os.environ.pop("LILLITH_FFMPEG", None)
+    check("ffmpeg: missing bundled ffmpeg.exe is not used", C._find_ffmpeg() is None)
+    with open(bundled, "w") as f:
+        f.write("#!/bin/sh\n")
+    os.chmod(bundled, 0o644)
+    if os.name != "nt":
+        check("ffmpeg: non-executable bundled ffmpeg.exe refused", C._find_ffmpeg() is None)
+    os.chmod(bundled, 0o755)
+    check("ffmpeg: bundled ffmpeg.exe passes the absolute executable check", C._find_ffmpeg() == bundled)
+    os.environ["LILLITH_FFMPEG"] = "ffmpeg"
+    check("ffmpeg: relative $LILLITH_FFMPEG refused, bundled used", C._find_ffmpeg() == bundled)
+    os.environ["LILLITH_FFMPEG"] = exe
+    check("ffmpeg: absolute executable $LILLITH_FFMPEG wins", C._find_ffmpeg() == exe)
+    os.environ.pop("LILLITH_FFMPEG", None)
+    C.VOICE_HOME = "relative/voicehome"
+    check("ffmpeg: a relative voice home is refused", C._find_ffmpeg() is None)
+    check("NO_WINDOW is one definition", C.NO_WINDOW is G.NO_WINDOW)
+finally:
+    C.WINDOWS, C.VOICE_HOME, env_ff, C.shutil.which = saved
+    if env_ff is not None:
+        os.environ["LILLITH_FFMPEG"] = env_ff
+
 print(f"{'ALL PASSED' if not FAILS else str(len(FAILS)) + ' FAILED'}")
 sys.exit(1 if FAILS else 0)

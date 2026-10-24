@@ -25,6 +25,9 @@ import threading
 import time
 
 LAUNCH = "LAUNCH"
+# Same as core.NO_WINDOW (core imports this module, so it can't be imported from there): Windows subprocesses
+# must not flash a console window under pythonw.exe.
+NO_WINDOW = {"creationflags": 0x08000000} if os.name == "nt" else {}  # CREATE_NO_WINDOW
 NO_CARD = "no-card"
 _SECRET = ("api-key", "api_key", "apikey", "token", "password", "passwd", "secret")
 

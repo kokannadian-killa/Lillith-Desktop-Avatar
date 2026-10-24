@@ -22,9 +22,26 @@ from . import launchguard as G
 SR = 24000  # Kokoro's native sample rate
 
 # --------------------------------------------------------------------------- paths
-DATA_HOME = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-VOICE_HOME = os.environ.get("LILLITH_VOICE_HOME") or os.path.join(DATA_HOME, "lillith-voice")
+WINDOWS = os.name == "nt"
+# Windows subprocesses (ffmpeg, a custom player) must not flash a console window under pythonw.exe
+NO_WINDOW = G.NO_WINDOW  # {"creationflags": CREATE_NO_WINDOW} on Windows, {} elsewhere (one definition)
+
+
+def _win_payload_home():
+    """Windows installer payload (%LOCALAPPDATA%\\Lillith\\voice): <home>\\python\\python(w).exe + <home>\\models."""
+    home = os.path.dirname(os.path.dirname(os.path.abspath(sys.executable)))
+    return home if os.path.isdir(os.path.join(home, "models")) else None
+
+
+if WINDOWS:
+    DATA_HOME = os.environ.get("XDG_DATA_HOME") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.environ.get("APPDATA") or os.path.expanduser("~")
+    VOICE_HOME = (os.environ.get("LILLITH_VOICE_HOME") or _win_payload_home()
+                  or os.path.join(DATA_HOME, "Lillith", "voice"))
+else:
+    DATA_HOME = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    VOICE_HOME = os.environ.get("LILLITH_VOICE_HOME") or os.path.join(DATA_HOME, "lillith-voice")
 MODEL_DIR = os.environ.get("LILLITH_VOICE_MODELS") or os.path.join(VOICE_HOME, "models")
 MODEL_FILE = os.environ.get("LILLITH_VOICE_MODEL_FILE", "kokoro-v1.0.onnx")  # or kokoro-v1.0.int8.onnx
 VOICES_FILE = "voices-v1.0.bin"
@@ -36,7 +53,10 @@ PRESETS_OVERRIDE = os.path.join(CONFIG_HOME, "lillith-voice", "presets.json")
 
 def runtime_dir() -> str:
     base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
-    d = os.path.join(base, f"lillith-voice-{os.getuid()}" if base == tempfile.gettempdir() else "lillith-voice")
+    if WINDOWS or base != tempfile.gettempdir():  # Windows %TEMP% is already per-user; no os.getuid() there
+        d = os.path.join(base, "lillith-voice")
+    else:
+        d = os.path.join(base, f"lillith-voice-{os.getuid()}")
     os.makedirs(d, mode=0o700, exist_ok=True)
     return d
 
@@ -195,13 +215,22 @@ def split_sentences(text: str, first_max: int = 120, max_len: int = 260):
 
 
 # --------------------------------------------------------------------------- ffmpeg
-def _default_ffmpeg():
+def _find_ffmpeg():
+    """$LILLITH_FFMPEG, else (Windows) the installer's bundled ffmpeg.exe, else ffmpeg on PATH. Each one only as
+    an absolute path to an existing executable file (launchguard.checked_exe); a refused $LILLITH_FFMPEG is logged
+    and the next candidate is used."""
+    env = G.env_exe("LILLITH_FFMPEG")
+    if env:
+        return env
+    if WINDOWS:  # the installer bundles a static ffmpeg.exe (with rubberband) in <voice home>\bin
+        b = G.checked_exe(os.path.join(VOICE_HOME, "bin", "ffmpeg.exe"))[0]
+        if b:
+            return b
     w = shutil.which("ffmpeg")
     return G.checked_exe(w)[0] if w and os.path.isabs(w) else None
 
 
-# $LILLITH_FFMPEG only as an absolute path to an existing executable file (else logged + the default)
-FFMPEG = G.env_exe("LILLITH_FFMPEG") or _default_ffmpeg()
+FFMPEG = _find_ffmpeg()
 _HAS_RB = None
 
 
@@ -213,7 +242,7 @@ def has_rubberband() -> bool:
             try:
                 G.audit_once("voice_ffmpeg_probe", [FFMPEG, "-hide_banner", "-filters"])
                 out = subprocess.run([FFMPEG, "-hide_banner", "-filters"], capture_output=True, text=True,
-                                     timeout=20).stdout
+                                     timeout=20, **NO_WINDOW).stdout
                 _HAS_RB = bool(re.search(r"^\s*\S+\s+rubberband\s", out, re.M))
             except Exception:
                 pass
@@ -329,7 +358,7 @@ def process(audio: np.ndarray, p: Preset, pitch: float, fx: bool = True, prepitc
                "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "pipe:0",
                "-af", ",".join(chain), "-f", "f32le", "-ar", str(SR), "-ac", "1", "pipe:1"]
         G.audit_once("voice_ffmpeg_dsp", cmd)
-        r = subprocess.run(cmd, input=x.tobytes(), capture_output=True, timeout=120)
+        r = subprocess.run(cmd, input=x.tobytes(), capture_output=True, timeout=120, **NO_WINDOW)
         if r.returncode != 0:
             raise RuntimeError("ffmpeg DSP failed: " + r.stderr.decode(errors="replace")[-600:])
         y = np.frombuffer(r.stdout, dtype=np.float32).copy()
@@ -370,7 +399,8 @@ def _ffmpeg(chain, x, sr_in, sr_out=None, measure=None):
            "-f", "f32le", "-ar", str(sr_in), "-ac", "1", "-i", "pipe:0", "-af", ",".join(chain),
            "-f", "f32le", "-ar", str(sr_out or sr_in), "-ac", "1", "pipe:1"]
     G.audit_once("voice_ffmpeg_dsp", cmd)
-    r = subprocess.run(cmd, input=np.asarray(x, np.float32).tobytes(), capture_output=True, timeout=180)
+    r = subprocess.run(cmd, input=np.asarray(x, np.float32).tobytes(), capture_output=True, timeout=180,
+                       **NO_WINDOW)
     if r.returncode != 0:
         raise RuntimeError("ffmpeg DSP failed: " + r.stderr.decode(errors="replace")[-600:])
     return np.frombuffer(r.stdout, dtype=np.float32).copy(), r.stderr.decode(errors="replace")
@@ -710,7 +740,7 @@ class Player:
                     G.audit_once("voice_player", self.cmd)
                     self.proc = subprocess.Popen([path if a == "{}" else a for a in self.cmd],
                                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                                 stderr=subprocess.DEVNULL)
+                                                 stderr=subprocess.DEVNULL, **NO_WINDOW)
                     self._active = True
                 t_aud = time.monotonic() * 1000 + self.latency_ms
                 if on_start:

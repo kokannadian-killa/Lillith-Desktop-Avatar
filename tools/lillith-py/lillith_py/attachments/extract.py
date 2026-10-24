@@ -1,25 +1,26 @@
 """Content extraction: text, PDF (pdftotext), images (dims, thumbnail, OCR).
 
-Optional deps (Pillow, pytesseract) are guarded; CLI tools are used when present.
+Pillow is optional and runs in-process. It is limited to plain raster formats so
+it can never shell out (e.g. Ghostscript for EPS). The CLI tools (pdftotext,
+pdfinfo, ImageMagick, tesseract) are used when present. They are started ONLY
+through lillith_py.launch.run, which writes one audit.log line per launch.
 Nothing here touches the network.
 """
 from __future__ import annotations
 
 import mimetypes
-import shutil
 import struct
-import subprocess
 from pathlib import Path
+
+from .. import launch
 
 try:  # optional
     from PIL import Image  # type: ignore
 except Exception:  # pragma: no cover
     Image = None
 
-try:  # optional
-    import pytesseract  # type: ignore
-except Exception:  # pragma: no cover
-    pytesseract = None
+# Formats Pillow may open: all decoded in-process (no external helpers).
+PIL_FORMATS = ("PNG", "JPEG", "GIF", "WEBP", "BMP", "TIFF")
 
 TEXT_EXTS = {
     ".txt", ".md", ".markdown", ".rst", ".log", ".csv", ".tsv", ".json", ".jsonl",
@@ -98,21 +99,23 @@ def read_text_file(path: Path, max_bytes: int) -> tuple[str, bool]:
 
 def extract_pdf(path: Path, max_bytes: int) -> tuple[str, bool, dict]:
     info: dict = {}
-    exe = shutil.which("pdftotext")
+    exe = launch.which("pdftotext")
     if not exe:
         return "", False, {"error": "pdftotext not installed (pacman -S poppler)"}
     try:
-        out = subprocess.run([exe, "-layout", "-enc", "UTF-8", str(path), "-"],
-                             capture_output=True, timeout=120, check=False)
+        out = launch.run([exe, "-layout", "-enc", "UTF-8", str(path), "-"],
+                         purpose="attachments: PDF text",
+                         capture_output=True, timeout=120, check=False)
         text = out.stdout.decode("utf-8", errors="replace")
         if out.returncode != 0 and not text:
             info["error"] = out.stderr.decode(errors="replace").strip()[:500]
-    except subprocess.TimeoutExpired:
+    except launch.TimeoutExpired:
         return "", False, {"error": "pdftotext timed out"}
-    pinfo = shutil.which("pdfinfo")
+    pinfo = launch.which("pdfinfo")
     if pinfo:
         try:
-            o = subprocess.run([pinfo, str(path)], capture_output=True, timeout=30, text=True)
+            o = launch.run([pinfo, str(path)], purpose="attachments: PDF page count",
+                           capture_output=True, timeout=30, text=True)
             for line in o.stdout.splitlines():
                 if line.startswith("Pages:"):
                     info["pages"] = int(line.split(":", 1)[1].strip())
@@ -130,7 +133,7 @@ def image_size(path: Path) -> tuple[int, int] | None:
     """Image dimensions; Pillow if present, else stdlib header parsing."""
     if Image is not None:
         try:
-            with Image.open(path) as im:
+            with Image.open(path, formats=PIL_FORMATS) as im:
                 return im.size
         except Exception:
             pass
@@ -179,7 +182,7 @@ def make_thumbnail(src: Path, dest: Path, size: int) -> bool:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if Image is not None:
         try:
-            with Image.open(src) as im:
+            with Image.open(src, formats=PIL_FORMATS) as im:
                 im.thumbnail((size, size))
                 if im.mode not in ("RGB", "RGBA"):
                     im = im.convert("RGBA")
@@ -188,25 +191,24 @@ def make_thumbnail(src: Path, dest: Path, size: int) -> bool:
         except Exception:
             return False
     for tool in ("magick", "convert"):
-        exe = shutil.which(tool)
+        exe = launch.which(tool)
         if exe:
-            r = subprocess.run([exe, f"{src}[0]", "-thumbnail", f"{size}x{size}", str(dest)],
-                               capture_output=True, timeout=60)
+            try:
+                r = launch.run([exe, f"{src}[0]", "-thumbnail", f"{size}x{size}", str(dest)],
+                               purpose="attachments: thumbnail", capture_output=True, timeout=60)
+            except (OSError, launch.SubprocessError):
+                return False
             return r.returncode == 0 and dest.exists()
     return False
 
 
 def ocr_image(path: Path) -> str:
-    if pytesseract is not None and Image is not None:
-        try:
-            with Image.open(path) as im:
-                return pytesseract.image_to_string(im)
-        except Exception:
-            pass
-    exe = shutil.which("tesseract")
+    # pytesseract is not used: it starts tesseract itself, outside the launch wrapper.
+    exe = launch.which("tesseract")
     if exe:
         try:
-            r = subprocess.run([exe, str(path), "-", "--psm", "3"], capture_output=True, timeout=120)
+            r = launch.run([exe, str(path), "-", "--psm", "3"], purpose="attachments: OCR",
+                           capture_output=True, timeout=120)
             if r.returncode == 0:
                 return r.stdout.decode("utf-8", errors="replace")
         except Exception:

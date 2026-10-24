@@ -28,7 +28,7 @@ import wave
 
 import numpy as np
 
-from .core import MODEL_DIR, CONFIG_HOME
+from .core import MODEL_DIR, CONFIG_HOME, NO_WINDOW
 from . import launchguard as G
 from .micgate import MicGate
 
@@ -346,7 +346,7 @@ def list_devices():
     if pactl:
         argv = [pactl, "list", "short", "sources"]
         G.audit_once("mic_devices", argv)
-        r = subprocess.run(argv, capture_output=True, text=True)
+        r = subprocess.run(argv, capture_output=True, text=True, **NO_WINDOW)
         for ln in r.stdout.splitlines():
             p = ln.split("\t")
             if len(p) > 1 and ".monitor" not in p[1]:
@@ -354,7 +354,7 @@ def list_devices():
     elif arecord:
         argv = [arecord, "-L"]
         G.audit_once("mic_devices", argv)
-        r = subprocess.run(argv, capture_output=True, text=True)
+        r = subprocess.run(argv, capture_output=True, text=True, **NO_WINDOW)
         out = [{"id": ln.strip(), "desc": ""} for ln in r.stdout.splitlines() if ln and not ln.startswith(" ")]
     try:
         import sounddevice as sd  # Windows (WASAPI) / anywhere it is installed
@@ -394,7 +394,8 @@ class Mic:
                                          callback=lambda d, *_: self.on_audio(d[:, 0].copy()))
             self.stream.start()
             return
-        self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                                     **NO_WINDOW)
         threading.Thread(target=self._read, daemon=True, name="lillith-mic").start()
 
     def _read(self):

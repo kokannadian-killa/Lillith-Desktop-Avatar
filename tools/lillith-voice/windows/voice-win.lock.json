@@ -1,0 +1,182 @@
+{
+ "_comment": "Every artifact build-voice-win.sh fetches (build machine only; the installed app never downloads anything). Bump versions here and re-run the build; each file is checked against its sha256.",
+ "python": {
+  "version": "3.13.17",
+  "file": "python-3.13.17-embed-amd64.zip",
+  "url": "https://www.python.org/ftp/python/3.13.17/python-3.13.17-embed-amd64.zip",
+  "sha256": "9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38",
+  "verified": "sigstore bundle python-3.13.17-embed-amd64.zip.sigstore, identity thomas@python.org (https://accounts.google.com)"
+ },
+ "vcruntime": {
+  "version": "14.51.36247 (Microsoft Visual C++ 2015-2022 runtime, conda-forge vc14_runtime build 41, files Authenticode-signed by Microsoft Corporation)",
+  "file": "vc14_runtime-14.51.36247-habf1de7_41.conda",
+  "url": "https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.51.36247-habf1de7_41.conda",
+  "sha256": "4e4cb599cdc41bf2109d1464c127b5bcbddf548ce3e322e612afb691338b48f8",
+  "members": {
+   "msvcp140.dll": "python/msvcp140.dll",
+   "msvcp140_1.dll": "python/msvcp140_1.dll",
+   "msvcp140_2.dll": "python/msvcp140_2.dll"
+  },
+  "why": "onnxruntime, sentencepiece and espeak-ng import MSVCP140.dll / MSVCP140_1.dll, which the embeddable Python does not ship and a fresh Windows may lack. App-local copies next to python.exe need no admin (the VC++ redist installer would).",
+  "license": "Microsoft Visual C++ Redistributable (app-local deployment of the listed redistributable DLLs)"
+ },
+ "ffmpeg": {
+  "version": "n8.1.3-24-g92611900bb (BtbN FFmpeg-Builds win64-gpl-8.1, static, includes librubberband)",
+  "file": "ffmpeg-n8.1.3-24-g92611900bb-win64-gpl-8.1.zip",
+  "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-23-13-04/ffmpeg-n8.1.3-24-g92611900bb-win64-gpl-8.1.zip",
+  "sha256": "ec297d65145f71686498436bb7d5281f540d26fb6791072ba73b194498581b22",
+  "members": {
+   "ffmpeg-n8.1.3-24-g92611900bb-win64-gpl-8.1/bin/ffmpeg.exe": "bin/ffmpeg.exe",
+   "ffmpeg-n8.1.3-24-g92611900bb-win64-gpl-8.1/LICENSE.txt": "licenses/ffmpeg-LICENSE.txt"
+  },
+  "license": "GPL-3.0-or-later (source: https://github.com/BtbN/FFmpeg-Builds, https://ffmpeg.org)",
+  "note": "BtbN prunes old autobuild tags; keep a copy of the zip in the build cache (FFMPEG_ZIP=...) or bump to a newer build and update sha256."
+ },
+ "wheels_target": {
+  "platform": "win_amd64",
+  "python_version": "3.13",
+  "implementation": "cp"
+ },
+ "wheels": [
+  {
+   "name": "attrs",
+   "version": "26.1.0",
+   "file": "attrs-26.1.0-py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl",
+   "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309"
+  },
+  {
+   "name": "cffi",
+   "version": "2.1.1",
+   "file": "cffi-2.1.1-cp313-cp313-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/60/a6/8b149b2c3f2e11aaa1618ef64500b45f50f22c57a977a4dff1aff1f91042/cffi-2.1.1-cp313-cp313-win_amd64.whl",
+   "sha256": "1aa5645c30469b09530c4ebca77ebf8f17618293c58f8549cb1a543a50236e7d"
+  },
+  {
+   "name": "cloudpickle",
+   "version": "3.1.2",
+   "file": "cloudpickle-3.1.2-py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/88/39/799be3f2f0f38cc727ee3b4f1445fe6d5e4133064ec2e4115069418a5bb6/cloudpickle-3.1.2-py3-none-any.whl",
+   "sha256": "9acb47f6afd73f60dc1df93bb801b472f05ff42fa6c84167d25cb206be1fbf4a"
+  },
+  {
+   "name": "dlinfo",
+   "version": "2.0.0",
+   "file": "dlinfo-2.0.0-py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/da/90/022c79d6e5e6f843268c10b84d4a021ee3afba0621d3c176d3ff2024bfc8/dlinfo-2.0.0-py3-none-any.whl",
+   "sha256": "b32cc18e3ea67c0ca9ca409e5b41eed863bd1363dbc9dd3de90fedf11b61e7bc"
+  },
+  {
+   "name": "espeakng-loader",
+   "version": "0.2.4",
+   "file": "espeakng_loader-0.2.4-py3-none-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/9d/ed/a3d872fbad4f3a3f3db0e8c31768ab14e77cd77306de16b8b20b1e1df7ea/espeakng_loader-0.2.4-py3-none-win_amd64.whl",
+   "sha256": "41f1e08ac9deda2efd1ea9de0b81dab9f5ae3c4b24284f76533d0a7b1dd7abd7"
+  },
+  {
+   "name": "flatbuffers",
+   "version": "25.12.19",
+   "file": "flatbuffers-25.12.19-py2.py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+   "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4"
+  },
+  {
+   "name": "joblib",
+   "version": "1.6.0",
+   "file": "joblib-1.6.0-py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/18/53/84099323c2ec4be98d935f63c033ac4151ee83836ca1050ede3b3aadf155/joblib-1.6.0-py3-none-any.whl",
+   "sha256": "3dbbf9f6e4b592a2357b854608e980fe6390d131d7a82f011a377ef2ebef7aba"
+  },
+  {
+   "name": "kokoro-onnx",
+   "version": "0.6.1",
+   "file": "kokoro_onnx-0.6.1-py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/60/e1/a27e5a70a525a5ee1fd5357596f07b724d02ff317f134e86cb6e3d9db968/kokoro_onnx-0.6.1-py3-none-any.whl",
+   "sha256": "50c8de4950d601df41428ee5462a48c8a78bef441bf671f2492e070ef44d8a32"
+  },
+  {
+   "name": "numpy",
+   "version": "2.5.4",
+   "file": "numpy-2.5.4-cp313-cp313-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/90/8c/140a40398a66b4471211be1affdb6ed24c486d581bd28d07b7f2fcb69540/numpy-2.5.4-cp313-cp313-win_amd64.whl",
+   "sha256": "8b4d2fd2d34e5f8c9235ee787de5631a37a28402b15cb80814df973d2be54129"
+  },
+  {
+   "name": "onnxruntime",
+   "version": "1.31.0",
+   "file": "onnxruntime-1.31.0-cp313-cp313-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/c4/86/05ed2056f43b27aaf12ebc592ebd9037a26bed315958cf882f43425fd469/onnxruntime-1.31.0-cp313-cp313-win_amd64.whl",
+   "sha256": "73e0165d58ece068c2a8a1c477c90b38e5a8adbbd399fdfdfd4bd79cbc28ff8d"
+  },
+  {
+   "name": "packaging",
+   "version": "26.3",
+   "file": "packaging-26.3-py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+   "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+  },
+  {
+   "name": "phonemizer",
+   "version": "3.4.0",
+   "file": "phonemizer-3.4.0-py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/37/41/09bafd0ccf4f4ddd1530c9f9d10e75a24056e10e120b9daa97f691fcabc3/phonemizer-3.4.0-py3-none-any.whl",
+   "sha256": "5ff1215d0efa3606dd1b92449f6d71b5c1741efcc84c6d40c17bfaf64f6ded5f"
+  },
+  {
+   "name": "protobuf",
+   "version": "7.36.2",
+   "file": "protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+   "sha256": "a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353"
+  },
+  {
+   "name": "pycparser",
+   "version": "3.12",
+   "file": "pycparser-3.12-py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/b6/ae/315bbeee126a769cbde43cf4908acb4b40408d8bf8bbf334dd7368d8dadf/pycparser-3.12-py3-none-any.whl",
+   "sha256": "a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e"
+  },
+  {
+   "name": "sentencepiece",
+   "version": "0.2.2",
+   "file": "sentencepiece-0.2.2-cp313-cp313-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/09/fa/d2d6369257fd2f0de616b1c7110b73fab409ef61b14f1b9e0010ed325914/sentencepiece-0.2.2-cp313-cp313-win_amd64.whl",
+   "sha256": "74f0ee601047c0c12a783088b51be4e6214a62ecd9e02278c477433cd16e0ed9"
+  },
+  {
+   "name": "sherpa-onnx-core",
+   "version": "2.0.0",
+   "file": "sherpa_onnx_core-2.0.0-py3-none-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/e4/5e/121c4def02a0d11a2a073345af3eb50c30109467505bc93bd8656bf8c922/sherpa_onnx_core-2.0.0-py3-none-win_amd64.whl",
+   "sha256": "dcb06b6427f841861376b24703fee3dba24723527b54d7429eeac6286f8567e9"
+  },
+  {
+   "name": "sherpa_onnx",
+   "version": "2.0.0",
+   "file": "sherpa_onnx-2.0.0-cp313-cp313-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/44/a9/6a003b367f877cf9cdea1960ba1bd0a76effd8b1d95e3be2f55194e785a6/sherpa_onnx-2.0.0-cp313-cp313-win_amd64.whl",
+   "sha256": "e6be1c7ca9ca8b4140243951b4b7113a2b1a2b1b85deb0bb0c3d2d0394b9feed"
+  },
+  {
+   "name": "sounddevice",
+   "version": "0.5.6",
+   "file": "sounddevice-0.5.6-py3-none-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/8d/3e/cbc593c31a5f0d817b3fe97e64aa8461bd0f55cb07b67ce1b776296ae336/sounddevice-0.5.6-py3-none-win_amd64.whl",
+   "sha256": "7f4162f514f007b0bf25a3ccfed3f1705bc2ec311888a90232729eec4f57a4f4"
+  },
+  {
+   "name": "soundfile",
+   "version": "0.14.0",
+   "file": "soundfile-0.14.0-py2.py3-none-win_amd64.whl",
+   "url": "https://files.pythonhosted.org/packages/ed/97/b39c18ac1df45e755ca22b8b00e872929da5d107998a207a5e4ac831bfda/soundfile-0.14.0-py2.py3-none-win_amd64.whl",
+   "sha256": "299491d3499460fb1b74bb4bd78b57ffc2d243a5fafa7b6ec1b264875c78453e"
+  },
+  {
+   "name": "typing_extensions",
+   "version": "4.16.0",
+   "file": "typing_extensions-4.16.0-py3-none-any.whl",
+   "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+   "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+  }
+ ]
+}

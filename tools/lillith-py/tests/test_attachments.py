@@ -101,7 +101,7 @@ def test_pdf_extract(store, files):
 
 
 def test_pdf_without_poppler(store, files, monkeypatch):
-    monkeypatch.setattr(extract.shutil, "which", lambda n: None)
+    monkeypatch.setattr(extract.launch, "which", lambda n: None)
     f = files / "doc.pdf"
     f.write_bytes(make_pdf(["x"]))
     a = store.add(f)
@@ -122,7 +122,7 @@ def test_image_dims_and_thumbnail(store, files):
 
 def test_image_without_pillow(store, files, monkeypatch):
     monkeypatch.setattr(extract, "Image", None)
-    monkeypatch.setattr(extract.shutil, "which", lambda n: None)
+    monkeypatch.setattr(extract.launch, "which", lambda n: None)
     f = files / "pic2.png"
     f.write_bytes(make_png(33, 17, (1, 2, 3)))
     a = store.add(f)

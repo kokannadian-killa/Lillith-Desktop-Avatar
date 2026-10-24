@@ -58,7 +58,8 @@ def run_card(program, title, summary, target, detail, timeout=CARD_TIMEOUT_S):
     G.audit_once("mic_card_ui", [program, "contract-card", "--timeout", str(int(timeout))])
     try:
         r = subprocess.run([program, "contract-card", "--timeout", str(int(timeout))], input=text.encode(),
-                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout + 10)
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout + 10,
+                           **G.NO_WINDOW)
     except subprocess.TimeoutExpired:
         return "timeout"
     except OSError:

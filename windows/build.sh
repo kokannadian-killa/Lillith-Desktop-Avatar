@@ -21,7 +21,13 @@
 #
 # Env: CARGO (cargo binary, default `cargo`), CARGO_TARGET_DIR, DIST,
 #      SKIP_BUILD=1 (reuse the last release build), NO_ZIP=1,
-#      NO_LLAMA=1 (leave the bundled llama-server out).
+#      NO_LLAMA=1 (leave the bundled llama-server out),
+#      VOICE_PAYLOAD=<lillith-voice-win-<id>.zip> (from
+#        tools/lillith-voice/windows/build-voice-win.sh): adds Lillith's voice
+#        (cloned voice, p1 fallback, offline STT; ~1.3 GB) to the installer
+#        (section "Lillith's voice" -> %LOCALAPPDATA%\Lillith\voice, HKCU Run
+#        autostart) and to the portable zip (Lillith\voice\ + "Start Lillith
+#        with voice.cmd"). Without it both are built without voice, as before.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -108,19 +114,57 @@ else
   echo "==> no bundled llama-server (run tools/bundle/make-bundle.sh --fetch-only to include it)"
 fi
 
+VOICE_ARGS=()
+VOICE_STAGE=""
+if [[ -n "${VOICE_PAYLOAD:-}" ]]; then
+  [[ -f "$VOICE_PAYLOAD" ]] || { echo "error: VOICE_PAYLOAD=$VOICE_PAYLOAD not found" >&2; exit 1; }
+  if [[ -f "$VOICE_PAYLOAD.sha256" ]]; then
+    (cd "$(dirname "$VOICE_PAYLOAD")" && sha256sum -c --quiet "$(basename "$VOICE_PAYLOAD").sha256")
+  fi
+  VOICE_STAGE="$(dirname "$STAGE")/voice-payload"
+  echo "==> voice payload $(basename "$VOICE_PAYLOAD") -> $VOICE_STAGE"
+  rm -rf "$VOICE_STAGE"; mkdir -p "$VOICE_STAGE"
+  python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$VOICE_PAYLOAD" "$VOICE_STAGE"
+  [[ -f "$VOICE_STAGE/voice/python/pythonw.exe" && -f "$VOICE_STAGE/voice/models/pocket/voices/lillith.npy" ]] \
+    || { echo "error: $VOICE_PAYLOAD is not a voice-win payload (voice/python, voice/models)" >&2; exit 1; }
+  (cd "$VOICE_STAGE/voice" && sha256sum -c --quiet SHA256SUMS) || { echo "error: voice payload SHA256SUMS mismatch" >&2; exit 1; }
+  VOICE_ARGS=(-DVOICE="$VOICE_STAGE/voice")
+fi
+
 mkdir -p "$DIST"
 SETUP="$DIST/Lillith-$VERSION-setup.exe"
 echo "==> makensis -> $SETUP"
 makensis -V2 -INPUTCHARSET UTF8 \
   -DVERSION="$VERSION" -DSTAGE="$STAGE" -DOUTFILE="$SETUP" -DICON="$HERE/lillith.ico" \
-  -DICONS_NSH="$ICONS_NSH" \
+  -DICONS_NSH="$ICONS_NSH" "${VOICE_ARGS[@]}" \
   "$HERE/installer.nsi"
 
 if [[ "${NO_ZIP:-}" != 1 ]]; then
   ZIP="$DIST/Lillith-$VERSION-windows-x64.zip"
   echo "==> zip -> $ZIP"
   rm -f "$ZIP"
-  (cd "$(dirname "$STAGE")" && python3 -m zipfile -c "$ZIP" Lillith)
+  # Lillith\ (+ Lillith\voice\ when VOICE_PAYLOAD is set: the daemon finds its
+  # models next to its own python\, so the portable copy works from any folder)
+  python3 - "$(dirname "$STAGE")" "$ZIP" "$VOICE_STAGE" <<'PY'
+import os, sys, zipfile
+root, zp, voice = sys.argv[1], sys.argv[2], sys.argv[3]
+def walk(base, arc):
+    for d, _, fs in os.walk(base):
+        for f in sorted(fs):
+            p = os.path.join(d, f)
+            yield p, arc + "/" + os.path.relpath(p, base).replace(os.sep, "/")
+with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
+    for p, a in walk(os.path.join(root, "Lillith"), "Lillith"):
+        z.write(p, a)
+    if voice:
+        for p, a in walk(os.path.join(voice, "voice"), "Lillith/voice"):
+            z.write(p, a)
+        z.writestr("Lillith/Start Lillith with voice.cmd",
+                   "@echo off\r\nrem Portable copy: starts Lillith's voice (hidden, \\\\.\\pipe\\lillith-voice) and Lillith.\r\n"
+                   "rem The installer instead autostarts the voice at sign-in (HKCU Run).\r\n"
+                   "rem It starts the voice if needed, waits until it answers, then starts lillith.exe.\r\n"
+                   'start "" "%~dp0voice\\python\\pythonw.exe" -m lillith_voice.winlaunch --start-app "%~dp0lillith.exe"\r\n')
+PY
 fi
 
 (cd "$DIST" && sha256sum Lillith-"$VERSION"-* > SHA256SUMS)

@@ -374,7 +374,8 @@ pub fn clip_pool(clip: &str) -> Option<&'static [&'static str]> {
         | "lean_forward"
         | "predator_lean_in"
         | "seduce_lean_to_screen_whisper"
-        | "wall_lean_invisible" => LEAN,
+        | "wall_lean_invisible"
+        | "dom_screen_edge_whisper" => LEAN,
         "hip_pop_wink"
         | "hip_sway"
         | "body_roll_slow"
@@ -382,7 +383,8 @@ pub fn clip_pool(clip: &str) -> Option<&'static [&'static str]> {
         | "idle_flirt_hip_lean"
         | "sway_dance"
         | "slow_turn_spin_tease"
-        | "hip_sway_slow" => HIPS,
+        | "hip_sway_slow"
+        | "body_roll_to_viewer" => HIPS,
         "stretch_arch" | "idle_flirt_stretch" | "hair_lift_stretch" => STRETCH,
         "cheeky_tongue_wink"
         | "over_shoulder_look"
@@ -391,13 +393,15 @@ pub fn clip_pool(clip: &str) -> Option<&'static [&'static str]> {
         | "arch_back_over_shoulder"
         | "taskbar_lounge_lie"
         | "leg_cross_slow_sit"
-        | "lean_doorframe_smolder" => LOOKS,
+        | "lean_doorframe_smolder"
+        | "chin_rest_slow_wink" => LOOKS,
         "dom_beckon_finger"
         | "seduce_beckon_finger"
         | "kiss_then_come_here"
         | "come_hither_crawl"
         | "kneel_sit_back_beckon"
-        | "dom_chin_tilt_summon" => BECKON,
+        | "dom_chin_tilt_summon"
+        | "hip_pop_beckon" => BECKON,
         "dom_point_down" | "dom_throne_lean" | "dom_snap_kneel_order" => COMMAND,
         "dom_arms_crossed_demand" => DEMAND,
         "smug_smirk" => SMUG,
@@ -639,6 +643,10 @@ mod tests {
             "kiss_mark_on_glass",
             "dom_snap_kneel_order",
             "finger_walk_on_glass",
+            "body_roll_to_viewer",
+            "chin_rest_slow_wink",
+            "dom_screen_edge_whisper",
+            "hip_pop_beckon",
         ] {
             assert!(clip_pool(c).is_some(), "{c}");
         }
