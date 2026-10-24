@@ -78,6 +78,10 @@ pub struct BubbleOptions {
     pub chat: ChatConfig,
     /// Knowledge + skills folders and the skill-authoring gate (`[mind]`).
     pub mind: MindConfig,
+    /// The config file in use (`--config`, else the default path). Its
+    /// `[llm] system_prompt` applies unless `[chat] system_prompt` is set
+    /// (`None` = only the default config path is consulted).
+    pub config_path: Option<PathBuf>,
     /// `--no-llm`: answer with an in-character "switched off" line.
     pub offline: bool,
     /// History file (`None` = in-memory only).
@@ -284,10 +288,21 @@ pub fn demo_lines() -> Vec<(bool, &'static str)> {
     ]
 }
 
+/// The bubble's chat session (no history yet): `[mind]` attached, and the
+/// system prompt resolved against [`BubbleOptions::config_path`] so a custom
+/// `--config` file's `[llm] system_prompt` reaches the model.
+pub fn new_session(opts: &BubbleOptions) -> ChatSession {
+    let mut session = ChatSession::new(&opts.chat, opts.offline);
+    if let Some(p) = &opts.config_path {
+        session = session.with_config_file(&opts.chat.system_prompt, p);
+    }
+    session.with_mind(&opts.mind)
+}
+
 fn spawn_worker(opts: &BubbleOptions, ctx: egui::Context) -> (Sender<Req>, Receiver<Ui>) {
     let (req_tx, req_rx) = channel::<Req>();
     let (ui_tx, ui_rx) = channel::<Ui>();
-    let mut session = ChatSession::new(&opts.chat, opts.offline).with_mind(&opts.mind);
+    let mut session = new_session(opts);
     if let Some(p) = &opts.history {
         session = session.with_history_file(p.clone());
     }
@@ -1379,6 +1394,7 @@ mod tests {
             pos: None,
             chat: ChatConfig::default(),
             mind: MindConfig::default(),
+            config_path: None,
             offline: true,
             history: Some(path),
             emit: Arc::new(|_, _| {}),
@@ -1389,6 +1405,36 @@ mod tests {
         let lines = history_lines(&opts);
         assert_eq!(lines.len(), 3);
         assert!(lines.iter().all(|l| !l.text.starts_with("[tool result]")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn custom_config_path_supplies_llm_system_prompt() {
+        let dir =
+            std::env::temp_dir().join(format!("lillith-bubble-cfgprompt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("custom.toml");
+        std::fs::write(&cfg, "[llm]\nsystem_prompt = \"From the custom config.\"\n").unwrap();
+        let mut opts = BubbleOptions {
+            pos: None,
+            chat: ChatConfig::default(),
+            mind: MindConfig::default(),
+            config_path: Some(cfg.clone()),
+            offline: true,
+            history: None,
+            emit: Arc::new(|_, _| {}),
+            screenshot: None,
+            demo: false,
+            demo_contract: false,
+        };
+        assert_eq!(
+            new_session(&opts).system_prompt(),
+            "From the custom config."
+        );
+        // [chat] system_prompt still wins over the file's [llm] one.
+        opts.chat.system_prompt = "Chat wins.".into();
+        assert_eq!(new_session(&opts).system_prompt(), "Chat wins.");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
