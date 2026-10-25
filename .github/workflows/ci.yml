@@ -119,7 +119,7 @@ jobs:
           cargo build --release --locked -p lillith --no-default-features --features windows
           cargo build --release --locked -p lillith-settings-gui -p lillith-admin
       - name: cargo test (voice, settings-gui)
-        run: cargo test --locked -p lillith-voice -p lillith-settings-gui
+        run: cargo test --locked --no-fail-fast -p lillith-voice -p lillith-settings-gui
       # lillith-core's access/ and config tests assume Unix paths (/etc, /usr,
       # /srv, HOME, "/"-joined strings) and don't pass on Windows yet (10 of
       # 285 at aa65ffa). Shown, not gating, until they're ported.

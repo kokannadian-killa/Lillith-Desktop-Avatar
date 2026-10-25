@@ -1403,7 +1403,14 @@ mod tests {
 
     #[test]
     fn oversized_request_is_refused_before_sending() {
-        let c = DaemonClient::new(std::env::temp_dir().join("lillith-no-such.sock")).unwrap();
+        // A local endpoint that nobody serves: a socket path on Unix, a
+        // named pipe on Windows (where only `\\.\pipe\…` counts as local).
+        let ep = if cfg!(windows) {
+            std::path::PathBuf::from(r"\\.\pipe\lillith-no-such")
+        } else {
+            std::env::temp_dir().join("lillith-no-such.sock")
+        };
+        let c = DaemonClient::new(ep).unwrap();
         let big = Request::Say {
             text: "a".repeat(MAX_LINE + 10),
             wait: false,
