@@ -467,6 +467,11 @@ chmod 700 "$DATA_DIR"   # her memory.db and knowledge live here: yours only
 if [[ $ASSET_STATE == ok ]]; then
   python3 "$HERE/stage-assets.py" "$ASSET_SRC" "$ASSET_DIR" | sed 's/^/  /'
 fi
+# Seasonal outfits: Lillith reads seasons.toml next to generated/ (else her
+# built-in copy). It lives in assets/, not assets/generated/.
+if [[ -f $ROOT/assets/seasons.toml ]]; then
+  install -Dm644 "$ROOT/assets/seasons.toml" "$DATA_DIR/seasons.toml"
+fi
 # No env var or config key needed: Lillith looks in
 # $XDG_DATA_HOME/lillith/generated/manifest.toml by itself.
 

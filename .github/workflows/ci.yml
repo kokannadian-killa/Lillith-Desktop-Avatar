@@ -85,3 +85,38 @@ jobs:
           cache-key: all-features
       - name: cargo clippy --all-features
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  windows:
+    name: windows (MSVC build + tests, install.ps1 on PowerShell 5.1)
+    runs-on: windows-latest
+    env:
+      # Short target folder: Windows' 260-character path limit.
+      CARGO_TARGET_DIR: C:\t
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      # Windows PowerShell 5.1 (shell: powershell), the one install.bat runs:
+      # parse every .ps1, then install.ps1 -DryRun / -Yes with a fake gh that
+      # writes to stderr and exits 1.
+      - name: install.ps1 smoke (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\windows\install-ps1-smoke.ps1
+      - name: install.ps1 smoke (PowerShell 7)
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File tools\windows\install-ps1-smoke.ps1
+      - name: .bat/.cmd files have CRLF line endings
+        shell: pwsh
+        run: |
+          $bad = git ls-files '*.bat' '*.cmd' '*.ps1' | Where-Object { $b = [IO.File]::ReadAllBytes($_); $lf = ($b | Where-Object { $_ -eq 10 }).Count; $crlf = ([regex]::Matches([Text.Encoding]::ASCII.GetString($b), "`r`n")).Count; $lf -ne $crlf }
+          if ($bad) { "LF-only lines in: $bad"; exit 1 }
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows
+      - name: cargo build --release (lillith, settings, admin)
+        run: |
+          cargo build --release --locked -p lillith --no-default-features --features windows
+          cargo build --release --locked -p lillith-settings-gui -p lillith-admin
+      - name: cargo test (core, voice, settings-gui)
+        run: cargo test --locked -p lillith-core -p lillith-voice -p lillith-settings-gui

@@ -4,9 +4,11 @@
 `Lillith-Desktop-Avatar-main.zip`)? Use the one-step installer. See
 [From the main zip](#from-the-main-zip-github-download-zip) right below.
 
-How to install and start Lillith from the release zip. The zip ships **Linux
-binaries only**. On Windows you build from source with Rust 1.85. On Android you chat
-with her model in Termux (plus an experimental APK, see below).
+How to install and start Lillith from the release zips. There's one
+all-in-one zip per OS: `Lillith-main-linux.zip` and `Lillith-main-windows.zip`
+(ready-made programs, nothing to build). You can also build from source with
+Rust 1.85. On Android you chat with her model in Termux (plus an experimental
+APK, see below).
 
 Everything runs on your own machine. Lillith only talks to `127.0.0.1`
 (loopback), and nothing is downloaded while she runs. You get the model file
@@ -64,6 +66,35 @@ bash ~/Downloads/Lillith-main-linux/install.sh
    the bundled wheels (`pip --no-index`, Python 3.13 or 3.14). With another
    Python it says so and carries on without voice.
 
+### Windows 10/11: Lillith-main-windows.zip
+
+It has the ready-made programs (`bin\lillith.exe`, `lillith-settings.exe`,
+`lillith-admin.exe`), `bin\ffmpeg.exe` + `bin\ffprobe.exe` (a pinned static
+BtbN build; its URL, sha256 and GPL license are in `bin\licenses\`), all her
+art and pose videos, her offline voice (`voice\`), llama-server
+(`bundle\llama\windows-x64\`, llama.cpp b11829) and the art kit. No Rust,
+no GitHub login, nothing downloaded.
+
+1. If the release has the zip in parts (`.part1`, `.part2`, ...), put all of the
+   release files in one folder and double-click **`join-and-verify.cmd`**. It
+   joins them with `copy /b` and checks the result with
+   `certutil -hashfile ... SHA256` against `Lillith-main-windows.zip.sha256`.
+2. **Unzip to a short folder such as `C:\Lillith`.** Deep folders like
+   `C:\Users\<you>\Downloads\Lillith-...\Lillith-...` can run into Windows'
+   260-character path limit. Folders with spaces are fine.
+3. Double-click **`install.bat`** in `C:\Lillith\Lillith-main-windows`. It
+   unblocks the unzipped files, installs to `%LOCALAPPDATA%\Programs\Lillith`
+   (programs, art, `assets\seasons.toml`, ffmpeg, llama-server, the Pose
+   Builder importer), asks about her voice (to `%LOCALAPPDATA%\Lillith\voice`,
+   started at sign-in) and a desktop icon, and runs `lillith setup` with
+   `%USERPROFILE%\AI\models\dolphin3.0-llama3.2-3b-q4_k_m.gguf` if it's there
+   (else another `.gguf` in `AI\models`, `models` or `Downloads`).
+
+`install.bat -DryRun` shows what it would do without changing anything;
+`install.bat -Uninstall` removes her (settings and voice clones stay).
+Pose Builder's video import also needs Python 3 with numpy, scipy,
+opencv-python and Pillow on `PATH` (or set `LILLITH_PYTHON`).
+
 ## From the main zip (GitHub "Download ZIP")
 
 The main zip is the source code. It has no ready-made program, and on GitHub
@@ -102,12 +133,18 @@ Other model: `bash install.sh --gguf /path/to/model.gguf`. All options:
 `bash install.sh --help`. Remove her: `bash install.sh --uninstall` (it also offers to remove her voice;
 `--purge` also deletes settings, chat history and her memory).
 
-**Windows:** double-click `install.bat` in the unzipped folder. It downloads
-the art the same way (GitHub CLI login), offers to install Rust and the C++
-Build Tools with `winget`, builds her, installs to
+**Windows:** the easiest way is the release's `Lillith-main-windows.zip`
+(above): no build, no GitHub login. From the main zip, unzip it to a short
+folder (e.g. `C:\Lillith`) and double-click `install.bat`. With Git LFS
+placeholders it tries `git lfs pull` (a git clone with git-lfs), then your
+GitHub CLI login (`gh auth login --web`, it asks first) or `GH_TOKEN`, or a
+token you paste (hidden, never saved or shown). Without any of those it tells
+you how to get the art and asks whether to carry on without it. It then offers
+Rust and the C++ Build Tools with `winget`, builds into the short folder
+`%LOCALAPPDATA%\lt` (set `CARGO_TARGET_DIR` to change it), installs to
 `%LOCALAPPDATA%\Programs\Lillith` with Start-menu and desktop shortcuts, and
 runs `lillith setup` with the `.gguf` it finds in `%USERPROFILE%\AI\models`,
-`%USERPROFILE%\models` or `Downloads`. It hasn't been run on a real Windows PC yet.
+`%USERPROFILE%\models` or `Downloads`.
 
 **Android:** the main zip has no APK. See [Android](#android-termux-chat-experimental-apk).
 
