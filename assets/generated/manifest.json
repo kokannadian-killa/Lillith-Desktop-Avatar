@@ -6660,6 +6660,39 @@
    ],
    "allure": true,
    "video": "squeeze_hands_press_tease/squeeze_hands_press_tease.mp4"
+  },
+  {
+   "name": "secret_oops_retie",
+   "frame_count": 241,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": false,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "secret_oops_retie/",
+   "sheet": "secret_oops_retie/secret_oops_retie_sheet.png",
+   "manifest": "secret_oops_retie/secret_oops_retie.json",
+   "preview": "secret_oops_retie/secret_oops_retie_preview.gif",
+   "tags": [
+    "baked_motion",
+    "cleavage_zoom",
+    "easter_egg",
+    "outfit:halloween_witch",
+    "season:halloween",
+    "secret",
+    "unlock:konami_or_triple_click_hat"
+   ],
+   "video": "secret_oops_retie/secret_oops_retie.mp4"
   }
  ]
 }
