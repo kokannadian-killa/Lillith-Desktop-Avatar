@@ -322,6 +322,13 @@ if (Test-Path -LiteralPath $vp) {
         if (Test-Path -LiteralPath $dvp) { Remove-Item -LiteralPath $dvp -Recurse -Force }
         New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir "tools") | Out-Null
         Copy-Item -LiteralPath $vp -Destination (Join-Path $InstallDir "tools") -Recurse -Force
+        # The importer imports matte_clean from tools\matte-clean (sibling folder).
+        $mc = Join-Path $Root "tools\matte-clean"
+        if (Test-Path -LiteralPath $mc) {
+            $dmc = Join-Path $InstallDir "tools\matte-clean"
+            if (Test-Path -LiteralPath $dmc) { Remove-Item -LiteralPath $dmc -Recurse -Force }
+            Copy-Item -LiteralPath $mc -Destination (Join-Path $InstallDir "tools") -Recurse -Force
+        }
     }
     Ok "Pose Builder importer (needs Python 3 with numpy, scipy, opencv-python, Pillow on PATH)"
 }
