@@ -7185,6 +7185,41 @@
    "video": "xmas_scarf_shiver_hug/xmas_scarf_shiver_hug.mp4",
    "season": "xmas",
    "outfit": "xmas"
+  },
+  {
+   "name": "xmas_gift_sit_crossleg",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "xmas_gift_sit_crossleg/",
+   "sheet": "xmas_gift_sit_crossleg/xmas_gift_sit_crossleg_sheet.png",
+   "manifest": "xmas_gift_sit_crossleg/xmas_gift_sit_crossleg.json",
+   "preview": "xmas_gift_sit_crossleg/xmas_gift_sit_crossleg_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:xmas",
+    "outfit:xmas"
+   ],
+   "allure": true,
+   "video": "xmas_gift_sit_crossleg/xmas_gift_sit_crossleg.mp4",
+   "season": "xmas",
+   "outfit": "xmas"
   }
  ]
 }
