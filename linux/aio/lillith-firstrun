@@ -48,7 +48,12 @@ if [[ $VOICE == 1 ]]; then
   if have systemctl && [[ -f $CONF/systemd/user/lillith-voice.service ]]; then
     systemctl --user daemon-reload >/dev/null 2>&1 || true
     if systemctl --user enable --now lillith-voice.service >/dev/null 2>&1; then
-      ok "voice daemon: lillith-voice.service enabled and started (systemctl --user status lillith-voice)"
+      # `enable --now` exits 0 without starting anything when no user systemd is running
+      if systemctl --user is-active --quiet lillith-voice.service 2>/dev/null; then
+        ok "voice daemon: lillith-voice.service enabled and started (systemctl --user status lillith-voice)"
+      else
+        warn "voice daemon enabled (starts at your next login) but not running now. Start it: systemctl --user start lillith-voice"
+      fi
     else
       warn "couldn't start lillith-voice.service (no user session bus?). Later: systemctl --user enable --now lillith-voice"
     fi
