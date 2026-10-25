@@ -13,7 +13,7 @@ Pipeline (docs/VIDEO_IMPORT.md has the full contract):
   zoom    zoom_tease.py placement + slow cleavage zoom (same smoothstep ease-in/hold/ease-out, zmax 1.8) onto the
           400x400 canvas, anchor (200, 392), scale 0.54, premultiplied INTER_AREA downscale, nothing below row 392
   clean   matte_clean.clean_cell (tools/matte-clean, v6) per cell, then cellfix.post (holefill -> edgefix ->
-          holefill: holefill is the last image step)
+          pocketfill against the pre-clean cell -> holefill: holefill is the last image step)
   encode  sheet + json + alpha-packed H.264 mp4 exactly like pack_mp4.py (crf 16, 800x400, no B-frames)
   qa      qa_all.py --white-edge --mp4 and fringeqa.py (FQA_ALL=1) on the candidate dir
 
@@ -100,6 +100,143 @@ def peak_mb():
     return v if v is not None else rss_mb()
 
 
+def _linux_tree_rss(root):
+    """RSS (MB) of root + every descendant, from /proc (children files when the kernel has them, else a ppid scan)."""
+    def kids_fast(pid):
+        out = []
+        try:
+            for t in os.listdir(f'/proc/{pid}/task'):
+                with open(f'/proc/{pid}/task/{t}/children') as f:
+                    out += [int(x) for x in f.read().split()]
+        except OSError:
+            return None
+        return out
+    pids = [root]; i = 0; scan = None
+    while i < len(pids):
+        k = kids_fast(pids[i])
+        if k is None:
+            if scan is None:
+                scan = {}
+                for d in os.listdir('/proc'):
+                    if d.isdigit():
+                        try:
+                            with open(f'/proc/{d}/stat') as f:
+                                pp = int(f.read().rsplit(')', 1)[1].split()[1])
+                            scan.setdefault(pp, []).append(int(d))
+                        except (OSError, ValueError, IndexError):
+                            pass
+            k = scan.get(pids[i], [])
+        pids += [c for c in k if c not in pids]; i += 1
+    tot = 0.0
+    for pid in pids:
+        try:
+            with open(f'/proc/{pid}/status') as f:
+                for l in f:
+                    if l.startswith('VmRSS:'):
+                        tot += int(l.split()[1]) / 1024.0; break
+        except OSError:
+            pass
+    return tot
+
+
+def _win_tree_rss(root):
+    """RSS (working set, MB) of root + descendants via a Toolhelp32 snapshot (no psutil needed)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class PE(ctypes.Structure):
+        _fields_ = [('dwSize', wintypes.DWORD), ('cntUsage', wintypes.DWORD), ('th32ProcessID', wintypes.DWORD),
+                    ('th32DefaultHeapID', ctypes.c_void_p), ('th32ModuleID', wintypes.DWORD), ('cntThreads', wintypes.DWORD),
+                    ('th32ParentProcessID', wintypes.DWORD), ('pcPriClassBase', ctypes.c_long), ('dwFlags', wintypes.DWORD),
+                    ('szExeFile', ctypes.c_char * 260)]
+
+    class PMC(ctypes.Structure):
+        _fields_ = [('cb', wintypes.DWORD), ('PageFaultCount', wintypes.DWORD),
+                    ('PeakWorkingSetSize', ctypes.c_size_t), ('WorkingSetSize', ctypes.c_size_t),
+                    ('QuotaPeakPagedPoolUsage', ctypes.c_size_t), ('QuotaPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaPeakNonPagedPoolUsage', ctypes.c_size_t), ('QuotaNonPagedPoolUsage', ctypes.c_size_t),
+                    ('PagefileUsage', ctypes.c_size_t), ('PeakPagefileUsage', ctypes.c_size_t)]
+    k = ctypes.windll.kernel32; ps = ctypes.windll.psapi
+    k.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    snap = k.CreateToolhelp32Snapshot(0x2, 0)
+    kids = {}
+    try:
+        e = PE(); e.dwSize = ctypes.sizeof(PE)
+        ok = k.Process32First(snap, ctypes.byref(e))
+        while ok:
+            kids.setdefault(e.th32ParentProcessID, []).append(e.th32ProcessID)
+            ok = k.Process32Next(snap, ctypes.byref(e))
+    finally:
+        k.CloseHandle(snap)
+    pids = [root]; i = 0
+    while i < len(pids):
+        pids += [c for c in kids.get(pids[i], []) if c not in pids and c != 0]; i += 1
+    tot = 0.0
+    for pid in pids:
+        h = k.OpenProcess(0x1000 | 0x0010, False, pid)  # QUERY_LIMITED_INFORMATION | VM_READ
+        if not h:
+            continue
+        try:
+            c = PMC(); c.cb = ctypes.sizeof(PMC)
+            if ps.GetProcessMemoryInfo(h, ctypes.byref(c), c.cb):
+                tot += c.WorkingSetSize / 2**20
+        finally:
+            k.CloseHandle(h)
+    return tot
+
+
+def tree_rss_mb(root=None):
+    """RSS of this process (or root) plus all of its children (ffmpeg, qa_all, fringeqa, ...), in MB."""
+    root = root or os.getpid()
+    try:
+        import psutil  # optional
+        p = psutil.Process(root); tot = 0.0
+        for q in [p] + p.children(recursive=True):
+            try:
+                tot += q.memory_info().rss / 2**20
+            except Exception:
+                pass
+        return tot
+    except Exception:
+        pass
+    try:
+        if os.name == 'nt':
+            return _win_tree_rss(root)
+        if os.path.isdir('/proc'):
+            return _linux_tree_rss(root)
+    except Exception:
+        pass
+    return rss_mb() if root == os.getpid() else 0.0
+
+
+class TreeSampler:
+    """Background thread: samples tree_rss_mb() every `period` s and keeps the peak (importer + every child)."""
+
+    def __init__(self, period=0.25, root=None):
+        self.period = period; self.root = root or os.getpid()
+        self.peak = 0.0; self.last = 0.0
+        self._stop = threading.Event()
+        self._t = threading.Thread(target=self._loop, name='rss_sampler', daemon=True)
+
+    def _loop(self):
+        while not self._stop.is_set():
+            self.sample()
+            self._stop.wait(self.period)
+
+    def sample(self):
+        v = tree_rss_mb(self.root)
+        self.last = v; self.peak = max(self.peak, v)
+        return v
+
+    def start(self):
+        self._t.start(); return self
+
+    def stop(self):
+        self._stop.set(); self._t.join(2)
+        self.sample()
+        return self.peak
+
+
 # ------------------------------------------------------------------ job state, output
 class Job:
     def __init__(self, a, out_stream):
@@ -116,6 +253,8 @@ class Job:
         self.work = self.out_dir / '.user_import_work'
         self.ff = self.fp = None
         self.peak_seen = 0.0
+        self.t0 = time.monotonic()
+        self.sampler = None   # TreeSampler, started by main()
         self.current = None   # candidate dir being built (removed on error)
 
     # every write goes through here: refuse anything outside --out
@@ -165,13 +304,15 @@ class Job:
         if not force and pct == self.pct and now - self.last_emit < 0.5:
             return
         self.pct = pct; self.last_emit = now
-        self.emit({'event': 'progress', 'stage': stage, 'pct': pct, 'msg': msg})
+        self.emit({'event': 'progress', 'stage': stage, 'pct': pct, 'msg': msg,
+                   'ts': round(time.time(), 3), 'elapsed_s': round(now - self.t0, 3)})
 
     def mem_guard(self, where):
         r = rss_mb()
         self.peak_seen = max(self.peak_seen, r)
         budget = self.a.max_ram_mb - FFMPEG_RESERVE_MB
-        return r, r > budget, budget
+        tree = self.sampler.last if self.sampler else 0.0
+        return r, r > budget or tree > self.a.max_ram_mb, budget
 
     # subprocesses: tracked so a cancel can kill them
     def popen(self, cmd, **kw):
@@ -420,24 +561,64 @@ def split(job, info, path, total_est):
 
 
 # ------------------------------------------------------------------ matte
+MODEL_NAME = 'isnet-anime.onnx'
+
+
+def model_candidates(flag=None, env=None, home=None):
+    """isnet-anime lookup order (never downloaded):
+      1. --model (a file, or a folder holding isnet-anime.onnx)
+      2. $U2NET_HOME/isnet-anime.onnx
+      3. <home>/.rembg/models/isnet-anime/isnet-anime.onnx   (home = pathlib home: ~ on Linux/macOS,
+         %USERPROFILE% on Windows)"""
+    env = os.environ if env is None else env
+    home = Path.home() if home is None else home
+    out = []
+    for c in (flag, env.get('U2NET_HOME')):
+        if c:
+            c = Path(c)
+            out.append(c if c.suffix.lower() == '.onnx' else c / MODEL_NAME)
+    out.append(home / '.rembg' / 'models' / 'isnet-anime' / MODEL_NAME)
+    return out
+
+
+def find_model(flag=None, env=None, home=None):
+    """(path or None, [every path tried])"""
+    tried = model_candidates(flag, env, home)
+    for c in tried:
+        try:
+            if Path(c).is_file():
+                return Path(c).resolve(), tried
+        except OSError:
+            pass
+    return None, tried
+
+
 class Matter:
     def __init__(self, job, info):
         self.job = job; self.mode = job.a.matte; self.threads = job.a.threads
         import matte_v2 as mv
         self.mv = mv
-        if job.a.model:
-            mv.MODEL = str(Path(job.a.model).resolve())
-        model_ok = Path(mv.MODEL).is_file() and job.a.max_ram_mb >= ISNET_MIN_MB and _has_ort()
+        model, tried = find_model(getattr(job.a, 'model', None))
+        self.tried = tried
+        self.found = model is not None
+        if model:
+            mv.MODEL = str(model); mv._S = None
+        model_ok = model is not None and job.a.max_ram_mb >= ISNET_MIN_MB and _has_ort()
         self.fallback = 'isnet' if model_ok and job.a.matte in ('auto', 'isnet') else 'key'
         if self.mode == 'auto':
             self.mode = 'alpha' if info['alpha'] else self.fallback
-        if self.mode == 'isnet' and not (Path(mv.MODEL).is_file() and _has_ort()):
-            raise Fail(f'--matte isnet needs onnxruntime and the local isnet-anime model at {mv.MODEL} '
-                       f'(set U2NET_HOME or --model; nothing is downloaded)')
+        if self.mode == 'isnet':
+            if model is None:
+                raise Fail('--matte isnet: the isnet-anime model was not found (nothing is downloaded). Tried: '
+                           + '; '.join(str(t) for t in tried)
+                           + '. Copy isnet-anime.onnx to one of those paths, or pass --model <file>.')
+            if not _has_ort():
+                raise Fail('--matte isnet needs the onnxruntime Python package (pip install onnxruntime)')
 
     def describe(self):
         return {'alpha': "the file's own alpha channel", 'isnet': f'local isnet-anime model ({Path(self.mv.MODEL).name}) + matte_v2 edge alpha',
-                'key': 'backdrop key (no model)'}[self.mode]
+                'key': 'backdrop key (no model' + (
+                    '' if self.found else '; isnet-anime not found, tried ' + '; '.join(str(t) for t in self.tried)) + ')'}[self.mode]
 
     def downgrade(self):
         if self.mode in ('isnet', 'alpha'):
@@ -508,6 +689,99 @@ def backdrop_key(rgb, mv):
     return mv.drop_specks(out)
 
 
+# ------------------------------------------------------------------ placement
+FIT_MARGIN = 4      # keep the normal-framing bbox inside x FIT_MARGIN..CANVAS-1-FIT_MARGIN (canvas_compliant wants 3..396)
+
+
+def fit_placement(S0, top, low, xl, xr, cx):
+    """One scale + horizontal body point for a whole movement (no per-frame pumping).
+
+    S0 is the shipped scale (0.54 at 720 p) and is the maximum, so standing poses match the shipped clips.
+    It shrinks only when the movement's union bbox (rows top..low, columns xl..xr, work px) would not fit the
+    400x400 canvas at normal framing: height up to the baseline, width inside the side margins. cx (the body
+    point, normally build_clip.body_x) is kept when the figure fits around it, else moved the least needed
+    so the bbox fits (a lying pose is wider than it is tall and is not centred on its body point).
+    Returns (S, cx, how) with how in {'fixed', 'fit_height', 'fit_width', 'shifted'}."""
+    S = S0; how = 'fixed'
+    fig_h = low - top + 1; fig_w = xr - xl + 1
+    if fig_h * S > BASELINE - 6:
+        S = (BASELINE - 6) / fig_h; how = 'fit_height'
+    span = CANVAS - 1 - 2 * FIT_MARGIN - 1     # -1: one px of slack for the INTER_AREA footprint
+    if fig_w * S > span:
+        S = span / fig_w; how = 'fit_width'
+    lo_cx = xr - (CANVAS - 1 - FIT_MARGIN - ANCHOR_X) / S   # right edge inside
+    hi_cx = xl + (ANCHOR_X - FIT_MARGIN) / S                # left edge inside
+    if lo_cx > hi_cx:
+        lo_cx = hi_cx = (xl + xr) / 2.0
+    ncx = min(max(cx, lo_cx), hi_cx)
+    if abs(ncx - cx) > 0.5 and how == 'fixed':
+        how = 'shifted'
+    return S, float(ncx), how
+
+
+def _runs(row):
+    import numpy as np
+    xs = np.flatnonzero(row)
+    if not len(xs):
+        return []
+    br = np.split(xs, np.flatnonzero(np.diff(xs) > 1) + 1)
+    return [(int(r[0]), int(r[-1])) for r in br]
+
+
+def chest_point(alpha, body_x=None):
+    """Estimated chest (x, y) in the alpha's px, and which rule found it.
+
+    The mask (alpha > 128) is opened by ~3 % of the figure height and reduced to its largest blob, which drops
+    the thin tail, loose hair strands and fingers. Then:
+      upright (bbox w <= 1.25 h: standing, sitting, kneeling, crawling): the widest band in 18-45 % of the
+          height, measured on the opaque run at (or nearest) the body point, smoothed over ~4 % of the height;
+      lying (w > 1.25 h): the head end is the end whose outer quarter reaches highest; the chest is 30 % of
+          the width in from it, vertically centred on the body there.
+    None when the alpha is empty."""
+    import numpy as np, cv2
+    from scipy import ndimage as nd
+    m = alpha > 128
+    ys, xs = np.nonzero(m)
+    if not len(xs):
+        return None, 'empty'
+    h = ys.max() - ys.min() + 1
+    k = max(3, int(round(0.03 * h))) | 1
+    o = cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))) > 0
+    lab, n = nd.label(o)
+    if n:
+        o = lab == (int(np.argmax(nd.sum(o, lab, range(1, n + 1)))) + 1)
+    else:
+        o = m
+    ys, xs = np.nonzero(o)
+    y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
+    H = y1 - y0 + 1; W = x1 - x0 + 1
+    if W <= 1.25 * H:
+        cx = body_x if body_x is not None else (x0 + x1) / 2.0
+        r0, r1 = int(y0 + 0.18 * H), max(int(y0 + 0.45 * H), int(y0 + 0.18 * H) + 1)
+        wid = np.zeros(r1 - r0); cen = np.full(r1 - r0, float(cx))
+        for i, y in enumerate(range(r0, r1)):
+            rs = _runs(o[y])
+            if not rs:
+                continue
+            r = min(rs, key=lambda r: 0 if r[0] <= cx <= r[1] else min(abs(r[0] - cx), abs(r[1] - cx)))
+            wid[i] = r[1] - r[0] + 1; cen[i] = (r[0] + r[1]) / 2.0
+        if not wid.any():
+            return (float(cx), float(y0 + 0.30 * H)), 'upright_fallback'
+        kk = max(1, int(0.04 * H))
+        ws = np.convolve(wid, np.ones(kk) / kk, 'same')
+        i = int(np.argmax(ws))
+        return (float(cen[i]), float(r0 + i)), 'upright_widest_band'
+    q = max(1, W // 4)
+    tl = int(np.flatnonzero(o[:, x0:x0 + q].any(1)).min()); tr = int(np.flatnonzero(o[:, x1 - q + 1:x1 + 1].any(1)).min())
+    head_left = tl <= tr
+    x = int(x0 + 0.30 * W) if head_left else int(x1 - 0.30 * W)
+    col = np.flatnonzero(o[:, x])
+    if not len(col):
+        return (float(x), float((y0 + y1) / 2)), 'lying_fallback'
+    rs = np.split(col, np.flatnonzero(np.diff(col) > 1) + 1); r = max(rs, key=len)
+    return (float(x), float((r[0] + r[-1]) / 2.0)), 'lying_head_' + ('left' if head_left else 'right')
+
+
 # ------------------------------------------------------------------ segment render
 def zoom_curve(N, zmax):
     """zoom_tease.zoom_of with automatic slow keyframes (15/40/60/85 % of the movement)."""
@@ -544,21 +818,37 @@ def render_segment(job, seg, name, cdir, meta, work_wh, pct0, pct1):
     if not live:
         return None, 'no subject found in this movement'
     tops = [m[3] for m in live]; lows = [m[4] for m in live]
-    fig_h = max(lows) - min(tops) + 1
-    S = BASE_SCALE * WORK_H / H
-    if fig_h * S > BASELINE - 6:
-        S = (BASELINE - 6) / fig_h
+    S0 = BASE_SCALE * WORK_H / H
     zmax = job.a.zmax
     # union rect of every crop: one sampling grid for the whole movement (no sub-pixel shimmer)
     ux0 = min(m[1] for m in live); uy0 = min(m[2] for m in live)
     ux1 = max(m[1] + m[5] for m in live); uy1 = max(m[2] + m[6] for m in live)
+    def full_alpha(m):
+        f = cv2.imread(m[0], cv2.IMREAD_UNCHANGED)
+        a_ = np.zeros((H, W), np.uint8); a_[m[2]:m[2] + f.shape[0], m[1]:m[1] + f.shape[1]] = f[..., 3]
+        return a_
     first = live[0]
-    f0 = cv2.imread(first[0], cv2.IMREAD_UNCHANGED)
-    a0 = np.zeros((H, W), np.uint8); a0[first[2]:first[2] + f0.shape[0], first[1]:first[1] + f0.shape[1]] = f0[..., 3]
-    cx_src = body_x(a0)
+    a0 = full_alpha(first)
+    body_cx = body_x(a0)
+    xl = min(m[7] for m in live); xr = max(m[8] for m in live)
+    S, cx_src, fit = fit_placement(S0, min(tops), max(lows), xl, xr, body_cx)
     tx = int(round(ANCHOR_X - cx_src * S))
     ty = int(np.floor(BASELINE - (max(lows) + 1) * S + 1))
-    chest_src = np.array([cx_src, first[3] + 0.30 * (first[4] - first[3])])
+    # zoom focus: median chest over up to 5 frames spread through the movement (one focus: no jitter)
+    picks = sorted({live[int(round(j * (len(live) - 1) / 4))][0] for j in range(5)}) if len(live) > 1 else [first[0]]
+    byp = {m[0]: m for m in live}
+    pts, rules = [], []
+    for pth in picks:
+        m_ = byp[pth]
+        a_ = a0 if m_ is first else full_alpha(m_)
+        pt, rule = chest_point(a_, body_x(a_))
+        if pt is not None:
+            pts.append(pt); rules.append(rule)
+    if pts:
+        chest_src = np.median(np.array(pts), 0)
+        chest_rule = max(set(rules), key=rules.count)
+    else:
+        chest_src = np.array([body_cx, first[3] + 0.30 * (first[4] - first[3])]); chest_rule = 'fixed_30pct'
     C = S * chest_src + np.array([tx, ty], float)
     T = np.array(TARGET)
     N = len(meta)
@@ -566,7 +856,7 @@ def render_segment(job, seg, name, cdir, meta, work_wh, pct0, pct1):
     uw, uh = ux1 - ux0, uy1 - uy0
     cells = []
     import matte_clean as mc
-    cstats = {'matte_clean_px': 0, 'holefill_px': 0, 'edgefix_px': 0}
+    cstats = {'matte_clean_px': 0, 'holefill_px': 0, 'edgefix_px': 0, 'pocketfill_px': 0, 'pocket_skipped_px': 0}
     import cellfix
     for k, m in enumerate(meta):
         job.check()
@@ -595,13 +885,15 @@ def render_segment(job, seg, name, cdir, meta, work_wh, pct0, pct1):
         job.progress('zoom', pct0 + (pct1 - pct0) * 0.35 * (k + 1) / N, f'{name}: zoom frame {k + 1}/{N}')
         c2, st = mc.clean_cell(u8, name)
         cstats['matte_clean_px'] += int(sum(v for v in st.values() if isinstance(v, (int, np.integer))))
-        c3, st2 = cellfix.post(c2)
-        cstats['holefill_px'] += st2['holefill_px']; cstats['edgefix_px'] += st2['edgefix_px']
+        c3, st2 = cellfix.post(c2, raw=u8)
+        for kk in ('holefill_px', 'edgefix_px', 'pocketfill_px', 'pocket_skipped_px'):
+            cstats[kk] += st2[kk]
         c3[BASELINE + 1:] = 0
         cells.append(c3)
         job.progress('clean', pct0 + (pct1 - pct0) * (0.35 + 0.4 * (k + 1) / N), f'{name}: matte-clean + holefill {k + 1}/{N}')
     fields = dict(scale=round(S, 5), tx=tx, ty=ty, zmax=zmax, keyframes=ks, zs=[round(v, 4) for v in zs],
-                  focus=C.tolist(), stats=cstats)
+                  focus=C.tolist(), stats=cstats, fit=fit, base_scale=round(S0, 5), chest_rule=chest_rule,
+                  chest_src=[round(float(v), 1) for v in chest_src])
     return cells, fields
 
 
@@ -711,18 +1003,20 @@ def finish_segment(job, k, seg, meta, work_wh, base, info, matter, pct0, pct1):
                                  'note': f'0-based frame numbers of the input resampled to {FPS} fps'},
           'generator': f'tools/video-pipeline/user_import.py ({VERSION})',
           'matte_version': f'{matter.mode}: {matter.describe()}', 'matte_tool': 'tools/video-pipeline/user_import.py (matte_v2 functions)',
-          'centering': 'fixed', 'baseline_snap': 'fixed (lowest frame of the movement on the baseline)',
+          'centering': fields['fit'], 'scale_max': fields['base_scale'],
+          'baseline_snap': 'fixed (lowest frame of the movement on the baseline)',
           'cleavage_zoom': {'zmax': fields['zmax'], 'focus_canvas_xy': fields['focus'], 'target_canvas_xy': list(TARGET),
                             'keyframes_ease_in_hold_out': [fields['keyframes']] if fields['keyframes'] else [],
                             'cycles': 1 if fields['keyframes'] else 0, 'easing': 'smoothstep', 'zoom_per_frame': fields['zs'],
-                            'note': 'zoom_tease.py math with automatic keyframes; focus = estimated chest (30 % down her height)'},
+                            'focus_rule': fields['chest_rule'], 'focus_src_xy': fields['chest_src'],
+                            'note': 'zoom_tease.py math with automatic keyframes; focus = detected chest (user_import.chest_point)'},
           'baked_secondary_motion': ['breathing', 'sway', 'pigtails', 'tail', 'chest_follow'],
           'engine_note': 'v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.',
           'tags': ['baked_motion', 'cleavage_zoom', 'user_import'] if fields['keyframes'] else ['baked_motion', 'user_import'],
           'bbox_per_frame': bbs,
           'canvas_compliant': all(b[0] >= 3 and b[1] <= 396 and b[3] <= 392 for b in bbs),
           'user_import': {'version': VERSION, 'input': str(Path(job.a.input).resolve()), 'movement': k,
-                          'post': ['matte_clean.clean_cell v6', 'cellfix.post (holefill, edgefix, holefill)'], **fields['stats']}}
+                          'post': ['matte_clean.clean_cell v6', 'cellfix.post (holefill, edgefix, pocketfill vs the raw matte, holefill)'], **fields['stats']}}
     mp4 = cdir / f'{name}.mp4'
     q = encode(job, cells, mp4)
     js['video'] = {'file': mp4.name, 'layout': 'alpha_side_by_side', 'codec': 'h264 high yuv420p full-range bt709',
@@ -821,15 +1115,17 @@ def pipeline(job):
             x0, x1, y0, y1 = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
             solid = np.nonzero((rgba[..., 3] > 128).any(1))[0]
             top, low = (int(solid.min()), int(solid.max())) if len(solid) else (y0, y1 - 1)
+            cols = np.nonzero((rgba[..., 3] > 16).any(0))[0]
+            xl_, xr_ = (int(cols.min()), int(cols.max())) if len(cols) else (x0, x1 - 1)
             import cv2
             if not sd.exists():
                 job.mkdir(sd)
             p = job.inside(sd / f'f_{i:06d}.png')
             cv2.imwrite(str(p), cv2.cvtColor(np.ascontiguousarray(rgba[y0:y1, x0:x1]), cv2.COLOR_RGBA2BGRA),
                         [cv2.IMWRITE_PNG_COMPRESSION, 1])
-            metas[si].append((str(p), x0, y0, top, low, x1 - x0, y1 - y0))
+            metas[si].append((str(p), x0, y0, top, low, x1 - x0, y1 - y0, xl_, xr_))
         else:
-            metas[si].append((None, 0, 0, 0, 0, 0, 0))
+            metas[si].append((None, 0, 0, 0, 0, 0, 0, 0, 0))
         del rgba, fr
         segn = segs[si][1] - segs[si][0]
         job.progress('matte', lo[si] + (lo[si + 1] - lo[si]) / 2 * len(metas[si]) / segn,
@@ -851,7 +1147,8 @@ def main(argv=None):
     ap.add_argument('--json-progress', action='store_true', help='JSON lines on stdout (the GUI contract)')
     ap.add_argument('--max-ram-mb', type=int, default=1500, help='RAM cap for the importer + its ffmpeg (default 1500)')
     ap.add_argument('--matte', choices=('auto', 'isnet', 'key', 'alpha'), default='auto')
-    ap.add_argument('--model', help='isnet-anime.onnx path (default $U2NET_HOME/isnet-anime.onnx); never downloaded')
+    ap.add_argument('--model', help='isnet-anime.onnx file or folder. Lookup: --model, then $U2NET_HOME/isnet-anime.onnx, then '
+                         '~/.rembg/models/isnet-anime/isnet-anime.onnx (%%USERPROFILE%% on Windows); never downloaded')
     ap.add_argument('--zmax', type=float, default=ZMAX, help='peak cleavage zoom (1 = no zoom; default 1.8)')
     ap.add_argument('--min-seconds', type=float, default=1.5)
     ap.add_argument('--max-seconds', type=float, default=8.0)
@@ -874,6 +1171,7 @@ def main(argv=None):
     os.environ.setdefault('CC_REPO', str(REPO))
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     job = Job(a, out_stream)
+    job.sampler = TreeSampler().start()
     result = {}
 
     def work():
@@ -919,7 +1217,9 @@ def main(argv=None):
         job.emit({'event': 'error', 'msg': result['error']})
         out_stream.flush()
         return 1
-    job.emit({'event': 'done', 'candidates': len(result.get('names', [])), 'peak_rss_mb': int(max(peak_mb(), job.peak_seen))})
+    tree_peak = job.sampler.stop()
+    job.emit({'event': 'done', 'candidates': len(result.get('names', [])),
+              'peak_rss_mb': int(round(max(tree_peak, peak_mb(), job.peak_seen)))})
     out_stream.flush()
     return 0
 
