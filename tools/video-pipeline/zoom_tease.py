@@ -76,13 +76,23 @@ def zoom_of(k):
         else: u = 1 - ss((k - K2) / (K3 - K2))
     return 1 + (a.zmax - 1) * u, u
 
+WHITE_TRIM = os.environ.get('LILLITH_WHITE_TRIM') == '1'
+def ivory(f):
+    """white-trim mode: white outfit parts (Santa fur) -> warm ivory so the backdrop rules (neutral white = backdrop,
+    sat <= 40) never key or flag them; max channel kept, so shading is unchanged."""
+    rgb = f[..., :3].astype(np.int32); mn = rgb.min(-1); v = rgb.max(-1)
+    m = (f[..., 3] > 0) & (mn >= 170) & (v - mn < 44)
+    out = f.copy(); out[..., 0][m] = v[m]; out[..., 1][m] = np.clip(v[m] - 12, 0, 255); out[..., 2][m] = np.clip(v[m] - 44, 0, 255)
+    return out
 full = []  # full-res straight RGBA per output frame (uint8)
 for k, i in enumerate(idx):
     A, aux, g = alpha_of(i)
     nb = [j for j in range(i - a.tspan, i + a.tspan + 1) if j != i and 1 <= j <= nvid]
     nbs = [alpha_of(j) for j in nb]
     A = mv.temporal(A, g, [n[0] for n in nbs], [n[2] for n in nbs], aux['band'])
-    full.append(mv.drop_specks(mv.colour(A, aux)))
+    fr = mv.drop_specks(mv.colour(A, aux))
+    if WHITE_TRIM: fr = ivory(fr)
+    full.append(fr)
     for j in list(cache):
         if j < i - a.tspan: del cache[j]
     print(f'  {c} matte {k + 1}/{N} (video {i})', flush=True)

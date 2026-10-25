@@ -89,7 +89,7 @@ id = "xmas"
 name = "Santa Bikini (Christmas)"
 season = "xmas"
 thumbnail = "assets/generated/outfits/xmas.png"
-clips = []                  # filled by the Christmas batch (prefix xmas_)
+clips = ["xmas_candy_cane_lick", "xmas_mistletoe_blow_kiss", "xmas_scarf_shiver_hug", "xmas_gift_sit_crossleg"]
 hidden = false
 
 [[outfit]]
@@ -121,5 +121,5 @@ id = "newyear"
 name = "New Year Sparkle"
 season = "newyear"
 thumbnail = "assets/generated/outfits/newyear.png"
-clips = []                  # feat/seasonal-summer-newyear (prefix newyear_)
+clips = ["newyear_champagne_rim_lick", "newyear_strawberry_bite", "newyear_midnight_kiss_squeeze", "newyear_strap_oops"]
 hidden = false
