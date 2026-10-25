@@ -2,7 +2,7 @@
 """Lillith's icon set: every icon, for every platform.
 
 branding/icons.toml lists the icons (id, display name, files); the default
-is `phantomcore-red`. Each icon lives in branding/icons/<id>/:
+is `neon-sign` (Ko's pick; build variable `SHORTCUT_ICON` overrides it). Each icon lives in branding/icons/<id>/:
 
     icon-1024.png                 master (transparent outside the rounded square)
     lillith-<N>.png               N = 16 24 32 48 64 128 256 (Linux hicolor, picker thumbnails)
@@ -36,6 +36,7 @@ and makes everything outside it transparent with a clean anti-aliased
 rounded-rect mask (detected corner radius, at least 18%).
 """
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -60,7 +61,8 @@ FG_PX = 432  # 108 dp at xxxhdpi
 FG_ART = 80 / 108  # art size inside the adaptive canvas (the launcher masks ~66 dp)
 BG_HEX = "#FF000000"  # the art is drawn on black
 
-DEFAULT = "phantomcore-red"
+# The desktop shortcut / menu entry / app icon of every installer.
+DEFAULT = os.environ.get("SHORTCUT_ICON", "").strip() or "neon-sign"
 # (id, display name, source stem in --from-sources; None = not from a JPG)
 SET = [
     ("neon-portrait", "Neon Portrait", "01-neon-portrait"),

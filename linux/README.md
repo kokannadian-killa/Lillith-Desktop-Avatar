@@ -123,7 +123,7 @@ Tests: `bash linux/tests/kwin-blur-exclude-test.sh`. It never touches your `.ggu
 
 ## App icon
 
-Lillith ships 15 icons (`branding/icons.toml`; default `phantomcore-red`,
+Lillith ships 15 icons (`branding/icons.toml`; default `neon-sign`,
 plus `classic`, the old idle-frame icon). Pick one in **Settings ▸ Icon**
 (right-click her ▸ **Icon…**), or:
 

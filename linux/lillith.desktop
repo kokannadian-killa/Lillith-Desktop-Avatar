@@ -3,7 +3,7 @@ Type=Application
 Name=Lillith
 GenericName=Desktop companion
 Comment=Your desktop demon: a local-only animated companion
-Exec=lillith
+Exec=/usr/bin/lillith
 Icon=lillith
 Terminal=false
 Categories=Utility;
@@ -13,4 +13,4 @@ Actions=settings;
 
 [Desktop Action settings]
 Name=Lillith Settings
-Exec=lillith-settings
+Exec=/usr/bin/lillith-settings

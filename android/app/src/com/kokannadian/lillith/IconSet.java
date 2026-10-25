@@ -5,7 +5,7 @@ package com.kokannadian.lillith;
 final class IconSet {
     private IconSet() {}
 
-    static final String DEFAULT = "phantomcore-red";
+    static final String DEFAULT = "neon-sign";
 
     static final String[] IDS = {
         "neon-portrait",

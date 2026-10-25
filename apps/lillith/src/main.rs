@@ -190,12 +190,18 @@ enum Cmd {
         /// Context window for llama-server `-c`.
         #[arg(long)]
         ctx_size: Option<u32>,
+        /// No `--gguf` and no working model in config.toml: pick one from
+        /// ~/AI/models, ~/models and the data dir (the preferred Dolphin 3B,
+        /// else a Dolphin that fits in RAM, else the smallest that fits;
+        /// warns if it is too big for RAM).
+        #[arg(long, conflicts_with = "gguf")]
+        auto_gguf: bool,
     },
     /// Choose Lillith's app icon: saves `icon = "<id>"` to config.toml and
     /// applies it (Linux: menu entry + desktop shortcut theme icon;
     /// Windows: Start-menu / Desktop shortcuts). No ID: show the current one.
     Icon {
-        /// Icon id (see `--list`), e.g. phantomcore-red, classic.
+        /// Icon id (see `--list`), e.g. neon-sign, classic.
         id: Option<String>,
         /// List the icons.
         #[arg(long)]
@@ -552,12 +558,19 @@ async fn main() -> Result<()> {
             ref gguf,
             ref llama_server,
             ctx_size,
+            auto_gguf,
         }) => {
             let path = cli
                 .config
                 .clone()
                 .or_else(Config::default_path)
                 .ok_or_else(|| anyhow::anyhow!("no config directory; pass --config"))?;
+            let picked = if auto_gguf {
+                auto_pick_gguf(&path)
+            } else {
+                None
+            };
+            let gguf = gguf.clone().or(picked);
             let msg = match setup(&path, gguf.as_deref(), llama_server.as_deref(), ctx_size) {
                 Ok(m) => m,
                 Err(e) => {
@@ -725,7 +738,7 @@ fn icon_cmd(cli: &Cli, id: Option<&str>, list: bool, no_apply: bool, reapply: bo
     if no_apply {
         return Ok(());
     }
-    let root = icons::icons_dir()
+    let root = icons::root_for(&icons::icons_dirs(), &chosen.id)
         .ok_or_else(|| anyhow::anyhow!("icon files not found (set LILLITH_ICONS_DIR)"))?;
     let a = icons::apply(&root, &chosen.id).map_err(|e| anyhow::anyhow!(e))?;
     println!(
@@ -769,6 +782,47 @@ fn seed_config_text(bundled: Option<&std::path::Path>) -> String {
 /// `lillith setup`: writes the local model choice into `path` (creating
 /// it from the commented template if missing). Local files only; the
 /// endpoint stays the loopback default.
+/// `setup --auto-gguf`: `None` keeps config.toml's model when it is still
+/// a file (a saved choice always wins), else the [`lillith_setup::pick`]
+/// default. Prints the pick and any too-big-for-RAM warning.
+fn auto_pick_gguf(config: &std::path::Path) -> Option<PathBuf> {
+    use lillith_setup::pick;
+    if let Ok(llm) = lillith_setup::config::load(config) {
+        let cur = llm.gguf_path.trim();
+        if !cur.is_empty() && std::path::Path::new(cur).is_file() {
+            println!("model: keeping {cur} (already in {})", config.display());
+            return None;
+        }
+    }
+    let found = pick::find_ggufs(&pick::default_dirs(), 2);
+    let pref = pick::preferred_path();
+    match pick::pick_default(
+        &found,
+        pref.as_deref(),
+        lillith_setup::scan::total_ram_bytes(),
+    ) {
+        Some(p) => {
+            println!("model: {}", p.describe());
+            if let Some(w) = &p.warning {
+                eprintln!("WARNING: {w}");
+                tracing::warn!("{w}");
+            }
+            Some(p.path)
+        }
+        None => {
+            println!(
+                "model: no .gguf found in {}; pick one later in Settings -> Brain",
+                pick::default_dirs()
+                    .iter()
+                    .map(|d| d.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            None
+        }
+    }
+}
+
 fn setup(
     path: &std::path::Path,
     gguf: Option<&std::path::Path>,
@@ -1099,6 +1153,133 @@ impl lillith_overlay::ActionSink for VoiceSink {
     }
 }
 
+/// Says where a see-through start comes from (`None` at full opacity).
+/// The default is 1.0 (fully opaque); only `--opacity` or a saved
+/// `opacity = ...` makes her translucent.
+fn opacity_note(
+    cli: Option<f32>,
+    cfg: f32,
+    config_path: Option<&std::path::Path>,
+) -> Option<String> {
+    let (v, from) = match cli {
+        Some(v) => (v, "--opacity".to_string()),
+        None => (
+            cfg,
+            format!(
+                "opacity = {cfg} in {}",
+                config_path
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "config.toml".into())
+            ),
+        ),
+    };
+    (v < 1.0).then(|| {
+        format!(
+            "she is drawn {:.0}% opaque because of {from} (default 1.0; Settings > Avatar > Opacity)",
+            v.clamp(0.0, 1.0) * 100.0
+        )
+    })
+}
+
+/// Which saved setting mutes her at start-up, if any (`None` = not muted;
+/// the defaults never mute).
+fn mute_source(
+    config_path: Option<&std::path::Path>,
+    voice_mute: bool,
+    muted: bool,
+) -> Option<String> {
+    let file = config_path
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| "config.toml".into());
+    match (voice_mute, muted) {
+        (false, false) => None,
+        (true, _) => Some(format!(
+            "[voice] mute = true (or top-level muted = true) in {file}"
+        )),
+        (false, true) => Some(format!("muted = true in {file}")),
+    }
+}
+
+/// The systemd user unit of her voice daemon (`tools/lillith-voice/install.sh`).
+const VOICE_UNIT: &str = "lillith-voice.service";
+
+/// Launch: if the voice daemon's socket is missing but its systemd user
+/// unit is installed, ask systemd once to start it (`systemctl --user start
+/// --no-block lillith-voice.service`), then give it a few seconds to come
+/// up. This is part of starting the app (no Soul Contract card), but the
+/// command is written to the audit log. Skipped with
+/// `LILLITH_NO_VOICE_AUTOSTART=1`, when the socket exists, or when the
+/// unit isn't installed. The voice switches to the daemon later on its own
+/// if it comes up after this.
+fn ensure_voice_daemon(configured: Option<&std::path::Path>) {
+    if !cfg!(target_os = "linux") || std::env::var_os("LILLITH_NO_VOICE_AUTOSTART").is_some() {
+        return;
+    }
+    let Some(sock) = lillith_voice::daemon::resolve_endpoint(configured) else {
+        return;
+    };
+    if sock.exists() {
+        return;
+    }
+    let config_home = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")));
+    if !voice_unit_installed(config_home.as_deref()) {
+        tracing::debug!(
+            "voice daemon: {} not installed; not starting it",
+            VOICE_UNIT
+        );
+        return;
+    }
+    let argv: Vec<String> = ["systemctl", "--user", "start", "--no-block", VOICE_UNIT]
+        .map(String::from)
+        .to_vec();
+    lillith_core::launch_audit::record("voice-daemon", &argv);
+    let status = std::process::Command::new(&argv[0])
+        .args(&argv[1..])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    match status {
+        Ok(s) if s.success() => {
+            let t0 = std::time::Instant::now();
+            while !sock.exists() && t0.elapsed() < std::time::Duration::from_secs(4) {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            if sock.exists() {
+                tracing::info!("voice daemon started ({VOICE_UNIT})");
+            } else {
+                tracing::warn!(
+                    "voice daemon: started {VOICE_UNIT} but {} is not there yet \
+                     (she switches to it when it is; `systemctl --user status {VOICE_UNIT}`)",
+                    sock.display()
+                );
+            }
+        }
+        Ok(s) => tracing::warn!("voice daemon: systemctl --user start {VOICE_UNIT}: {s}"),
+        Err(e) => tracing::warn!("voice daemon: systemctl: {e}"),
+    }
+}
+
+/// Whether `lillith-voice.service` is installed as a user unit (per user,
+/// or system-wide for all users).
+fn voice_unit_installed(config_home: Option<&std::path::Path>) -> bool {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if let Some(c) = config_home {
+        dirs.push(c.join("systemd/user"));
+    }
+    for d in [
+        "/etc/systemd/user",
+        "/usr/lib/systemd/user",
+        "/usr/local/lib/systemd/user",
+    ] {
+        dirs.push(PathBuf::from(d));
+    }
+    dirs.iter().any(|d| d.join(VOICE_UNIT).is_file())
+}
+
 /// Builds the voice from config.toml `[voice]` (logs the engine choice
 /// once). `--no-voice` disables it; with no TTS engine installed she stays
 /// silent (`Dropped::NoEngine`).
@@ -1117,7 +1298,17 @@ fn start_voice(
     if cli.no_voice {
         vcfg.enabled = false;
     }
+    if vcfg.enabled {
+        ensure_voice_daemon(vcfg.daemon_socket.as_deref());
+    }
     // One mute flag for SFX and voice (the brain starts from `muted`).
+    // Both default to false; say where a mute comes from so a stale saved
+    // `muted = true` isn't mistaken for a broken voice.
+    if let Some(src) = mute_source(config_path, vcfg.mute, cfg.muted) {
+        tracing::warn!(
+            "voice starts muted: {src} (right-click > Unmute, or Settings, to hear her)"
+        );
+    }
     vcfg.mute |= cfg.muted;
     let voice = lillith_voice::Voice::from_config(vcfg);
     // A fallback voice (daemon down) is a warning, like every other
@@ -1167,6 +1358,9 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
         behavior.sleepy_after_s = behavior.asleep_after_s;
     }
     let mode = cli.mode.unwrap_or(cfg.mode);
+    if let Some(w) = opacity_note(cli.opacity, cfg.opacity, config_path.as_deref()) {
+        tracing::warn!("{w}");
+    }
     let opts = OverlayOptions {
         manifest: manifest.clone(),
         scale,
@@ -1319,6 +1513,50 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Ko's log showed first-buffer opacity 112: the defaults (code,
+    /// seed config, settings template, bundled config) are fully opaque
+    /// and unmuted; only a saved value or `--opacity` changes that, and
+    /// then the log says which.
+    #[test]
+    fn defaults_are_fully_opaque_and_unmuted() {
+        use lillith_overlay::pixels::opacity_byte;
+        let texts = [
+            ("default", String::new()),
+            ("seed", seed_config_text(None)),
+            ("template", lillith_core::menu::settings_template()),
+            ("bundled", BUNDLED_CONFIG.to_string()),
+        ];
+        for (what, text) in &texts {
+            let c = Config::from_toml_str(text).unwrap();
+            assert_eq!(opacity_byte(c.opacity), 255, "{what}");
+            assert!(!c.muted, "{what}");
+            let v = lillith_voice::VoiceConfig::from_config_toml(text).unwrap();
+            assert!(!v.mute, "{what}: [voice] mute");
+            assert!(opacity_note(None, c.opacity, None).is_none(), "{what}");
+            assert!(mute_source(None, v.mute, c.muted).is_none(), "{what}");
+        }
+        let saved = Config::from_toml_str("opacity = 0.44\nmuted = true\n").unwrap();
+        assert_eq!(opacity_byte(saved.opacity), 112);
+        let n = opacity_note(None, saved.opacity, Some(std::path::Path::new("/c.toml"))).unwrap();
+        assert!(n.contains("opacity = 0.44 in /c.toml"), "{n}");
+        assert!(opacity_note(Some(1.0), saved.opacity, None).is_none());
+        assert!(mute_source(None, false, true)
+            .unwrap()
+            .contains("muted = true"));
+    }
+
+    #[test]
+    fn voice_unit_detection() {
+        let d = std::env::temp_dir().join(format!("lillith-unit-{}", std::process::id()));
+        std::fs::create_dir_all(d.join("systemd/user")).unwrap();
+        // (also true when the unit is installed system-wide on the test box)
+        let system = voice_unit_installed(None);
+        assert_eq!(voice_unit_installed(Some(&d)), system);
+        std::fs::write(d.join("systemd/user").join(VOICE_UNIT), "[Unit]\n").unwrap();
+        assert!(voice_unit_installed(Some(&d)));
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     /// Voice e2e (reprobe ec9e1c5): daemon deaths the fallback speaks
     /// through are not engine errors (lillith-voice tests pin that

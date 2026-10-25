@@ -1,0 +1,7 @@
+#!/bin/sh
+# /usr/bin/<name> -> /opt/lillith/bin/<name> (lillith-bin package).
+# Points her at the packaged animation set (232 clips + seasons.toml) unless
+# you set LILLITH_MANIFEST yourself; your own imported clips are added on top.
+: "${LILLITH_MANIFEST:=/opt/lillith/assets/generated/manifest.toml}"
+export LILLITH_MANIFEST
+exec "/opt/lillith/bin/$(basename "$0")" "$@"

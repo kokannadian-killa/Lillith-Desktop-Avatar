@@ -30,6 +30,8 @@ const THUMB: f32 = 96.0;
 type Job = mpsc::Receiver<(String, Result<icons::Applied, String>)>;
 
 pub struct IconTab {
+    /// Every icons root found (a stale/partial one doesn't hide the rest).
+    roots: Vec<PathBuf>,
     root: Option<PathBuf>,
     thumbs: HashMap<String, Option<egui::TextureHandle>>,
     job: Option<Job>,
@@ -60,8 +62,10 @@ fn audit(tag: &str, card: &str) {
 
 impl IconTab {
     pub fn new() -> Self {
+        let roots = icons::icons_dirs();
         Self {
-            root: icons::icons_dir(),
+            root: roots.first().cloned(),
+            roots,
             thumbs: HashMap::new(),
             job: None,
             card: None,
@@ -76,11 +80,14 @@ impl IconTab {
         if let Some(t) = self.thumbs.get(id) {
             return t.clone();
         }
-        let t = self
-            .root
-            .as_ref()
-            .and_then(|r| icons::thumbnail(r, id, THUMB as u32))
-            .and_then(|p| image::open(p).ok())
+        let t = icons::thumbnail_in(&self.roots, id, THUMB as u32)
+            .and_then(|p| match image::open(&p) {
+                Ok(i) => Some(i),
+                Err(e) => {
+                    eprintln!("lillith-settings: icon preview {}: {e}", p.display());
+                    None
+                }
+            })
             .map(|img| {
                 let img = img.to_rgba8();
                 let ci = egui::ColorImage::from_rgba_unmultiplied(
@@ -99,7 +106,8 @@ impl IconTab {
         if let Some(icon) = crate::window_icon(&info.id) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Icon(Some(icon)));
         }
-        let Some(root) = self.root.clone() else {
+        let Some(root) = icons::root_for(&self.roots, &info.id).or_else(|| self.root.clone())
+        else {
             shared.toast(
                 "icon saved; icon files not found, so the desktop keeps the old one",
                 pal::WARN,

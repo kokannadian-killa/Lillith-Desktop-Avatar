@@ -84,7 +84,7 @@ Usage: ./linux/install.sh [options]
       --no-kwin          don't install/enable the KWin bridge script
       --icon ID          app icon (menu entry, desktop shortcut); saved as
                          icon = "ID" in config.toml. Default: the configured
-                         one, else phantomcore-red. --list-icons shows the ids.
+                         one, else neon-sign. --list-icons shows the ids.
                          Change it later in Settings > Icon or: lillith icon ID
       --list-icons       print the icon ids and exit
       --start / --no-start                  start Lillith at the end (asked; --yes: no)
@@ -625,7 +625,7 @@ HAS_SETUP=0
 "$LILLITH" setup --help >/dev/null 2>&1 && HAS_SETUP=1
 
 find_gguf() {
-  # Prefer Dolphin 3.0 Llama 3.2 3B Q4_K_M, then other chat models.
+  # Ranked by gguf_rank (below).
   { for d in "$ROOT/bundle/models" "$ROOT/../bundle/models"; do
       [[ -d $d ]] && find "$d" -maxdepth 4 -type f -iname '*.gguf' ! -iname '*mmproj*' -print 2>/dev/null
     done
@@ -634,11 +634,31 @@ find_gguf() {
          -o -name node_modules -o -name .git \) -prune -o \
       -type f -iname '*.gguf' ! -iname '*mmproj*' -size +50M -print 2>/dev/null
     find /usr/share /opt -maxdepth 4 -type f -iname '*.gguf' -size +50M -print 2>/dev/null
-  } | awk '{ s = tolower($0); r = 3
-             if (s ~ /dolphin/ && s ~ /3\.2/ && s ~ /3b/ && s ~ /q4_k_m/) r = 0
-             else if (s ~ /dolphin/) r = 1
-             else if (s ~ /q4_k_m/) r = 2
-             print r "\t" $0 }' | sort -t$'\t' -k1,1n -k2 | cut -f2- | awk '!seen[$0]++' | head -n 12
+  } | awk '!seen[$0]++' | gguf_rank | head -n 12
+}
+# Same order as `lillith setup --auto-gguf` (crates/lillith-setup/src/pick.rs):
+# ~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf, then Dolphin models that fit
+# in RAM, then the smallest that fits (size + 3 GiB <= RAM), then the rest,
+# smallest first; models too big for RAM are marked so they're never a silent pick.
+ram_bytes() { [[ -n ${LILLITH_RAM_BYTES:-} ]] && { echo "$LILLITH_RAM_BYTES"; return; }
+  awk '/^MemTotal:/ { printf "%.0f", $2 * 1024 }' /proc/meminfo 2>/dev/null || echo 0; }
+gguf_rank() {
+  local ram pref f
+  ram="$(ram_bytes)"; [[ $ram =~ ^[0-9]+$ && $ram -gt 0 ]] || ram=$((8 * 1024 ** 3))
+  pref="$HOME/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf"
+  while IFS= read -r f; do
+    printf '%s\t%s\n' "$(stat -Lc %s "$f" 2>/dev/null || echo 0)" "$f"
+  done | awk -F'\t' -v ram="$ram" -v pref="$pref" -v head=$((3 * 1024 ** 3)) '{
+      n = tolower($2); sub(/.*\//, "", n); fit = ($1 + head <= ram)
+      r = ($2 == pref) ? 0 : (fit && n ~ /dolphin/) ? 1 : fit ? 2 : 3
+      printf "%d\t%020.0f\t%s\n", r, $1, $2 }' |
+    sort -t$'\t' -k1,1n -k2,2 -k3 | cut -f3-
+}
+gguf_too_big() {
+  local ram size
+  ram="$(ram_bytes)"; [[ $ram =~ ^[0-9]+$ && $ram -gt 0 ]] || return 1
+  size="$(stat -Lc %s "$1" 2>/dev/null)" || return 1
+  ((size + 3 * 1024 ** 3 > ram))
 }
 find_llama() {
   {
@@ -665,6 +685,10 @@ else
     mapfile -t ggufs < <(find_gguf)
     if ((${#ggufs[@]})); then
       GGUF="$(choose "Which model should Lily use?" "${ggufs[@]}")"
+      if [[ -n $GGUF ]] && gguf_too_big "$GGUF"; then
+        warn "$GGUF is too big for this computer's RAM ($(($(ram_bytes) / 1024 ** 2)) MiB; it needs the model + ~3 GB free)."
+        warn "Lily may be very slow or fail to start; a ~3B Q4_K_M model such as dolphin3.0-llama3.2-3b-q4_k_m.gguf fits better."
+      fi
     else
       warn "no .gguf model found. Copy one onto this computer (e.g. Dolphin 3.0 Llama 3.2 3B Q4_K_M)"
       warn "and run: lillith setup --gguf /path/to/model.gguf --llama-server /usr/bin/llama-server"

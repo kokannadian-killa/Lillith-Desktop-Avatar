@@ -88,8 +88,8 @@ pub fn default_config_path() -> PathBuf {
 /// The window icon for app icon `id` (its 64 px PNG), if the icon files
 /// are found.
 pub fn window_icon(id: &str) -> Option<std::sync::Arc<egui::IconData>> {
-    let root = lillith_core::icons::icons_dir()?;
-    let png = lillith_core::icons::thumbnail(&root, id, 64)?;
+    let roots = lillith_core::icons::icons_dirs();
+    let png = lillith_core::icons::thumbnail_in(&roots, id, 64)?;
     let img = image::open(png).ok()?.to_rgba8();
     Some(std::sync::Arc::new(egui::IconData {
         width: img.width(),

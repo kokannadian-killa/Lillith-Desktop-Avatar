@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# lillith-uninstall: remove the lillith-bin package and (asked first) your per-user Lillith bits.
+#   lillith-uninstall          ask about the voice kit; keep settings, chat history and memory
+#   lillith-uninstall --purge  also delete settings + chat history + memory (asked again)
+# Never touches your .gguf models. Same as `sudo pacman -R lillith-bin` plus the per-user cleanup.
+set -uo pipefail
+PURGE=0; [[ ${1:-} == --purge ]] && PURGE=1
+[[ $EUID -ne 0 ]] || { echo "Run lillith-uninstall as your normal user (it calls sudo for pacman)." >&2; exit 1; }
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}"; CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
+ask(){ local r=""; [[ -t 0 ]] || return 1; read -r -p "  $1 [y/N] " r || true; [[ ${r,,} == y* ]]; }
+pgrep -x lillith >/dev/null && { echo "==> stopping Lillith"; pkill -x lillith; sleep 1; }
+if command -v kwriteconfig6 >/dev/null; then kwriteconfig6 --file kwinrc --group Plugins --key lillith-bridgeEnabled --delete || true; fi
+[[ -f $DATA/lillith/kwin-blur-exclusion.state && -x /opt/lillith/linux/kwin-blur-exclude.sh ]] && /opt/lillith/linux/kwin-blur-exclude.sh revert || true
+if [[ -d $DATA/lillith-voice ]] && ask "Remove her voice kit ($DATA/lillith-voice, about 1 GB, and lillith-say etc.)?"; then
+  command -v systemctl >/dev/null && systemctl --user disable --now lillith-voice.service >/dev/null 2>&1
+  rm -f -- "$CONF/systemd/user/lillith-voice.service" "$CONF/fish/conf.d/lillith-voice.fish"
+  for b in lillith-say lillith-voiced lillith-chat lillith-piper lillith-listen; do rm -f -- "$HOME/.local/bin/$b"; done
+  rm -rf -- "$DATA/lillith-voice"; echo "  removed her voice"
+fi
+if [[ $PURGE == 1 ]] && ask "Delete settings ($CONF/lillith) and chat history/memory ($DATA/lillith)? This cannot be undone."; then
+  rm -rf -- "$CONF/lillith" "$DATA/lillith"; echo "  removed settings + history"
+else
+  echo "  kept settings ($CONF/lillith) and history ($DATA/lillith)"
+fi
+if pacman -Q lillith-bin >/dev/null 2>&1; then echo "==> sudo pacman -R lillith-bin"; sudo pacman -R lillith-bin; fi
+echo "Done. Python/ffmpeg packages pulled in for her stay installed (remove with pacman -Rs if you want)."

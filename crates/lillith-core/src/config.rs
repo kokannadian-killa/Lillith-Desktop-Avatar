@@ -1384,7 +1384,7 @@ mod tests {
 
     #[test]
     fn icon_key_parses_defaults_and_saves() {
-        assert_eq!(Config::default().icon, "phantomcore-red");
+        assert_eq!(Config::default().icon, "neon-sign");
         let c = Config::from_toml_str("scale = 0.75\n").unwrap();
         assert_eq!(c.icon, crate::icons::DEFAULT_ICON);
         let c = Config::from_toml_str("icon = \"glitch\"\n[chat]\nenabled = true\n").unwrap();
@@ -1394,7 +1394,7 @@ mod tests {
         assert_eq!(c.icon_info().id, crate::icons::DEFAULT_ICON);
         assert!(Config::from_toml_str("icon = 3\n").is_err());
         // the settings template carries the key
-        assert!(crate::menu::settings_template().contains("icon = \"phantomcore-red\""));
+        assert!(crate::menu::settings_template().contains("icon = \"neon-sign\""));
         let dir = std::env::temp_dir().join(format!("lillith-cfg-icon-{}", std::process::id()));
         let p = dir.join("config.toml");
         save_scale(&p, 0.75).unwrap();

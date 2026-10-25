@@ -33,7 +33,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 /// The icon used when config.toml has none (or an unknown id).
-pub const DEFAULT_ICON: &str = "phantomcore-red";
+pub const DEFAULT_ICON: &str = "neon-sign";
 
 const ICONS_TOML: &str = include_str!("../../../branding/icons.toml");
 
@@ -122,41 +122,115 @@ fn is_icons_root(p: &Path) -> bool {
     p.join(d).is_dir() || p.join(format!("{d}.ico")).is_file()
 }
 
-/// Where the icon files are (see the module docs for the order).
+/// Where the icon files are: the first icons root (see the module docs
+/// for the order). Prefer [`icons_dirs`] + [`root_for`] / [`thumbnail_in`]:
+/// a root can be a stale or partial copy (an old zip install's
+/// `~/.local/share/lillith/icons`).
 pub fn icons_dir() -> Option<PathBuf> {
-    icons_dir_candidates()
-        .into_iter()
-        .find(|p| is_icons_root(p))
+    icons_dirs().into_iter().next()
 }
 
-fn icons_dir_candidates() -> Vec<PathBuf> {
+/// Every icons root that exists, in search order, without duplicates.
+pub fn icons_dirs() -> Vec<PathBuf> {
+    let exe = std::env::current_exe().ok();
+    roots_from(icons_dir_candidates_with(
+        &|k| std::env::var_os(k),
+        exe.as_deref(),
+    ))
+}
+
+fn roots_from(cands: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut seen = std::collections::HashSet::new();
+    cands
+        .into_iter()
+        .filter(|p| is_icons_root(p))
+        .filter(|p| seen.insert(std::fs::canonicalize(p).unwrap_or_else(|_| p.clone())))
+        .collect()
+}
+
+/// The first root that has PNGs for `id` (so one stale or partial root
+/// doesn't hide the icon).
+pub fn root_for(roots: &[PathBuf], id: &str) -> Option<PathBuf> {
+    roots
+        .iter()
+        .find(|r| sizes().iter().any(|&n| png_path(r, id, n).is_file()))
+        .cloned()
+}
+
+/// [`thumbnail`] of `id` from the first root in `roots` that has it.
+pub fn thumbnail_in(roots: &[PathBuf], id: &str, min: u32) -> Option<PathBuf> {
+    roots.iter().find_map(|r| thumbnail(r, id, min))
+}
+
+/// Every place an icons root can be, in order (`env` / `exe` injectable
+/// for tests). Installed layouts:
+///
+/// - Arch package: `/usr/bin/lillith-settings` -> `/opt/lillith/bin/`;
+///   the set is in `/usr/share/lillith/icons` and `/opt/lillith/branding/icons`.
+/// - Windows setup: `%LOCALAPPDATA%\Programs\Lillith\lillith-settings.exe`
+///   with `icons\` next to it.
+/// - Source checkout: `branding/icons` (cwd) or `<exe>/../../branding/icons`
+///   (`target/<profile>/`), and the checkout above a custom target dir.
+pub fn icons_dir_candidates_with(
+    env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    exe: Option<&Path>,
+) -> Vec<PathBuf> {
     let mut c = Vec::new();
-    if let Some(p) = std::env::var_os("LILLITH_ICONS_DIR").filter(|v| !v.is_empty()) {
+    if let Some(p) = env("LILLITH_ICONS_DIR").filter(|v| !v.is_empty()) {
         c.push(PathBuf::from(p));
     }
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|e| e.parent().map(Path::to_path_buf));
+    // /usr/bin/x is a symlink to the launcher; the real binary's dir counts.
+    let exe = exe.map(|e| std::fs::canonicalize(e).unwrap_or_else(|_| e.to_path_buf()));
+    let exe_dir = exe.as_deref().and_then(Path::parent).map(Path::to_path_buf);
     if let Some(d) = &exe_dir {
         c.push(d.join("icons"));
+        if let Some(up) = d.parent() {
+            // <prefix>/bin/lillith-settings: <prefix>/share/lillith/icons,
+            // <prefix>/icons, <prefix>/branding/icons (/opt/lillith).
+            c.push(up.join("share").join("lillith").join("icons"));
+            c.push(up.join("icons"));
+            c.push(up.join("branding").join("icons"));
+        }
     }
-    if let Some(d) = data_home() {
+    let data = env("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute());
+    #[cfg(windows)]
+    let data = data.or_else(|| env("LOCALAPPDATA").map(PathBuf::from));
+    let data = data.or_else(|| env("HOME").map(|h| PathBuf::from(h).join(".local/share")));
+    if let Some(d) = data {
         c.push(d.join("lillith").join("icons"));
     }
     #[cfg(unix)]
     {
-        let dirs = std::env::var("XDG_DATA_DIRS")
-            .ok()
+        let dirs = env("XDG_DATA_DIRS")
+            .map(|v| v.to_string_lossy().into_owned())
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
         for d in dirs.split(':').filter(|d| d.starts_with('/')) {
             c.push(Path::new(d).join("lillith").join("icons"));
         }
+        // A session whose XDG_DATA_DIRS leaves out /usr/share (some
+        // launchers/sandboxes set only their own dirs) still finds the package.
+        c.push(PathBuf::from("/usr/share/lillith/icons"));
+        #[cfg(not(target_os = "android"))]
+        c.push(PathBuf::from("/opt/lillith/branding/icons"));
+    }
+    #[cfg(windows)]
+    if let Some(l) = env("LOCALAPPDATA") {
+        let app = PathBuf::from(l).join("Programs").join("Lillith");
+        c.push(app.join("icons"));
+        c.push(app.join("branding").join("icons"));
     }
     c.push(PathBuf::from("branding").join("icons"));
     if let Some(d) = &exe_dir {
         // target/{debug,release}/lillith in a checkout
         c.push(d.join("../../branding/icons"));
+        // a custom CARGO_TARGET_DIR: walk up to a checkout (a dir with
+        // branding/icons.toml next to the icons)
+        for a in d.ancestors().skip(1).take(4) {
+            c.push(a.join("branding").join("icons"));
+        }
     }
     c
 }
@@ -511,7 +585,8 @@ mod tests {
         let ids: Vec<&str> = all().iter().map(|i| i.id.as_str()).collect();
         assert_eq!(ids.len(), 15);
         assert_eq!(default_id(), DEFAULT_ICON);
-        assert_eq!(find(DEFAULT_ICON).unwrap().name, "Phantomcore Red");
+        assert_eq!(find(DEFAULT_ICON).unwrap().name, "Neon Sign");
+        assert_eq!(find("phantomcore-red").unwrap().name, "Phantomcore Red");
         assert_eq!(find("classic").unwrap().name, "Classic");
         let mut dedup = ids.clone();
         dedup.sort_unstable();
@@ -556,7 +631,74 @@ mod tests {
             assert!(res.join(format!("mipmap-xxxhdpi/{m}_fg.png")).is_file());
         }
         let t = thumbnail(&root, DEFAULT_ICON, 100).unwrap();
-        assert!(t.ends_with("phantomcore-red/lillith-128.png"));
+        assert!(t.ends_with(format!("{DEFAULT_ICON}/lillith-128.png")));
+    }
+
+    /// The settings picker's previews: a stale/partial root first (an old
+    /// zip install's ~/.local/share/lillith/icons with only the default)
+    /// must not hide the other icons, and the installed layouts are found.
+    #[test]
+    fn previews_fall_through_a_partial_root_and_find_installed_layouts() {
+        let tmp = std::env::temp_dir().join(format!("lillith-icon-roots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let stale = tmp.join("home/.local/share/lillith/icons");
+        std::fs::create_dir_all(stale.join(DEFAULT_ICON)).unwrap();
+        std::fs::copy(
+            png_path(&repo_icons(), DEFAULT_ICON, 128),
+            png_path(&stale, DEFAULT_ICON, 128),
+        )
+        .unwrap();
+        // /opt/lillith layout: bin/lillith-settings + branding/icons (full set)
+        let opt = tmp.join("opt/lillith");
+        std::fs::create_dir_all(opt.join("bin")).unwrap();
+        std::fs::write(opt.join("bin/lillith-settings"), "").unwrap();
+        let full = opt.join("branding/icons");
+        for i in all() {
+            std::fs::create_dir_all(full.join(&i.id)).unwrap();
+            std::fs::copy(
+                png_path(&repo_icons(), &i.id, 128),
+                png_path(&full, &i.id, 128),
+            )
+            .unwrap();
+        }
+        let home = tmp.join("home");
+        let env = |k: &str| match k {
+            "HOME" => Some(home.clone().into_os_string()),
+            "XDG_DATA_DIRS" => Some(std::ffi::OsString::from("/nonexistent")),
+            _ => None,
+        };
+        let cands = icons_dir_candidates_with(&env, Some(&opt.join("bin/lillith-settings")));
+        let roots = roots_from(cands);
+        let canon = |p: &Path| std::fs::canonicalize(p).unwrap();
+        assert!(roots.iter().any(|r| canon(r) == canon(&full)), "{roots:#?}");
+        assert!(
+            roots.iter().any(|r| canon(r) == canon(&stale)),
+            "{roots:#?}"
+        );
+        for i in all() {
+            let t = thumbnail_in(&roots, &i.id, 96).unwrap_or_else(|| panic!("{}", i.id));
+            assert!(t.is_file());
+            assert!(root_for(&roots, &i.id).is_some());
+        }
+        // Windows layout: icons\<id>\lillith-64/128.png next to the exe.
+        let win = tmp.join("Programs/Lillith");
+        std::fs::create_dir_all(win.join("icons").join(DEFAULT_ICON)).unwrap();
+        std::fs::copy(
+            png_path(&repo_icons(), DEFAULT_ICON, 64),
+            png_path(&win.join("icons"), DEFAULT_ICON, 64),
+        )
+        .unwrap();
+        std::fs::write(win.join("lillith-settings.exe"), "").unwrap();
+        let none = |_: &str| None;
+        let roots = roots_from(icons_dir_candidates_with(
+            &none,
+            Some(&win.join("lillith-settings.exe")),
+        ));
+        assert_eq!(canon(&roots[0]), canon(&win.join("icons")));
+        assert!(thumbnail_in(&roots[..1], DEFAULT_ICON, 96)
+            .unwrap()
+            .ends_with("lillith-64.png"));
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[cfg(unix)]

@@ -124,34 +124,351 @@ pub fn version(conn: &Connection) -> rusqlite::Result<u32> {
 
 /// Applies every pending migration. A DB from a newer build is refused
 /// (never downgraded or clobbered).
+///
+/// Safe to call from several processes at once: the version is re-read
+/// under the write lock, so a second opener never re-runs a migration
+/// another process already applied ("table nodes already exists").
+///
+/// An *unversioned* DB that already has the tables (`user_version = 0`
+/// but `nodes` exists: an earlier build, an interrupted first run, or a
+/// copy restored without its pragma) is adopted in place, never wiped:
+/// the file is first copied to `<db>.bak-<YYYYmmdd-HHMMSS>`, the schema
+/// version is worked out from what is there, missing pieces are created
+/// (`IF NOT EXISTS`), and the usual migrations continue from there.
 pub fn migrate(conn: &mut Connection) -> Result<u32, Error> {
     migrate_with(conn, MIGRATIONS)
 }
 
 pub(crate) fn migrate_with(conn: &mut Connection, migrations: &[&str]) -> Result<u32, Error> {
-    let mut v = version(conn)?;
     let latest = migrations.len() as u32;
+    let v = version(conn)?;
     if v > latest {
         return Err(Error::FutureSchema {
             found: v,
             supported: latest,
         });
     }
-    while v < latest {
-        // IMMEDIATE: take the write lock up front (two processes opening an
-        // old DB at once serialize instead of failing mid-upgrade).
+    if v == latest {
+        return Ok(v);
+    }
+    if v == 0 && has_table(conn, "nodes")? {
+        adopt_unversioned(conn, migrations)?;
+    }
+    loop {
+        // IMMEDIATE: take the write lock up front, then re-read the version
+        // under it (another process may have migrated meanwhile).
         let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let v = version(&tx)?;
+        if v > latest {
+            return Err(Error::FutureSchema {
+                found: v,
+                supported: latest,
+            });
+        }
+        if v == latest {
+            tx.commit()?;
+            return Ok(v);
+        }
         tx.execute_batch(migrations[v as usize])?;
         tx.pragma_update(None, "user_version", v + 1)?;
         tx.commit()?;
-        v += 1;
     }
-    Ok(v)
+}
+
+fn has_table(conn: &Connection, name: &str) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [name],
+        |r| r.get::<_, i64>(0),
+    )
+    .map(|n| n > 0)
+}
+
+fn columns(conn: &Connection, table: &str) -> rusqlite::Result<Vec<String>> {
+    let mut st = conn.prepare(&format!("PRAGMA table_info(\"{table}\")"))?;
+    let cols = st
+        .query_map([], |r| r.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(cols)
+}
+
+/// `CREATE TABLE x` -> `CREATE TABLE IF NOT EXISTS x` (and the same for
+/// indexes, virtual tables and triggers). A fresh DB gets exactly the same
+/// schema from either form.
+fn idempotent(sql: &str) -> String {
+    sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")
+        .replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ")
+        .replace(
+            "CREATE VIRTUAL TABLE ",
+            "CREATE VIRTUAL TABLE IF NOT EXISTS ",
+        )
+        .replace("CREATE TRIGGER ", "CREATE TRIGGER IF NOT EXISTS ")
+}
+
+/// The schema version an unversioned DB already has, from its tables.
+fn detect_version(conn: &Connection) -> rusqlite::Result<u32> {
+    Ok(if has_table(conn, "notes")? {
+        3
+    } else if columns(conn, "nodes")?.iter().any(|c| c == "updated_at") {
+        2
+    } else {
+        1
+    })
+}
+
+/// Copies the DB file to `<db>.bak-<local date-time>` (a consistent copy
+/// via `VACUUM INTO`, WAL included). In-memory DBs have nothing to copy.
+fn backup(conn: &Connection) -> Result<Option<std::path::PathBuf>, Error> {
+    let Some(path) = conn.path().filter(|p| !p.is_empty()) else {
+        return Ok(None);
+    };
+    let stamp: String = conn.query_row(
+        "SELECT strftime('%Y%m%d-%H%M%S', 'now', 'localtime')",
+        [],
+        |r| r.get(0),
+    )?;
+    let mut bak = std::path::PathBuf::from(format!("{path}.bak-{stamp}"));
+    let mut n = 1;
+    while bak.exists() {
+        bak = std::path::PathBuf::from(format!("{path}.bak-{stamp}-{n}"));
+        n += 1;
+    }
+    conn.execute("VACUUM INTO ?1", [bak.to_string_lossy()])?;
+    Ok(Some(bak))
+}
+
+/// Adopts an unversioned DB that already has tables (see [`migrate`]).
+fn adopt_unversioned(conn: &mut Connection, migrations: &[&str]) -> Result<(), Error> {
+    const V1_NODES: &[&str] = &[
+        "id",
+        "kind",
+        "key",
+        "label",
+        "detail",
+        "strength",
+        "access_count",
+        "created_at",
+        "last_seen",
+    ];
+    let have = columns(conn, "nodes")?;
+    let missing: Vec<&str> = V1_NODES
+        .iter()
+        .copied()
+        .filter(|c| !have.iter().any(|h| h == c))
+        .collect();
+    let bak = backup(conn)?;
+    if let Some(b) = &bak {
+        tracing::warn!(
+            backup = %b.display(),
+            "memory db: unversioned (user_version 0) but its tables exist; backed up, adopting in place"
+        );
+    }
+    if !missing.is_empty() {
+        return Err(Error::LegacySchema(format!(
+            "nodes lacks {}",
+            missing.join(", ")
+        )));
+    }
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    if version(&tx)? != 0 {
+        // Another process adopted it meanwhile.
+        return Ok(tx.commit()?);
+    }
+    let found = detect_version(&tx)?.min(migrations.len() as u32);
+    let had_fts = has_table(&tx, "nodes_fts")?;
+    for (i, m) in migrations.iter().enumerate().take(found as usize) {
+        if i == 0 {
+            // v1 has triggers (`;` inside BEGIN..END): run it as one batch.
+            tx.execute_batch(&idempotent(m))?;
+            continue;
+        }
+        // Later migrations: plain statements. ADD COLUMN only when the
+        // column is missing; a backfill UPDATE only runs right after an
+        // ADD COLUMN it belongs to (never rewrites kept data).
+        let mut added = false;
+        for stmt in m.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+            let up = stmt.to_ascii_uppercase();
+            if up.starts_with("ALTER TABLE") {
+                let w: Vec<&str> = stmt.split_whitespace().collect();
+                // ALTER TABLE <t> ADD COLUMN <c> ...
+                if w.len() >= 6 && w[3].eq_ignore_ascii_case("ADD") {
+                    let (t, c) = (w[2], w[5]);
+                    if columns(&tx, t)?.iter().any(|h| h == c) {
+                        added = false;
+                        continue;
+                    }
+                }
+                tx.execute_batch(stmt)?;
+                added = true;
+            } else if up.starts_with("UPDATE") {
+                if added {
+                    tx.execute_batch(stmt)?;
+                }
+            } else {
+                tx.execute_batch(&idempotent(stmt))?;
+            }
+        }
+    }
+    if !had_fts && found >= 1 {
+        // The search index was missing: rebuild it from the kept rows.
+        tx.execute_batch("INSERT INTO nodes_fts(nodes_fts) VALUES ('rebuild');")?;
+    }
+    tx.pragma_update(None, "user_version", found)?;
+    tx.commit()?;
+    tracing::info!(version = found, "memory db: adopted (rows kept)");
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn temp_db(tag: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "lillith-schema-{tag}-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&d).unwrap();
+        d.join("memory.db")
+    }
+
+    fn baks(db: &std::path::Path) -> Vec<std::path::PathBuf> {
+        let name = db.file_name().unwrap().to_string_lossy().to_string();
+        std::fs::read_dir(db.parent().unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with(&format!("{name}.bak-"))
+            })
+            .collect()
+    }
+
+    /// Ko's case: an older DB file with the tables but `user_version = 0`
+    /// ("table nodes already exists; learning off"). It is backed up, then
+    /// adopted in place with every row kept.
+    #[test]
+    fn unversioned_existing_db_is_backed_up_and_adopted_keeping_rows() {
+        for keep in 1..=3usize {
+            let db = temp_db(&format!("adopt{keep}"));
+            {
+                let mut c = Connection::open(&db).unwrap();
+                migrate_with(&mut c, &MIGRATIONS[..keep]).unwrap();
+                c.execute_batch(
+                    "INSERT INTO nodes(kind,key,label,strength,created_at,last_seen)
+                         VALUES ('fact','k','Ko likes tea',1.0,100.0,500.0);
+                     INSERT INTO meta(key,value) VALUES ('last_maintain','42');",
+                )
+                .unwrap();
+                if keep >= 2 {
+                    c.execute_batch("UPDATE nodes SET updated_at = 321.0")
+                        .unwrap();
+                }
+                // The broken state: tables there, version pragma lost.
+                c.pragma_update(None, "user_version", 0).unwrap();
+            }
+            let mut c = Connection::open(&db).unwrap();
+            assert_eq!(migrate(&mut c).unwrap(), LATEST, "keep={keep}");
+            let label: String = c
+                .query_row("SELECT label FROM nodes WHERE key='k'", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(label, "Ko likes tea");
+            let upd: f64 = c
+                .query_row("SELECT updated_at FROM nodes WHERE key='k'", [], |r| {
+                    r.get(0)
+                })
+                .unwrap();
+            // v1 rows get the backfill; existing v2 values are never rewritten.
+            assert_eq!(upd, if keep >= 2 { 321.0 } else { 100.0 }, "keep={keep}");
+            let hits: i64 = c
+                .query_row(
+                    "SELECT count(*) FROM nodes_fts WHERE nodes_fts MATCH 'tea'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(hits, 1, "search index still finds the kept row");
+            let m: String = c
+                .query_row(
+                    "SELECT value FROM meta WHERE key='last_maintain'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(m, "42");
+            let b = baks(&db);
+            assert_eq!(b.len(), 1, "one backup before touching it: {b:?}");
+            let bc = Connection::open(&b[0]).unwrap();
+            let n: i64 = bc
+                .query_row("SELECT count(*) FROM nodes", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "the backup holds the old rows");
+            assert_eq!(migrate(&mut c).unwrap(), LATEST, "second open is a no-op");
+            assert_eq!(baks(&db).len(), 1, "no second backup");
+            let _ = std::fs::remove_dir_all(db.parent().unwrap());
+        }
+    }
+
+    #[test]
+    fn unknown_legacy_layout_is_left_untouched() {
+        let db = temp_db("legacy");
+        {
+            let c = Connection::open(&db).unwrap();
+            c.execute_batch(
+                "CREATE TABLE nodes (id INTEGER PRIMARY KEY, name TEXT);
+                 INSERT INTO nodes(name) VALUES ('keep me');",
+            )
+            .unwrap();
+        }
+        let mut c = Connection::open(&db).unwrap();
+        assert!(matches!(migrate(&mut c), Err(Error::LegacySchema(_))));
+        assert_eq!(version(&c).unwrap(), 0);
+        let name: String = c
+            .query_row("SELECT name FROM nodes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(name, "keep me");
+        assert_eq!(baks(&db).len(), 1);
+        let _ = std::fs::remove_dir_all(db.parent().unwrap());
+    }
+
+    /// Two openers of a fresh file: the second must not re-run v1.
+    #[test]
+    fn concurrent_first_open_does_not_rerun_v1() {
+        let db = temp_db("race");
+        let mut a = Connection::open(&db).unwrap();
+        let mut b = Connection::open(&db).unwrap();
+        // b read version 0 before a migrated (the old race window).
+        assert_eq!(version(&b).unwrap(), 0);
+        assert_eq!(migrate(&mut a).unwrap(), LATEST);
+        assert_eq!(migrate(&mut b).unwrap(), LATEST);
+        let _ = std::fs::remove_dir_all(db.parent().unwrap());
+    }
+
+    #[test]
+    fn idempotent_rewrite_gives_the_same_fresh_schema() {
+        let mut a = Connection::open_in_memory().unwrap();
+        migrate(&mut a).unwrap();
+        let b = Connection::open_in_memory().unwrap();
+        for m in MIGRATIONS {
+            b.execute_batch(&idempotent(m)).unwrap();
+        }
+        let dump = |c: &Connection| -> Vec<(String, String)> {
+            let mut st = c
+                .prepare("SELECT type, name FROM sqlite_master ORDER BY type, name")
+                .unwrap();
+            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        assert_eq!(dump(&a), dump(&b));
+    }
 
     #[test]
     fn fresh_db_reaches_latest_and_is_idempotent() {

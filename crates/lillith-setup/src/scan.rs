@@ -478,7 +478,7 @@ fn walk(
     }
 }
 
-fn is_later_shard(name: &str) -> bool {
+pub(crate) fn is_later_shard(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower
         .rsplit_once("-of-")

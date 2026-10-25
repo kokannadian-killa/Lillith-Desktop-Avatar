@@ -53,6 +53,10 @@ pub enum Error {
     FutureSchema { found: u32, supported: u32 },
     #[error("no data directory (HOME / XDG_DATA_HOME unset)")]
     NoDataDir,
+    /// An unversioned DB whose tables don't match any schema this build
+    /// knows. Nothing was changed (a backup copy was made first).
+    #[error("memory db has an unknown older layout ({0}); left untouched")]
+    LegacySchema(String),
 }
 
 /// Node kinds in the graph.

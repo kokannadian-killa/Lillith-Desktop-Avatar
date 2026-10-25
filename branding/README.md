@@ -9,9 +9,9 @@ setup screen). The default is **Phantomcore Red**.
 |---|---|
 | `neon-portrait` | Neon Portrait |
 | `wink-chibi` | Wink Chibi |
-| `phantomcore-red` | Phantomcore Red (default) |
+| `phantomcore-red` | Phantomcore Red |
 | `demonos-green-chibi` | DemonOS Green Chibi |
-| `neon-sign` | Neon Sign |
+| `neon-sign` | Neon Sign (default) |
 | `demonos-emblem` | DemonOS Emblem |
 | `hooded-phantom` | Hooded Phantom |
 | `green-hologram` | Green Hologram |

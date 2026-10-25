@@ -50,6 +50,7 @@ pub mod launch;
 pub mod local;
 pub mod modelfile;
 pub mod paths;
+pub mod pick;
 pub mod scan;
 pub mod template;
 pub mod validate;

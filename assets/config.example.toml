@@ -22,7 +22,7 @@
 # autostart = false      # true: writes ~/.config/autostart/lillith.desktop
 # muted = false          # mutes SFX and voice (legacy fallback for [voice] mute)
 # voice_enabled = true   # legacy fallback for [voice] enabled
-# icon = "phantomcore-red"  # app icon: menu entry + desktop / Start-menu shortcuts.
+# icon = "neon-sign"        # app icon: menu entry + desktop / Start-menu shortcuts.
 #                         # Settings > Icon, right-click > Icon…, or `lillith icon ID`.
 # seasonal_outfit = "auto"  # auto (by date) | off (base outfit) | an outfit id from
 #                           # assets/seasons.toml. Right-click > Avatar > Outfit…

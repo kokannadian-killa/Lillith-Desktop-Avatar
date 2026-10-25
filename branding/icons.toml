@@ -2,7 +2,7 @@
 # Paths are relative to this file. `default` is used when config.toml has
 # no `icon` key or names an unknown id.
 
-default = "phantomcore-red"
+default = "neon-sign"
 sizes = [16, 24, 32, 48, 64, 128, 256]
 
 [[icon]]

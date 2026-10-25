@@ -1,0 +1,8 @@
+post_install() {
+  cat <<'MSG'
+==> Lillith is installed in /opt/lillith (232 clips, art-kit, voice kit, llama-server).
+    Per user (no root): run   lillith-firstrun   (voice, your .gguf, KWin bridge).
+    Lillith-Install.sh already ran it for you. Uninstall: lillith-uninstall
+MSG
+}
+post_upgrade() { echo "==> Restart Lillith to use the new version (re-run lillith-firstrun if her voice changed)."; }

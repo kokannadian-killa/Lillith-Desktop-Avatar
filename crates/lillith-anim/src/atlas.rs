@@ -611,14 +611,32 @@ impl Manifest {
 }
 
 /// Finds the generated set's `manifest.toml`: `$LILLITH_MANIFEST`, then
-/// `./assets/generated/manifest.toml`, then
+/// `./assets/generated/manifest.toml`, (Windows) next to `lillith.exe` and
+/// `%LOCALAPPDATA%\lillith\generated`, then
 /// `$XDG_DATA_HOME/lillith/generated/manifest.toml` (default
 /// `~/.local/share/...`), then (Unix) `<dir>/lillith/generated/manifest.toml`
-/// for each `$XDG_DATA_DIRS` entry (default `/usr/local/share:/usr/share`).
-/// Returns the first that exists.
+/// for each `$XDG_DATA_DIRS` entry (default `/usr/local/share:/usr/share`),
+/// and last the standard install locations ([`install_manifest_paths`]:
+/// `<exe>/../assets/generated` and `/opt/lillith` on Linux,
+/// `%LOCALAPPDATA%\Programs\Lillith` on Windows, the app's files dir on
+/// Android). Returns the first that exists.
 pub fn default_manifest_path() -> Option<PathBuf> {
+    manifest_candidates_with(
+        &|k| std::env::var_os(k),
+        std::env::current_exe().ok().as_deref(),
+    )
+    .into_iter()
+    .find(|p| p.is_file())
+}
+
+/// Every place [`default_manifest_path`] looks, in order (`env` and `exe`
+/// injectable for tests).
+pub fn manifest_candidates_with(
+    env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    exe: Option<&std::path::Path>,
+) -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Some(p) = std::env::var_os("LILLITH_MANIFEST") {
+    if let Some(p) = env("LILLITH_MANIFEST").filter(|v| !v.is_empty()) {
         candidates.push(PathBuf::from(p));
     }
     candidates.push(PathBuf::from("assets/generated/manifest.toml"));
@@ -626,13 +644,10 @@ pub fn default_manifest_path() -> Option<PathBuf> {
     // next to `lillith.exe`, then `%LOCALAPPDATA%\lillith\generated`.
     #[cfg(windows)]
     {
-        if let Some(dir) = std::env::current_exe()
-            .ok()
-            .and_then(|e| e.parent().map(|d| d.to_path_buf()))
-        {
+        if let Some(dir) = exe.and_then(|e| e.parent()) {
             candidates.push(dir.join("assets").join("generated").join("manifest.toml"));
         }
-        if let Some(l) = std::env::var_os("LOCALAPPDATA") {
+        if let Some(l) = env("LOCALAPPDATA") {
             candidates.push(
                 PathBuf::from(l)
                     .join("lillith")
@@ -641,9 +656,9 @@ pub fn default_manifest_path() -> Option<PathBuf> {
             );
         }
     }
-    let data = std::env::var_os("XDG_DATA_HOME")
+    let data = env("XDG_DATA_HOME")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
+        .or_else(|| env("HOME").map(|h| PathBuf::from(h).join(".local/share")));
     if let Some(d) = data {
         candidates.push(d.join("lillith/generated/manifest.toml"));
     }
@@ -651,16 +666,61 @@ pub fn default_manifest_path() -> Option<PathBuf> {
     // `/usr/local/share:/usr/share`.
     #[cfg(unix)]
     candidates.extend(
-        system_data_dirs(std::env::var_os("XDG_DATA_DIRS"))
+        system_data_dirs(env("XDG_DATA_DIRS"))
             .into_iter()
             .map(|d| d.join("lillith/generated/manifest.toml")),
     );
-    candidates.into_iter().find(|p| p.is_file())
+    candidates.extend(install_manifest_paths(env, exe));
+    let mut seen = std::collections::HashSet::new();
+    candidates.retain(|p| seen.insert(p.clone()));
+    candidates
 }
 
-/// `$XDG_DATA_DIRS` as absolute paths (empty or unset: the XDG default
-/// `/usr/local/share:/usr/share`).
-#[cfg(unix)]
+/// The standard install locations' `manifest.toml`, used when nothing
+/// else is found and no `--manifest` / `$LILLITH_MANIFEST` is given:
+///
+/// - the package layout around the binary: `<exe dir>/../assets/generated`
+///   (`/opt/lillith/bin/lillith` -> `/opt/lillith/assets/generated`) and
+///   `<exe dir>/assets/generated` (portable zip, Windows install);
+/// - Linux: `/opt/lillith/assets/generated/manifest.toml` (lillith-bin);
+/// - Windows: `%LOCALAPPDATA%\Programs\Lillith\assets\generated\manifest.toml`
+///   (the per-user setup);
+/// - Android: the app's files dir (`/data/user/0/<pkg>/files/generated`).
+pub fn install_manifest_paths(
+    env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    exe: Option<&std::path::Path>,
+) -> Vec<PathBuf> {
+    let gen = |root: PathBuf| root.join("assets").join("generated").join("manifest.toml");
+    let mut v = Vec::new();
+    if let Some(dir) = exe.and_then(|e| e.parent()) {
+        v.push(gen(dir.to_path_buf()));
+        if let Some(up) = dir.parent() {
+            v.push(gen(up.to_path_buf()));
+        }
+    }
+    #[cfg(all(unix, not(target_os = "android")))]
+    v.push(gen(PathBuf::from(LINUX_INSTALL_DIR)));
+    #[cfg(windows)]
+    if let Some(l) = env("LOCALAPPDATA") {
+        v.push(gen(PathBuf::from(l).join("Programs").join("Lillith")));
+    }
+    #[cfg(target_os = "android")]
+    for base in ["/data/user/0", "/data/data"] {
+        v.push(
+            PathBuf::from(base)
+                .join(ANDROID_PACKAGE)
+                .join("files/generated/manifest.toml"),
+        );
+    }
+    let _ = env;
+    v
+}
+
+/// Where the Arch package (lillith-bin) installs her.
+pub const LINUX_INSTALL_DIR: &str = "/opt/lillith";
+/// The Android application id (its files dir holds `generated/`).
+pub const ANDROID_PACKAGE: &str = "com.kokannadian.lillith";
+
 fn system_data_dirs(var: Option<std::ffi::OsString>) -> Vec<PathBuf> {
     let dirs: Vec<PathBuf> = var
         .map(|v| std::env::split_paths(&v).collect::<Vec<_>>())
@@ -688,6 +748,48 @@ mod tests {
     use super::*;
 
     #[cfg(unix)]
+    #[test]
+    fn install_locations_are_the_last_resort() {
+        let env = |k: &str| match k {
+            "HOME" => Some(std::ffi::OsString::from("/home/ko")),
+            _ => None,
+        };
+        let exe = std::path::Path::new("/opt/lillith/bin/lillith");
+        let c = manifest_candidates_with(&env, Some(exe));
+        let opt = PathBuf::from("/opt/lillith/assets/generated/manifest.toml");
+        let user = PathBuf::from("/home/ko/.local/share/lillith/generated/manifest.toml");
+        let pu = c.iter().position(|p| *p == user).expect("user data dir");
+        let po = c
+            .iter()
+            .position(|p| *p == opt)
+            .expect("/opt/lillith fallback");
+        assert!(pu < po, "{c:#?}");
+        // No duplicates (exe/.. and the fixed /opt/lillith are the same here).
+        assert_eq!(c.iter().filter(|p| **p == opt).count(), 1);
+        // $LILLITH_MANIFEST still wins.
+        let env2 = |k: &str| (k == "LILLITH_MANIFEST").then(|| "/x/m.toml".into());
+        assert_eq!(
+            manifest_candidates_with(&env2, None)[0],
+            PathBuf::from("/x/m.toml")
+        );
+    }
+
+    #[test]
+    fn package_layout_next_to_the_binary_is_found() {
+        // A self-contained install tree: <root>/bin/lillith + <root>/assets/generated.
+        let root = std::env::temp_dir().join(format!("lillith-atlas-inst-{}", std::process::id()));
+        let gen = root.join("assets/generated");
+        std::fs::create_dir_all(&gen).unwrap();
+        std::fs::write(gen.join("manifest.toml"), "").unwrap();
+        let exe = root.join("bin").join("lillith");
+        let none = |_: &str| None;
+        let found = install_manifest_paths(&none, Some(&exe))
+            .into_iter()
+            .find(|p| p.is_file());
+        assert_eq!(found, Some(gen.join("manifest.toml")));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn system_data_dirs_default_and_override() {
         let def = system_data_dirs(None);

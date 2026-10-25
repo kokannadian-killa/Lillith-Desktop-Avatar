@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# lillith-firstrun: per-user setup for the lillith-bin package (no root, no downloads).
+#   - moves stale lillith programs aside (~/.cargo/bin, ~/.local/bin, PATH dirs before /usr/bin)
+#     to <name>.old-<date>, so /usr/bin/lillith is what runs; nothing is deleted
+#   - installs her offline voice kit from /opt/lillith and enables + starts lillith-voice.service
+#   - picks your local model (~/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf first, then a Dolphin,
+#     then the smallest that fits in RAM; warns if too big) and writes ~/.config/lillith/config.toml;
+#     llama-server = the bundled one, loopback 127.0.0.1:8080 only
+#   - menu entry + desktop shortcut (trusted), her icon; KWin bridge (Plasma 6), no force-blur
+# Options: --gguf FILE   --no-voice   --no-desktop   -y/--yes (take defaults)
+# Safe to re-run any time. Never downloads anything, never touches your .gguf files.
+set -euo pipefail
+OPT="${LILLITH_OPT:-/opt/lillith}"; SYSBIN="${LILLITH_SYSBIN:-/usr/bin}"
+YES=0 GGUF="${LILLITH_GGUF:-}" VOICE=1 DESK=1
+while [[ $# -gt 0 ]]; do case "$1" in
+  --gguf) GGUF="${2:?--gguf needs a file}"; shift ;; --gguf=*) GGUF="${1#*=}" ;;
+  --no-voice) VOICE=0 ;; --no-desktop) DESK=0 ;; -y|--yes) YES=1 ;;
+  -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *) echo "unknown option: $1" >&2; exit 2 ;; esac; shift; done
+[[ $EUID -ne 0 ]] || { echo "Run lillith-firstrun as your normal user, not root." >&2; exit 1; }
+B=$'\e[1m' G=$'\e[32m' Y=$'\e[33m' N=$'\e[0m'
+step(){ printf '\n%s==> %s%s\n' "$B" "$*" "$N"; }; ok(){ printf '  %s✓%s %s\n' "$G" "$N" "$*"; }; warn(){ printf '  %s!%s %s\n' "$Y" "$N" "$*"; }
+ask(){ local d=${2:-y} r=""; [[ $YES == 1 || ! -t 0 ]] && { [[ $d == y ]]; return; }; read -r -p "  $1 [$( [[ $d == y ]] && echo Y/n || echo y/N )] " r || true; r=${r,,}; [[ -z $r ]] && r=$d; [[ $r == y* ]]; }
+have(){ command -v "$1" >/dev/null 2>&1; }
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}"; CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
+HELPER="$OPT/launch/lillith-shadows.sh"; [[ -f $HELPER ]] || HELPER="$(dirname "$(readlink -f "$0")")/lillith-shadows.sh"
+# shellcheck source=lillith-shadows.sh
+. "$HELPER"
+
+step "1/5 Older installs that would run instead of the package"
+lillith_move_shadows
+OLD=0
+for f in "$DATA/applications/lillith.desktop"; do       # an old per-user menu entry hides the package's
+  [[ -e $f && ! -L $f ]] || continue
+  [[ $OLD == 1 ]] || { BK="$DATA/lillith/old-zip-install-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$BK"; OLD=1; }
+  mv -- "$f" "$BK/" && ok "moved $f -> $BK/ (so the packaged menu entry is used)"
+done
+if [[ -f $DATA/lillith/generated/manifest.toml ]]; then
+  warn "your old animation copy $DATA/lillith/generated is no longer used (the package's clips are)."
+  warn "  free ~1.5 GB later if you like: rm -r '$DATA/lillith/generated'"
+fi
+
+step "2/5 Her offline voice (bundled kit, nothing downloaded)"
+if [[ $VOICE == 1 ]]; then
+  if bash "$OPT/tools/lillith-voice/install.sh" --wheels "$OPT/tools/lillith-voice/wheels" --systemd; then
+    ok "voice kit installed (lillith-say \"hi\")"
+  else warn "voice setup failed (see above). Retry: lillith-firstrun   (she still works, just without her own voice)"; fi
+  if have systemctl && [[ -f $CONF/systemd/user/lillith-voice.service ]]; then
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+    if systemctl --user enable --now lillith-voice.service >/dev/null 2>&1; then
+      ok "voice daemon: lillith-voice.service enabled and started (systemctl --user status lillith-voice)"
+    else
+      warn "couldn't start lillith-voice.service (no user session bus?). Later: systemctl --user enable --now lillith-voice"
+    fi
+  fi
+else ok "skipped (--no-voice)"; fi
+
+step "3/5 Your local model (loopback 127.0.0.1:8080 only, no model is ever downloaded)"
+if [[ -n $GGUF ]]; then
+  "$SYSBIN/lillith" setup --gguf "$GGUF" && ok "model: $GGUF"
+else
+  "$SYSBIN/lillith" setup --auto-gguf || warn "model setup failed (see above). Later: lillith setup --gguf /path/to/model.gguf"
+fi
+ok "llama-server: the bundled one in $OPT/bundle/llama (127.0.0.1:8080)"
+
+step "4/5 App menu, desktop shortcut and icon"
+"$SYSBIN/lillith" icon --reapply >/dev/null 2>&1 && ok "icon: $("$SYSBIN/lillith" icon 2>/dev/null | head -1)" || true
+if [[ $DESK == 1 ]]; then lillith_desktop_shortcut "${LILLITH_DESKTOP_FILE:-/usr/share/applications/lillith.desktop}" || true
+else ok "desktop shortcut skipped (--no-desktop)"; fi
+have update-desktop-database && update-desktop-database -q "$DATA/applications" 2>/dev/null || true
+have kbuildsycoca6 && kbuildsycoca6 >/dev/null 2>&1 || true
+
+step "5/5 Plasma: KWin bridge + blur"
+if have kwriteconfig6; then
+  kwriteconfig6 --file kwinrc --group Plugins --key lillith-bridgeEnabled true
+  have qdbus6 && qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+  ok "KWin bridge enabled (she can perch on windows)"
+  if have kreadconfig6 && ! "$OPT/linux/kwin-blur-exclude.sh" check >/dev/null 2>&1; then
+    if ask "Keep KDE's force-blur from drawing a dark box behind her?" y; then
+      "$OPT/linux/kwin-blur-exclude.sh" apply >/dev/null 2>&1 && ok "excluded from force blur" || warn "blur exclude failed (see $OPT/linux/kwin-blur-exclude.sh)"
+    fi
+  fi
+else
+  warn "not Plasma 6 (no kwriteconfig6): skipped; she sits on the screen bottom instead of windows"
+fi
+printf '\n%sDone.%s Start her from the desktop or app menu (Lillith), or run: lillith    Settings: lillith-settings\n' "$G" "$N"
