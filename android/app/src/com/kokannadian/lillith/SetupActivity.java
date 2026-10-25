@@ -15,8 +15,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
+import android.text.InputType;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -33,7 +35,8 @@ import java.io.OutputStream;
 /**
  * First-run setup: overlay permission, notifications, the local GGUF model
  * (side-loaded by the user, copied into app storage; nothing is downloaded),
- * her size, then start/hide the overlay. Also offers a pinned home-screen
+ * her size, the one-time clip-pack download (only when this APK carries part
+ * of her clips, see {@link ClipPack}), then start/hide the overlay. Also offers a pinned home-screen
  * shortcut (once, after her first start; plus a button) where the launcher
  * supports it, and the launcher-icon picker (one activity-alias per icon in
  * the manifest; picking enables that alias and disables the others).
@@ -41,6 +44,7 @@ import java.io.OutputStream;
 public final class SetupActivity extends Activity {
     private static final int REQ_PICK_MODEL = 10;
     private static final int REQ_NOTIFY = 11;
+    private static final int REQ_PICK_PACK = 12;
 
     private TextView overlayStatus, notifyStatus, modelStatus, sizeLabel, startStatus;
     private Button overlayBtn, notifyBtn, pickBtn, removeBtn, startBtn;
@@ -48,6 +52,10 @@ public final class SetupActivity extends Activity {
     private TextView iconStatus;
     private ImageButton[] iconBtns;
     private boolean busy;
+    private TextView packStatus;
+    private EditText packToken;
+    private Button packBtn, packCancel, packPick;
+    private final boolean[] packCancelFlag = new boolean[1];
 
     @Override
     protected void onCreate(Bundle b) {
@@ -80,8 +88,8 @@ public final class SetupActivity extends Activity {
 
         col.addView(title("3. Local chat model (optional)", 18));
         col.addView(text("Pick a .gguf model you copied onto this phone (USB, file manager). "
-                + "Lily runs it with llama.cpp right here on the device. Nothing is downloaded, "
-                + "and nothing leaves the phone (this app has no internet permission). "
+                + "Lily runs it with llama.cpp right here on the device. The model is never "
+                + "downloaded and chat never leaves the phone. "
                 + "A 1-4B model at Q4 is a good fit for most phones."));
         modelStatus = text("");
         col.addView(modelStatus);
@@ -127,7 +135,38 @@ public final class SetupActivity extends Activity {
         col.addView(iconStatus);
         col.addView(iconPicker(dp));
 
-        col.addView(title("6. Go", 18));
+        ClipPack.Info pack = ClipPack.info(this);
+        if (pack != null) {
+            col.addView(title("6. The rest of her clips (once)", 18));
+            col.addView(text(pack.clips + " of her " + pack.totalClips + " clips didn't fit inside the app. "
+                    + "Download them once (" + (pack.size / 1_000_000) + " MB) from your GitHub release "
+                    + pack.tag + ". The repo is private, so paste a GitHub token that can read "
+                    + pack.repo + ". It's used for this download only and never saved. "
+                    + "Or download " + pack.asset + " from that release in your browser and pick it. "
+                    + "She works without them meanwhile, and a dropped connection resumes."));
+            packStatus = text("");
+            col.addView(packStatus);
+            packToken = new EditText(this);
+            packToken.setHint("GitHub token");
+            packToken.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            packToken.setSaveEnabled(false);
+            if (Build.VERSION.SDK_INT >= 26) packToken.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+            col.addView(packToken);
+            packBtn = button("Download the rest of her clips", v -> downloadPack());
+            col.addView(packBtn);
+            packPick = button("Or pick " + pack.asset + " you downloaded…", v -> {
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("*/*");
+                startActivityForResult(i, REQ_PICK_PACK);
+            });
+            col.addView(packPick);
+            packCancel = button("Cancel download", v -> packCancelFlag[0] = true);
+            packCancel.setVisibility(View.GONE);
+            col.addView(packCancel);
+        }
+
+        col.addView(title(pack != null ? "7. Go" : "6. Go", 18));
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setVisibility(View.GONE);
         col.addView(progress);
@@ -174,6 +213,14 @@ public final class SetupActivity extends Activity {
             iconBtns[i].setAlpha(on ? 1f : 0.55f);
             iconBtns[i].setSelected(on);
             iconBtns[i].setBackgroundColor(on ? 0xFFC4001A : 0x00000000);
+        }
+        if (packStatus != null) {
+            boolean have = ClipPack.installed(this);
+            if (!busy) packStatus.setText(have ? "✓ All her clips are installed" : "Not downloaded yet.");
+            packBtn.setEnabled(!have && !busy);
+            packPick.setEnabled(!have && !busy);
+            packPick.setVisibility(have ? View.GONE : View.VISIBLE);
+            packToken.setVisibility(have ? View.GONE : View.VISIBLE);
         }
         startBtn.setText(OverlayService.running ? "Hide Lillith" : "Start Lillith");
         startBtn.setEnabled(overlay && !busy);
@@ -319,9 +366,77 @@ public final class SetupActivity extends Activity {
         }).start();
     }
 
+    /** One-time clip-pack download (token from the masked field, held only for this call). */
+    private void downloadPack() {
+        String token = packToken.getText().toString();
+        packToken.setText("");
+        if (token.trim().isEmpty()) {
+            packStatus.setText("Paste a GitHub token first.");
+            return;
+        }
+        runPack(token, null);
+    }
+
+    /** Downloads (token != null) or imports (uri != null) the clip pack off the UI thread. */
+    private void runPack(String token, Uri uri) {
+        busy = true;
+        packCancelFlag[0] = false;
+        packCancel.setVisibility(View.VISIBLE);
+        progress.setVisibility(View.VISIBLE);
+        refresh();
+        packStatus.setText("Connecting to GitHub…");
+        new Thread(() -> {
+            String err = null;
+            try {
+                // her own clips first, so the pack lands next to them
+                AssetInstaller.install(this, null);
+                ClipPack.Progress pr = (what, done, total) -> runOnUiThread(() -> {
+                    progress.setMax(1000);
+                    progress.setProgress(total > 0 ? (int) (done * 1000 / total) : 0);
+                    packStatus.setText(total > 1000
+                            ? String.format("%s %d / %d MB", what, done / 1_000_000, total / 1_000_000)
+                            : what + (total > 1 ? " " + done + "/" + total : ""));
+                });
+                if (uri != null) {
+                    try (InputStream in = getContentResolver().openInputStream(uri)) {
+                        if (in == null) throw new java.io.IOException("can't open that file");
+                        ClipPack.importFrom(this, in, pr, packCancelFlag);
+                    }
+                } else {
+                    ClipPack.download(this, token, pr, packCancelFlag);
+                }
+            } catch (Exception e) {
+                err = e.getMessage();
+            }
+            final String fe = err;
+            runOnUiThread(() -> {
+                busy = false;
+                progress.setVisibility(View.GONE);
+                packCancel.setVisibility(View.GONE);
+                refresh();
+                if (fe != null) {
+                    packStatus.setText((uri != null ? "Import stopped: " : "Download stopped: ") + fe);
+                } else if (OverlayService.running) {
+                    // reload her with the full clip set
+                    startService(new Intent(this, OverlayService.class).setAction(OverlayService.ACTION_STOP));
+                    OverlayService.running = false;
+                    packStatus.postDelayed(() -> {
+                        startForegroundService(new Intent(this, OverlayService.class));
+                        OverlayService.running = true;
+                        refresh();
+                    }, 800);
+                }
+            });
+        }).start();
+    }
+
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
+        if (req == REQ_PICK_PACK) {
+            if (res == RESULT_OK && data != null && data.getData() != null) runPack(null, data.getData());
+            return;
+        }
         if (req != REQ_PICK_MODEL || res != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         String name = displayName(uri);

@@ -35,6 +35,12 @@
 #                         Maven Central into $OUT/dl (build time only) and SHA256-checked.
 #                         Its manifest is NOT merged and its 1DS telemetry classes are not
 #                         packaged (they need INTERNET, which the app does not have).
+# Clip pack (an APK must stay under ~1 GB to upload; see android/clip-pack.py):
+#   LILLITH_CLIP_PACK_MB  0 = every clip inside the APK; N = move ~N MB of tease clips into
+#                         $OUT/$LILLITH_CLIP_PACK_NAME, which the app downloads once from the
+#                         GitHub release (Setup > "Rest of her clips"), checks and unpacks  [0]
+#   LILLITH_CLIP_PACK_REPO / LILLITH_CLIP_PACK_TAG  release it is published on (required with MB)
+#   LILLITH_CLIP_PACK_NAME  release asset name   [lillith-clip-pack.zip]
 #   STAGE_ONLY=1          only stage assets (clips + voice) into $OUT/stage and list
 #                         them; needs no SDK/NDK/cargo
 set -euo pipefail
@@ -117,8 +123,32 @@ mkdir -p "$STAGE/lib/arm64-v8a" "$STAGE/assets/generated" "$OUT/classes" "$OUT/d
 stage_assets() {
 echo "==> 3/7 clips (assets/generated: manifest.toml + sheets, art unchanged)"
 cp "$REPO/assets/generated/manifest.toml" "$STAGE/assets/generated/"
+local skip="$OUT/clippack-skip.txt"; : > "$skip"
+if [ "${LILLITH_CLIP_PACK_MB:-0}" != 0 ]; then
+  : "${LILLITH_CLIP_PACK_REPO:?set LILLITH_CLIP_PACK_REPO (owner/repo of the release)}"
+  : "${LILLITH_CLIP_PACK_TAG:?set LILLITH_CLIP_PACK_TAG (release tag)}"
+  local pname="${LILLITH_CLIP_PACK_NAME:-lillith-clip-pack.zip}"
+  python3 "$HERE/clip-pack.py" select "$REPO/assets/generated" "$LILLITH_CLIP_PACK_MB" > "$OUT/clippack-clips.txt"
+  mkdir -p "$STAGE/assets/clippack"
+  python3 "$HERE/clip-pack.py" pack "$REPO/assets/generated" "$OUT/clippack-clips.txt" \
+    "$OUT/$pname" "$STAGE/assets/clippack/files.list"
+  sed 's/^[0-9a-f]*  /.\//' "$STAGE/assets/clippack/files.list" > "$skip"
+  {
+    echo "# written by android/build-apk.sh: the clips that are not inside this APK"
+    echo "repo=$LILLITH_CLIP_PACK_REPO"
+    echo "tag=$LILLITH_CLIP_PACK_TAG"
+    echo "asset=$pname"
+    echo "size=$(stat -c %s "$OUT/$pname")"
+    echo "sha256=$(sha256sum "$OUT/$pname" | cut -d' ' -f1)"
+    echo "clips=$(wc -l < "$OUT/clippack-clips.txt")"
+    echo "total_clips=$(grep -c '^\[clips\.[^].]*\]$' "$REPO/assets/generated/manifest.toml")"
+  } > "$STAGE/assets/clippack/clippack.properties"
+  echo "    clip pack: $(wc -l < "$OUT/clippack-clips.txt") clips, $(du -h "$OUT/$pname" | cut -f1) -> $OUT/$pname"
+fi
 ( cd "$REPO/assets/generated" && find . -path '*/frames' -prune -o -type f -name '*.png' -print ) |
+  { grep -vxF -f "$skip" || true; } |
   while read -r f; do
+
     mkdir -p "$STAGE/assets/generated/$(dirname "$f")"
     cp "$REPO/assets/generated/$f" "$STAGE/assets/generated/$f"
   done
@@ -233,8 +263,16 @@ fi
 echo "==> 6/7 package (aapt2)"
 rm -rf "$OUT/res-compiled" && mkdir -p "$OUT/res-compiled"
 "$BT/aapt2" compile --dir "$HERE/app/res" -o "$OUT/res-compiled/res.zip"
+MANIFEST="$HERE/app/AndroidManifest.xml"
+if [ "${LILLITH_CLIP_PACK_MB:-0}" != 0 ]; then
+  # clip-pack build: INTERNET for ClipPack.java's one-time download only
+  MANIFEST="$OUT/AndroidManifest.xml"
+  sed 's#^\(    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\)$#\1\n    <uses-permission android:name="android.permission.INTERNET" />#' \
+    "$HERE/app/AndroidManifest.xml" > "$MANIFEST"
+  grep -q 'android.permission.INTERNET' "$MANIFEST" || { echo "could not add INTERNET for the clip pack" >&2; exit 1; }
+fi
 "$BT/aapt2" link -o "$OUT/unsigned.apk" -I "$PLATFORM_JAR" \
-  --manifest "$HERE/app/AndroidManifest.xml" \
+  --manifest "$MANIFEST" \
   --min-sdk-version $API --target-sdk-version $TARGET_SDK \
   -A "$STAGE/assets" -0 png -0 toml -0 onnx -0 bin -0 npy -0 model \
   "$OUT/res-compiled/res.zip"
@@ -263,8 +301,17 @@ rm -f "$OUT/unsigned.apk"   # the APK is ~0.9 GB with voice: keep at most two co
   --out "$OUT/lillith-debug-arm64.apk" "$OUT/aligned.apk"
 "$BT/apksigner" verify "$OUT/lillith-debug-arm64.apk"
 # Speaking only, fully offline: the APK must never ask for the network or the microphone.
+# The one exception is a clip-pack build (LILLITH_CLIP_PACK_MB): INTERNET, used only by
+# ClipPack.java for the one-time, Ko-started pack download. A full APK must not have it.
+FORBIDDEN="RECORD_AUDIO|ACCESS_NETWORK_STATE"
+if [ "${LILLITH_CLIP_PACK_MB:-0}" = 0 ]; then
+  FORBIDDEN="INTERNET|$FORBIDDEN"
+  # and must not carry the downloader's settings either
+  ! "$BT/aapt" list "$OUT/lillith-debug-arm64.apk" | grep -q '^assets/clippack/' ||
+    { echo "assets/clippack/ in a full APK" >&2; exit 1; }
+fi
 if "$BT/aapt" dump permissions "$OUT/lillith-debug-arm64.apk" |
-    grep -E "android.permission.(INTERNET|RECORD_AUDIO|ACCESS_NETWORK_STATE)"; then
+    grep -E "android.permission.($FORBIDDEN)"; then
   echo "forbidden permission in the APK (see above)" >&2; exit 1
 fi
 rm -f "$OUT/unsigned.apk" "$OUT/aligned.apk" "$OUT/lillith-debug-arm64.apk.idsig"
