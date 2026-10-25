@@ -815,6 +815,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn tolerates_additive_fields() {
+        // user_import.py adds fields over time (ts/elapsed_s on progress;
+        // centering/scale_max/focus_* in the clip meta). Extra keys are ignored.
+        assert_eq!(
+            parse_line(
+                r#"{"event":"progress","stage":"matte","pct":42.5,"msg":"m","ts":1792900000.125,"elapsed_s":3.5}"#
+            ),
+            parse_line(r#"{"event":"progress","stage":"matte","pct":42.5,"msg":"m"}"#)
+        );
+        let base = r#""id":"c1","mp4":"c1/c1.mp4","preview_png":"c1/c1.png","frames":24,"fps":12,"qa":{"pass":true,"white_edge":0.01,"fringe":"low"},"suggested_name":"x""#;
+        assert_eq!(
+            parse_line(&format!(
+                r#"{{"event":"candidate",{base},"centering":"fit","scale_max":0.91,"focus_rule":"chest","focus_src_xy":[200.0,150.5],"ts":1.0,"elapsed_s":2.0}}"#
+            )),
+            parse_line(&format!(r#"{{"event":"candidate",{base}}}"#))
+        );
+        assert!(matches!(
+            parse_line(&format!(r#"{{"event":"candidate",{base}}}"#)),
+            Event::Candidate(_)
+        ));
+        assert_eq!(
+            parse_line(
+                r#"{"event":"done","candidates":2,"peak_rss_mb":800,"ts":1.0,"elapsed_s":9.0}"#
+            ),
+            parse_line(r#"{"event":"done","candidates":2,"peak_rss_mb":800}"#)
+        );
+    }
+
+    #[test]
     fn parses_every_event() {
         assert_eq!(
             parse_line(r#"{"event":"progress","stage":"matte","pct":42.5,"msg":"frame 10/24"}"#),
