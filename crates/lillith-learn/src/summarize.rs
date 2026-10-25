@@ -348,8 +348,16 @@ mod tests {
         let at = signalled.join().unwrap();
         assert_eq!(res, Err(SumError::Preempted));
         assert!(returned.duration_since(at) <= Duration::from_millis(200));
-        // The lock is free for chat right away.
-        assert!(gate.try_lock().unwrap().is_some());
+        // The lock is free for chat right away. Poll briefly, as chat_acquire
+        // does: a process another test forks at that moment can hold a copy
+        // of the flock fd until it execs (seen under the full parallel suite).
+        let free = (0..50).any(|_| {
+            gate.try_lock().unwrap().is_some() || {
+                std::thread::sleep(Duration::from_millis(10));
+                false
+            }
+        });
+        assert!(free, "gate still locked 500 ms after preemption");
         let server_saw_close = server.join().unwrap();
         assert!(closed.load(Ordering::SeqCst), "connection was dropped");
         assert!(server_saw_close.duration_since(at) <= Duration::from_secs(2));
