@@ -7115,6 +7115,41 @@
    "video": "valentines_strap_oops/valentines_strap_oops.mp4",
    "season": "valentines",
    "outfit": "valentines"
+  },
+  {
+   "name": "spring_petal_squeeze",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": false,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "spring_petal_squeeze/",
+   "sheet": "spring_petal_squeeze/spring_petal_squeeze_sheet.png",
+   "manifest": "spring_petal_squeeze/spring_petal_squeeze.json",
+   "preview": "spring_petal_squeeze/spring_petal_squeeze_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:spring",
+    "outfit:spring"
+   ],
+   "allure": true,
+   "video": "spring_petal_squeeze/spring_petal_squeeze.mp4",
+   "season": "spring",
+   "outfit": "spring"
   }
  ]
 }
