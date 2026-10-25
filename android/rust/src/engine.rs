@@ -125,6 +125,40 @@ impl std::fmt::Debug for Engine {
     }
 }
 
+/// Removes clips whose page `installed` says is missing, then (until
+/// nothing changes) clips whose `base_clip`, `jiggle_of` or blend
+/// `from`/`to` were removed. A dangling `jiggle_variant` is cleared.
+/// Returns the number of clips removed.
+pub fn drop_uninstalled_clips(manifest: &mut Manifest, installed: impl Fn(&str) -> bool) -> usize {
+    let before = manifest.clips.len();
+    manifest.clips.retain(|_, c| installed(&c.page));
+    loop {
+        let names: std::collections::BTreeSet<String> = manifest.clips.keys().cloned().collect();
+        let n = manifest.clips.len();
+        manifest.clips.retain(|_, c| {
+            let ok = |o: &Option<String>| o.as_ref().is_none_or(|x| names.contains(x));
+            ok(&c.base_clip)
+                && ok(&c.jiggle_of)
+                && c.blend
+                    .as_ref()
+                    .is_none_or(|b| names.contains(&b.from) && names.contains(&b.to))
+        });
+        if manifest.clips.len() == n {
+            break;
+        }
+    }
+    let names: std::collections::BTreeSet<String> = manifest.clips.keys().cloned().collect();
+    for c in manifest.clips.values_mut() {
+        if c.jiggle_variant
+            .as_ref()
+            .is_some_and(|v| !names.contains(v))
+        {
+            c.jiggle_variant = None;
+        }
+    }
+    before - manifest.clips.len()
+}
+
 impl Engine {
     pub fn load(opts: EngineOptions) -> Result<Self, String> {
         let manifest = Manifest::load(&opts.manifest).map_err(|e| e.to_string())?;
@@ -146,8 +180,12 @@ impl Engine {
                 ch = ch.max(f.h);
             }
         }
-        // Mouth patches are optional art: drop any the APK doesn't carry.
+        // Clips whose sheet isn't installed yet (the Android clip pack is
+        // downloaded after first run) are left out until it is, along with
+        // anything that points at them, so she never picks an invisible clip.
         let mut manifest = manifest;
+        drop_uninstalled_clips(&mut manifest, |rel| pages.exists(rel));
+        // Mouth patches are optional art: drop any the APK doesn't carry.
         for c in manifest.clips.values_mut() {
             c.mouth_patches.retain(|_, p| pages.exists(&p.page));
         }

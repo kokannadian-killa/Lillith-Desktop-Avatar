@@ -7,6 +7,9 @@
   NO INTERNET permission: the chat model is llama.cpp in-process (JNI), not a
   server, so not even a loopback socket is needed. Without INTERNET the OS
   refuses every socket, which enforces the "fully local" rule.
+  The one exception: a clip-pack build (build-apk.sh LILLITH_CLIP_PACK_MB, for
+  when every clip won't fit in an uploadable APK) adds INTERNET at build time,
+  used ONLY by ClipPack.java for the one-time download Ko starts in setup.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.kokannadian.lillith"

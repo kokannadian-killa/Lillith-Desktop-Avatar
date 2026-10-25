@@ -147,3 +147,54 @@ fn rotation_keeps_her_on_screen() {
     assert!(l >= 0 && l + w as i32 <= 2200);
     assert_eq!(t as f32, e.floor_top().round());
 }
+
+/// The Android clip pack: clips whose sheets aren't installed yet are left
+/// out (with anything pointing at them) and she still loads and plays.
+#[test]
+fn missing_pack_clips_are_left_out_until_installed() {
+    use lillith_android::engine::drop_uninstalled_clips;
+    use lillith_android::pages::{Pages, DEFAULT_BUDGET};
+    use lillith_anim::atlas::Manifest;
+    let full = Manifest::load(&manifest()).unwrap();
+    let total = full.clips.len();
+    let pack = |page: &str| {
+        let c = page.split('/').next().unwrap_or("");
+        c.starts_with("valentines_") || c.starts_with("spring_") || c.ends_with("_long")
+    };
+    let mut m = full.clone();
+    let gone = drop_uninstalled_clips(&mut m, |p| !pack(p));
+    assert!(gone > 0 && m.clips.len() + gone == total);
+    assert!(m.clips.values().all(|c| !pack(&c.page)));
+    for c in m.clips.values() {
+        for r in [&c.base_clip, &c.jiggle_of, &c.jiggle_variant]
+            .into_iter()
+            .flatten()
+        {
+            assert!(m.clips.contains_key(r), "dangling {r}");
+        }
+        if let Some(b) = &c.blend {
+            assert!(m.clips.contains_key(&b.from) && m.clips.contains_key(&b.to));
+        }
+    }
+    // A blend whose source is missing goes too.
+    let mut m2 = full.clone();
+    let (name, from) = full
+        .clips
+        .iter()
+        .find_map(|(n, c)| c.blend.as_ref().map(|b| (n.clone(), b.from.clone())))
+        .expect("the set has blend clips");
+    let from_page = full.clips[&from].page.clone();
+    drop_uninstalled_clips(&mut m2, |p| p != from_page);
+    assert!(!m2.clips.contains_key(&name) && !m2.clips.contains_key(&from));
+    // Nothing missing: nothing dropped.
+    let mut m3 = full.clone();
+    assert_eq!(drop_uninstalled_clips(&mut m3, |_| true), 0);
+
+    let dir = manifest().parent().unwrap().to_path_buf();
+    let mut o = EngineOptions::new(manifest(), 1.0);
+    o.seed = 7;
+    let mut e =
+        Engine::new(m, Pages::new(dir, DEFAULT_BUDGET), &o).expect("engine loads the core set");
+    e.set_screen(SCREEN.0, SCREEN.1);
+    assert!(run(&mut e, 2.0) > 0);
+}
