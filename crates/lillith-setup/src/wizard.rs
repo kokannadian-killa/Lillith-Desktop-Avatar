@@ -6,7 +6,10 @@ use crate::scan::ModelInfo;
 
 /// Context the wizard proposes: 4096, capped by the model's training context.
 pub fn suggested_ctx(m: &ModelInfo) -> u32 {
-    m.context_length.map(|c| c.min(4096) as u32).unwrap_or(4096).max(512)
+    m.context_length
+        .map(|c| c.min(4096) as u32)
+        .unwrap_or(4096)
+        .max(512)
 }
 
 /// `[llm]` settings for a picked model (other fields default).

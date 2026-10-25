@@ -66,17 +66,28 @@ fn parse_response(raw: &[u8]) -> Result<Response, HttpError> {
         l.starts_with("transfer-encoding:") && l.contains("chunked")
     });
     let body = &raw[split + 4..];
-    let body = if chunked { dechunk(body) } else { body.to_vec() };
-    Ok(Response { status, body: String::from_utf8_lossy(&body).into_owned() })
+    let body = if chunked {
+        dechunk(body)
+    } else {
+        body.to_vec()
+    };
+    Ok(Response {
+        status,
+        body: String::from_utf8_lossy(&body).into_owned(),
+    })
 }
 
 fn dechunk(mut b: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     loop {
-        let Some(nl) = b.windows(2).position(|w| w == b"\r\n") else { break };
+        let Some(nl) = b.windows(2).position(|w| w == b"\r\n") else {
+            break;
+        };
         let size_s = String::from_utf8_lossy(&b[..nl]);
         let size_s = size_s.split(';').next().unwrap_or("").trim();
-        let Ok(size) = usize::from_str_radix(size_s, 16) else { break };
+        let Ok(size) = usize::from_str_radix(size_s, 16) else {
+            break;
+        };
         b = &b[nl + 2..];
         if size == 0 || b.len() < size {
             out.extend_from_slice(&b[..size.min(b.len())]);
@@ -126,7 +137,10 @@ pub(crate) mod tests {
         let r = get(&u, "/health", Duration::from_secs(2)).unwrap();
         assert_eq!(r.status, 200);
         assert_eq!(r.body, "{\"status\":\"ok\"}");
-        assert_eq!(get(&u, "/nope", Duration::from_secs(2)).unwrap().status, 404);
+        assert_eq!(
+            get(&u, "/nope", Duration::from_secs(2)).unwrap().status,
+            404
+        );
     }
 
     #[test]
@@ -138,7 +152,11 @@ pub(crate) mod tests {
     #[test]
     fn closed_port_is_an_error_not_a_panic() {
         // Bind then drop to get a (very likely) closed port.
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
         let u = LocalUrl::parse(&format!("127.0.0.1:{port}"), 1).unwrap();
         assert!(get(&u, "/", Duration::from_millis(300)).is_err());
     }
