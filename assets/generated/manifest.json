@@ -7045,6 +7045,41 @@
    "video": "newyear_midnight_kiss_squeeze/newyear_midnight_kiss_squeeze.mp4",
    "season": "newyear",
    "outfit": "newyear"
+  },
+  {
+   "name": "newyear_strap_oops",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "newyear_strap_oops/",
+   "sheet": "newyear_strap_oops/newyear_strap_oops_sheet.png",
+   "manifest": "newyear_strap_oops/newyear_strap_oops.json",
+   "preview": "newyear_strap_oops/newyear_strap_oops_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:newyear",
+    "outfit:newyear"
+   ],
+   "allure": true,
+   "video": "newyear_strap_oops/newyear_strap_oops.mp4",
+   "season": "newyear",
+   "outfit": "newyear"
   }
  ]
 }
