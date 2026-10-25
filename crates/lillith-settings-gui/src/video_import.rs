@@ -984,14 +984,23 @@ mod tests {
         let (exe, sys) = (root.join("app"), root.join("sysbin"));
         std::fs::create_dir_all(exe.join("bin")).unwrap();
         std::fs::create_dir_all(&sys).unwrap();
+        // Windows paths are case-insensitive, and a PATH search can hand back
+        // `ffmpeg.EXE` (PATHEXT casing), so compare them case-folded there.
+        let norm = |p: PathBuf| {
+            if cfg!(windows) {
+                PathBuf::from(p.to_string_lossy().to_lowercase())
+            } else {
+                p
+            }
+        };
         let file = |d: &Path, t: &str| {
             let p = d.join(format!("{t}{}", std::env::consts::EXE_SUFFIX));
             std::fs::write(&p, b"").unwrap();
-            p
+            norm(p)
         };
         let path = std::env::join_paths([&sys]).unwrap();
         let find = |t: &str, o: Option<&str>| {
-            find_tool_in(t, o.map(std::ffi::OsStr::new), Some(&exe), Some(&path))
+            find_tool_in(t, o.map(std::ffi::OsStr::new), Some(&exe), Some(&path)).map(norm)
         };
         // Nothing anywhere.
         assert_eq!(find("ffmpeg", None), None);
@@ -1017,11 +1026,11 @@ mod tests {
         assert_eq!(find("ffmpeg", Some("/nope/ffmpeg")), None);
         // Only a bundled bin/ copy is passed to the pipeline.
         assert_eq!(
-            bundled_tool_in("ffmpeg", Some(&exe)),
-            Some(
+            bundled_tool_in("ffmpeg", Some(&exe)).map(norm),
+            Some(norm(
                 exe.join("bin")
                     .join(format!("ffmpeg{}", std::env::consts::EXE_SUFFIX))
-            )
+            ))
         );
         assert_eq!(
             bundled_tool_in("ffprobe", Some(&exe)),
