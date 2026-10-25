@@ -89,7 +89,7 @@ id = "xmas"
 name = "Santa Bikini (Christmas)"
 season = "xmas"
 thumbnail = "assets/generated/outfits/xmas.png"
-clips = ["xmas_candy_cane_lick", "xmas_mistletoe_blow_kiss"]
+clips = ["xmas_candy_cane_lick", "xmas_mistletoe_blow_kiss", "xmas_scarf_shiver_hug"]
 hidden = false
 
 [[outfit]]
