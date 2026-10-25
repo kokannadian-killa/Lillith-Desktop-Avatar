@@ -7115,6 +7115,41 @@
    "video": "xmas_candy_cane_lick/xmas_candy_cane_lick.mp4",
    "season": "xmas",
    "outfit": "xmas"
+  },
+  {
+   "name": "xmas_mistletoe_blow_kiss",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "xmas_mistletoe_blow_kiss/",
+   "sheet": "xmas_mistletoe_blow_kiss/xmas_mistletoe_blow_kiss_sheet.png",
+   "manifest": "xmas_mistletoe_blow_kiss/xmas_mistletoe_blow_kiss.json",
+   "preview": "xmas_mistletoe_blow_kiss/xmas_mistletoe_blow_kiss_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:xmas",
+    "outfit:xmas"
+   ],
+   "allure": true,
+   "video": "xmas_mistletoe_blow_kiss/xmas_mistletoe_blow_kiss.mp4",
+   "season": "xmas",
+   "outfit": "xmas"
   }
  ]
 }
