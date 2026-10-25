@@ -7045,6 +7045,76 @@
    "video": "summer_popsicle_lick/summer_popsicle_lick.mp4",
    "season": "summer",
    "outfit": "summer"
+  },
+  {
+   "name": "valentines_heart_squeeze",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": false,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "valentines_heart_squeeze/",
+   "sheet": "valentines_heart_squeeze/valentines_heart_squeeze_sheet.png",
+   "manifest": "valentines_heart_squeeze/valentines_heart_squeeze.json",
+   "preview": "valentines_heart_squeeze/valentines_heart_squeeze_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:valentines",
+    "outfit:valentines"
+   ],
+   "allure": true,
+   "video": "valentines_heart_squeeze/valentines_heart_squeeze.mp4",
+   "season": "valentines",
+   "outfit": "valentines"
+  },
+  {
+   "name": "valentines_strap_oops",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "three-quarter front",
+   "canvas_compliant": false,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "valentines_strap_oops/",
+   "sheet": "valentines_strap_oops/valentines_strap_oops_sheet.png",
+   "manifest": "valentines_strap_oops/valentines_strap_oops.json",
+   "preview": "valentines_strap_oops/valentines_strap_oops_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:valentines",
+    "outfit:valentines"
+   ],
+   "allure": true,
+   "video": "valentines_strap_oops/valentines_strap_oops.mp4",
+   "season": "valentines",
+   "outfit": "valentines"
   }
  ]
 }
