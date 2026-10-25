@@ -612,6 +612,9 @@ id = "c"
         assert!(h.owns_clip("x", &tags(&["seasonal", "season:halloween"])));
         assert!(!h.owns_clip("xmas_a", &tags(&["seasonal", "outfit:xmas", "season:xmas"])));
         assert!(h.available(|c| c == "halloween_cape_swirl_arch"));
-        assert!(!s.outfit("xmas").unwrap().available(|_| true));
+        // An outfit shows only when the set has at least one of its clips.
+        let x = s.outfit("xmas").unwrap();
+        assert!(x.available(|c| c == "xmas_gift_sit_crossleg"));
+        assert!(!x.available(|c| c.starts_with("halloween_")));
     }
 }
