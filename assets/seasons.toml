@@ -105,7 +105,7 @@ id = "spring"
 name = "Spring Blossom"
 season = "spring"
 thumbnail = "assets/generated/outfits/spring.png"
-clips = ["spring_lollipop_lick", "spring_vine_oops", "spring_petal_squeeze"]
+clips = ["spring_lollipop_lick", "spring_vine_oops", "spring_petal_squeeze", "spring_kneel_berries"]
 hidden = false
 
 [[outfit]]
