@@ -105,7 +105,7 @@ python3 tools/video-pipeline/user_import.py --input <file> --out <staging_dir> \
 
 stdout is one JSON object per line:
 
-- `{"event":"progress","stage","pct","msg"}`
+- `{"event":"progress","stage","pct","msg","ts","elapsed_s"}`
 - `{"event":"candidate","id","mp4","preview_png","frames","fps","qa":{"pass","white_edge","fringe"},"suggested_name"}`
 - `{"event":"done","candidates","peak_rss_mb"}`
 - `{"event":"error","msg"}`
@@ -176,7 +176,7 @@ python3 tools/video-pipeline/user_import.py --input <file> --out <staging_dir> -
 | `--ffmpeg` | `LILLITH_FFMPEG`, then PATH | ffmpeg binary **or its folder**, e.g. `C:\Lillith\bin\ffmpeg.exe` or `C:\Lillith\bin` |
 | `--ffprobe` | `LILLITH_FFPROBE`, then next to ffmpeg, then PATH | ffprobe binary or its folder |
 | `--matte` | `auto` | `auto`, `alpha` (use the file's own alpha), `isnet` (local model), `key` (plain-backdrop key) |
-| `--model` | `$U2NET_HOME/isnet-anime.onnx` (`~/.rembg/models/isnet-anime/`) | isnet model path; never downloaded |
+| `--model` | see [Model](#model): `$U2NET_HOME/isnet-anime.onnx`, then `~/.rembg/models/isnet-anime/isnet-anime.onnx` | isnet model file (or its folder); never downloaded |
 | `--zmax` | 1.8 | peak cleavage zoom; `1` turns the zoom off |
 | `--min-seconds` / `--max-seconds` | 1.5 / 8 | movement length limits |
 | `--max-candidates` | 0 (no limit) | stop after N candidates (useful for long videos) |
@@ -191,7 +191,7 @@ subprocess uses an argument list, never a shell.
 ### stdout: JSON lines (one object per line, nothing else)
 
 ```json
-{"event":"progress","stage":"matte","pct":37,"msg":"movement 2/4: frame 31/58"}
+{"event":"progress","stage":"matte","pct":37,"msg":"movement 2/4: frame 31/58","ts":1793212345.678,"elapsed_s":64.21}
 {"event":"candidate","id":"user_dance_02","mp4":"/abs/staging/user_dance_02/user_dance_02.mp4",
  "preview_png":"/abs/staging/user_dance_02/user_dance_02_preview.png","frames":58,"fps":12,
  "qa":{"pass":true,"white_edge":"OK","fringe":"PASS"},"suggested_name":"user_dance_02"}
@@ -201,13 +201,18 @@ subprocess uses an argument list, never a shell.
 
 * `stage` ∈ `probe decode split matte clean zoom encode qa`. `pct` is an int 0–100 for the **whole job** and
   never goes backwards (stages interleave per movement, so the stage can go back from `qa` to `matte`).
-  Progress lines are throttled to about two per second.
+  Progress lines are throttled to about two per second. `ts` is the wall clock (unix seconds, float) and
+  `elapsed_s` the seconds since the importer started (monotonic clock, float); both were added in a
+  backwards-compatible way, so readers that only know `stage`/`pct`/`msg` keep working. Per-frame speed is the
+  `elapsed_s` difference between two `matte` lines divided by the frame difference in their `msg`.
 * A `candidate` is emitted as soon as its movement is finished, before the rest of the video is done.
   `id == suggested_name ==` the candidate's folder name (`user_<input-slug>_<NN>`, bumped if it already exists).
 * `qa.pass` = `qa_all.py --white-edge --mp4` printed OK **and** fringeqa gave PASS or WARN. `white_edge` is
   `OK`/`FAIL`, and `fringe` is `PASS`/`WARN`/`FAIL`. A failing candidate is still produced; the GUI decides
   whether to show it.
-* `done` carries an extra field, `peak_rss_mb`: the importer's peak RSS, not counting ffmpeg.
+* `done` carries an extra field, `peak_rss_mb`: the peak RSS of the whole process tree (the importer **plus** its
+  ffmpeg and QA children), sampled every 0.25 s by a background thread (psutil if installed, else
+  `/proc/<pid>/task/*/children` on Linux, a Toolhelp32 snapshot + `GetProcessMemoryInfo` on Windows).
 * Exactly one terminal line: `done` or `error`. On cancel there is none.
 
 ### Exit codes and cancel
@@ -264,13 +269,32 @@ only `json`, `mp4` and `_sheet.png`, so drop `_preview.png` and `qa/`.
    Each matted frame is cropped and spilled to `<out>/.user_import_work/` as a PNG, so RAM does not grow with
    video length.
 4. **zoom**: `zoom_tease.py` math (ported; that script is a CLI with side effects at import). Uses
-   one sampling grid per movement, `S = 0.54 × 720 / H` (reduced if the figure would be taller than 386 px),
-   x from `build_clip.body_x` of the first frame, the lowest point of the movement on baseline 392, and a
-   premultiplied INTER_AREA downscale. The slow cleavage zoom has keyframes at 15/40/60/85 % of the movement
-   (smoothstep ease-in, hold, ease-out), peaks at `--zmax`, and brings the focus point (estimated chest, 30 %
-   down the figure) toward (200,195). Movements under 12 frames are not zoomed.
+   one sampling grid and **one scale per movement** (no pumping), the lowest point of the movement on baseline
+   392, and a premultiplied INTER_AREA downscale.
+   * **Scale fit:** `0.54 × 720 / H` (the shipped clips' scale) is the maximum. It is only reduced when the
+     movement's union bounding box would not fit the 400×400 canvas at normal framing: taller than 386 px
+     (`fit_height`) or wider than the canvas minus 4 px side margins (`fit_width`). x comes from
+     `build_clip.body_x` of the first frame and is moved the least needed so the whole bbox is on the canvas
+     (`shifted`; a lying pose is not centred on its body point). The result is in the JSON as
+     `user_import.centering` (`fixed`/`fit_height`/`fit_width`/`shifted`), `scale` and `scale_max`. Standing
+     poses keep 0.54; a full-length lying pose comes out at about 0.31, so she looks smaller in it.
+   * **Zoom aim:** the slow cleavage zoom has keyframes at 15/40/60/85 % of the movement (smoothstep ease-in,
+     hold, ease-out), peaks at `--zmax`, and brings the chest toward (200,195). The chest is found on the matte
+     (median over up to 5 frames of the movement): the mask is opened by 3 % of the figure height to drop thin
+     limbs and hair; for an upright figure it is the widest torso row 18–45 % down, at the body point
+     (`upright_widest_band`); for a lying figure (wider than 1.25× its height) the head end is the outer quarter
+     that reaches highest and the chest is 30 % of the width in from it, centred on the body there
+     (`lying_head_left`/`lying_head_right`). The rule and the source point are in `cleavage_zoom.focus_rule` /
+     `focus_src_xy`. Movements under 12 frames are not zoomed.
 5. **clean**: `tools/matte-clean/matte_clean.clean_cell` (v6), then `cellfix.post` (in-memory port of the
-   seasonal holefill → edgefix → holefill). **holefill is the last image step.** Rows below 392 are zeroed.
+   seasonal holefill → edgefix → **pocketfill** → holefill). **holefill is the last image step.** Rows below 392
+   are zeroed. *pocketfill* (after the seasonal `holefill2.py`) compares with the cell **before** matte-clean:
+   a transparent hole enclosed by the figure (≤ 400 px, ≥ 3 px inside) that was ≥ 90 % solid there was punched
+   by the clean pass (a highlight, a belly button, a gloss spot) and gets the raw pixels back at alpha 255.
+   Real gaps are left alone: holes that were already clear before cleaning (arm/body, hair/neck), holes ringed
+   mostly by blonde hair, and holes whose raw colour is backdrop white unless they sit in bright skin (ring mean
+   min ≥ 170, the same highlight rule as the white-edge QA). Counts are in `user_import.stats`
+   (`pocketfill_px`, `pocket_skipped_px`).
 6. **encode**: sheet, JSON and mp4 with pack_mp4's settings (libx264 veryslow, tune animation, crf 16,
    high@4.0, full-range bt709, no B-frames, faststart). The mp4 is decoded back and checked.
 7. **qa**: `qa_all.py --white-edge --mp4 <candidate>` and `tools/video-pipeline/fringeqa.py` (FQA_ALL=1, output
@@ -280,15 +304,24 @@ only `json`, `mp4` and `_sheet.png`, so drop `_preview.png` and `qa/`.
 
 The importer holds one frame at a time, plus one movement's metadata and a few canvases. ffmpeg runs with one
 thread and one filter thread. RSS is checked every frame (`/proc/self/status` on Linux,
-`GetProcessMemoryInfo` on Windows). If RSS goes over `--max-ram-mb − 150`, isnet downgrades to the key and,
+`GetProcessMemoryInfo` on Windows), and a background thread samples the whole process tree (importer + ffmpeg +
+QA children) every 0.25 s. If the importer's RSS goes over `--max-ram-mb − 150`, or the tree goes over
+`--max-ram-mb`, isnet downgrades to the key and,
 if that is still over, the run ends with `error: memory cap exceeded`. A cap smaller than the importer's start-up RSS + 150 MB (about 250 MB) is refused at start. The measured
 peak in key mode is about 160 MB. isnet needs the cap to be ≥ 1100 MB to be picked by `auto`.
 
 ### Model
 
-The isnet-anime model is **not** in the repo and is never fetched. The default is
-`~/.rembg/models/isnet-anime/isnet-anime.onnx` (176 MB) via `U2NET_HOME`, or pass `--model`. Without it,
-`auto` uses the backdrop key, which only works for plain or solid backdrops.
+The isnet-anime model (176 MB) is **not** in the repo and is never fetched. Lookup order, first existing file wins:
+
+1. `--model <file>` (or a folder holding `isnet-anime.onnx`)
+2. `$U2NET_HOME/isnet-anime.onnx` (`%U2NET_HOME%` on Windows)
+3. `<home>/.rembg/models/isnet-anime/isnet-anime.onnx`, where home is Python's `Path.home()`: `~` on
+   Linux/macOS, `%USERPROFILE%` on Windows (e.g. `C:\Users\Ko\.rembg\models\isnet-anime\isnet-anime.onnx`)
+
+With `--matte isnet` and no file found, the run fails with an `error` that lists every path it tried. With
+`auto`, it falls back to the backdrop key (plain or solid backdrops only) and the log line says which paths were
+tried.
 
 ### Known limits (v1)
 
@@ -297,7 +330,14 @@ The isnet-anime model is **not** in the repo and is never fetched. The default i
   moving, and `--max-candidates` bounds the work.
 * There is no temporal median smoothing of the matte (skipped to keep memory flat), so mattes may flicker
   slightly more than on hand-made clips.
-* The zoom focus is a heuristic (30 % down the figure), not a body-part detector.
+* The zoom aim is a shape heuristic (widest torso band upright, 30 % in from the head end lying), not a
+  body-part detector. Unusual poses (handstand, curled up, two people) can aim off the chest.
+* One scale per movement, fitted to that movement: a wide (lying) movement is smaller on screen than a standing
+  one, so switching between them changes her size.
+* White-edge QA can flag opaque white **art** as pockets: eye whites and skin highlights next to dark lines
+  (tattoo, fishnet) look like enclosed backdrop to `white_edge.pocket_mask` when their ring is not bright. These
+  pixels are unchanged from the source (raw alpha 255), so a candidate can show `white_edge: FAIL` with a clean
+  matte; check the frames it names before throwing it away.
 * Segmentation is motion-based. A long continuous dance becomes several `--max-seconds` pieces cut at the calmest frame.
 * Candidates are one-shot (`loop: false`). Loop closing is not attempted.
 * Audio is ignored.
@@ -312,6 +352,8 @@ The tests synthesise tiny 160×120 videos (a crude figure that waves, holds, bou
 second scene) and run the real importer at `--work-height 160` (a hidden test flag). They cover the JSON schema
 and monotonic progress, splitting into ≥ 3 movements, the clip format (800×400 mp4, sheet size, nothing below
 the baseline, zoom curve), the RAM cap (too low → error; the child tree's `ru_maxrss` stays under the cap),
-cancel → exit 130 within 1.5 s with cleanup (new and pre-existing `--out`), missing ffmpeg, `--ffmpeg`/`--ffprobe`
+the `ts`/`elapsed_s` progress fields, the model lookup order (incl. a Windows home), pocketfill (an enclosed
+punched highlight is restored, an open or raw-clear gap is not), the scale fit for a wide figure, the process-tree
+RSS sampler (a child holding 220 MB is counted), cancel → exit 130 within 1.5 s with cleanup (new and pre-existing `--out`), missing ffmpeg, `--ffmpeg`/`--ffprobe`
 as files and folders under a path with spaces, bad input, and writes confined to `--out` (empty TMPDIR, tool
 and input folders unchanged). Runtime is about 1 min on one core. Requires ffmpeg with libx264.

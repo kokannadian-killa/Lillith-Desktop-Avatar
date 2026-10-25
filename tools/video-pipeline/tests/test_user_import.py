@@ -68,7 +68,9 @@ class FullRun(unittest.TestCase):
         for e in self.evs:
             self.assertIn(e['event'], {'progress', 'candidate', 'done', 'error'})
             if e['event'] == 'progress':
-                self.assertEqual(set(e), {'event', 'stage', 'pct', 'msg'})
+                self.assertEqual(set(e), {'event', 'stage', 'pct', 'msg', 'ts', 'elapsed_s'})
+                self.assertIsInstance(e['ts'], float); self.assertLess(abs(e['ts'] - time.time()), 3600)
+                self.assertIsInstance(e['elapsed_s'], float); self.assertGreaterEqual(e['elapsed_s'], 0.0)
                 self.assertIn(e['stage'], STAGES)
                 self.assertIsInstance(e['pct'], int); self.assertTrue(0 <= e['pct'] <= 100)
                 self.assertGreaterEqual(e['pct'], last); last = e['pct']
@@ -245,6 +247,98 @@ class Units(unittest.TestCase):
         c[190:196, 190:196] = 0  # punched highlight
         out, n = cellfix.holefill(c)
         self.assertEqual(n, 36); self.assertTrue((out[100:300, 100:300, 3] == 255).all())
+
+    def test_model_lookup_order(self):
+        from pathlib import PureWindowsPath
+        sys.path.insert(0, str(TOOL.parent))
+        import user_import as ui
+        tmp = Path(tempfile.mkdtemp(prefix='vimport_model_'))
+        try:
+            home = tmp / 'home'; env = {'U2NET_HOME': str(tmp / 'u2')}
+            flag = tmp / 'mine.onnx'
+            exp = [flag, tmp / 'u2' / 'isnet-anime.onnx', home / '.rembg' / 'models' / 'isnet-anime' / 'isnet-anime.onnx']
+            self.assertEqual(ui.model_candidates(str(flag), env, home), exp)
+            self.assertEqual(ui.model_candidates(str(tmp / 'dir'), {}, home)[0], tmp / 'dir' / 'isnet-anime.onnx')
+            self.assertEqual(ui.find_model(str(flag), env, home), (None, exp))   # nothing exists: None + every path tried
+            for want in reversed(exp):          # create from the lowest priority up: the highest present always wins
+                want.parent.mkdir(parents=True, exist_ok=True); want.write_bytes(b'x')
+                self.assertEqual(ui.find_model(str(flag), env, home)[0], want.resolve())
+            # Windows: the default comes from the pathlib home (%USERPROFILE%), never a hard-coded ~
+            wh = PureWindowsPath(r'C:\Users\Ko Kannadian')
+            c = ui.model_candidates(None, {}, wh)
+            self.assertEqual(c, [PureWindowsPath(r'C:\Users\Ko Kannadian\.rembg\models\isnet-anime\isnet-anime.onnx')])
+            old = ui.Path.home
+            try:
+                ui.Path.home = classmethod(lambda cls: home)
+                self.assertEqual(ui.model_candidates(None, {})[-1], exp[-1])
+            finally:
+                ui.Path.home = old
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_pocketfill_enclosed_vs_open(self):
+        import numpy as np
+        sys.path.insert(0, str(TOOL.parent))
+        import cellfix
+        raw = np.zeros((400, 400, 4), np.uint8); raw[100:300, 100:300] = (200, 120, 110, 255)
+        raw[150:160, 200:210] = (250, 240, 235, 255)          # a skin highlight inside the body
+        raw[100:300, 240:250, 3] = 0                          # a real gap (arm/body) that is clear in the raw matte
+        cell = raw.copy()
+        cell[150:160, 200:210] = 0                            # matte-clean punched the highlight (100 px > holefill's 80)
+        out, st = cellfix.pocketfill(cell, raw)
+        self.assertEqual(st['pocketfill_px'], 100)
+        self.assertTrue((out[150:160, 200:210, 3] == 255).all())
+        self.assertTrue((out[150:160, 200:210, :3] == raw[150:160, 200:210, :3]).all())
+        self.assertTrue((out[100:300, 240:250, 3] == 0).all())    # the open gap stays open
+        # an enclosed gap that was already clear in the raw matte stays open too
+        raw2 = raw.copy(); raw2[200:230, 150:180, 3] = 0; cell2 = raw2.copy()
+        out2, st2 = cellfix.pocketfill(cell2, raw2)
+        self.assertEqual(st2['pocketfill_px'], 0); self.assertTrue((out2[200:230, 150:180, 3] == 0).all())
+        # backdrop-white seen through a hole ringed by darker cloth: a real gap, left clear
+        raw3 = raw.copy(); raw3[100:300, 100:240, :3] = (40, 30, 60); raw3[180:190, 150:160] = (250, 250, 250, 255)
+        cell3 = raw3.copy(); cell3[180:190, 150:160] = 0
+        out3, st3 = cellfix.pocketfill(cell3, raw3)
+        self.assertEqual(st3['pocketfill_px'], 0); self.assertEqual(st3['pocket_skipped_px'], 100)
+        # and post() with raw does the same, without raw it does not
+        self.assertEqual(cellfix.post(cell, raw=raw)[1]['pocketfill_px'], 100)
+        self.assertEqual(cellfix.post(cell)[1]['pocketfill_px'], 0)
+
+    def test_fit_placement_wide_figure(self):
+        sys.path.insert(0, str(TOOL.parent))
+        import user_import as ui
+        # standing (tall, narrow): keeps the shipped 0.54 and the body point
+        S, cx, how = ui.fit_placement(0.54, 30, 700, 500, 800, 650)
+        self.assertEqual((S, cx, how), (0.54, 650.0, 'fixed'))
+        # lying (1250 px wide at 720 p): shrinks once so the whole bbox fits, never above 0.54
+        S, cx, how = ui.fit_placement(0.54, 300, 700, 20, 1269, 400)
+        self.assertEqual(how, 'fit_width'); self.assertLess(S, 0.54)
+        left = ui.ANCHOR_X + (20 - cx) * S; right = ui.ANCHOR_X + (1269 + 1 - cx) * S
+        self.assertGreaterEqual(left, ui.FIT_MARGIN - 0.01); self.assertLessEqual(right, ui.CANVAS - ui.FIT_MARGIN + 0.01)
+        bottom = ui.BASELINE  # low row sits on the baseline; the top must stay on the canvas
+        self.assertGreaterEqual(bottom - (700 - 300 + 1) * S, 0)
+        # too tall: fit_height
+        S, cx, how = ui.fit_placement(0.54, 0, 1400, 600, 800, 700)
+        self.assertEqual(how, 'fit_height'); self.assertLessEqual(1401 * S, ui.BASELINE - 6 + 1e-9)
+        # fits at 0.54 but off-centre: same scale, body point moved
+        S, cx, how = ui.fit_placement(0.54, 300, 700, 100, 700, 650)
+        self.assertEqual((S, how), (0.54, 'shifted'))
+
+    def test_tree_rss_counts_children(self):
+        sys.path.insert(0, str(TOOL.parent))
+        import user_import as ui
+        code = "import sys,time; b=bytearray(220*1024*1024); b[::4096]=b'x'*len(b[::4096]); print('ok',flush=True); time.sleep(30)"
+        base = ui.tree_rss_mb()
+        smp = ui.TreeSampler(period=0.05).start()
+        p = subprocess.Popen([sys.executable, '-c', code], stdout=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(p.stdout.readline().strip(), 'ok')
+            time.sleep(0.4)
+            self.assertGreater(ui.tree_rss_mb() - base, 180)
+        finally:
+            p.kill(); p.wait(); p.stdout.close()
+        peak = smp.stop()
+        self.assertGreater(peak - base, 180)          # the sampler caught the child's 220 MB
+        self.assertLess(ui.rss_mb(), base + 180)      # the importer itself never held it
 
 
 if __name__ == '__main__':
