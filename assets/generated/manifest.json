@@ -7220,6 +7220,41 @@
    "video": "xmas_gift_sit_crossleg/xmas_gift_sit_crossleg.mp4",
    "season": "xmas",
    "outfit": "xmas"
+  },
+  {
+   "name": "valentines_kneel_chocolate",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front (kneeling)",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "valentines_kneel_chocolate/",
+   "sheet": "valentines_kneel_chocolate/valentines_kneel_chocolate_sheet.png",
+   "manifest": "valentines_kneel_chocolate/valentines_kneel_chocolate.json",
+   "preview": "valentines_kneel_chocolate/valentines_kneel_chocolate_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:valentines",
+    "outfit:valentines"
+   ],
+   "allure": true,
+   "video": "valentines_kneel_chocolate/valentines_kneel_chocolate.mp4",
+   "season": "valentines",
+   "outfit": "valentines"
   }
  ]
 }

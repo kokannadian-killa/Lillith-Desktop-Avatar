@@ -97,7 +97,7 @@ id = "valentines"
 name = "Heart Straps (Valentine's)"
 season = "valentines"
 thumbnail = "assets/generated/outfits/valentines.png"
-clips = ["valentines_strawberry_lick"]
+clips = ["valentines_strawberry_lick", "valentines_kneel_chocolate"]
 hidden = false
 
 [[outfit]]
