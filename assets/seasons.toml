@@ -89,7 +89,7 @@ id = "xmas"
 name = "Santa Bikini (Christmas)"
 season = "xmas"
 thumbnail = "assets/generated/outfits/xmas.png"
-clips = []                  # filled by the Christmas batch (prefix xmas_)
+clips = ["xmas_candy_cane_lick"]
 hidden = false
 
 [[outfit]]

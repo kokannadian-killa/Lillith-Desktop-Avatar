@@ -99,6 +99,10 @@ def raw_alpha(rgb, M):
         sel = np.zeros(n + 1, bool); sel[border] = True
         sel[ids[(sz >= 150) & (mean >= 249)]] = True; sel[0] = False
         holes = sel[lab]
+    if os.environ.get('LILLITH_WHITE_TRIM') == '1':
+        # white outfit parts (Santa fur trim, white lace) on the white backdrop: keep near-white
+        # pixels the isnet matte is confident about instead of keying them as backdrop
+        holes &= ~(nd.binary_erosion(M > 0.85, iterations=1))
     M = np.where(holes, np.minimum(M, 0.0), M)
     core = nd.binary_erosion(M > 0.95, iterations=2) & ~nd.binary_dilation(holes, iterations=3)
     noise = 5.0

@@ -7080,6 +7080,41 @@
    "video": "newyear_strap_oops/newyear_strap_oops.mp4",
    "season": "newyear",
    "outfit": "newyear"
+  },
+  {
+   "name": "xmas_candy_cane_lick",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "xmas_candy_cane_lick/",
+   "sheet": "xmas_candy_cane_lick/xmas_candy_cane_lick_sheet.png",
+   "manifest": "xmas_candy_cane_lick/xmas_candy_cane_lick.json",
+   "preview": "xmas_candy_cane_lick/xmas_candy_cane_lick_preview.gif",
+   "tags": [
+    "baked_motion",
+    "allure",
+    "cleavage_zoom",
+    "seasonal",
+    "season:xmas",
+    "outfit:xmas"
+   ],
+   "allure": true,
+   "video": "xmas_candy_cane_lick/xmas_candy_cane_lick.mp4",
+   "season": "xmas",
+   "outfit": "xmas"
   }
  ]
 }
