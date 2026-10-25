@@ -721,6 +721,7 @@ pub const LINUX_INSTALL_DIR: &str = "/opt/lillith";
 /// The Android application id (its files dir holds `generated/`).
 pub const ANDROID_PACKAGE: &str = "com.kokannadian.lillith";
 
+#[cfg(unix)]
 fn system_data_dirs(var: Option<std::ffi::OsString>) -> Vec<PathBuf> {
     let dirs: Vec<PathBuf> = var
         .map(|v| std::env::split_paths(&v).collect::<Vec<_>>())
@@ -791,6 +792,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn system_data_dirs_default_and_override() {
         let def = system_data_dirs(None);
         assert_eq!(
