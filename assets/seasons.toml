@@ -113,7 +113,7 @@ id = "summer"
 name = "String Bikini (Summer)"
 season = "summer"
 thumbnail = "assets/generated/outfits/summer.png"
-clips = ["summer_shades_peek_wink", "summer_string_oops"]
+clips = ["summer_shades_peek_wink", "summer_string_oops", "summer_popsicle_lick"]
 hidden = false
 
 [[outfit]]
