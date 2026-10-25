@@ -262,18 +262,53 @@ pub fn which_in(name: &str, path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
     })
 }
 
-/// The Python to run the pipeline with: `$LILLITH_PYTHON`, else `python3`
-/// (Windows: `python`, then `python3`) on `PATH`.
+/// The Python to run the pipeline with (see [`find_python_in`] for the order).
 pub fn find_python() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("LILLITH_PYTHON").filter(|v| !v.is_empty()) {
-        return which(&p.to_string_lossy());
+    find_python_in(
+        std::env::var_os("LILLITH_PYTHON").as_deref(),
+        exe_dir().as_deref(),
+        std::env::var_os("PATH").as_deref(),
+    )
+}
+
+/// Where the pipeline's Python is looked for, in order:
+/// 1. an explicit override (`$LILLITH_PYTHON`: a path, or a name on `PATH`),
+/// 2. the interpreter bundled next to the program ([`bundled_python_in`]:
+///    the Windows setup ships `<exe dir>\python\python.exe` with numpy,
+///    scipy, opencv and Pillow, so no separate Python install is needed),
+/// 3. `PATH`: `python3`, then `python` (Windows: `python`, then `python3`).
+///
+/// No program is run to find it.
+pub fn find_python_in(
+    override_path: Option<&std::ffi::OsStr>,
+    exe_dir: Option<&Path>,
+    path_env: Option<&std::ffi::OsStr>,
+) -> Option<PathBuf> {
+    if let Some(o) = override_path.filter(|v| !v.is_empty()) {
+        return which_in(&o.to_string_lossy(), path_env);
+    }
+    if let Some(p) = bundled_python_in(exe_dir) {
+        return Some(p);
     }
     let names: &[&str] = if cfg!(windows) {
         &["python", "python3"]
     } else {
         &["python3", "python"]
     };
-    names.iter().find_map(|n| which(n))
+    names.iter().find_map(|n| which_in(n, path_env))
+}
+
+/// The bundled interpreter, only if that file exists:
+/// `<exe dir>\python\python.exe` on Windows, `<exe dir>/python/bin/python3`
+/// elsewhere.
+pub fn bundled_python_in(exe_dir: Option<&Path>) -> Option<PathBuf> {
+    let d = exe_dir?.join("python");
+    let p = if cfg!(windows) {
+        d.join(format!("python{}", std::env::consts::EXE_SUFFIX))
+    } else {
+        d.join("bin").join("python3")
+    };
+    p.is_file().then_some(p)
 }
 
 /// Where a media tool (`ffmpeg` / `ffprobe`) is looked for, in order:
@@ -390,7 +425,7 @@ pub fn missing_tools(
     let mut miss = Vec::new();
     if python.is_none() {
         miss.push(if cfg!(windows) {
-            "Python 3 isn't installed (or not on PATH). Install it from python.org and tick \"Add python.exe to PATH\", or set LILLITH_PYTHON."
+            "Python 3 wasn't found: the Lillith setup puts it in python\\ next to Lillith (reinstall to restore it), or install it from python.org and tick \"Add python.exe to PATH\", or set LILLITH_PYTHON."
         } else {
             "Python 3 isn't installed (or not on PATH). Install python3 (Arch: sudo pacman -S python), or set LILLITH_PYTHON."
         });
@@ -1067,6 +1102,59 @@ mod tests {
             "ffprobe only on PATH"
         );
         assert_eq!(bundled_tool_in("ffmpeg", None), None);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn python_bundled_first_then_path() {
+        let root = std::env::temp_dir().join(format!("lillith-vi-python-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (exe, sys) = (root.join("app"), root.join("sysbin"));
+        std::fs::create_dir_all(&exe).unwrap();
+        std::fs::create_dir_all(&sys).unwrap();
+        // Same case-folding as media_tools_bundled_first_then_path: a PATH
+        // search on Windows can hand back `python.EXE`.
+        let norm = |p: PathBuf| {
+            if cfg!(windows) {
+                PathBuf::from(p.to_string_lossy().to_lowercase())
+            } else {
+                p
+            }
+        };
+        let file = |d: &Path, t: &str| {
+            std::fs::create_dir_all(d).unwrap();
+            let p = d.join(format!("{t}{}", std::env::consts::EXE_SUFFIX));
+            std::fs::write(&p, b"").unwrap();
+            norm(p)
+        };
+        let path = std::env::join_paths([&sys]).unwrap();
+        let find = |o: Option<&str>| {
+            find_python_in(o.map(std::ffi::OsStr::new), Some(&exe), Some(&path)).map(norm)
+        };
+        // Nothing anywhere.
+        assert_eq!(find(None), None);
+        assert_eq!(bundled_python_in(Some(&exe)), None);
+        // Only on PATH (the secondary name still counts).
+        let secondary = file(&sys, if cfg!(windows) { "python3" } else { "python" });
+        assert_eq!(find(None), Some(secondary));
+        let on_path = file(&sys, if cfg!(windows) { "python" } else { "python3" });
+        assert_eq!(find(None), Some(on_path.clone()));
+        // The bundled interpreter beats PATH.
+        let bundled = if cfg!(windows) {
+            file(&exe.join("python"), "python")
+        } else {
+            file(&exe.join("python").join("bin"), "python3")
+        };
+        assert_eq!(find(None), Some(bundled.clone()));
+        assert_eq!(bundled_python_in(Some(&exe)).map(norm), Some(bundled));
+        assert_eq!(bundled_python_in(None), None);
+        // An explicit override still wins (a path, or a name on PATH).
+        assert_eq!(find(Some(on_path.to_str().unwrap())), Some(on_path.clone()));
+        let name = if cfg!(windows) { "python" } else { "python3" };
+        assert_eq!(find(Some(name)), Some(on_path));
+        assert_eq!(find(Some("/nope/python3")), None);
+        // An empty override is ignored.
+        assert!(find(Some("")).is_some());
         let _ = std::fs::remove_dir_all(root);
     }
 

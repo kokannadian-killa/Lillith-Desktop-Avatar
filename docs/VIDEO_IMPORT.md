@@ -133,7 +133,12 @@ Script lookup:
 4. `./tools/…`
 5. the source tree
 
-Python is `$LILLITH_PYTHON`, else `python3` / `python` on PATH.
+Python is `$LILLITH_PYTHON`, else the interpreter bundled next to the
+program (`<exe dir>\python\python.exe` from the Windows setup, which ships
+numpy, scipy, opencv-python-headless, Pillow and onnxruntime;
+`<exe dir>/python/bin/python3` on Linux if present), else `python3` /
+`python` on PATH. The importer also needs `tools/matte-clean/` next to
+`tools/video-pipeline/` (it imports `matte_clean`).
 
 ## Android (feasibility note, no code)
 
