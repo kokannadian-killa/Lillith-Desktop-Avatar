@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Per-user, once: DemonOS colours + wallpaper (cosmetic only).
+stamp="${XDG_CONFIG_HOME:-$HOME/.config}/demonos-firstboot.done"
+[[ -e "$stamp" ]] && exit 0
+command -v plasma-apply-colorscheme >/dev/null && plasma-apply-colorscheme DemonOS || true
+command -v plasma-apply-wallpaperimage >/dev/null && \
+  plasma-apply-wallpaperimage /usr/share/wallpapers/DemonOS/contents/images/1920x1080.png || true
+touch "$stamp"
