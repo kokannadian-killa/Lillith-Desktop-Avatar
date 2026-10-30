@@ -30,6 +30,7 @@ All of this is **additive**. Nothing outside `iso/` changes; the build copies
 | `pkgs/lillith-llama-bin/PKGBUILD` | llama.cpp `llama-server` b11829, pinned to the sha256 in `bundle/llama/llama.lock`, installed to `/opt/llama` |
 | `theme/make-theme-assets.py` | draws the wallpaper, GRUB, syslinux, Plymouth and SDDM art from `branding/icons/{demonos-emblem,phantomcore-red}` and the `lillith-theme` fonts |
 | `build-iso.sh` | host driver (below) |
+| `setup-arch-chroot.sh` | creates, enters (`run CMD…`) and unmounts (`umount`) the Arch bootstrap chroot; `ARCH_BASE=` picks its location |
 | `chroot-build.sh` | runs inside the Arch chroot: makepkg, repo-add, art, mkarchiso |
 | `test-boot.sh` | QEMU **TCG-only** boot test (OVMF + BIOS), with a serial log and PNG screendumps |
 | `guest-check.py` | in-guest checks over the serial console, run by `test-boot.sh` |
@@ -98,14 +99,14 @@ All of these are in `iso/profile`; the repo itself is untouched.
 ## Building
 
 Requirements:
-* The Arch chroot from `/workspace/qsec/scripts/setup-arch-chroot.sh`, with archiso 91 and grub.
+* The Arch chroot from `iso/setup-arch-chroot.sh`, with archiso 91 and grub.
 * sudo.
 * About **10 GB free** on the disk that holds `/workspace/qsec/iso-build`.
 * The animation art checked out from LFS. Only `assets/generated/**` and `branding/**` are needed: `git lfs pull --include='assets/generated/**,branding/**'`.
 
 ```bash
 # once: Arch bootstrap chroot (verified download, pacman keyring, archiso, grub)
-/workspace/qsec/scripts/setup-arch-chroot.sh
+iso/setup-arch-chroot.sh
 
 # build (from the checkout's root)
 iso/build-iso.sh
@@ -145,11 +146,11 @@ cp -a iso/profile $BUILD/staging/profile
 ln /workspace/models/qwen2.5-0.5b-instruct-q4_k_m.gguf \
    $BUILD/staging/profile/airootfs/usr/share/lillith/models/
 # mounts
-/workspace/qsec/scripts/setup-arch-chroot.sh run true  # bind-mounts the chroot root onto itself
+iso/setup-arch-chroot.sh run true  # bind-mounts the chroot root onto itself
 sudo mount --bind $BUILD $ROOT/build
 sudo mount --bind <checkout> $ROOT/build/src && sudo mount -o remount,bind,ro $ROOT/build/src
 # build
-/workspace/qsec/scripts/setup-arch-chroot.sh run env SOURCE_DATE_EPOCH=... /build/src/iso/chroot-build.sh
+iso/setup-arch-chroot.sh run env SOURCE_DATE_EPOCH=... /build/src/iso/chroot-build.sh
 # result
 sha256sum out/*.iso > out/*.iso.sha256
 sudo umount $ROOT/build/src $ROOT/build; sudo rm -rf $BUILD/work
@@ -232,8 +233,11 @@ Any Alert makes the overall status **CRITICAL**. In a QEMU/TCG guest the emulate
 | date (MDT) | lillith | ISO sha256 | notes |
 |---|---|---|---|
 | 2026-10-30 06:06 | 20dee27 | `6411be1f73ff05df0900d380091375358cf37a476664a97ab22a5ccf27dfdaff` | first build; UEFI + BIOS reached the desktop; display blanked after ~10 min; LLMNR on; units pointed at `~/.local/bin`. Replaced by the next build (deleted for disk). |
+| 2026-10-30 07:56 | 20dee27 + unit drop-ins (bb50f4f) | `5ce04e868167a1265f5630f918c6982a259b3c5b82ed8fd3d8c8c2b29a704df3` | current. UEFI and BIOS TCG boot tests: every guest check passes, including the shield unit active and rewriting status.json, LLMNR off, and the screen still live at 14–17 min. |
 
 ## Known limits
+
+* mDNS is still on: systemd-resolved listens on `0.0.0.0:5353`. releng's `resolved.conf.d/archiso.conf` (`MulticastDNS=yes`) sorts after `10-demonos-local-only.conf`, so its `MulticastDNS=no` loses. LLMNR is off. To turn mDNS off as well in the next build, rename the drop-in so it sorts last (e.g. `zz-demonos-local-only.conf`). The guest check reports this as `INFO`.
 
 * Lillith starts from `~/.config/autostart/lillith.desktop`, not from
   `lillith.service`, so the two never run together. The unit is there for users

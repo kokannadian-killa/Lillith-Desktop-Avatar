@@ -18,7 +18,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 BUILD="${DEMONOS_BUILD_DIR:-/workspace/qsec/iso-build}"
-CHROOT_SH="${ARCH_CHROOT_SCRIPT:-/workspace/qsec/scripts/setup-arch-chroot.sh}"
+CHROOT_SH="${ARCH_CHROOT_SCRIPT:-$HERE/setup-arch-chroot.sh}"
 ROOT="${ARCH_ROOT:-/workspace/qsec/arch-root/root.x86_64}"
 MODEL="${DEMONOS_MODEL:-/workspace/models/qwen2.5-0.5b-instruct-q4_k_m.gguf}"
 MODEL_SHA="${DEMONOS_MODEL_SHA:-}"         # optional pin
