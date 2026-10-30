@@ -805,6 +805,29 @@ if [[ $VOICE != 0 && -n $VKIT ]]; then
   fi
 fi
 
+# ── 7c. Pose Builder's AI cut-out model (bundled; nothing downloaded) ─
+# The all-in-one zip ships models/rembg/isnet-anime.onnx (176 MB); it is
+# copied, sha256-checked, into ~/.local/share/lillith/models/rembg, where the
+# pipeline looks (matte_model.py). LILLITH_MATTE_MODEL=<file> picks another copy.
+MSRC=""
+for m in "${LILLITH_MATTE_MODEL:-}" "$ROOT/models/rembg/isnet-anime.onnx" "$ROOT/../models/rembg/isnet-anime.onnx"; do
+  [[ -n $m && -f $m ]] && { MSRC="$m"; break; }
+done
+MDEST="$DATA_DIR/models"
+if [[ -f $MDEST/rembg/isnet-anime.onnx && -z ${LILLITH_MATTE_MODEL:-} ]] && [[ $(stat -c %s "$MDEST/rembg/isnet-anime.onnx") == 176069933 ]]; then
+  ok "Pose Builder AI cut-out model already in $MDEST/rembg"
+elif [[ -n $MSRC ]]; then
+  step "7c/8 Pose Builder's AI cut-out model (bundled; nothing is downloaded)"
+  if LILLITH_MATTE_MODEL="$MSRC" bash "$ROOT/tools/release/stage-matte-model.sh" "$MDEST" 2>&1 | sed 's/^/  /'; [[ ${PIPESTATUS[0]} == 0 ]]; then
+    ok "isnet-anime.onnx installed in $MDEST/rembg"
+  else
+    warn "the bundled isnet-anime.onnx failed its checksum; Pose Builder will use the backdrop key."
+  fi
+else
+  warn "no isnet-anime.onnx in this download: Pose Builder's AI cut-out (--matte isnet) needs it."
+  warn "Put isnet-anime.onnx (176,069,933 bytes) in $MDEST/rembg/ (or /opt/lillith/models/rembg/)."
+fi
+
 # ── 8. check + start ────────────────────────────────────────────────
 step "8/8  Checking the install"
 "$LILLITH" --help >/dev/null || die "$LILLITH --help failed"

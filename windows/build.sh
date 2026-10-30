@@ -22,6 +22,11 @@
 # Env: CARGO (cargo binary, default `cargo`), CARGO_TARGET_DIR, DIST,
 #      SKIP_BUILD=1 (reuse the last release build), NO_ZIP=1,
 #      NO_LLAMA=1 (leave the bundled llama-server out),
+#      LILLITH_MATTE_MODEL=<isnet-anime.onnx> (Pose Builder's AI cut-out model,
+#        176 MB; default /workspace/lillith/matte-dl/isnet-anime.onnx). It is
+#        sha256-checked and staged as models\rembg\isnet-anime.onnx (never in
+#        git, never downloaded); a missing model fails the build unless
+#        NO_MATTE_MODEL=1,
 #      VOICE_PAYLOAD=<lillith-voice-win-<id>.zip> (from
 #        tools/lillith-voice/windows/build-voice-win.sh): adds Lillith's voice
 #        (cloned voice, p1 fallback, offline STT; ~1.3 GB) to the installer
@@ -103,6 +108,15 @@ cp "$HERE/INSTALL-windows.md" "$STAGE/INSTALL-windows.txt"
 cp "$ROOT/LICENSE" "$STAGE/LICENSE.txt"
 cp "$ROOT/LICENSE-ASSETS.md" "$STAGE/LICENSE-ASSETS.txt"
 cp "$ROOT/assets/config.example.toml" "$STAGE/config.example.toml"
+# Pose Builder: the import pipeline (tools\video-pipeline\*.py, found next to
+# the exe) and its AI cut-out model in <install dir>\models\rembg.
+mkdir -p "$STAGE/tools/video-pipeline"
+cp "$ROOT"/tools/video-pipeline/*.py "$STAGE/tools/video-pipeline/"
+if [[ "${NO_MATTE_MODEL:-}" == 1 ]]; then
+  echo "==> NO_MATTE_MODEL=1: no AI cut-out model (Pose Builder uses the backdrop key)"
+else
+  bash "$ROOT/tools/release/stage-matte-model.sh" "$STAGE/models"
+fi
 LLAMA_SRC="$ROOT/bundle/llama/windows-x64"
 if [[ "${NO_LLAMA:-}" != 1 && -f "$LLAMA_SRC/llama-server.exe" ]]; then
   echo "==> bundling llama-server ($(head -n1 "$LLAMA_SRC/BUNDLE.txt" 2>/dev/null || echo windows-x64))"
