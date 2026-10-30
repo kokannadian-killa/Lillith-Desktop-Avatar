@@ -180,6 +180,101 @@ pub fn migrate_from_aether() -> io::Result<MigrationReport> {
     Ok(report)
 }
 
+// ---------------------------------------------------------------------------
+// Upstream Biotek Engine (`biotekengine`, BoiTekEngine repo) paths.
+//
+// Separate from Lillith's own data home above: the engine keeps its own
+// names (`BIOTEKENGINE_*`, `biotekengine.service`, `biotekengine_*`
+// metrics, `~/.biotekengine/`). Nothing here writes or creates anything.
+// ---------------------------------------------------------------------------
+
+/// Upstream engine binary name.
+pub const ENGINE_BIN: &str = "biotekengine";
+/// Upstream systemd unit name.
+pub const ENGINE_UNIT: &str = "biotekengine.service";
+/// Upstream Prometheus metric name prefix.
+pub const ENGINE_METRICS_PREFIX: &str = "biotekengine_";
+/// Upstream user dot-dir (`~/.biotekengine`, and `.biotekengine` under its CWD).
+pub const ENGINE_DOT_DIR: &str = ".biotekengine";
+/// Engine working dir under Lillith's data home (`%h/.biotek/engine`).
+pub const ENGINE_WORK_SUBDIR: &str = "engine";
+/// Config path the engine loads, relative to its CWD (hard-coded upstream).
+pub const ENGINE_CONFIG_REL: &str = "config/biotekengine.toml";
+/// Data dir from the stock `config/biotekengine.toml` (`[cortex] data_dir`).
+pub const ENGINE_DATA_REL: &str = "data";
+/// Data-dir override. Set by the upstream units / Docker / k8s, but **not
+/// read by upstream code**; Lillith honours it so both sides agree.
+pub const ENGINE_DATA_DIR_ENV: &str = "BIOTEKENGINE_DATA_DIR";
+/// Config-file override. Set by the upstream units / Docker / k8s, but
+/// **not read by upstream code** (it always loads [`ENGINE_CONFIG_REL`]
+/// from its CWD); a launcher must place the file there.
+pub const ENGINE_CONFIG_ENV: &str = "BIOTEKENGINE_CONFIG";
+/// Upstream static GUI port (hard-coded; clashes with llama-server's default).
+pub const ENGINE_GUI_PORT: u16 = 8080;
+/// Upstream WebSocket port (hard-coded, binds 0.0.0.0 upstream).
+pub const ENGINE_WS_PORT: u16 = 8765;
+/// Upstream Prometheus port (documented upstream).
+pub const ENGINE_METRICS_PORT: u16 = 9090;
+
+/// Resolved upstream engine paths.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnginePaths {
+    /// Engine CWD: `<biotek home>/engine`.
+    pub work_dir: PathBuf,
+    /// `$BIOTEKENGINE_CONFIG`, else `<work_dir>/config/biotekengine.toml`.
+    pub config_file: PathBuf,
+    /// `$BIOTEKENGINE_DATA_DIR`, else `<work_dir>/data`.
+    pub data_dir: PathBuf,
+    /// GGUF model registry: `~/.biotekengine/models` (upstream `model_registry`).
+    pub models_dir: PathBuf,
+    /// CWD-relative engine state: `<work_dir>/.biotekengine`
+    /// (`reports/`, `probability/`, `lab/registry/`).
+    pub state_dir: PathBuf,
+}
+
+impl EnginePaths {
+    /// `<state_dir>/reports` (upstream report generator output).
+    pub fn reports_dir(&self) -> PathBuf {
+        self.state_dir.join("reports")
+    }
+
+    /// True when the config override differs from where the engine will
+    /// actually read it (`<work_dir>/config/biotekengine.toml`).
+    pub fn config_needs_placing(&self) -> bool {
+        self.config_file != self.work_dir.join(ENGINE_CONFIG_REL)
+    }
+}
+
+/// The engine-path rule from explicit values (testable without env).
+/// `biotek_home` is Lillith's data home, `home` is `$HOME`.
+pub fn engine_paths_from(
+    biotek_home: Option<PathBuf>,
+    home: Option<PathBuf>,
+    data_env: Option<PathBuf>,
+    config_env: Option<PathBuf>,
+) -> Option<EnginePaths> {
+    let work_dir = biotek_home?.join(ENGINE_WORK_SUBDIR);
+    let models_dir = home?.join(ENGINE_DOT_DIR).join("models");
+    Some(EnginePaths {
+        config_file: config_env.unwrap_or_else(|| work_dir.join(ENGINE_CONFIG_REL)),
+        data_dir: data_env.unwrap_or_else(|| work_dir.join(ENGINE_DATA_REL)),
+        state_dir: work_dir.join(ENGINE_DOT_DIR),
+        models_dir,
+        work_dir,
+    })
+}
+
+/// Upstream engine paths for this user (honours `$BIOTEK_HOME`,
+/// `$BIOTEKENGINE_DATA_DIR`, `$BIOTEKENGINE_CONFIG`; absolute values only).
+pub fn engine_paths() -> Option<EnginePaths> {
+    engine_paths_from(
+        biotek_home(),
+        crate::paths::home_dir(),
+        env_abs(ENGINE_DATA_DIR_ENV),
+        env_abs(ENGINE_CONFIG_ENV),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,5 +362,55 @@ mod tests {
             assert!(new.join(d).is_dir());
         }
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn engine_defaults() {
+        let e = engine_paths_from(
+            Some("/home/k/.biotek".into()),
+            Some("/home/k".into()),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(e.work_dir, PathBuf::from("/home/k/.biotek/engine"));
+        assert_eq!(
+            e.config_file,
+            PathBuf::from("/home/k/.biotek/engine/config/biotekengine.toml")
+        );
+        assert_eq!(e.data_dir, PathBuf::from("/home/k/.biotek/engine/data"));
+        assert_eq!(e.models_dir, PathBuf::from("/home/k/.biotekengine/models"));
+        assert_eq!(
+            e.reports_dir(),
+            PathBuf::from("/home/k/.biotek/engine/.biotekengine/reports")
+        );
+        assert!(!e.config_needs_placing());
+    }
+
+    #[test]
+    fn engine_env_overrides() {
+        let e = engine_paths_from(
+            Some("/b".into()),
+            Some("/home/k".into()),
+            Some("/var/lib/biotekengine/data".into()),
+            Some("/etc/biotekengine/biotekengine.toml".into()),
+        )
+        .unwrap();
+        assert_eq!(e.data_dir, PathBuf::from("/var/lib/biotekengine/data"));
+        assert_eq!(
+            e.config_file,
+            PathBuf::from("/etc/biotekengine/biotekengine.toml")
+        );
+        assert_eq!(e.work_dir, PathBuf::from("/b/engine"));
+        assert_eq!(e.models_dir, PathBuf::from("/home/k/.biotekengine/models"));
+        assert!(e.config_needs_placing());
+    }
+
+    #[test]
+    fn engine_needs_homes() {
+        assert_eq!(engine_paths_from(None, Some("/h".into()), None, None), None);
+        assert_eq!(engine_paths_from(Some("/b".into()), None, None, None), None);
+        assert_eq!(ENGINE_UNIT, "biotekengine.service");
+        assert!(ENGINE_METRICS_PREFIX.starts_with(ENGINE_BIN));
     }
 }
