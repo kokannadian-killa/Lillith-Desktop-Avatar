@@ -94,6 +94,28 @@ compose and k8s but no source file reads them. Env vars the code does read:
 with `WorkingDirectory` set so `./config` and `./data` resolve, e.g. a user unit
 with `WorkingDirectory=%h/.biotek/engine` (proposal, not implemented here).
 
+## 4b. Split: Lillith data home vs upstream engine paths
+
+Two resolvers in `lillith_setup::biotek`, deliberately separate:
+
+| | Lillith data home | Upstream Biotek Engine (`biotekengine`) |
+|---|---|---|
+| Resolver | `biotek_home()` | `engine_paths()` → `EnginePaths` |
+| Root | `$BIOTEK_HOME` → `$AETHER_HOME` (deprecated) → `~/.biotek` | work dir `<biotek home>/engine` (= `%h/.biotek/engine` in a user unit) |
+| Config | `~/.biotek/config/*.toml` | `$BIOTEKENGINE_CONFIG` → `<work_dir>/config/biotekengine.toml` |
+| Data | layout in §4 | `$BIOTEKENGINE_DATA_DIR` → `<work_dir>/data` |
+| Models | Lillith's own GGUF scan paths | `~/.biotekengine/models` (`$HOME`-relative upstream) |
+| Engine state | n/a | `<work_dir>/.biotekengine/{reports,probability,lab/registry}` (`state_dir`, `reports_dir()`) |
+| Names | `biotek`, `BIOTEK_*` | unchanged upstream: `BIOTEKENGINE_*`, `biotekengine.service`, `biotekengine_*` metrics |
+
+`BIOTEKENGINE_DATA_DIR` / `BIOTEKENGINE_CONFIG` are set by the upstream units,
+Dockerfile, compose and k8s files but **upstream code does not read them**. Lillith
+honours them (absolute values only) so its view matches the unit's intent. Since the
+engine always loads `config/biotekengine.toml` from its CWD,
+`EnginePaths::config_needs_placing()` is true when the override points elsewhere; the
+launcher must then copy or symlink the file into `<work_dir>/config/`. Nothing in
+Lillith creates or writes engine paths.
+
 ## 5. Fallback / migration behaviour (`crates/lillith-setup/src/biotek.rs`)
 
 * `biotek_home()`: `$BIOTEK_HOME` → `$AETHER_HOME` (deprecated) → `~/.biotek`. Only absolute, non-empty env values count.
@@ -116,9 +138,40 @@ with `WorkingDirectory=%h/.biotek/engine` (proposal, not implemented here).
 
 1. **Data home**: `lillith_setup::biotek` (this branch) is the single resolver for `~/.biotek`.
 2. **Engine binary** `biotekengine` (Rust, clap CLI): `init <scope>`, `health`, `report`, `pending` / `approve <id>` / `deny <id>` (approval gate → map onto Lillith's consent / blood-seal dialog and `~/.biotek/consent/`), `gui`, `backup`, `search`, `model list`.
-3. **WebSocket** `ws://<host>:8765`: JSON frames `{"type": "metrics"|"state"|"holo_update"|"event", "data": …}`; a QuantumSec panel can subscribe read-only. Bind to loopback (upstream binds `0.0.0.0`).
-4. **Prometheus** `http://localhost:9090/metrics`, prefix `biotekengine_` (e.g. `biotekengine_pending_approvals`, `biotekengine_swarm_agents_active`).
-5. **Static GUI** `:8080` serves `gui/biotekengine.html`. Conflict: Lillith's llama-server default is also `127.0.0.1:8080` (`[llm] server_url`); one must move before bundling both.
+3. **WebSocket** `:8765`: JSON frames `{"type": "metrics"|"state"|"holo_update"|"event", "data": …}`; a QuantumSec panel can subscribe read-only. **Must be localhost-only** (see §8).
+4. **Prometheus** `:9090/metrics`, prefix `biotekengine_` (e.g. `biotekengine_pending_approvals`, `biotekengine_swarm_agents_active`). **Must be localhost-only.** Note: in the upstream `main.rs` we read, `MetricsExporter` is defined but never started, so `:9090` may not be served until upstream wires it.
+5. **Static GUI** `:8080` serves `gui/biotekengine.html`. **Clashes with Lillith's llama-server default** `127.0.0.1:8080` (see §8).
 6. **LLM**: engine uses Ollama `http://localhost:11434`, model `dolphin3.0-llama3.2-3b`; Lillith's Ollama host defaults to the same port, so one Ollama can serve both.
 7. **systemd**: upstream ships a hardened *system* unit (`User=biotekengine`, `/var/lib/biotekengine`). For the ISO prefer a user unit or keep the system unit but do not mix data with `~/.biotek`.
 8. **Legal/scope**: upstream is "PROPRIETARY" and pentest-oriented (`swarm <target>`, `predict-*`, `pos-audit`). Lillith's red team is LOCAL SIMULATION ONLY; only defensive/read-only engine commands should be wired without explicit consent.
+
+## 8. Network integration notes (no engine code changed)
+
+Upstream hard-codes all three listeners on `0.0.0.0` (`gui_server.rs`, `websocket_server.rs`)
+with fixed ports (`with_port(8080)`, `8765`) and has no CLI flag or env var for host/port.
+
+| Port | Upstream | Required in Lillith OS |
+|---|---|---|
+| 8765 WebSocket | `0.0.0.0:8765` | localhost only |
+| 9090 Prometheus | documented, `0.0.0.0` | localhost only |
+| 8080 static GUI | `0.0.0.0:8080` | move off 8080; **leave Lillith's llama-server default `127.0.0.1:8080` alone** |
+
+Recommended fix (unit / launch level only):
+
+* **Container launch (preferred, no code change):** publish only to loopback and remap the GUI,
+  e.g. `-p 127.0.0.1:18080:8080 -p 127.0.0.1:8765:8765 -p 127.0.0.1:9090:9090`
+  (compose: `"127.0.0.1:18080:8080"` etc.). The engine keeps listening on 8080 inside its
+  own network namespace, so there is no clash with llama-server, and nothing is reachable off-box.
+  `18080` is a suggestion; pick any free loopback port and record it in `~/.biotek/config/`.
+* **Bare systemd unit (`biotekengine.service` or a user unit with `WorkingDirectory=%h/.biotek/engine`):**
+  add `IPAddressAllow=localhost` + `IPAddressDeny=any` so 8765 / 9090 / 8080 only answer loopback
+  peers. This does **not** free port 8080: a bare process cannot be moved off 8080 without an
+  upstream change. So under a bare unit either run the engine in its own netns (e.g.
+  `PrivateNetwork=yes` plus a `systemd-socket-proxyd` unit on `127.0.0.1:18080`, `:8765`, `:9090`,
+  which also cuts its Ollama access unless proxied), or do not run `biotekengine gui` while
+  llama-server is up. Commands other than `gui` open no listeners.
+* Upstream follow-up (not done here, BoiTekEngine untouched): a host/port flag or env for the three
+  listeners would make the bare-unit path trivial.
+
+Constants for these live in `lillith_setup::biotek` (`ENGINE_GUI_PORT`, `ENGINE_WS_PORT`,
+`ENGINE_METRICS_PORT`, `ENGINE_UNIT`, `ENGINE_BIN`, `ENGINE_METRICS_PREFIX`).
