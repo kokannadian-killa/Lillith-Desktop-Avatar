@@ -420,3 +420,45 @@ fn observe_never_blocks_when_the_queue_is_full() {
     assert!(b.dropped() > 0);
     gate_tx.send(()).unwrap();
 }
+
+#[test]
+fn presence_profile_is_sent_at_start_from_memory_events() {
+    let cfg = MemoryConfig::default();
+    let (ptx, prx) = channel::<[f32; 8]>();
+    let ptx = Mutex::new(ptx);
+    let mut opts = BridgeOptions::new(&cfg, Box::new(|_| {}));
+    opts.clock = Arc::new(|| NEXT_MON_EVENING);
+    let brain = steam_evenings(&cfg);
+    opts.open = Box::new(move || Some(brain));
+    opts.presence = Some(Box::new(move |p| {
+        let _ = ptx.lock().unwrap().send(p);
+    }));
+    let b = MemoryBridge::spawn_with(opts);
+    let p = prx
+        .recv_timeout(Duration::from_millis(1500))
+        .expect("a profile at start");
+    // 10 focus events, all in one evening bucket (whatever the zone).
+    assert_eq!(p.iter().sum::<f32>(), 10.0, "{p:?}");
+    assert_eq!(p.iter().filter(|v| **v > 0.0).count(), 1, "{p:?}");
+    // Not again before PRESENCE_EVERY_S.
+    assert!(prx.recv_timeout(Duration::from_millis(300)).is_err());
+    drop(b);
+}
+
+#[test]
+fn presence_detail_is_what_the_overlay_parses() {
+    let d = presence_detail(&[0.0, 1.0, 2.5, 0.0, 0.0, 0.0, 10.0, f32::NAN]);
+    assert_eq!(d, "0,1,2.5,0,0,0,10,0");
+    assert_eq!(d.split(',').count(), 8);
+    assert_eq!(PRESENCE_EVENT, "lonely.presence");
+}
+
+#[test]
+fn no_presence_sink_means_no_profile_work() {
+    let cfg = MemoryConfig::default();
+    let r = rig(cfg.clone(), Some(steam_evenings(&cfg)));
+    // The rig sets no presence sink: suggestions still work as before.
+    r.set(NEXT_MON_EVENING);
+    r.bridge.check_now();
+    assert!(r.said().is_some());
+}

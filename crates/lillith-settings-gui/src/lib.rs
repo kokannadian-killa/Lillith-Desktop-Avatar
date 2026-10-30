@@ -29,6 +29,7 @@
 //! `registry.unseal(Box::new(MyTab))` replaces the first sealed slot.
 
 mod app;
+pub mod bots;
 pub mod chrome;
 pub mod companion;
 pub mod store;
@@ -61,7 +62,7 @@ pub struct Options {
     /// Initial inner size (default 960×660; minimum is 640×480).
     pub inner_size: Option<[f32; 2]>,
     /// Tab id to open (`companion`, `motion`, `brain`, `avatar`, `icon`, `voice`,
-    /// `build`, `about`, `access`, `import`).
+    /// `build`, `bots`, `about`, `access`, `import`).
     pub start_tab: Option<String>,
     /// Sub-page for the start tab (Brain: `runtime`, `pick-model`, `persona`, `test-save`).
     pub deep_link: Option<String>,

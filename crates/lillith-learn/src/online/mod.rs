@@ -361,7 +361,8 @@ impl<'f> OnlineResearch<'f> {
             knowledge_dir: cfg.mind.resolved_knowledge_dir(),
             topics: cfg.learn.topics.clone(),
             audit_log: lillith_core::config::audit_log_path(),
-            deny: IdentityDenylist::from_local().with_names(names),
+            // Memory's person names ∪ `[learn.dream] blocklist_terms`.
+            deny: IdentityDenylist::for_requests(names, cfg.learn.dream.blocklist_terms.terms()),
             block_hosts: cfg
                 .learn
                 .block_hosts

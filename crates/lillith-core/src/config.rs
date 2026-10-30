@@ -950,7 +950,9 @@ impl LearnConfig {
     }
 }
 
-/// `[learn.dream]` (docs/SELF_LEARNING.md §11; not used before P7).
+/// `[learn.dream]` (docs/SELF_LEARNING.md §11): read by the dream card
+/// (`lillith_learn::workers::dream`) and the dream orchestration
+/// (`lillith_learn::workers::orchestrator`, P7).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LearnDreamConfig {
@@ -965,6 +967,42 @@ pub struct LearnDreamConfig {
     pub dream_strength: f32,
     pub stop_battery_pct: u32,
     pub stop_cpu_temp_c: u32,
+    /// After a session, one short digest of the saved notes from the
+    /// local model (loopback only; skipped when it's down or chat needs it).
+    pub summarize: bool,
+    /// Extra words no outgoing dream request may contain, on top of the
+    /// person names memory knows (unioned in
+    /// `lillith_learn::online::IdentityDenylist::for_requests`). Private:
+    /// never logged, audited or printed; `Debug` shows only the count.
+    pub blocklist_terms: BlockTerms,
+}
+
+/// `[learn.dream] blocklist_terms`: a plain TOML string array whose `Debug`
+/// prints only how many terms there are, so a logged config never leaks
+/// them.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct BlockTerms(pub Vec<String>);
+
+impl BlockTerms {
+    /// The terms (callers must not log them).
+    pub fn terms(&self) -> &[String] {
+        &self.0
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl std::fmt::Debug for BlockTerms {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlockTerms({} term(s))", self.0.len())
+    }
 }
 
 impl Default for LearnDreamConfig {
@@ -981,6 +1019,8 @@ impl Default for LearnDreamConfig {
             dream_strength: 0.2,
             stop_battery_pct: 20,
             stop_cpu_temp_c: 85,
+            summarize: true,
+            blocklist_terms: BlockTerms::default(),
         }
     }
 }
@@ -1263,6 +1303,36 @@ pub fn save_seasonal_outfit(path: &Path, value: &str) -> Result<(), ConfigError>
     })
 }
 
+/// Persists the "Lonely poses" toggle: `[behavior.loneliness] mode =
+/// "auto"` (on) or `"off"`, keeping the other keys of both tables.
+pub fn save_loneliness_mode(path: &Path, on: bool) -> Result<(), ConfigError> {
+    let mode = if on {
+        crate::loneliness::LonelinessMode::Auto
+    } else {
+        crate::loneliness::LonelinessMode::Off
+    };
+    update_config(path, |t| {
+        let behavior = t
+            .entry("behavior")
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !behavior.is_table() {
+            *behavior = toml::Value::Table(toml::Table::new());
+        }
+        let Some(behavior) = behavior.as_table_mut() else {
+            return;
+        };
+        let lonely = behavior
+            .entry("loneliness")
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !lonely.is_table() {
+            *lonely = toml::Value::Table(toml::Table::new());
+        }
+        if let Some(lonely) = lonely.as_table_mut() {
+            lonely.insert("mode".into(), toml::Value::String(mode.key().into()));
+        }
+    })
+}
+
 /// Read-modify-write of the config file as a TOML table (atomic rename;
 /// creates the file and directory; comments are not kept).
 pub fn update_config(path: &Path, f: impl FnOnce(&mut toml::Table)) -> Result<(), ConfigError> {
@@ -1429,6 +1499,42 @@ mod tests {
         assert_eq!(back.icon, "classic");
         save_seasonal_outfit(&p, "off").unwrap();
         assert_eq!(Config::load(&p).unwrap().seasonal_outfit, "off");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn loneliness_config_parses_and_the_toggle_saves() {
+        use crate::loneliness::LonelinessMode;
+        let c = Config::default();
+        assert_eq!(c.behavior.loneliness.mode, LonelinessMode::Auto);
+        assert_eq!(c.behavior.loneliness.max_severity, 5);
+        let c = Config::from_toml_str(
+            "[behavior.loneliness]\nmode = \"off\"\nmax_severity = 1\nquiet_hours = [23, 7]\n",
+        )
+        .unwrap();
+        assert_eq!(c.behavior.loneliness.mode, LonelinessMode::Off);
+        assert_eq!(c.behavior.loneliness.max_severity, 1);
+        assert_eq!(c.behavior.loneliness.quiet_hours, [23, 7]);
+        assert!(Config::from_toml_str("[behavior.loneliness]\nmode = \"loud\"\n").is_err());
+        let dir = std::env::temp_dir().join(format!("lillith-cfg-lonely-{}", std::process::id()));
+        let p = dir.join("config.toml");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            &p,
+            "scale = 0.75\n[behavior]\npose_cycle_s = 30.0\n[behavior.loneliness]\nmax_severity = 2\n",
+        )
+        .unwrap();
+        save_loneliness_mode(&p, false).unwrap();
+        let back = Config::load(&p).unwrap();
+        assert_eq!(back.behavior.loneliness.mode, LonelinessMode::Off);
+        assert_eq!(back.behavior.loneliness.max_severity, 2);
+        assert_eq!(back.behavior.pose_cycle_s, 30.0);
+        assert_eq!(back.scale, 0.75);
+        save_loneliness_mode(&p, true).unwrap();
+        assert_eq!(
+            Config::load(&p).unwrap().behavior.loneliness.mode,
+            LonelinessMode::Auto
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1779,5 +1885,24 @@ mod tests {
         let old: Config =
             toml::from_str("[learn]\nsafeword_cooldown_min = 60.0\nmax_duty = 0.2\n").unwrap();
         assert_eq!(old.learn.max_duty, 0.2);
+    }
+
+    #[test]
+    fn dream_blocklist_terms_parse_and_never_debug_print() {
+        assert!(Config::default().learn.dream.blocklist_terms.is_empty());
+        assert!(Config::default().learn.dream.summarize);
+        let c: Config =
+            toml::from_str("[learn.dream]\nblocklist_terms = [\"zebrafinch\", \"Quokka Lane\"]\n")
+                .unwrap();
+        let t = &c.learn.dream.blocklist_terms;
+        assert_eq!(t.terms(), ["zebrafinch", "Quokka Lane"]);
+        assert_eq!(t.len(), 2);
+        // Logged configs show the count only.
+        let dbg = format!("{c:?}");
+        assert!(dbg.contains("BlockTerms(2 term(s))"), "{dbg}");
+        assert!(!dbg.contains("zebrafinch") && !dbg.contains("Quokka"));
+        // It round-trips as a plain string array.
+        let back: Config = toml::from_str(&toml::to_string(&c).unwrap()).unwrap();
+        assert_eq!(back.learn.dream.blocklist_terms, *t);
     }
 }

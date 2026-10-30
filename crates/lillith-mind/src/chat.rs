@@ -873,6 +873,14 @@ impl ChatSession {
         }
 
         let user = user.trim();
+        // `/dream [2h|90m]`, `/dream end|stop|status` (docs §11): only opens
+        // the dream card (a mouse click on it is the sole approval) or ends /
+        // reports a session. Never reaches the model or the history.
+        if let Some(cmd) = lillith_core::dream::parse_command(user) {
+            let line = lillith_core::dream::reply_line(&cmd, &lillith_core::dream::dispatch(&cmd));
+            on_token(&line);
+            return Outcome::Reply(line);
+        }
         if let Some(line) = self.handle_forget(user) {
             on_token(&line);
             return Outcome::Reply(line);
@@ -1825,6 +1833,38 @@ mod tests {
         let off = ChatSession::new(&cfg(&url), true).with_memory(&MemoryConfig::disabled());
         assert!(off.memory().is_none());
         assert!(!off.full_system_prompt("synthwave").contains("[Memory"));
+    }
+
+    #[tokio::test]
+    async fn dream_command_only_opens_the_card_and_yes_never_approves() {
+        use lillith_core::dream::{Dispatch, Hooks};
+        use std::sync::{Arc, Mutex};
+        let asked: Arc<Mutex<Vec<Option<u64>>>> = Arc::default();
+        let a = asked.clone();
+        lillith_core::dream::set_hooks(Hooks {
+            open: Arc::new(move |m| {
+                a.lock().unwrap().push(m);
+                Dispatch::CardOpening
+            }),
+            end_early: Arc::new(|| Dispatch::NotRunning),
+            stop: Arc::new(|| Dispatch::NotRunning),
+            status: Arc::new(|| "idle".into()),
+        });
+        let mut s = ChatSession::new(&ChatConfig::default(), true);
+        let mut shown = String::new();
+        let out = s.send("/dream 90m", |t| shown.push_str(t)).await;
+        assert!(matches!(out, Outcome::Reply(_)));
+        assert!(shown.contains("click Yes"), "{shown}");
+        assert_eq!(*asked.lock().unwrap(), vec![Some(90)]);
+        let out = s.send("/dream", |_| {}).await;
+        assert!(matches!(out, Outcome::Reply(_)));
+        // A typed yes is just chat: no hook call, nothing approved.
+        let _ = s.send("yes", |_| {}).await;
+        assert_eq!(*asked.lock().unwrap(), vec![Some(90), None]);
+        assert!(s.pending_action().is_none());
+        // Commands never enter the history.
+        assert!(s.history.is_empty());
+        lillith_core::dream::clear_hooks();
     }
 
     #[tokio::test]

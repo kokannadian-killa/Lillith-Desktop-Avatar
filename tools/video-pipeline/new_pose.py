@@ -18,8 +18,9 @@ Steps (each one is a separate tool you can also run by hand):
   register  add / update the assets/generated/manifest.json entry
   pack      pack_mp4.py: sheet -> <clip>.mp4 (colour | alpha, crf 16) + halo metrics,
             sets entry.video
-  import    cargo run -p import-manifest -- --tag canonical --check (probes + decodes
-            every MP4, compares alpha with the PNG)
+  import    cargo run -p import-manifest -- --tag canonical (writes manifest.toml), then
+            the same with --check (never writes; probes + decodes every MP4, compares
+            alpha with the PNG)
 
 Timing stays in JSON (fps, loop/once, frame_durations_ms); the MP4 holds one
 frame per cell. Content rules: the locked canonical style; clothed, non-explicit.
@@ -87,6 +88,8 @@ def main():
     a = ap.parse_args()
     c, dry = a.clip, a.dry_run
     steps = STEPS[STEPS.index(a.start_step):STEPS.index(a.stop_step) + 1]
+    if not dry and ('build' in steps or 'matte' in steps):
+        import matte_model; matte_model.preflight_or_exit()   # clear message + exit 2 before any work, not a traceback mid-build
     src = os.path.join(paths.SRC_VIDEO, c, f'{c}_v3_{a.take}.mp4')
     v2 = os.path.join(paths.V2, c)
     gen = os.path.join(a.repo, 'assets', 'generated')
@@ -131,8 +134,10 @@ def main():
     if 'pack' in steps:
         run([PY, f'{HERE}/pack_mp4.py', dst, '--crf', a.crf, '--manifest', manifest, '--force'], dry)
     if 'import' in steps:
-        run(['cargo', 'run', '-q', '-p', 'import-manifest', '--', '--input', 'assets/generated/manifest.json',
-             '--tag', 'canonical', '--check'], dry, cwd=a.repo)
+        imp = ['cargo', 'run', '-q', '-p', 'import-manifest', '--', '--input', 'assets/generated/manifest.json',
+               '--tag', 'canonical']
+        run(imp, dry, cwd=a.repo)  # writes manifest.toml (only if it changed)
+        run(imp + ['--check'], dry, cwd=a.repo)  # verifies; never writes
     if not dry:
         print(f'\ndone: {c}. Review {v2}/{c}_preview.gif, then commit assets/generated/{c}/ + manifest.*'
               + ('' if a.allure else '\n(not an allure pose: add it to a catalog.rs list if the menu category matters)'))

@@ -49,16 +49,13 @@ def key_white(rgb, hard=242, soft=200, hole_min=150, matte=None):
     return out
 
 
-_SESS = None
 def key_combined(rgb, mask_floor=0.5, dilate=2):
     """White key, then cut regions the isnet-anime matte calls background
-    (motion-blur ghosts, enclosed white slivers). Keeps the white key's soft edges."""
-    global _SESS
-    from rembg import new_session, remove
-    from PIL import Image
-    if _SESS is None:
-        _SESS = new_session('isnet-anime')
-    mat = np.asarray(remove(Image.fromarray(rgb.astype(np.uint8)), session=_SESS, only_mask=True))
+    (motion-blur ghosts, enclosed white slivers). Keeps the white key's soft edges.
+    The matte comes from matte_model.isnet_mask (onnxruntime + the bundled isnet-anime.onnx; same mask rembg
+    gives, nothing downloaded). A missing model / package raises matte_model.MatteModelError with the fix."""
+    import matte_model
+    mat = matte_model.isnet_mask(rgb)
     out = key_white(rgb, matte=mat)
     m = mat.astype(np.float32) / 255
     m = ndimage.grey_dilation(m, size=(2 * dilate + 1, 2 * dilate + 1))

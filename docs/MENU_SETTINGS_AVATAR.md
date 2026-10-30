@@ -47,6 +47,7 @@ are the constants in `lillith_core::menu::wire`; `action_line` /
 | `set_mode` | `stay` / `wander` / `follow` | Mode ▸ |
 | `set_mood` | `playful` / `happy` / `mischievous` / `alert` / `sleepy` | Mood ▸ |
 | `toggle_mute`, `toggle_monitor` | – | Mute voice, Pause system monitor |
+| `toggle_loneliness` | – | Lonely poses (`[behavior.loneliness] mode = auto` / `off`) |
 | `set_size` | `small` / `normal` / `large` / `xl` / `xxl` | Resize ▸ presets |
 | `scale_step` | `+1` / `-1` (× 0.05) | Resize ▸ Bigger / Smaller |
 | `pose` | clip name, e.g. `blow_kiss` | Poses ▸ <clip> |

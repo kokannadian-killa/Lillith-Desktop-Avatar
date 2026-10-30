@@ -198,19 +198,19 @@
     [
       127,
       354,
-      0,
+      1,
       388
     ],
     [
       127,
       354,
-      0,
+      1,
       389
     ],
     [
       127,
       354,
-      0,
+      1,
       392
     ]
   ],
@@ -224,13 +224,13 @@
     "height": 400,
     "frame_count": 10,
     "fps": 8.0,
-    "bytes": 182195,
+    "bytes": 182179,
     "quality": {
       "edge_mae": 1.917,
       "edge_p99": 18.0,
-      "halo_dark": 0.023,
-      "halo_light": -0.077,
-      "alpha_mae": 0.1124
+      "halo_dark": 0.022,
+      "halo_light": -0.07,
+      "alpha_mae": 0.1129
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -245,5 +245,6 @@
     "tool": "tools/matte-clean/regress.py",
     "base": "379900d",
     "px_restored": 19
-  }
+  },
+  "fluid_polish3_edge": "frames 6-9: sun-icon glow feathered over the top 8 rows (x>=240) and row 0 cleared, so the glow fades out instead of being cut by the cell edge."
 }

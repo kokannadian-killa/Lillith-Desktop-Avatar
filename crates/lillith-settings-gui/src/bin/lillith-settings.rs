@@ -9,11 +9,12 @@ const HELP: &str = "lillith-settings — Lillith's settings / setup wizard windo
 USAGE: lillith-settings [CONFIG_PATH] [OPTIONS]
 
   CONFIG_PATH          config.toml to edit (default: ~/.config/lillith/config.toml)
-  --tab ID             open a tab: companion motion brain avatar icon voice build about
-                       access import quantumsec
+  --tab ID             open a tab: companion motion brain avatar icon voice build bots
+                       about access import quantumsec
   --step NAME          Chat/Brain wizard step: avatar runtime pick-model persona test-save;
                        Companion: poses/N opens Poses category N;
                        Avatar: import:PATH imports an image, anchors:ID edits one;
+                       Bots: a bot id/name, new, settings;
                        QuantumSec: awakening | blood-seal | tab | whisper | teams | consent | unit-enable;
                        Brain wizard: quantumsec
   --size WxH           initial window size (default 960x660, min 640x480)
@@ -69,6 +70,12 @@ fn main() {
             path => opts.config_path = Some(PathBuf::from(path)),
         }
     }
+    // Ctrl-C / SIGTERM pull the kill switch: helper bots and their
+    // commands stop before the window exits.
+    lillith_settings_gui::bots::install_ctrlc_stop();
+    // Settings, the setup wizard and their cards / file dialogs are system
+    // interactions: Lillith makes no lonely attention bids while this is open.
+    let _ui = lillith_core::system_ui::SystemUi::enter_shared("settings");
     if let Err(e) = run_with(opts, None) {
         die(&format!("{e}"));
     }

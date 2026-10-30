@@ -1,7 +1,7 @@
 {
   "name": "idle_flirt_hands_behind_sway",
   "placeholder": false,
-  "frame_count": 47,
+  "frame_count": 54,
   "frame_width": 400,
   "frame_height": 400,
   "canvas_w": 400,
@@ -9,7 +9,7 @@
   "layout": "horizontal_strip",
   "sheet": "idle_flirt_hands_behind_sway_sheet.png",
   "frames_dir": "frames/",
-  "fps": 10.5,
+  "fps": 12.0,
   "loop": true,
   "baseline_y": 392,
   "anchor": [
@@ -27,9 +27,65 @@
   "source_frame_range": {
     "first": 1,
     "last": 93,
-    "step": 2,
+    "step": null,
+    "frames": [
+      1,
+      3,
+      4,
+      6,
+      8,
+      10,
+      11,
+      13,
+      15,
+      17,
+      18,
+      20,
+      22,
+      24,
+      25,
+      27,
+      29,
+      31,
+      32,
+      34,
+      36,
+      38,
+      39,
+      41,
+      43,
+      45,
+      46,
+      48,
+      50,
+      51,
+      53,
+      55,
+      57,
+      58,
+      60,
+      62,
+      64,
+      65,
+      67,
+      69,
+      71,
+      72,
+      74,
+      76,
+      78,
+      79,
+      81,
+      83,
+      85,
+      86,
+      88,
+      90,
+      92,
+      93
+    ],
     "video_fps": 24,
-    "note": "1-based ffmpeg frame numbers"
+    "note": "1-based ffmpeg frame numbers; explicit list (even-time resample)"
   },
   "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
   "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
@@ -82,58 +138,72 @@
     631.8,
     631.8,
     631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
     631.8
   ],
   "horn_fix": {
-    "ref_horn_px": 626,
-    "ref_hue_median": 275.6,
+    "ref_horn_px": 714,
+    "ref_hue_median": 274.3,
     "mean_hue_shift_deg_per_frame": [
-      0.0,
-      -0.1,
-      -0.7,
+      -0.4,
       -0.3,
-      -0.2,
-      -0.2,
-      0.6,
-      1.2,
-      0.1,
-      0.9,
-      2.2,
-      0.6,
-      -2.1,
-      1.1,
-      2.3,
-      3.9,
-      2.6,
+      -0.7,
       -0.6,
-      3.3,
-      2.8,
-      6.5,
-      3.8,
-      0.9,
-      1.0,
-      0.8,
-      2.4,
-      2.9,
-      1.5,
-      2.7,
-      3.1,
-      5.1,
-      3.5,
-      -0.8,
-      0.6,
-      1.9,
-      3.1,
-      1.6,
+      -0.5,
+      -0.5,
+      -0.3,
+      -1.2,
+      0.1,
+      -0.5,
+      0.3,
       0.1,
       1.4,
+      -0.9,
+      -3.9,
+      -1.0,
+      0.2,
+      2.4,
+      3.5,
+      -1.8,
+      -2.7,
       1.7,
-      1.0,
-      1.7,
+      1.5,
+      4.2,
+      1.3,
+      -1.1,
+      -0.6,
+      0.2,
+      1.3,
+      1.3,
+      1.2,
+      -1.4,
+      1.2,
+      1.5,
+      3.3,
+      3.8,
+      1.2,
+      -2.2,
+      -1.1,
       1.1,
-      0.4,
-      0.1,
+      2.4,
+      2.7,
+      -1.1,
+      -0.5,
+      0.6,
+      0.6,
+      -0.3,
+      1.3,
+      -0.6,
+      0.2,
+      -0.5,
       0.3,
+      -0.2,
       -0.2
     ]
   },
@@ -145,7 +215,7 @@
     "chest_follow"
   ],
   "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
-  "notes": "Idle variant (waiting): hands clasped behind back, rocking side to side; whole 4 s video (first = last = idle still).",
+  "notes": "Idle variant (waiting): hands clasped behind back, rocking side to side; whole 4 s video (first = last = idle still). | 12 fps fluid pilot (art/fluid-bounce): rebuilt from the same source span at 12 fps, even-time resample, same loop length, shifted -7 px to keep the idle-start alignment",
   "canvas_compliant": true,
   "bbox_per_frame": [
     [
@@ -161,37 +231,43 @@
       392
     ],
     [
-      144,
+      141,
       270,
-      21,
-      392
-    ],
-    [
-      144,
-      270,
-      21,
-      392
-    ],
-    [
-      144,
-      270,
-      21,
-      392
-    ],
-    [
-      146,
-      268,
-      21,
-      392
-    ],
-    [
-      145,
-      257,
       21,
       392
     ],
     [
       143,
+      270,
+      21,
+      392
+    ],
+    [
+      143,
+      270,
+      21,
+      392
+    ],
+    [
+      143,
+      270,
+      21,
+      392
+    ],
+    [
+      143,
+      268,
+      21,
+      392
+    ],
+    [
+      142,
+      257,
+      21,
+      392
+    ],
+    [
+      142,
       242,
       20,
       392
@@ -203,19 +279,25 @@
       392
     ],
     [
-      96,
-      240,
+      115,
+      242,
+      21,
+      392
+    ],
+    [
+      92,
+      242,
       23,
       392
     ],
     [
-      91,
+      93,
       241,
-      24,
+      23,
       392
     ],
     [
-      102,
+      110,
       240,
       22,
       392
@@ -229,7 +311,7 @@
     [
       143,
       255,
-      20,
+      19,
       392
     ],
     [
@@ -239,27 +321,33 @@
       392
     ],
     [
-      143,
+      142,
       293,
       24,
       392
     ],
     [
-      145,
-      285,
-      22,
+      144,
+      291,
+      23,
       392
     ],
     [
       145,
-      267,
+      280,
+      20,
+      392
+    ],
+    [
+      143,
+      255,
       21,
       392
     ],
     [
-      144,
+      140,
       243,
-      19,
+      20,
       392
     ],
     [
@@ -275,75 +363,87 @@
       392
     ],
     [
-      95,
-      237,
-      22,
-      392
-    ],
-    [
-      113,
+      94,
       238,
       21,
       392
     ],
     [
-      143,
-      241,
+      113,
+      239,
       20,
       392
     ],
     [
-      142,
-      280,
-      22,
+      124,
+      240,
+      21,
+      392
+    ],
+    [
+      140,
+      252,
+      20,
       392
     ],
     [
       141,
-      291,
-      24,
-      392
-    ],
-    [
-      143,
       287,
       23,
       392
     ],
     [
-      145,
+      140,
+      291,
+      24,
+      392
+    ],
+    [
+      142,
+      287,
+      22,
+      392
+    ],
+    [
+      143,
       273,
       21,
       392
     ],
     [
-      142,
+      141,
       242,
       19,
       392
     ],
     [
-      126,
-      241,
-      22,
+      141,
+      242,
+      19,
       392
     ],
     [
-      94,
+      105,
+      241,
+      23,
+      392
+    ],
+    [
+      91,
       240,
       23,
       392
     ],
     [
-      95,
+      99,
       238,
-      22,
+      20,
       392
     ],
     [
       111,
       239,
-      21,
+      20,
       392
     ],
     [
@@ -353,84 +453,385 @@
       392
     ],
     [
-      141,
-      276,
+      140,
+      277,
       22,
       392
     ],
     [
       141,
       290,
-      24,
+      23,
       392
     ],
     [
-      143,
-      286,
+      142,
+      290,
       22,
       392
     ],
     [
       143,
-      276,
-      22,
+      283,
+      21,
       392
     ],
     [
-      144,
-      264,
+      142,
+      272,
+      21,
+      392
+    ],
+    [
+      141,
+      259,
       20,
       392
     ],
     [
-      144,
+      142,
       253,
       20,
       392
     ],
     [
-      145,
+      143,
+      242,
+      20,
+      392
+    ],
+    [
+      143,
       241,
       20,
       392
     ],
     [
-      144,
-      239,
+      143,
+      246,
       20,
       392
     ],
     [
-      145,
-      246,
+      142,
+      250,
+      21,
+      392
+    ],
+    [
+      142,
+      260,
+      21,
+      392
+    ],
+    [
+      142,
+      266,
       21,
       392
     ],
     [
       143,
-      256,
-      22,
-      392
-    ],
-    [
-      143,
-      264,
+      269,
       21,
       392
     ],
     [
       143,
-      268,
-      21,
-      392
-    ],
-    [
-      146,
       270,
       21,
       392
     ]
   ],
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -141,
+        17,
+        0.0238
+      ],
+      [
+        -141,
+        17,
+        0.0262
+      ],
+      [
+        -141,
+        17,
+        0.0369
+      ],
+      [
+        -141,
+        17,
+        0.0235
+      ],
+      [
+        -141,
+        17,
+        0.025
+      ],
+      [
+        -141,
+        17,
+        0.0254
+      ],
+      [
+        -141,
+        17,
+        0.0254
+      ],
+      [
+        -141,
+        17,
+        0.0227
+      ],
+      [
+        -141,
+        17,
+        0.0246
+      ],
+      [
+        -141,
+        17,
+        0.0255
+      ],
+      [
+        -141,
+        17,
+        0.0261
+      ],
+      [
+        -141,
+        17,
+        0.0252
+      ],
+      [
+        -141,
+        17,
+        0.0248
+      ],
+      [
+        -141,
+        17,
+        0.019
+      ],
+      [
+        -141,
+        17,
+        0.023
+      ],
+      [
+        -141,
+        17,
+        0.0278
+      ],
+      [
+        -141,
+        17,
+        0.0254
+      ],
+      [
+        -141,
+        17,
+        0.0231
+      ],
+      [
+        -141,
+        17,
+        0.0249
+      ],
+      [
+        -141,
+        17,
+        0.0223
+      ],
+      [
+        -141,
+        17,
+        0.0186
+      ],
+      [
+        -141,
+        17,
+        0.0226
+      ],
+      [
+        -141,
+        17,
+        0.0233
+      ],
+      [
+        -141,
+        17,
+        0.0238
+      ],
+      [
+        -141,
+        17,
+        0.0206
+      ],
+      [
+        -141,
+        17,
+        0.0228
+      ],
+      [
+        -141,
+        17,
+        0.0218
+      ],
+      [
+        -141,
+        17,
+        0.0282
+      ],
+      [
+        -141,
+        17,
+        0.0236
+      ],
+      [
+        -141,
+        17,
+        0.0255
+      ],
+      [
+        -141,
+        17,
+        0.0243
+      ],
+      [
+        -141,
+        17,
+        0.0193
+      ],
+      [
+        -141,
+        17,
+        0.02
+      ],
+      [
+        -141,
+        17,
+        0.0277
+      ],
+      [
+        -141,
+        17,
+        0.0235
+      ],
+      [
+        -141,
+        17,
+        0.023
+      ],
+      [
+        -141,
+        17,
+        0.0219
+      ],
+      [
+        -141,
+        17,
+        0.0231
+      ],
+      [
+        -141,
+        17,
+        0.0241
+      ],
+      [
+        -141,
+        17,
+        0.0264
+      ],
+      [
+        -141,
+        17,
+        0.0258
+      ],
+      [
+        -141,
+        17,
+        0.0244
+      ],
+      [
+        -141,
+        17,
+        0.0237
+      ],
+      [
+        -141,
+        17,
+        0.024
+      ],
+      [
+        -141,
+        17,
+        0.0248
+      ],
+      [
+        -141,
+        17,
+        0.0269
+      ],
+      [
+        -141,
+        17,
+        0.029
+      ],
+      [
+        -141,
+        17,
+        0.0272
+      ],
+      [
+        -141,
+        17,
+        0.0319
+      ],
+      [
+        -141,
+        17,
+        0.0284
+      ],
+      [
+        -141,
+        17,
+        0.0228
+      ],
+      [
+        -141,
+        17,
+        0.0243
+      ],
+      [
+        -141,
+        17,
+        0.0259
+      ],
+      [
+        -141,
+        17,
+        0.0312
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
+  "fluid_pilot": {
+    "old_fps": 10.5,
+    "old_frame_count": 47,
+    "x_shift_px": -7
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "496df25dfe76be27f929d64ecd12850c7292123db36095107fae0e887800b450",
+    "source_sha256": "d38aa3e0e181da95f3f1fd0f16389102d7f0190728123b73ba45e30551fe8d60"
+  },
   "video": {
     "file": "idle_flirt_hands_behind_sway.mp4",
     "layout": "alpha_side_by_side",
@@ -439,34 +840,16 @@
     "edge_bleed_px": 0,
     "width": 800,
     "height": 400,
-    "frame_count": 47,
-    "fps": 10.5,
-    "bytes": 551066,
+    "frame_count": 54,
+    "fps": 12.0,
+    "bytes": 552710,
     "quality": {
-      "edge_mae": 2.423,
-      "edge_p99": 20.34,
-      "halo_dark": 0.042,
-      "halo_light": -0.154,
+      "edge_mae": 2.14,
+      "edge_p99": 16.0,
+      "halo_dark": 0.015,
+      "halo_light": -0.098,
       "alpha_mae": 0.0621
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
-  },
-  "matte_protect": {
-    "tool": "tools/matte-clean/regress.py",
-    "base": "379900d",
-    "px_restored": 1
-  },
-  "matte_clean_prev": {
-    "version": 1,
-    "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "a38eae5f6d857bab40b7bdd206ab7233b90eebd605a87b902cec2cce41fd4421",
-    "hand_pass": "white background pockets cleared (newbot handfix.py)",
-    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
-  },
-  "matte_clean": {
-    "version": 6,
-    "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "4c9616d6e9fb93c4af4a3579a4b2f19d300de393565b7bfe56a281b6f8cf09c1",
-    "source_sha256": "a38eae5f6d857bab40b7bdd206ab7233b90eebd605a87b902cec2cce41fd4421"
   }
 }

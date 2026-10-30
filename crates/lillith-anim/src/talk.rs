@@ -462,6 +462,8 @@ mod tests {
         Clip {
             page: "t.png".into(),
             tags: tags.iter().map(|s| s.to_string()).collect(),
+            severity: 0,
+            system: false,
             frames: vec![
                 FrameRect {
                     x: 0,

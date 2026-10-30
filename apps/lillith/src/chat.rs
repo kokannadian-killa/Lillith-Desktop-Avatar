@@ -225,6 +225,11 @@ fn pump(
             card = ev.detail.clone();
             continue;
         }
+        // `/dream …` typed in the bubble: the overlay owns the dream. This
+        // only opens the card / asks the running session to end.
+        if crate::dream_wiring::on_bubble_event(&ev.name, ev.detail.as_deref()) {
+            continue;
+        }
         closed |= ev.name == "chat.closed";
         if feed.send(ev).is_err() {
             break;
@@ -532,6 +537,7 @@ pub fn bubble_main(
     app_server: bool,
 ) -> Result<()> {
     let emit = stdout_emit();
+    crate::dream_wiring::register_bubble(emit.clone());
     let opts = BubbleOptions {
         pos,
         history: if demo { None } else { history_path(&cfg) },
@@ -831,6 +837,8 @@ pub(crate) fn review_plan_on_console(
     id: RequestId,
     stdin: &std::io::Stdin,
 ) -> Result<Result<String, String>> {
+    // A system interaction (the console review): no lonely poses meanwhile.
+    let _ui = lillith_core::system_ui::SystemUi::enter_shared("console");
     let mut input = stdin.lock();
     review_plan(
         contract,

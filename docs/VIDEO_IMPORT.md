@@ -181,7 +181,7 @@ python3 tools/video-pipeline/user_import.py --input <file> --out <staging_dir> -
 | `--ffmpeg` | `LILLITH_FFMPEG`, then PATH | ffmpeg binary **or its folder**, e.g. `C:\Lillith\bin\ffmpeg.exe` or `C:\Lillith\bin` |
 | `--ffprobe` | `LILLITH_FFPROBE`, then next to ffmpeg, then PATH | ffprobe binary or its folder |
 | `--matte` | `auto` | `auto`, `alpha` (use the file's own alpha), `isnet` (local model), `key` (plain-backdrop key) |
-| `--model` | see [Model](#model): `$U2NET_HOME/isnet-anime.onnx`, then `~/.rembg/models/isnet-anime/isnet-anime.onnx` | isnet model file (or its folder); never downloaded |
+| `--model` | see [Model](#model): `$U2NET_HOME`, the installer's `models/rembg`, `~/.u2net`, `~/.rembg/models/isnet-anime` | isnet model file (or its folder); never downloaded |
 | `--zmax` | 1.8 | peak cleavage zoom; `1` turns the zoom off |
 | `--min-seconds` / `--max-seconds` | 1.5 / 8 | movement length limits |
 | `--max-candidates` | 0 (no limit) | stop after N candidates (useful for long videos) |
@@ -317,12 +317,27 @@ peak in key mode is about 160 MB. isnet needs the cap to be ≥ 1100 MB to be pi
 
 ### Model
 
-The isnet-anime model (176 MB) is **not** in the repo and is never fetched. Lookup order, first existing file wins:
+The isnet-anime model (176 MB, sha256 `f15622d8…1a6e99`) is **not** in the repo and is never fetched. The
+installers bundle it: Arch `lillith-bin` puts it in `/opt/lillith/models/rembg/`, the Windows setup in
+`<install folder>\models\rembg\`. `tools/video-pipeline/matte_model.py` is the one place that resolves it
+(paths.py, matte_v2, key_white, build_clip, new_pose and user_import all use it) and sets `U2NET_HOME` to that
+folder for any child process. Lookup order, first file with the exact size (176,069,933 bytes) wins, so a
+half-finished copy is never used:
 
 1. `--model <file>` (or a folder holding `isnet-anime.onnx`)
 2. `$U2NET_HOME/isnet-anime.onnx` (`%U2NET_HOME%` on Windows)
-3. `<home>/.rembg/models/isnet-anime/isnet-anime.onnx`, where home is Python's `Path.home()`: `~` on
+3. the installer's copy, `<install>/models/rembg/isnet-anime.onnx`, found relative to the script
+   (`tools/video-pipeline/../../models/rembg`)
+4. `/opt/lillith/models/rembg/isnet-anime.onnx` (Linux only)
+5. `<home>/.u2net/isnet-anime.onnx` (rembg's own folder)
+6. `<home>/.rembg/models/isnet-anime/isnet-anime.onnx`, where home is Python's `Path.home()`: `~` on
    Linux/macOS, `%USERPROFILE%` on Windows (e.g. `C:\Users\Ko\.rembg\models\isnet-anime\isnet-anime.onnx`)
+
+rembg is no longer needed: the mask is computed with onnxruntime directly, the same way rembg's isnet-anime
+session does it. `python3 tools/video-pipeline/matte_model.py [--json] [--verify]` prints what is missing
+(packages or model) and how to fix it; `user_import.py --preflight [--matte M] [--model F]` prints the same as
+one JSON line, and `build_clip.py`, `matte_v2.py` and `new_pose.py` exit 2 with that message instead of a
+traceback.
 
 With `--matte isnet` and no file found, the run fails with an `error` that lists every path it tried. With
 `auto`, it falls back to the backdrop key (plain or solid backdrops only) and the log line says which paths were
@@ -330,7 +345,7 @@ tried.
 
 ### Known limits (v1)
 
-* Without the isnet model, busy backgrounds give poor mattes. Ship or ask for the model for real-world videos.
+* Without the isnet model (a source checkout, or a damaged install), busy backgrounds give poor mattes. The installers ship it.
 * isnet is slow on a laptop i5 (about 1–3 s per frame at 720 px), so a 30 s video takes minutes. Progress keeps
   moving, and `--max-candidates` bounds the work.
 * There is no temporal median smoothing of the matte (skipped to keep memory flat), so mattes may flicker

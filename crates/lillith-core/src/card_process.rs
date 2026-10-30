@@ -129,6 +129,8 @@ pub fn ask_until(
     if !display_available() {
         return CardAnswer::NoUi;
     }
+    // A system interaction: no lonely poses / attention bids while open.
+    let _ui = crate::system_ui::SystemUi::enter_shared("card");
     show_and_wait(exe, text, timeout, stop)
 }
 

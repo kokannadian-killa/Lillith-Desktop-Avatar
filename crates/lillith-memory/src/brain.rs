@@ -163,7 +163,7 @@ pub struct Brain {
     cfg: MemoryConfig,
     path: Option<PathBuf>,
     extractor: Box<dyn Extractor>,
-    last_retrieved: RefCell<Vec<i64>>,
+    pub(crate) last_retrieved: RefCell<Vec<i64>>,
     local_offset: Cell<Option<i32>>,
     last_maintain: Cell<f64>,
     /// The shared `<data>/lillith/audit.log` (also with a custom
@@ -340,6 +340,27 @@ impl Brain {
         self.upsert_node_rate(kind, key, label, detail, ctx, RATE_OBSERVE, INITIAL)
     }
 
+    /// Like [`upsert_node`](Self::upsert_node), but a brand-new node starts
+    /// at `initial` (clamped to `0.0..=` the normal starting strength); an
+    /// existing node is reinforced as usual. Dream learning stores its
+    /// facts weak this way (docs/SELF_LEARNING.md §11: `dream_strength`).
+    pub fn upsert_node_weak(
+        &self,
+        kind: Kind,
+        key: &str,
+        label: &str,
+        detail: &str,
+        ctx: &Ctx,
+        initial: f64,
+    ) -> Result<Option<i64>> {
+        let initial = if initial.is_finite() {
+            initial.clamp(0.0, INITIAL)
+        } else {
+            INITIAL
+        };
+        self.upsert_node_rate(kind, key, label, detail, ctx, RATE_OBSERVE, initial)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn upsert_node_rate(
         &self,
@@ -446,6 +467,86 @@ impl Brain {
             }
         }
         Ok(n)
+    }
+
+    /// Read-only: every remembered value that is a person's name, for the
+    /// outgoing-request identity denylist (online research / dream learning
+    /// must never put one in a URL). Ko's own `name` attribute plus the
+    /// value of any relationship attribute ("my sister is Anna", "my
+    /// boss is Sam Lee"), up to three words. Nothing is reinforced. Empty
+    /// when disabled.
+    pub fn person_names(&self) -> Vec<String> {
+        const PEOPLE: &[&str] = &[
+            "name",
+            "nickname",
+            "real name",
+            "full name",
+            "wife",
+            "husband",
+            "partner",
+            "girlfriend",
+            "boyfriend",
+            "fiance",
+            "fiancee",
+            "spouse",
+            "sister",
+            "brother",
+            "mom",
+            "mother",
+            "dad",
+            "father",
+            "son",
+            "daughter",
+            "child",
+            "kid",
+            "aunt",
+            "uncle",
+            "cousin",
+            "niece",
+            "nephew",
+            "grandma",
+            "grandmother",
+            "grandpa",
+            "grandfather",
+            "friend",
+            "best friend",
+            "roommate",
+            "boss",
+            "manager",
+            "coworker",
+            "colleague",
+            "neighbor",
+            "neighbour",
+            "teacher",
+            "doctor",
+            "therapist",
+            "ex",
+        ];
+        let Some(c) = &self.conn else {
+            return Vec::new();
+        };
+        let rows: Vec<(String, String)> = c
+            .prepare("SELECT key, detail FROM nodes WHERE kind = ?1 AND key LIKE 'attr:%'")
+            .and_then(|mut st| {
+                st.query_map(params![Kind::Entity.as_str()], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })?
+                .collect()
+            })
+            .unwrap_or_default();
+        let mut out: Vec<String> = Vec::new();
+        for (key, value) in rows {
+            let attr = key.trim_start_matches("attr:");
+            let value = value.trim();
+            let words = value.split_whitespace().count();
+            if !PEOPLE.contains(&attr) || words == 0 || words > 3 {
+                continue;
+            }
+            if !out.iter().any(|n| n.eq_ignore_ascii_case(value)) {
+                out.push(value.to_string());
+            }
+        }
+        out
     }
 
     /// Decayed strength of a node now (`None` if missing / disabled).
@@ -933,6 +1034,43 @@ impl Brain {
     }
 
     // ----- anticipation -----------------------------------------------------
+
+    /// Ko's "usually around" profile: logged events of the last
+    /// [`HABIT_WINDOW_S`] per 3-hour local bucket
+    /// ([`habits::presence_profile`]). Read-only; zeros when memory is off
+    /// or the read fails.
+    pub fn presence_profile(&self, ctx: &Ctx) -> [f32; 8] {
+        match self.recent_events(ctx) {
+            Ok(rows) => habits::presence_profile(&rows),
+            Err(e) => {
+                tracing::warn!("memory: presence profile failed: {e}");
+                [0.0; 8]
+            }
+        }
+    }
+
+    /// What Ko recently asked about (`request` event subjects of the last
+    /// [`HABIT_WINDOW_S`], newest first, deduped, at most `limit`).
+    /// Read-only; empty when memory is off or the read fails.
+    pub fn recent_requests(&self, ctx: &Ctx, limit: usize) -> Vec<String> {
+        let rows = match self.recent_events(ctx) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("memory: recent requests failed: {e}");
+                return Vec::new();
+            }
+        };
+        let mut out: Vec<String> = Vec::new();
+        for r in rows {
+            if out.len() >= limit {
+                break;
+            }
+            if r.kind == "request" && !out.contains(&r.subject) {
+                out.push(r.subject);
+            }
+        }
+        out
+    }
 
     /// Ranked guesses at what Ko will want around `ctx.now` (best first).
     pub fn predict(&self, ctx: &Ctx, limit: usize) -> Vec<Prediction> {

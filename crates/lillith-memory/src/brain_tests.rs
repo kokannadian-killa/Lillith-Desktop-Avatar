@@ -129,6 +129,25 @@ fn attributes_update_in_place() {
 }
 
 #[test]
+fn person_names_are_people_only() {
+    let b = brain();
+    b.observe_interaction("call me Ko", "", &at(MON));
+    b.observe_interaction("my sister is Anna", "", &at(MON));
+    b.observe_interaction("my favorite color is blue", "", &at(MON));
+    let names = b.person_names();
+    assert!(
+        names.iter().any(|n| n.eq_ignore_ascii_case("ko")),
+        "{names:?}"
+    );
+    assert!(
+        names.iter().any(|n| n.eq_ignore_ascii_case("anna")),
+        "{names:?}"
+    );
+    assert!(!names.iter().any(|n| n.contains("blue")), "{names:?}");
+    assert!(Brain::disabled(&cfg()).person_names().is_empty());
+}
+
+#[test]
 fn ranking_relevance_then_strength_and_recency() {
     let b = brain();
     let old = at(MON - 20.0 * DAY);
@@ -1063,4 +1082,27 @@ fn custom_db_path_still_audits_to_the_shared_data_dir_log() {
     assert_eq!(p.audit_log(), None);
     let _ = std::fs::remove_dir_all(&data);
     let _ = std::fs::remove_dir_all(&elsewhere);
+}
+
+#[test]
+fn recent_requests_are_newest_first_deduped_and_requests_only() {
+    let b = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
+    b.log_event("request", "btrfs snapshot", &at(MON)).unwrap();
+    b.log_event("app", "firefox", &at(MON + 1.0)).unwrap();
+    b.log_event("request", "lifetimes rust", &at(MON + 2.0))
+        .unwrap();
+    b.log_event("request", "btrfs snapshot", &at(MON + 3.0))
+        .unwrap();
+    let now = at(MON + 10.0);
+    assert_eq!(
+        b.recent_requests(&now, 10),
+        ["btrfs snapshot", "lifetimes rust"]
+    );
+    assert_eq!(b.recent_requests(&now, 1), ["btrfs snapshot"]);
+    let off = Brain::open_in_memory(&MemoryConfig {
+        enabled: false,
+        ..MemoryConfig::default()
+    })
+    .unwrap();
+    assert!(off.recent_requests(&now, 10).is_empty());
 }

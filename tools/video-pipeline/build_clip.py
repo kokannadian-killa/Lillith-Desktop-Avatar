@@ -129,11 +129,13 @@ def main():
     ap.add_argument('--keep-old-fields', default='', help='comma list of fields copied from the old clip json (e.g. seat_y,seat_x_range)')
     ap.add_argument('--durations-from-old', action='store_true', help='derive frame_durations_ms from the old clip: resample its profile to N frames, scale non-final frames to the real video time, keep the final hold')
     ap.add_argument('--snap-thresh', type=float, default=0, help='snap only frames whose lowest pixel is within this many canvas px of the ground (keeps real flight frames)')
+    ap.add_argument('--frames', default='', help='explicit comma list of 1-based video frames (overrides start/stop/step; e.g. an even-time resample to a higher fps)')
     ap.add_argument('--snap', action='store_true', help='per-frame: lowest pixel -> y=392 (clips with constant ground contact, e.g. walk)')
     a = ap.parse_args()
+    import matte_model; matte_model.preflight_or_exit()   # onnxruntime + the bundled isnet-anime.onnx, else a clear message (exit 2)
     name = a.out_name or a.clip
     video = os.path.abspath(a.video); fd = extract(video)
-    idx = list(range(a.start, a.stop, a.step))
+    idx = [int(x) for x in a.frames.split(',')] if a.frames else list(range(a.start, a.stop, a.step))
     load = lambda i: np.asarray(Image.open(f'{fd}/f_{i:03d}.png').convert('RGB'))
     keyed = [key_combined(load(i)) for i in idx]
     ref_keyed = key_combined(load(1))
@@ -170,7 +172,9 @@ def main():
     outdir = os.path.abspath(a.out_dir) if a.out_dir else os.path.join(ROOT, name)
     rel = os.path.relpath(video, outdir)
     meta_extra = {"facing": a.facing, "source_files": [rel],
-        "source_frame_range": {"first": idx[0], "last": idx[-1], "step": a.step, "video_fps": 24, "note": "1-based ffmpeg frame numbers"},
+        "source_frame_range": ({"first": idx[0], "last": idx[-1], "step": a.step, "video_fps": 24, "note": "1-based ffmpeg frame numbers"}
+                               if not a.frames else
+                               {"first": idx[0], "last": idx[-1], "step": None, "frames": idx, "video_fps": 24, "note": "1-based ffmpeg frame numbers; explicit list (even-time resample)"}),
         "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
         "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
         "centering": a.center, "baseline_snap": "per_frame" if a.snap else (f"frames within {a.snap_thresh}px of ground snapped" if a.snap_thresh else "global (video ground line)"), "body_point_src_x": [round(float(x), 1) for x in bx],

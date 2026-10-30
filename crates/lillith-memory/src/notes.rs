@@ -69,12 +69,41 @@ impl Brain {
     /// Inserts or replaces the index row for `note` and upserts its graph
     /// node. Returns the node id (`None` when memory is off).
     pub fn upsert_note(&self, note: &NoteRow, body: &str, ctx: &Ctx) -> Result<Option<i64>> {
+        self.upsert_note_at(note, body, ctx, None)
+    }
+
+    /// Like [`upsert_note`](Self::upsert_note), but a new note node starts
+    /// at `strength` (at most the normal starting strength): dream-learned
+    /// notes go in weak (`[learn.dream] dream_strength`, docs §11) and only
+    /// grow if she uses them. No schema change: `nodes.strength` exists.
+    pub fn upsert_note_with_strength(
+        &self,
+        note: &NoteRow,
+        body: &str,
+        ctx: &Ctx,
+        strength: f64,
+    ) -> Result<Option<i64>> {
+        self.upsert_note_at(note, body, ctx, Some(strength))
+    }
+
+    fn upsert_note_at(
+        &self,
+        note: &NoteRow,
+        body: &str,
+        ctx: &Ctx,
+        strength: Option<f64>,
+    ) -> Result<Option<i64>> {
         if self.conn.is_none() {
             return Ok(None);
         }
         self.write_tx(|| {
             let detail: String = body.chars().take(NODE_DETAIL_CHARS).collect();
-            let node = self.upsert_node(Kind::Note, &note.id, &note.title, &detail, ctx)?;
+            let node = match strength {
+                Some(s) => {
+                    self.upsert_node_weak(Kind::Note, &note.id, &note.title, &detail, ctx, s)?
+                }
+                None => self.upsert_node(Kind::Note, &note.id, &note.title, &detail, ctx)?,
+            };
             let Some(c) = &self.conn else { return Ok(None) };
             c.execute(
                 "INSERT INTO notes(id, path, topic, kind, title, source_type, source_ref,
@@ -163,6 +192,20 @@ impl Brain {
         st.query_map(params![expr, limit as i64], row_of)
             .map(|rows| rows.flatten().collect())
             .unwrap_or_default()
+    }
+
+    /// Forgets one note: its index row and its graph node (edges go with
+    /// it). Returns whether a row was there. Additive: no schema change.
+    pub fn forget_note(&self, id: &str) -> Result<bool> {
+        let Some(c) = &self.conn else {
+            return Ok(false);
+        };
+        self.last_retrieved.borrow_mut().clear();
+        self.write_tx(|| {
+            let n = c.execute("DELETE FROM notes WHERE id = ?1", [id])?;
+            let m = c.execute("DELETE FROM nodes WHERE kind = 'note' AND key = ?1", [id])?;
+            Ok(n + m > 0)
+        })
     }
 
     /// Drops every note row and note node (before a `--reindex`). Returns
@@ -419,6 +462,46 @@ mod tests {
         assert_eq!(b.clear_note_index().unwrap(), 1);
         assert!(b.all_notes().is_empty());
         assert!(b.strength_of(Kind::Note, "n-1", &ctx).is_none());
+    }
+
+    #[test]
+    fn forget_note_drops_one_row_and_its_node_only() {
+        let b = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
+        let ctx = Ctx::at(100.0);
+        b.upsert_note_with_strength(&row("n-a", "kept fact"), "a", &ctx, 0.2)
+            .unwrap();
+        b.upsert_note_with_strength(&row("n-b", "dreamed fact"), "b", &ctx, 0.2)
+            .unwrap();
+        assert!(b.forget_note("n-b").unwrap());
+        assert!(b.note("n-b").is_none());
+        assert!(b.strength_of(Kind::Note, "n-b", &ctx).is_none());
+        assert!(b
+            .similar_notes("dreamed fact", 5)
+            .iter()
+            .all(|n| n.id != "n-b"));
+        assert!(b.note("n-a").is_some(), "others stay");
+        assert!(!b.forget_note("n-b").unwrap(), "already gone");
+    }
+
+    #[test]
+    fn dream_notes_start_weak_and_never_above_normal() {
+        let b = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
+        let ctx = Ctx::at(100.0);
+        b.upsert_note_with_strength(&row("n-d", "dreamed fact"), "body", &ctx, 0.2)
+            .unwrap()
+            .unwrap();
+        let s = b.strength_of(Kind::Note, "n-d", &ctx).unwrap();
+        assert!((s - 0.2).abs() < 1e-9, "{s}");
+        assert_eq!(b.note("n-d").unwrap().title, "dreamed fact");
+        // A strength above the normal start is capped; junk falls back.
+        b.upsert_note_with_strength(&row("n-e", "e"), "", &ctx, 5.0)
+            .unwrap();
+        b.upsert_note(&row("n-n", "n"), "", &ctx).unwrap();
+        let normal = b.strength_of(Kind::Note, "n-n", &ctx).unwrap();
+        assert!(b.strength_of(Kind::Note, "n-e", &ctx).unwrap() <= normal + 1e-9);
+        b.upsert_note_with_strength(&row("n-f", "f"), "", &ctx, f64::NAN)
+            .unwrap();
+        assert!(b.strength_of(Kind::Note, "n-f", &ctx).unwrap().is_finite());
     }
 
     #[test]

@@ -308,6 +308,31 @@ enum Msg {
 pub type Clock = Arc<dyn Fn() -> f64 + Send + Sync>;
 /// Where proactive lines go.
 pub type Say = Box<dyn Fn(String) + Send>;
+
+/// Receives Ko's presence profile ([`Brain::presence_profile`]) when the
+/// thread starts and every [`PRESENCE_EVERY_S`] after.
+pub type PresenceSink = Box<dyn Fn([f32; 8]) + Send>;
+
+/// The overlay event carrying the presence profile (detail:
+/// [`presence_detail`]); the overlay's loneliness reads it.
+pub const PRESENCE_EVENT: &str = "lonely.presence";
+
+/// How often the presence profile is re-sent (s).
+pub const PRESENCE_EVERY_S: f64 = 1800.0;
+
+/// `[f32; 8]` as the [`PRESENCE_EVENT`] detail: 8 comma-separated counts.
+pub fn presence_detail(p: &[f32; 8]) -> String {
+    p.iter()
+        .map(|v| {
+            if v.is_finite() && *v >= 0.0 {
+                format!("{v}")
+            } else {
+                "0".into()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
 /// Opens the thread's own brain (on the thread).
 pub type BrainFactory = Box<dyn FnOnce() -> Option<Brain> + Send>;
 
@@ -320,6 +345,8 @@ pub struct BridgeOptions {
     /// the safeword or a stop).
     pub stop_epoch: Arc<dyn Fn() -> u64 + Send + Sync>,
     pub say: Say,
+    /// Where the presence profile goes (`None`: not computed).
+    pub presence: Option<PresenceSink>,
 }
 
 impl BridgeOptions {
@@ -338,6 +365,7 @@ impl BridgeOptions {
             }),
             stop_epoch: Arc::new(lillith_core::access::kill_switch::hush_epoch),
             say,
+            presence: None,
         }
     }
 }
@@ -411,6 +439,7 @@ impl MemoryBridge {
             clock: o.clock.clone(),
             stop_epoch: o.stop_epoch,
             say: o.say,
+            presence: o.presence,
             signals: signals.clone(),
             used: HashMap::new(),
             salt: 0,
@@ -563,6 +592,7 @@ struct Worker {
     stop_epoch: Arc<dyn Fn() -> u64 + Send + Sync>,
     epoch: u64,
     say: Say,
+    presence: Option<PresenceSink>,
     signals: Arc<Signals>,
     /// Last time each app was used (from admitted focus events).
     used: HashMap<String, f64>,
@@ -573,9 +603,16 @@ impl Worker {
     fn run(mut self, brain: &Brain, rx: Receiver<Msg>) {
         let mut stopped_at = f64::NEG_INFINITY;
         let mut next_check = (self.clock)() + self.interval_s;
+        let mut next_presence = f64::NEG_INFINITY;
         loop {
             let now = (self.clock)();
-            let wait = (next_check - now).clamp(0.05, 60.0);
+            if let Some(p) = &self.presence {
+                if now >= next_presence {
+                    next_presence = now + PRESENCE_EVERY_S;
+                    p(brain.presence_profile(&Ctx::at(now)));
+                }
+            }
+            let wait = (next_check.min(next_presence) - now).clamp(0.05, 60.0);
             let msg = match rx.recv_timeout(Duration::from_secs_f64(wait)) {
                 Ok(m) => Some(m),
                 Err(RecvTimeoutError::Timeout) => None,

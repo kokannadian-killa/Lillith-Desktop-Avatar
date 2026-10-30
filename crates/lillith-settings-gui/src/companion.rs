@@ -47,6 +47,7 @@ pub fn state_from_store(s: &ConfigStore) -> MenuState {
         .overlay_scale(),
         extras: MenuExtras {
             outfit: outfit_from_store(s),
+            lonely: Some(lonely_from_store(s)),
             ..Default::default()
         },
     }
@@ -70,6 +71,9 @@ pub fn apply(state: &mut MenuState, a: MenuAction) {
             state.extras.speaker = Some(!state.extras.speaker.unwrap_or(true));
         }
         MenuAction::ToggleMonitor => state.monitor_paused = !state.monitor_paused,
+        MenuAction::ToggleLoneliness => {
+            state.extras.lonely = Some(!state.extras.lonely.unwrap_or(true));
+        }
         // Local mirror only (radio state): the overlay owns size and
         // persists it itself.
         MenuAction::SetSize(z) => state.scale = z.scale(),
@@ -146,6 +150,14 @@ pub fn persist(store: &mut ConfigStore, state: &MenuState, a: MenuAction) -> Per
             // TODO(LillithBot): the overlay has no persisted "paused" flag; the
             // nearest key is [monitor] enabled (read at start).
             store.set_bool(&["monitor", "enabled"], !state.monitor_paused);
+            Persisted::Staged
+        }
+        MenuAction::ToggleLoneliness => {
+            let on = state.extras.lonely.unwrap_or(true);
+            store.set_str(
+                &["behavior", "loneliness", "mode"],
+                if on { "auto" } else { "off" },
+            );
             Persisted::Staged
         }
         MenuAction::Outfit(_) => {
@@ -240,11 +252,19 @@ pub fn extras_for(poses: Vec<PoseGroup>, avatars: Option<&AvatarStore>) -> MenuE
         avatar,
         chat: true,
         speaker: None,
+        lonely: None,
         outfits: Vec::new(),
         outfit: lillith_core::seasons::AUTO.into(),
         outfit_active: None,
         outfit_page: false,
+        dream: None,
     }
+}
+
+/// "Lonely poses" from `[behavior.loneliness] mode` (default `auto` = on).
+pub fn lonely_from_store(s: &ConfigStore) -> bool {
+    s.get_str(&["behavior", "loneliness", "mode"])
+        .is_none_or(|m| m.trim() != "off")
 }
 
 /// "Speak out loud (speakers)" from `[voice] enabled` (legacy top-level
@@ -331,6 +351,7 @@ mod tests {
             avatar: None,
             chat: true,
             speaker: Some(true),
+            lonely: Some(true),
             outfits: vec![
                 OutfitChoice {
                     id: "halloween".into(),
@@ -346,6 +367,7 @@ mod tests {
             outfit: "auto".into(),
             outfit_active: None,
             outfit_page: false,
+            dream: None,
         }
     }
 
@@ -589,6 +611,7 @@ mod tests {
             MenuAction::ToggleMute,
             MenuAction::SetSize(Size::Large),
             MenuAction::ToggleMonitor,
+            MenuAction::ToggleLoneliness,
             MenuAction::ResetPosition,
             MenuAction::SetMood(Mood::Sleepy),
         ] {
@@ -612,12 +635,17 @@ mod tests {
         assert!((core.scale - 0.55).abs() < 1e-6, "scale untouched: {text}");
         assert!(core.muted);
         assert!(!core.monitor.enabled);
+        assert_eq!(
+            core.behavior.loneliness.mode,
+            lillith_core::loneliness::LonelinessMode::Off
+        );
         assert_eq!(core.overlay, OverlayPos::default());
         assert!(text.contains("[voice]\nmute = true"), "{text}");
         assert!(text.contains("backend = \"ollama\""));
         let back = state_from_store(&ConfigStore::load(&p));
         assert_eq!(back.mode, MoveMode::Follow);
         assert!(back.muted && back.monitor_paused);
+        assert_eq!(back.extras.lonely, Some(false));
     }
 
     #[test]
