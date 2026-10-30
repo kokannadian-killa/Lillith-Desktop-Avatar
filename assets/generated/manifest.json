@@ -7680,6 +7680,37 @@
    "allure": true,
    "video": "lonely_tier3_attention_tease/lonely_tier3_attention_tease.mp4",
    "severity": 4
+  },
+  {
+   "name": "oops_perch_slip",
+   "frame_count": 83,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "oops_perch_slip/",
+   "sheet": "oops_perch_slip/oops_perch_slip_sheet.png",
+   "manifest": "oops_perch_slip/oops_perch_slip.json",
+   "preview": "oops_perch_slip/oops_perch_slip_preview.gif",
+   "tags": [
+    "baked_motion",
+    "oops",
+    "variant_of:perch_sit"
+   ],
+   "allure": true,
+   "video": "oops_perch_slip/oops_perch_slip.mp4",
+   "severity": 4
   }
  ]
 }
