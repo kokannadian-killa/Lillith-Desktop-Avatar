@@ -7590,6 +7590,36 @@
    "allure": true,
    "video": "perch_stretch_arch/perch_stretch_arch.mp4",
    "severity": 4
+  },
+  {
+   "name": "lonely_tier1_pout_glance",
+   "frame_count": 83,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "lonely_tier1_pout_glance/",
+   "sheet": "lonely_tier1_pout_glance/lonely_tier1_pout_glance_sheet.png",
+   "manifest": "lonely_tier1_pout_glance/lonely_tier1_pout_glance.json",
+   "preview": "lonely_tier1_pout_glance/lonely_tier1_pout_glance_preview.gif",
+   "tags": [
+    "baked_motion",
+    "lonely_idle"
+   ],
+   "allure": true,
+   "video": "lonely_tier1_pout_glance/lonely_tier1_pout_glance.mp4",
+   "severity": 4
   }
  ]
 }
