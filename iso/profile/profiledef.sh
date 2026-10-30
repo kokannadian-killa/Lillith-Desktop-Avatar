@@ -28,5 +28,4 @@ file_permissions=(
   ["/usr/local/bin/livecd-sound"]="0:0:755"
   ["/usr/local/bin/demonos-awakening"]="0:0:755"
   ["/usr/local/bin/demonos-firstboot"]="0:0:755"
-  ["/home/demon"]="1000:1000:750"
 )
