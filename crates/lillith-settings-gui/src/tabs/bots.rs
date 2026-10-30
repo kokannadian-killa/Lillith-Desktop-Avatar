@@ -342,7 +342,14 @@ impl BotsTab {
                                 }
                             }
                         }
-                        let tail: String = out.chars().rev().take(1500).collect::<Vec<_>>().into_iter().rev().collect();
+                        let tail: String = out
+                            .chars()
+                            .rev()
+                            .take(1500)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
+                            .collect();
                         if !tail.trim().is_empty() && !pose {
                             r.say(Who::System, tail.trim().to_string());
                         }
@@ -356,8 +363,7 @@ impl BotsTab {
                             r.say(
                                 Who::Bot,
                                 if pose {
-                                    "Done. Approve the poses you like in Pose Builder."
-                                        .to_string()
+                                    "Done. Approve the poses you like in Pose Builder.".to_string()
                                 } else {
                                     format!("Done. — {name}")
                                 },
@@ -412,11 +418,7 @@ impl BotsTab {
             let sel = i == self.selected && self.view != View::NewBot;
             let p = ui.painter();
             if sel || resp.hovered() {
-                p.rect_filled(
-                    rect,
-                    6.0,
-                    c32(if sel { pal::STONE_HI } else { pal::STONE }),
-                );
+                p.rect_filled(rect, 6.0, c32(if sel { pal::STONE_HI } else { pal::STONE }));
             }
             if sel {
                 p.rect_stroke(
@@ -695,8 +697,7 @@ impl BotsTab {
             chrome::row(ui, "Name", |ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.new_name).desired_width(240.0));
             });
-            if chrome::blade_button(ui, "Create bot", !self.new_name.trim().is_empty()).clicked()
-            {
+            if chrome::blade_button(ui, "Create bot", !self.new_name.trim().is_empty()).clicked() {
                 let mut b = bots::new_bot(self.new_kind, &self.roster);
                 b.name = self.new_name.trim().to_string();
                 self.roster.push(b.clone());
@@ -851,17 +852,13 @@ impl SettingsTab for BotsTab {
         ui.add_space(4.0);
         let h = ui.available_height().max(320.0);
         ui.horizontal_top(|ui| {
-            ui.allocate_ui_with_layout(
-                vec2(ROSTER_W, h),
-                Layout::top_down(Align::Min),
-                |ui| {
-                    ui.set_width(ROSTER_W);
-                    egui::ScrollArea::vertical()
-                        .id_salt("bots-roster")
-                        .max_height(h)
-                        .show(ui, |ui| self.roster_ui(ui));
-                },
-            );
+            ui.allocate_ui_with_layout(vec2(ROSTER_W, h), Layout::top_down(Align::Min), |ui| {
+                ui.set_width(ROSTER_W);
+                egui::ScrollArea::vertical()
+                    .id_salt("bots-roster")
+                    .max_height(h)
+                    .show(ui, |ui| self.roster_ui(ui));
+            });
             ui.add_space(10.0);
             let w = ui.available_width();
             ui.allocate_ui_with_layout(vec2(w, h), Layout::top_down(Align::Min), |ui| {

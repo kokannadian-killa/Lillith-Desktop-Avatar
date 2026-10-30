@@ -85,7 +85,10 @@ fn name_in(job: &str, fallback: &str) -> String {
 
 fn organize(folders: &[PathBuf], base: &Path, job: &str) -> Result<Plan, String> {
     let w = words(job);
-    let by = if w.iter().any(|x| x.starts_with("month") || x.starts_with("date")) {
+    let by = if w
+        .iter()
+        .any(|x| x.starts_with("month") || x.starts_with("date"))
+    {
         SortBy::Date
     } else {
         SortBy::Type
@@ -184,14 +187,33 @@ fn web_page(base: &Path, job: &str) -> Plan {
 
 /// Base package list of a DemonOS / Phantomcore (Arch) respin.
 const BASE_PACKAGES: &[&str] = &[
-    "base", "linux", "linux-firmware", "mkinitcpio", "mkinitcpio-archiso", "syslinux", "grub",
-    "efibootmgr", "networkmanager", "plasma-meta", "sddm", "konsole", "dolphin", "firefox",
-    "pipewire", "pipewire-pulse", "wireplumber", "git", "base-devel", "fish", "vim",
+    "base",
+    "linux",
+    "linux-firmware",
+    "mkinitcpio",
+    "mkinitcpio-archiso",
+    "syslinux",
+    "grub",
+    "efibootmgr",
+    "networkmanager",
+    "plasma-meta",
+    "sddm",
+    "konsole",
+    "dolphin",
+    "firefox",
+    "pipewire",
+    "pipewire-pulse",
+    "wireplumber",
+    "git",
+    "base-devel",
+    "fish",
+    "vim",
 ];
 
 fn os_respin(base: &Path, job: &str) -> Plan {
     let dir = base.join(name_in(job, "demonos-respin"));
-    let mut pk = String::from("# DemonOS / Phantomcore respin package list (archiso packages.x86_64)\n");
+    let mut pk =
+        String::from("# DemonOS / Phantomcore respin package list (archiso packages.x86_64)\n");
     for p in BASE_PACKAGES {
         pk.push_str(p);
         pk.push('\n');
@@ -249,8 +271,8 @@ pub fn targets_others(job: &str) -> Option<String> {
         } else {
             w.split(':').next().unwrap_or("").to_string()
         };
-        let local = matches!(host.as_str(), "localhost" | "::1" | "127.0.0.1")
-            || host.starts_with("127.");
+        let local =
+            matches!(host.as_str(), "localhost" | "::1" | "127.0.0.1") || host.starts_with("127.");
         if w.contains("://") && !local {
             return Some(raw.to_string());
         }
@@ -260,7 +282,9 @@ pub fn targets_others(job: &str) -> Option<String> {
             return Some(raw.to_string());
         }
         // host.tld style names (not files with a path or an extension we know).
-        let tlds = [".com", ".net", ".org", ".io", ".gov", ".edu", ".co", ".ru", ".cn"];
+        let tlds = [
+            ".com", ".net", ".org", ".io", ".gov", ".edu", ".co", ".ru", ".cn",
+        ];
         if !w.contains('/') && tlds.iter().any(|t| host.ends_with(t)) {
             return Some(raw.to_string());
         }
@@ -270,7 +294,14 @@ pub fn targets_others(job: &str) -> Option<String> {
 
 /// Names that usually hold secrets (reported by name only, never read).
 const SECRET_NAMES: &[&str] = &[
-    "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".env", "credentials", ".netrc", ".pgpass",
+    "id_rsa",
+    "id_ed25519",
+    "id_ecdsa",
+    "id_dsa",
+    ".env",
+    "credentials",
+    ".netrc",
+    ".pgpass",
     ".git-credentials",
 ];
 const SECRET_EXT: &[&str] = &["pem", "key", "p12", "pfx", "kdbx"];
@@ -331,7 +362,8 @@ pub fn audit(folders: &[PathBuf]) -> Vec<String> {
                                 p.display()
                             ));
                         } else {
-                            findings.push(format!("secret-looking file (private): {}", p.display()));
+                            findings
+                                .push(format!("secret-looking file (private): {}", p.display()));
                         }
                     }
                     #[cfg(not(unix))]
@@ -413,7 +445,8 @@ fn red_team(folders: &[PathBuf], base: &Path, job: &str) -> Result<Plan, String>
     for f in &findings {
         report.push_str(&format!("- {f}\n"));
     }
-    report.push_str("\nNo file contents were read; secret-looking files are listed by name only.\n");
+    report
+        .push_str("\nNo file contents were read; secret-looking files are listed by name only.\n");
     Ok(Plan {
         say: format!(
             "Scan done: {} finding(s). I'd like to save the report as a file.",

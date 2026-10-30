@@ -226,7 +226,11 @@ impl BotDef {
             enabled: true,
             model: String::new(),
             use_model: true,
-            folders: kind.default_folders().iter().map(|s| s.to_string()).collect(),
+            folders: kind
+                .default_folders()
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         }
     }
 
@@ -452,16 +456,40 @@ fn real_path(p: &Path) -> PathBuf {
 /// One proposed step.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
-    WriteFile { path: PathBuf, body: String },
-    Mkdir { path: PathBuf },
-    Move { from: PathBuf, to: PathBuf },
-    Copy { from: PathBuf, to: PathBuf },
+    WriteFile {
+        path: PathBuf,
+        body: String,
+    },
+    Mkdir {
+        path: PathBuf,
+    },
+    Move {
+        from: PathBuf,
+        to: PathBuf,
+    },
+    Copy {
+        from: PathBuf,
+        to: PathBuf,
+    },
     /// A shell command line (shown verbatim on the card).
-    Run { command: String, cwd: Option<PathBuf>, timeout_s: u64 },
+    Run {
+        command: String,
+        cwd: Option<PathBuf>,
+        timeout_s: u64,
+    },
     /// A sort plan from [`lillith_core::access::organize::suggest_sort`].
-    Organize { plan: OrganizePlan },
-    Scaffold { dir: PathBuf, language: Language, template: String },
-    Build { dir: PathBuf, language: Language },
+    Organize {
+        plan: OrganizePlan,
+    },
+    Scaffold {
+        dir: PathBuf,
+        language: Language,
+        template: String,
+    },
+    Build {
+        dir: PathBuf,
+        language: Language,
+    },
 }
 
 impl Step {
@@ -637,7 +665,12 @@ pub fn parse_model_plan(text: &str, base: &Path) -> Option<Plan> {
             }
         })
     };
-    for s in v.get("steps").and_then(Value::as_array).into_iter().flatten() {
+    for s in v
+        .get("steps")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
         let op = s.get("op").and_then(Value::as_str).unwrap_or("");
         let step = match op {
             "write_file" => p(s, "path").map(|path| Step::WriteFile {
@@ -649,8 +682,12 @@ pub fn parse_model_plan(text: &str, base: &Path) -> Option<Plan> {
                     .to_string(),
             }),
             "mkdir" => p(s, "path").map(|path| Step::Mkdir { path }),
-            "move" => p(s, "from").zip(p(s, "to")).map(|(from, to)| Step::Move { from, to }),
-            "copy" => p(s, "from").zip(p(s, "to")).map(|(from, to)| Step::Copy { from, to }),
+            "move" => p(s, "from")
+                .zip(p(s, "to"))
+                .map(|(from, to)| Step::Move { from, to }),
+            "copy" => p(s, "from")
+                .zip(p(s, "to"))
+                .map(|(from, to)| Step::Copy { from, to }),
             "run" => s
                 .get("command")
                 .and_then(Value::as_str)
@@ -700,13 +737,25 @@ pub fn parse_model_plan(text: &str, base: &Path) -> Option<Plan> {
 /// The system prompt a bot's model call uses (plan-only, JSON out).
 pub fn system_prompt(bot: &BotDef, base: &Path) -> String {
     let ops = [
-        (Op::WriteFile, r#"{"op":"write_file","path":"rel/path","body":"full file text"}"#),
+        (
+            Op::WriteFile,
+            r#"{"op":"write_file","path":"rel/path","body":"full file text"}"#,
+        ),
         (Op::Mkdir, r#"{"op":"mkdir","path":"rel/dir"}"#),
         (Op::Move, r#"{"op":"move","from":"a","to":"b"}"#),
         (Op::Copy, r#"{"op":"copy","from":"a","to":"b"}"#),
-        (Op::Run, r#"{"op":"run","command":"shell command","cwd":"rel/dir"}"#),
-        (Op::Scaffold, r#"{"op":"scaffold","dir":"name","language":"rust|python|fish"}"#),
-        (Op::Build, r#"{"op":"build","dir":"name","language":"rust|python|fish"}"#),
+        (
+            Op::Run,
+            r#"{"op":"run","command":"shell command","cwd":"rel/dir"}"#,
+        ),
+        (
+            Op::Scaffold,
+            r#"{"op":"scaffold","dir":"name","language":"rust|python|fish"}"#,
+        ),
+        (
+            Op::Build,
+            r#"{"op":"build","dir":"name","language":"rust|python|fish"}"#,
+        ),
     ];
     let allowed: Vec<&str> = ops
         .iter()

@@ -106,7 +106,12 @@ fn keyboard_never_approves_and_escape_denies() {
     assert!(ctx
         .read_response(egui::Id::new(CARD_ID).with("yes"))
         .is_some());
-    for k in [egui::Key::Enter, egui::Key::Space, egui::Key::Tab, egui::Key::Enter] {
+    for k in [
+        egui::Key::Enter,
+        egui::Key::Space,
+        egui::Key::Tab,
+        egui::Key::Enter,
+    ] {
         frame(&ctx, &mut t, &mut s, vec![key(k)]);
     }
     assert!(t.runs[PAIMON].exec.is_none(), "keys must never run a step");
@@ -139,10 +144,15 @@ fn approved_step_writes_and_lists_the_file() {
     assert_eq!(t.status(PAIMON), BotStatus::Done);
     let files = &t.runs[PAIMON].files;
     assert_eq!(files.len(), 2, "{files:?}");
-    assert!(files.iter().all(|f| f.is_file() && f.starts_with(d.join("work"))));
+    assert!(files
+        .iter()
+        .all(|f| f.is_file() && f.starts_with(d.join("work"))));
     let log = std::fs::read_to_string(d.join("audit.log")).unwrap();
     assert_eq!(log.matches("CONFIRM").count(), 2, "{log}");
-    assert!(log.contains("BOT_STEP") && log.contains("bot=paimon"), "{log}");
+    assert!(
+        log.contains("BOT_STEP") && log.contains("bot=paimon"),
+        "{log}"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -235,7 +245,10 @@ fn dream_hook_shows_the_session() {
     let mut t = tab_in(&d);
     assert!(t.dream_line().starts_with("No dream session"));
     t.set_dream_source(Box::new(FakeDream));
-    assert_eq!(t.dream_line(), "Session d-1: running · 42 min left · 3/5 jobs");
+    assert_eq!(
+        t.dream_line(),
+        "Session d-1: running · 42 min left · 3/5 jobs"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 

@@ -25,7 +25,10 @@ use std::time::Duration;
 pub enum BotEvent {
     Progress(String),
     /// The vetted plan plus the steps that were refused (with reasons).
-    Planned { plan: Plan, refused: Vec<String> },
+    Planned {
+        plan: Plan,
+        refused: Vec<String>,
+    },
     Failed(String),
     Stopped,
 }
@@ -144,7 +147,9 @@ fn plan_job(
     let plan = match plan {
         Some(p) => p,
         None => {
-            send(BotEvent::Progress("planning with my built-in recipe…".into()));
+            send(BotEvent::Progress(
+                "planning with my built-in recipe…".into(),
+            ));
             match recipes::plan(bot, job) {
                 Ok(p) => p,
                 Err(e) => return BotEvent::Failed(e),

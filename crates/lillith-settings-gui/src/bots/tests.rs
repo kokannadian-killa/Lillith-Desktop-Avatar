@@ -51,8 +51,9 @@ fn missing_roster_is_stock_and_unknown_kinds_skipped() {
         load_roster(Path::new("/nonexistent/lillith/bots.toml")).unwrap(),
         stock_roster()
     );
-    let r = parse_roster("[[bot]]\nkind = \"nope\"\n[[bot]]\nkind = \"red-team\"\nname = \"Andy\"\n")
-        .unwrap();
+    let r =
+        parse_roster("[[bot]]\nkind = \"nope\"\n[[bot]]\nkind = \"red-team\"\nname = \"Andy\"\n")
+            .unwrap();
     assert_eq!(r.len(), 1);
     assert_eq!(r[0].name, "Andy");
     assert_eq!(r[0].id, "andras");
@@ -62,7 +63,10 @@ fn missing_roster_is_stock_and_unknown_kinds_skipped() {
 fn confine_keeps_steps_inside_folders() {
     let d = tmp("confine");
     let f = vec![d.clone()];
-    assert_eq!(confine(&f, Path::new("a/b.txt")).unwrap(), d.join("a/b.txt"));
+    assert_eq!(
+        confine(&f, Path::new("a/b.txt")).unwrap(),
+        d.join("a/b.txt")
+    );
     assert!(confine(&f, Path::new("../x")).is_err());
     assert!(confine(&f, &d.join("a/../../x")).is_err());
     assert!(confine(&f, Path::new("/etc/passwd")).is_err());
@@ -85,7 +89,9 @@ fn vet_drops_ops_the_kind_does_not_do() {
                 path: d.join("x"),
                 body: "x".into(),
             },
-            Step::Mkdir { path: d.join("Images") },
+            Step::Mkdir {
+                path: d.join("Images"),
+            },
             Step::Run {
                 command: "ls".into(),
                 cwd: None,
@@ -180,7 +186,11 @@ fn system_prompt_lists_only_allowed_ops() {
 #[test]
 fn recipes_plan_without_touching_disk() {
     let d = tmp("recipes");
-    let p = recipes::plan(&bot_in(BotKind::WebPageBuilder, &d), "Ko's <b> landing page").unwrap();
+    let p = recipes::plan(
+        &bot_in(BotKind::WebPageBuilder, &d),
+        "Ko's <b> landing page",
+    )
+    .unwrap();
     assert_eq!(p.steps.len(), 2);
     assert!(p.steps.iter().all(|s| s.paths()[0].starts_with(&d)));
     if let Step::WriteFile { body, .. } = &p.steps[0] {
@@ -248,8 +258,14 @@ fn andras_audit_reports_by_name_only() {
     std::fs::set_permissions(d.join("open.sh"), std::fs::Permissions::from_mode(0o666)).unwrap();
     let p = recipes::plan(&bot_in(BotKind::RedTeam, &d), "audit my stuff").unwrap();
     let all = p.notes.join("\n");
-    assert!(all.contains("readable by others") && all.contains("id_rsa"), "{all}");
-    assert!(all.contains("world-writable file") && all.contains("open.sh"), "{all}");
+    assert!(
+        all.contains("readable by others") && all.contains("id_rsa"),
+        "{all}"
+    );
+    assert!(
+        all.contains("world-writable file") && all.contains("open.sh"),
+        "{all}"
+    );
     match &p.steps[..] {
         [Step::WriteFile { path, body }] => {
             assert!(path.starts_with(&d));
