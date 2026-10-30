@@ -98,18 +98,11 @@ processes, listeners, key configs and load — all local, all light."
         StrokeKind::Inside,
     );
     neon_rect(ui.painter(), inner.shrink(2.0), pal::CYBER_CYAN, 1.0, 4.0);
-    let pulse = 0.5 + 0.5 * (t * 2.2).sin();
-    glow_blob(
-        ui.painter(),
-        inner.center_top() + Vec2::new(0.0, 28.0),
-        40.0 + 8.0 * pulse,
-        pal::CYBER_PURPLE,
-        0.35 + 0.25 * pulse,
-    );
 
     let mut y = inner.top() + pad;
     let x = inner.left() + pad;
 
+    // Title first — no glow over lettering (glow_blob would wash crimson to white).
     ui.painter()
         .galley(Pos2::new(x, y), title.clone(), c32(pal::CYBER_CRIMSON));
     y += title.size().y + 4.0;
@@ -121,6 +114,15 @@ processes, listeners, key configs and load — all local, all light."
         c32(pal::CYBER_PURPLE),
     );
     y += 16.0;
+    // Soft pulse sits under the subtitle / above the body, never over the title.
+    let pulse = 0.5 + 0.5 * (t * 2.2).sin();
+    glow_blob(
+        ui.painter(),
+        Pos2::new(inner.center().x, y + 8.0),
+        22.0 + 4.0 * pulse,
+        pal::CYBER_PURPLE,
+        0.12 + 0.08 * pulse,
+    );
     ui.painter()
         .galley(Pos2::new(x, y), whisper.clone(), c32(pal::CYBER_TEXT));
     y += whisper.size().y + 12.0;

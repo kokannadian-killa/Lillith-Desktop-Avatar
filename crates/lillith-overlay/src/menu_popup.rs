@@ -802,10 +802,10 @@ mod tests {
             }
         }
         assert!(seen.iter().all(|&s| s), "{seen:?}");
-        // Collapsed (no poses): 4 headers (Avatar, Resize, Mode, Mood) +
+        // Collapsed (no poses): 5 headers (Avatar, Resize, Mode, Mood, QuantumSec) +
         // 9 top leaves (Chat, Minimize, Mute, Pause, Settings, Icon, Reset,
         // About, Close) + 3 separators.
-        assert_eq!(rows_of(&p.menu, None).len(), 16);
+        assert_eq!(rows_of(&p.menu, None).len(), 17);
         assert!(p.size().1 >= p.content_height());
     }
 
@@ -936,6 +936,34 @@ mod tests {
             assert_eq!(p.content_height(), top + PAD + BOTTOM);
             assert!(p.content_height() <= p.size().1);
         }
+    }
+
+    /// When `LILLITH_MENU_SHOT` is set, write a PNG of the popup with
+    /// QuantumSec expanded (Status / Open panel… visible beside the old rows).
+    #[test]
+    fn quantumsec_menu_shot_optional() {
+        let Some(path) = std::env::var_os("LILLITH_MENU_SHOT") else {
+            return;
+        };
+        let mut fonts = Fonts::preload();
+        let mut p = MenuPopup::new(state());
+        let qsec = find(
+            &p,
+            |r| matches!(r, Row::Header { label, .. } if label == "QuantumSec"),
+        );
+        p.click(20.0, row_y(&p, qsec));
+        let px = p.render(&mut fonts).expect("render").clone();
+        // Sanity: expanded QuantumSec leaves appear.
+        assert!(
+            p.rows().iter().any(|r| matches!(r, Row::Leaf { label, .. } if label == "Status")),
+            "Status leaf missing: {:?}",
+            p.rows()
+        );
+        assert!(
+            p.rows().iter().any(|r| matches!(r, Row::Leaf { label, .. } if label.starts_with("Open panel"))),
+            "Open panel leaf missing"
+        );
+        px.save_png(&path).expect("save_png");
     }
 
     #[test]

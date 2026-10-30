@@ -89,6 +89,25 @@ impl SettingsTab for QuantumSecTab {
         17
     }
 
+    fn deep_link(&mut self, arg: &str) {
+        match arg {
+            "awakening" | "awaken" => {
+                self.show_awakening = true;
+                self.awakening_checked = true; // skip auto-flag so we stay open for screenshots
+            }
+            "blood-seal" | "blood_seal" | "lockdown" => {
+                self.pending = Some(LockdownProposal::local_simulation_default());
+                self.awakening_checked = true;
+                self.show_awakening = false;
+            }
+            "tab" | "" => {
+                self.awakening_checked = true;
+                self.show_awakening = false;
+            }
+            _ => {}
+        }
+    }
+
     fn tick(&mut self, ctx: &egui::Context, _shared: &mut Shared) {
         self.ensure_awakening_flag();
         self.refresh_status();
@@ -222,7 +241,7 @@ impl SettingsTab for QuantumSecTab {
         chrome::section(ui, "WHISPER_FROM_THE_CORE", Some("info"), |ui| {
             for id in lillith_quantumsec::ProtonId::ALL {
                 ui.label(
-                    RichText::new(format!("⛧ {} — {}", id.label(), id.whisper()))
+                    RichText::new(format!("⚠ {} — {}", id.label(), id.whisper()))
                         .small()
                         .color(c32(pal::CYBER_TEXT_DIM)),
                 );

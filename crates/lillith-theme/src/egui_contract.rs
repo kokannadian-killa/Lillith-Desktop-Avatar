@@ -361,7 +361,11 @@ fn plate(
     let target = view
         .target
         .filter(|s| !s.is_empty())
-        .map(|p| painter.layout(format!("⛧ {p}"), f.mono.clone(), c32(pal::EMBER), inner_w));
+        .map(|p| {
+            // U+26A0 WARNING SIGN — present in bundled JetBrains Mono.
+            // Do not use U+26E7 (inverted pentagram): missing glyph → tofu box.
+            painter.layout(format!("⚠ {p}"), f.mono.clone(), c32(pal::EMBER), inner_w)
+        });
     let detail = detail_text(view)
         .map(|d| painter.layout(d, f.mono.clone(), c32(pal::BONE), inner_w - 16.0));
     // A scrolling slab is at most DETAIL_LINES rows tall; the rest scrolls.
