@@ -7500,6 +7500,42 @@
    "video": "spring_kneel_berries/spring_kneel_berries.mp4",
    "season": "spring",
    "outfit": "spring"
+  },
+  {
+   "name": "thirsty_bedroom_stare",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "thirsty_bedroom_stare/",
+   "sheet": "thirsty_bedroom_stare/thirsty_bedroom_stare_sheet.png",
+   "manifest": "thirsty_bedroom_stare/thirsty_bedroom_stare.json",
+   "preview": "thirsty_bedroom_stare/thirsty_bedroom_stare_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "idle_variant",
+    "severity:3",
+    "thirsty",
+    "variant_of:idle"
+   ],
+   "allure": true,
+   "video": "thirsty_bedroom_stare/thirsty_bedroom_stare.mp4",
+   "severity": 3,
+   "system": false
   }
  ]
 }
