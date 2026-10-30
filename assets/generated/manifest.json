@@ -7536,6 +7536,42 @@
    "video": "thirsty_bedroom_stare/thirsty_bedroom_stare.mp4",
    "severity": 3,
    "system": false
+  },
+  {
+   "name": "thirsty_fingertip_lip_drag",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "thirsty_fingertip_lip_drag/",
+   "sheet": "thirsty_fingertip_lip_drag/thirsty_fingertip_lip_drag_sheet.png",
+   "manifest": "thirsty_fingertip_lip_drag/thirsty_fingertip_lip_drag.json",
+   "preview": "thirsty_fingertip_lip_drag/thirsty_fingertip_lip_drag_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "idle_variant",
+    "severity:3",
+    "thirsty",
+    "variant_of:idle"
+   ],
+   "allure": true,
+   "video": "thirsty_fingertip_lip_drag/thirsty_fingertip_lip_drag.mp4",
+   "severity": 3,
+   "system": false
   }
  ]
 }
