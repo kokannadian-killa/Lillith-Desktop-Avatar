@@ -38,6 +38,7 @@ pub mod idle;
 pub mod interaction;
 pub mod launch_audit;
 pub mod llm_gate;
+pub mod loneliness;
 pub mod menu;
 pub mod mood;
 pub mod notes;
@@ -49,6 +50,7 @@ pub mod seasons;
 pub mod soul_contract;
 pub mod spring;
 pub mod state;
+pub mod system_ui;
 pub mod tease;
 
 pub use command::Command;

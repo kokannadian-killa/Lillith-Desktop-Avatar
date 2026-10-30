@@ -75,6 +75,27 @@ pub trait ActionSink {
 pub const CHAT_BARGE_IN: &str = "chat.barge_in";
 /// The bubble heard the safeword (voice or typed): everything stops.
 pub const CHAT_SAFEWORD: &str = "chat.safeword";
+
+/// Ko's presence profile for loneliness: detail = 8 comma-separated counts
+/// (3-hour buckets from midnight; `lillith_memory::habits::presence_profile`).
+pub const LONELY_PRESENCE: &str = "lonely.presence";
+
+/// How often (s) loneliness polls system UI, the hour and the hush.
+const LONELY_POLL_S: f32 = 1.0;
+
+/// Parses a [`LONELY_PRESENCE`] detail.
+fn parse_presence(detail: Option<&str>) -> Option<[f32; 8]> {
+    let mut out = [0.0f32; 8];
+    let mut parts = detail?.split(',');
+    for slot in &mut out {
+        let v: f32 = parts.next()?.trim().parse().ok()?;
+        if !v.is_finite() || v < 0.0 {
+            return None;
+        }
+        *slot = v;
+    }
+    parts.next().is_none().then_some(out)
+}
 /// Talk clip held after speech once the voice daemon is in use (s).
 pub const DAEMON_TALK_HOLD_S: f32 = 1.0;
 
@@ -394,6 +415,10 @@ pub struct Controller {
     outfit_check_s: f32,
     /// The last opened menu is the Avatar ▸ Outfit page.
     menu_outfit_page: bool,
+    /// Seconds since loneliness last polled system UI / hour / hush.
+    lonely_poll_s: f32,
+    /// The kill-switch hush epoch last seen (a change = the safeword).
+    lonely_hush_epoch: u64,
 }
 
 /// How often (s) the overlay re-checks today's date for `auto` outfits.
@@ -458,6 +483,10 @@ impl Controller {
             opts.animator.seed ^ 0xB4A1_17B4,
         );
         brain.set_muted(opts.muted);
+        // Loneliness picks from every pose, weighted by its manifest severity.
+        brain.set_pose_tags(lillith_anim::catalog::pose_tags(
+            stage.animator().manifest(),
+        ));
         let placement = Placement::from_config(&opts.position);
         brain.set_position(placement.left as f32);
         Self {
@@ -518,6 +547,8 @@ impl Controller {
             outfit_date: None,
             outfit_check_s: 0.0,
             menu_outfit_page: false,
+            lonely_poll_s: LONELY_POLL_S,
+            lonely_hush_epoch: lillith_core::access::kill_switch::hush_epoch(),
         }
         .with_click_through(opts.click_through)
         .with_outfit_for(lillith_core::seasons::today())
@@ -549,6 +580,26 @@ impl Controller {
         self.outfit_active = id;
         self.outfit_date = Some(date);
         self.outfit_check_s = 0.0;
+    }
+
+    /// Feeds loneliness what only the overlay knows: a system interaction
+    /// open in any Lillith process (cards, settings, wizard, dialogs; see
+    /// `lillith_core::system_ui`), the local hour, and a hush from anywhere
+    /// in this process (voice safeword, kill switch).
+    fn poll_loneliness(&mut self) {
+        self.brain
+            .set_system_busy(lillith_core::system_ui::active());
+        self.brain.set_hour(lillith_core::seasons::local_hour());
+        let epoch = lillith_core::access::kill_switch::hush_epoch();
+        if epoch != self.lonely_hush_epoch {
+            self.lonely_hush_epoch = epoch;
+            self.brain.note_hush();
+        }
+        // TODO(loneliness): Ko's presence profile (3-hour buckets) lives in
+        // the memory DB, which this process doesn't open; the mind can send
+        // it as a `lonely.presence` event (8 comma-separated counts, see
+        // `lillith_memory::habits::presence_profile`). Until then the habit
+        // factor is neutral (1.0).
     }
 
     /// Re-picks the outfit if the local date changed (auto mode).
@@ -834,6 +885,8 @@ impl Controller {
             self.set_seasonal_outfit(&cfg.seasonal_outfit, false);
         }
         self.tease.set_config(cfg.behavior.tease.clone());
+        self.brain
+            .set_loneliness_config(cfg.behavior.loneliness.clone());
         if self.peek.is_none() && cfg.scale > 0.0 {
             self.cancel_tease();
             self.set_scale(cfg.overlay_scale(), false);
@@ -1348,6 +1401,11 @@ impl Controller {
         }
         self.drain_feed();
         self.drain_settings();
+        self.lonely_poll_s += dt;
+        if self.lonely_poll_s >= LONELY_POLL_S {
+            self.lonely_poll_s = 0.0;
+            self.poll_loneliness();
+        }
         if self.click_gate.poll(self.clock, self.double_click_s) {
             tracing::info!("single click survived the double-click window: opening chat");
             self.open_chat();
@@ -1796,11 +1854,18 @@ impl Controller {
         }
         if ev.name == CHAT_BARGE_IN || ev.name == CHAT_SAFEWORD {
             let safeword = ev.name == CHAT_SAFEWORD;
+            if !safeword {
+                // Ko spoke over her (voice barge-in): real attention.
+                self.brain.note_attention();
+            }
             if safeword {
                 // The safeword stops her talking (not her work: running
                 // commands and the admin helper are left alone).
                 tracing::warn!("safeword from the chat bubble: she stops talking");
                 lillith_core::access::kill_switch::hush();
+                self.lonely_hush_epoch = lillith_core::access::kill_switch::hush_epoch();
+                // The hush: no lonely attention bids for a while.
+                self.brain.note_hush();
                 // The reply in flight is dead: wrap up what's shown, and
                 // nothing of it still queued is shown or spoken.
                 self.chat_stopped = true;
@@ -1815,8 +1880,21 @@ impl Controller {
             }
             return;
         }
+        if ev.name == LONELY_PRESENCE {
+            match parse_presence(ev.detail.as_deref()) {
+                Some(p) => self.brain.set_presence(p),
+                None => tracing::debug!(detail = ?ev.detail, "bad lonely.presence"),
+            }
+            return;
+        }
         if ev.name.starts_with("chat.") {
+            if ev.name == crate::chat::CHAT_OPENED {
+                // Ko opened the chat bubble to talk to her: attention.
+                self.brain.note_attention();
+            }
             if ev.name == crate::chat::CHAT_START {
+                // Ko wrote to her (a reply starts): real attention.
+                self.brain.note_attention();
                 self.chat_stopped = false;
             } else if self.chat_stopped
                 && (ev.name == crate::chat::CHAT_TOKEN || ev.name == crate::chat::CHAT_END)
@@ -2113,6 +2191,7 @@ impl Controller {
             avatar: self.stage.avatar_id().map(str::to_string),
             chat: self.chat.is_some(),
             speaker: self.speaker(),
+            lonely: Some(self.brain.loneliness_enabled()),
             outfits: self
                 .seasons
                 .listed()
@@ -2215,6 +2294,14 @@ impl Controller {
             MenuEffect::SetMonitorPaused(p) => {
                 self.monitor_paused = p;
                 tracing::info!(paused = p, "system monitor");
+            }
+            MenuEffect::SetLoneliness(on) => {
+                tracing::info!(on, "lonely poses");
+                if let Some(path) = &self.config_path {
+                    if let Err(e) = lillith_core::config::save_loneliness_mode(path, on) {
+                        tracing::warn!("could not save loneliness to {}: {e}", path.display());
+                    }
+                }
             }
             MenuEffect::SetScale(s) => self.command(Command::Scale {
                 scale: s,
@@ -3785,6 +3872,51 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
             "it hushes"
         );
         assert_eq!(*sink.interrupts.lock().unwrap(), ["barge_in", "safeword"]);
+        assert!(
+            c.brain.loneliness().hushed(),
+            "no lonely attention bids after the safeword"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn lonely_poses_toggle_persists_and_chat_is_attention() {
+        let (dir, mut c) = m3_controller("lonely", MoveMode::Stay);
+        let path = dir.join("config.toml");
+        c.config_path = Some(path.clone());
+        assert!(c.brain.loneliness_enabled());
+        assert_eq!(c.menu_state(None).extras.lonely, Some(true));
+        c.menu_pick(MenuAction::ToggleLoneliness);
+        assert!(!c.brain.loneliness_enabled());
+        let saved = Config::load(&path).unwrap();
+        assert_eq!(
+            saved.behavior.loneliness.mode,
+            lillith_core::loneliness::LonelinessMode::Off
+        );
+        c.menu_pick(MenuAction::ToggleLoneliness);
+        assert!(c.brain.loneliness_enabled());
+        assert_eq!(
+            Config::load(&path).unwrap().behavior.loneliness.mode,
+            lillith_core::loneliness::LonelinessMode::Auto
+        );
+        // Presence profile from the mind (bad details are ignored).
+        c.event(&Event::with_detail(LONELY_PRESENCE, "0,0,1,2,3,4,5,6"));
+        c.event(&Event::with_detail(LONELY_PRESENCE, "1,2,x"));
+        assert_eq!(parse_presence(Some("1,2,3")), None);
+        assert_eq!(parse_presence(Some("0,0,0,0,0,0,0,0,1")), None);
+        assert_eq!(parse_presence(Some("1, 2,3,4,5,6,7,8")).unwrap()[1], 2.0);
+        // A chat reply starting = Ko wrote (or spoke) to her.
+        c.event(&Event::new(crate::chat::CHAT_START));
+        assert_eq!(c.brain.loneliness().score(), 0.0);
+        // Opening the bubble and a voice barge-in are attention too.
+        for ev in [crate::chat::CHAT_OPENED, CHAT_BARGE_IN] {
+            for _ in 0..600 {
+                let _ = c.brain.tick(10.0, false);
+            }
+            assert!(c.brain.loneliness().score() > 0.0, "{ev}: lonely first");
+            c.event(&Event::new(ev));
+            assert_eq!(c.brain.loneliness().score(), 0.0, "{ev}");
+        }
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -97,6 +97,17 @@ pub struct AnimatorConfig {
     /// scale is still damped by `baked_motion_gain`; drag sway (`angle`) and
     /// footfall bob (`root_y`) stay.
     pub baked_motion_springs_off: bool,
+    /// Hair follow-through over [`BAKED_MOTION_TAG`] clips: gain on the
+    /// pigtail spring offset there (physics.toml `[baked_motion]
+    /// pigtail_gain`). Separate from `baked_motion_gain` so hair can run
+    /// livelier than the chest, which keeps `baked_motion_gain` and stays
+    /// switched off. 0 = pigtails switched off with the chest (the old
+    /// behaviour). A clip's own `disable_springs = ["pigtails"]` still wins.
+    pub baked_pigtail_gain: f32,
+    /// Cap (px) on that scaled pigtail offset over baked clips, so hair that
+    /// already swings in the video never gets a big second sway (0 = no
+    /// cap).
+    pub baked_pigtail_max_px: f32,
     /// Global clip playback speed: frame timing (fps / `frame_durations_ms`)
     /// of every clip is stretched by `1 / playback_speed` (0.7 = 30%
     /// slower). Physics, breathing and idle timers keep real time.
@@ -187,6 +198,8 @@ impl Default for AnimatorConfig {
             physics_driver: false,
             baked_motion_gain: 0.2,
             baked_motion_springs_off: true,
+            baked_pigtail_gain: physics_toml().baked_motion.pigtail_gain,
+            baked_pigtail_max_px: physics_toml().baked_motion.pigtail_max_px,
             playback_speed: 1.0,
             talk_speed: crate::talk::DEFAULT_TALK_SPEED,
             prefer_jiggle_variants: false,
@@ -880,21 +893,31 @@ impl Animator {
     }
 
     /// Engine spring channels switched off while `clip` is drawn: its
-    /// `disable_springs`, plus chest / pigtails / hip for [`BAKED_MOTION_TAG`]
-    /// clips when [`AnimatorConfig::baked_motion_springs_off`] is on.
+    /// `disable_springs`, plus chest / hip for [`BAKED_MOTION_TAG`] clips
+    /// when [`AnimatorConfig::baked_motion_springs_off`] is on, and pigtails
+    /// too unless [`AnimatorConfig::baked_pigtail_gain`] keeps hair live
+    /// (never over baked walks, which bake their own gait).
     pub fn clip_mask(&self, clip: &Clip) -> SpringMask {
         let mut m = clip.spring_mask();
         if self.cfg.baked_motion_springs_off && clip.has_tag(BAKED_MOTION_TAG) {
-            for c in [Channel::Chest, Channel::Pigtail, Channel::RootX] {
+            for c in [Channel::Chest, Channel::RootX] {
                 m.insert(c);
+            }
+            // Baked walks (`disable_springs = ["gait"]`) already swing the
+            // hair hard every step and get footfall pigtail kicks: keep hair
+            // off there too, or the sway doubles.
+            if self.cfg.baked_pigtail_gain <= 0.0 || clip.bakes_gait() {
+                m.insert(Channel::Pigtail);
             }
         }
         m
     }
 
     /// Spring transform for a frame of `clip`: secondary channels (chest,
-    /// pigtail, breathing scale) are scaled by `baked_motion_gain` when the
-    /// clip is tagged [`BAKED_MOTION_TAG`].
+    /// breathing scale) are scaled by `baked_motion_gain` when the clip is
+    /// tagged [`BAKED_MOTION_TAG`]; pigtails by their own
+    /// `baked_pigtail_gain` (capped at `baked_pigtail_max_px`) when that is
+    /// on, else by `baked_motion_gain` like before.
     fn transform_for(&self, clip: &Clip) -> Transform {
         let mut t = self.physics().transform();
         // Baked-jiggle clips: their disabled springs read as rest, even
@@ -922,8 +945,17 @@ impl Animator {
         if clip.tags.iter().any(|x| x == BAKED_MOTION_TAG) {
             let g = self.cfg.baked_motion_gain;
             t.chest_offset *= g;
-            t.pigtail_offset *= g;
             t.scale = 1.0 + (t.scale - 1.0) * g;
+            let gp = self.cfg.baked_pigtail_gain;
+            if gp > 0.0 {
+                t.pigtail_offset *= gp;
+                let cap = self.cfg.baked_pigtail_max_px;
+                if cap > 0.0 {
+                    t.pigtail_offset = t.pigtail_offset.clamp(-cap, cap);
+                }
+            } else {
+                t.pigtail_offset *= g;
+            }
         }
         if m.contains(Channel::Chest) {
             // chest bounce > 100 %: a light engine layer over the baked art
@@ -2382,7 +2414,12 @@ mod tests {
     #[test]
     fn baked_motion_clips_switch_off_engine_jiggle() {
         // variant_manifest(): idle (+ variants) tagged baked_motion, wave not.
-        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+        // Pigtails off too here: the pre-[baked_motion] behaviour.
+        let old = AnimatorConfig {
+            baked_pigtail_gain: 0.0,
+            ..quiet()
+        };
+        let mut a = Animator::new(variant_manifest(), old).unwrap();
         let m = a.spring_mask();
         assert!(m.contains(Channel::Chest) && m.contains(Channel::Pigtail));
         assert!(m.contains(Channel::RootX));
@@ -2407,9 +2444,94 @@ mod tests {
     }
 
     #[test]
+    fn baked_clips_keep_chest_damping_but_let_hair_move() {
+        // Bundled defaults: chest gain unchanged (0.2) and chest still
+        // switched off over baked clips; hair runs at its own gain.
+        let d = AnimatorConfig::default();
+        assert_eq!(
+            d.baked_motion_gain, 0.2,
+            "chest/breath gain must not change"
+        );
+        assert!(d.baked_motion_springs_off);
+        assert!(d.baked_pigtail_gain > d.baked_motion_gain);
+        assert!(
+            (0.5..=0.6).contains(&d.baked_pigtail_gain),
+            "{}",
+            d.baked_pigtail_gain
+        );
+        assert!(d.baked_pigtail_max_px > 0.0);
+
+        let mut a = Animator::new(variant_manifest(), quiet()).unwrap();
+        let m = a.spring_mask();
+        assert!(m.contains(Channel::Chest) && m.contains(Channel::RootX));
+        assert!(
+            !m.contains(Channel::Pigtail),
+            "hair stays live over baked clips"
+        );
+        a.physics_mut().impulse(Channel::Chest, 80.0);
+        a.physics_mut().impulse(Channel::Pigtail, 400.0);
+        let (mut chest, mut pig): (f32, f32) = (0.0, 0.0);
+        for _ in 0..90 {
+            a.tick(1.0 / 60.0);
+            let t = a.current().transform;
+            chest = chest.max(t.chest_offset.abs());
+            pig = pig.max(t.pigtail_offset.abs());
+        }
+        // Chest: exactly as before (off; no >100 % layer at default bounce).
+        assert_eq!(chest, 0.0);
+        // Hair: moves, but never past the cap (no big double sway).
+        assert!(pig > 0.1, "hair did not move {pig}");
+        assert!(pig <= d.baked_pigtail_max_px + 1e-6, "cap broken {pig}");
+
+        // Chest damping factor applies unchanged when the chest is not
+        // switched off: the chest offset is the raw spring times 0.2,
+        // whatever the pigtail gain is.
+        let chest_with = |pigtail_gain: f32| {
+            let cfg = AnimatorConfig {
+                baked_motion_springs_off: false,
+                baked_pigtail_gain: pigtail_gain,
+                ..quiet()
+            };
+            let mut a = Animator::new(variant_manifest(), cfg).unwrap();
+            a.physics_mut().impulse(Channel::Chest, 80.0);
+            let mut v = Vec::new();
+            for _ in 0..30 {
+                a.tick(1.0 / 60.0);
+                let raw = a.physics().transform().chest_offset;
+                let shown = a.current().transform.chest_offset;
+                assert!((shown - raw * 0.2).abs() < 1e-5, "{shown} vs {raw}");
+                v.push(shown);
+            }
+            v
+        };
+        assert_eq!(chest_with(0.0), chest_with(0.55));
+    }
+
+    #[test]
+    fn manifest_opt_out_turns_hair_off_on_one_clip() {
+        // A clip with disable_springs = ["pigtails"] keeps hair off even
+        // with the baked pigtail gain on.
+        let mut s = String::from(
+            "[clips.idle]\npage = \"idle.png\"\nfps = 10.0\nmode = \"loop\"\n\
+             tags = [\"baked_motion\"]\ndisable_springs = [\"pigtails\"]\nframes = [",
+        );
+        for i in 0..2 {
+            s += &format!(
+                "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                i * 400
+            );
+        }
+        s += "]\n";
+        let m = Manifest::from_toml_str(&s).unwrap();
+        let a = Animator::new(m, quiet()).unwrap();
+        assert!(a.spring_mask().contains(Channel::Pigtail));
+    }
+
+    #[test]
     fn baked_motion_clips_damp_secondary_springs() {
         let cfg = AnimatorConfig {
             baked_motion_gain: 0.0,
+            baked_pigtail_gain: 0.0,
             ..quiet()
         };
         let mut a = Animator::new(variant_manifest(), cfg).unwrap();

@@ -560,6 +560,8 @@ async fn main() -> Result<()> {
             ctx_size,
             auto_gguf,
         }) => {
+            // An install step (first-run setup): no lonely poses meanwhile.
+            let _ui = lillith_core::system_ui::SystemUi::enter_shared("install");
             let path = cli
                 .config
                 .clone()

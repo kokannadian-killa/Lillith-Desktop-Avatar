@@ -831,6 +831,8 @@ pub(crate) fn review_plan_on_console(
     id: RequestId,
     stdin: &std::io::Stdin,
 ) -> Result<Result<String, String>> {
+    // A system interaction (the console review): no lonely poses meanwhile.
+    let _ui = lillith_core::system_ui::SystemUi::enter_shared("console");
     let mut input = stdin.lock();
     review_plan(
         contract,

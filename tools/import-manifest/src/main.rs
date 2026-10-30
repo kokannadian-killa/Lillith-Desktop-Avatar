@@ -24,8 +24,6 @@
 //! `feet_off_ground_px` becomes a `feet_off_ground_px:<n>` tag; the feet
 //! anchor itself stays on the shared baseline.
 //!
-//! `severity` (0..=4, attention level for the loneliness picker) is copied
-//! as is; `Clip::validate` rejects values above 4.
 //! Seat metadata (`seat_y`, `seat_x_range`, `feet_lowest_y`) and event
 //! reaction metadata (`event`, `base_clip`, `base_frames`) are carried into
 //! the clip fields of the same names. The engine validates that `base_clip`
@@ -388,6 +386,15 @@ fn convert(
     if anim.extra.contains_key("retime") || side.is_some_and(|m| m.contains_key("retime")) {
         tags.push("retimed".into());
     }
+    // Loneliness tiers: `severity` 0..=5 and `system` (never an idle pick).
+    let severity: u8 = typed_field(&anim.name, &anim.extra, side, "severity")?.unwrap_or(0);
+    ensure!(
+        severity <= lillith_anim::atlas::MAX_SEVERITY,
+        "{}: severity {severity} is above {}",
+        anim.name,
+        lillith_anim::atlas::MAX_SEVERITY
+    );
+    let system: bool = typed_field(&anim.name, &anim.extra, side, "system")?.unwrap_or(false);
     let disable_springs = engine_springs_of(anim, side)?;
     let blend = blend_of(anim, side)?;
     if blend.is_some() {
@@ -416,14 +423,14 @@ fn convert(
         baseline_y: anim.baseline_y,
         scale,
         tags,
+        severity,
+        system,
         points: collect_points(&anim.extra, side),
         // Seat metadata (sit_swing): a line, a range and a scalar; mapped
         // explicitly so they are never mistaken for points or frame indices.
         seat_y: typed_field(&anim.name, &anim.extra, side, "seat_y")?,
         seat_x_range: typed_field(&anim.name, &anim.extra, side, "seat_x_range")?,
         feet_lowest_y: typed_field(&anim.name, &anim.extra, side, "feet_lowest_y")?,
-        // Attention severity (0..=4) for the loneliness picker.
-        severity: typed_field(&anim.name, &anim.extra, side, "severity")?,
         // Locomotion: per-frame root motion and footfall frames (in-place cycles).
         root_motion: typed_field(&anim.name, &anim.extra, side, "root_motion")?,
         contact_frames: typed_field(&anim.name, &anim.extra, side, "contact_frames")?,
@@ -897,9 +904,6 @@ fn check(path: &Path, videos: bool) -> Result<()> {
                 "   seat_y {:?}  seat_x_range {:?}  feet_lowest_y {:?}",
                 clip.seat_y, clip.seat_x_range, clip.feet_lowest_y
             );
-        }
-        if let Some(sev) = clip.severity {
-            println!("   severity {sev}");
         }
         if let Some(v) = clip.video_path(&dir) {
             ensure!(v.is_file(), "{name}: video {v:?} missing");
@@ -1409,6 +1413,45 @@ mod tests {
             &[]
         )
         .is_err());
+    }
+
+    #[test]
+    fn carries_severity_and_system_tags() {
+        let json: JsonManifest = serde_json::from_str(
+            r#"{ "animations": [
+              { "name": "lean_tease", "sheet": "a.png", "frame_count": 1, "fps": 6,
+                "loop": false, "severity": 2, "anchor": [200, 392] },
+              { "name": "event_card", "sheet": "b.png", "frame_count": 1, "fps": 6,
+                "loop": false, "system": true, "anchor": [200, 392] },
+              { "name": "wave", "sheet": "c.png", "frame_count": 1, "fps": 6,
+                "loop": false, "anchor": [200, 392] },
+              { "name": "top_tier", "sheet": "d.png", "frame_count": 1, "fps": 6,
+                "loop": false, "severity": 5, "anchor": [200, 392] } ] }"#,
+        )
+        .unwrap();
+        let m = build(&json, Path::new("."), Path::new("."), &[]).unwrap();
+        assert_eq!(m.clips["lean_tease"].severity, 2);
+        assert!(!m.clips["lean_tease"].system);
+        assert!(m.clips["event_card"].system);
+        assert_eq!(m.clips["wave"].severity, 0);
+        assert_eq!(m.clips["top_tier"].severity, 5, "5 is accepted");
+        let back = Manifest::from_toml_str(&toml::to_string(&m).unwrap()).unwrap();
+        assert_eq!(back.clips, m.clips);
+        for bad in [
+            r#""severity": 6"#,
+            r#""severity": "high""#,
+            r#""system": "yes""#,
+        ] {
+            let src = format!(
+                r#"{{ "animations": [ {{ "name": "x", "sheet": "x.png", "frame_count": 1,
+                  "fps": 6, "loop": false, "anchor": [200, 392], {bad} }} ] }}"#
+            );
+            let json: JsonManifest = serde_json::from_str(&src).unwrap();
+            assert!(
+                build(&json, Path::new("."), Path::new("."), &[]).is_err(),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

@@ -7,6 +7,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 video = "arch_back_over_shoulder/arch_back_over_shoulder.mp4"
 
 [[clips.arch_back_over_shoulder.frames]]
@@ -268,6 +269,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 jiggle_baked = true
 disable_springs = ["chest", "pigtails", "hip"]
 video = "arch_back_over_shoulder_long/arch_back_over_shoulder_long.mp4"
@@ -1546,6 +1548,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.559
 tags = ["canonical", "facing:front (seated on an edge, legs dangling)", "baked_motion", "variant_of:perch_sit"]
+severity = 2
 seat_y = 240
 seat_x_range = [130, 238]
 feet_lowest_y = 389
@@ -2337,6 +2340,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 video = "bend_forward_wink/bend_forward_wink.mp4"
 
 [[clips.bend_forward_wink.frames]]
@@ -2598,6 +2602,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 jiggle_baked = true
 disable_springs = ["chest", "pigtails", "hip"]
 video = "bend_forward_wink_long/bend_forward_wink_long.mp4"
@@ -5333,6 +5338,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+severity = 1
 video = "blink_wink/blink_wink.mp4"
 
 [[clips.blink_wink.frames]]
@@ -5679,6 +5685,7 @@ frame_durations_ms = [69, 69, 69, 69, 69, 69, 69, 69, 69, 69, 182, 182, 182, 69,
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
 video = "blow_kiss/blow_kiss.mp4"
 
 [clips.blow_kiss.points]
@@ -5862,6 +5869,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 2
 video = "blow_kiss_hip_pop/blow_kiss_hip_pop.mp4"
 
 [[clips.blow_kiss_hip_pop.frames]]
@@ -6123,6 +6131,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 jiggle_baked = true
 disable_springs = ["chest", "pigtails", "hip"]
 video = "blow_kiss_hip_pop_long/blow_kiss_hip_pop_long.mp4"
@@ -7401,6 +7410,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "variant_of:idle", "idle_variant"]
+severity = 2
 video = "body_roll_slow/body_roll_slow.mp4"
 
 [[clips.body_roll_slow.frames]]
@@ -7662,6 +7672,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 jiggle_baked = true
 disable_springs = ["chest", "pigtails", "hip"]
 video = "body_roll_slow_long/body_roll_slow_long.mp4"
@@ -8940,6 +8951,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 2
 video = "body_roll_to_viewer/body_roll_to_viewer.mp4"
 
 [[clips.body_roll_to_viewer.frames]]
@@ -9708,6 +9720,7 @@ frame_durations_ms = [94, 94, 94, 94, 94, 94, 94, 94, 94, 188, 188, 188, 188, 18
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
 video = "cheeky_tongue_wink/cheeky_tongue_wink.mp4"
 
 [[clips.cheeky_tongue_wink.frames]]
@@ -9885,6 +9898,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.559
 tags = ["canonical", "facing:front (seated on an edge, legs dangling)", "baked_motion", "variant_of:perch_sit"]
+severity = 3
 seat_y = 240
 seat_x_range = [154, 239]
 feet_lowest_y = 387
@@ -10485,6 +10499,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front (seated on an edge, legs crossed, chin on hand)", "allure", "baked_motion", "sit_base"]
+severity = 1
 seat_y = 228
 seat_x_range = [159, 244]
 feet_lowest_y = 392
@@ -10917,6 +10932,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.559
 tags = ["canonical", "facing:front (seated on an edge, legs dangling)", "baked_motion", "variant_of:perch_sit"]
+severity = 3
 seat_y = 240
 seat_x_range = [152, 240]
 feet_lowest_y = 387
@@ -11517,6 +11533,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 2
 video = "come_hither_crawl/come_hither_crawl.mp4"
 
 [[clips.come_hither_crawl.frames]]
@@ -12375,6 +12392,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "dom_arms_crossed_demand/dom_arms_crossed_demand.mp4"
 
 [[clips.dom_arms_crossed_demand.frames]]
@@ -12804,6 +12822,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "dom_beckon_finger/dom_beckon_finger.mp4"
 
 [[clips.dom_beckon_finger.frames]]
@@ -13233,6 +13252,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "dom_chin_tilt_summon/dom_chin_tilt_summon.mp4"
 
 [[clips.dom_chin_tilt_summon.frames]]
@@ -13662,6 +13682,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "dom_point_down/dom_point_down.mp4"
 
 [[clips.dom_point_down.frames]]
@@ -14091,6 +14112,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "dom_screen_edge_whisper/dom_screen_edge_whisper.mp4"
 
 [[clips.dom_screen_edge_whisper.frames]]
@@ -14520,6 +14542,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "dom_snap_kneel_order/dom_snap_kneel_order.mp4"
 
 [[clips.dom_snap_kneel_order.frames]]
@@ -14949,6 +14972,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "dom_throne_lean/dom_throne_lean.mp4"
 
 [[clips.dom_throne_lean.frames]]
@@ -15526,6 +15550,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "approval.needed"
 base_clip = "event_approval_needed"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -15617,6 +15642,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.531
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "archive.created"
 base_clip = "spell_orb_cast"
 base_frames = [20, 20, 21, 21, 22, 22, 21, 21, 22, 22]
@@ -15706,6 +15732,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "battery.low"
 base_clip = "nod"
 base_frames = [0, 2, 4, 6, 8, 10, 13, 15, 17, 19, 21, 23]
@@ -15809,6 +15836,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.533
 tags = ["canonical", "facing:front (points screen-left)", "baked_motion"]
+system = true
 event = "bt.paired"
 base_clip = "point"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -15898,6 +15926,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "brightness.changed"
 base_clip = "salute"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -15987,6 +16016,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "browser.bookmark"
 base_clip = "dance"
 base_frames = [17, 19, 22, 25, 28, 30, 30, 30, 30, 30]
@@ -16076,6 +16106,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "browser.history"
 base_clip = "hip_sway"
 base_frames = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
@@ -16165,6 +16196,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.528
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "calendar.reminder"
 base_clip = "think"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -16254,6 +16286,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.533
 tags = ["canonical", "facing:front (points screen-left)", "baked_motion"]
+system = true
 event = "clipboard.copied"
 base_clip = "point"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -16343,6 +16376,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "clipboard.cut"
 base_clip = "event_clipboard_cut"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -16434,6 +16468,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "cloud.sync"
 base_clip = "hip_sway"
 base_frames = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
@@ -16523,6 +16558,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.528
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "cpu.high"
 base_clip = "facepalm"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -16612,6 +16648,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.533
 tags = ["canonical", "facing:front (points screen-left)", "baked_motion"]
+system = true
 event = "system.status"
 base_clip = "point"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -16701,6 +16738,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.528
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "journal.error"
 base_clip = "facepalm"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -16790,6 +16828,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.533
 tags = ["canonical", "facing:front (points screen-left)", "baked_motion"]
+system = true
 event = "firewall.blocked"
 base_clip = "point"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -16879,6 +16918,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.528
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "help.requested"
 base_clip = "think"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -16968,6 +17008,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.531
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "hotspot.on"
 base_clip = "spell_orb_cast"
 base_frames = [20, 20, 21, 21, 22, 22, 21, 21, 22, 22]
@@ -17059,6 +17100,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "window.private"
 base_clip = "blink_wink"
 base_frames = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -17148,6 +17190,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.535
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "input.click.double"
 base_clip = "tada_celebrate"
 base_frames = [0, 1, 2, 4, 5, 6, 7, 9, 10, 11]
@@ -17239,6 +17282,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "input.click.right"
 base_clip = "event_input_click_right"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -17334,6 +17378,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "input.hover_long"
 base_clip = "lean_forward"
 base_frames = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
@@ -17425,6 +17470,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.528
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "app.loading"
 base_clip = "think"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -17514,6 +17560,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "net.lost"
 base_clip = "event_net_lost"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -17603,6 +17650,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "notify.received"
 base_clip = "tail_wag"
 base_frames = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10]
@@ -17692,6 +17740,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.528
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "print.job"
 base_clip = "think"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -17781,6 +17830,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "ram.high"
 base_clip = "event_ram_high"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -17870,6 +17920,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.533
 tags = ["canonical", "facing:front (points screen-left)", "baked_motion"]
+system = true
 event = "trash.added"
 base_clip = "point"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -17959,6 +18010,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "screenshot.taken"
 base_clip = "lean_forward"
 base_frames = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
@@ -18048,6 +18100,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.528
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "search.opened"
 base_clip = "think"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -18137,6 +18190,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "start_menu.opened"
 base_clip = "event_start_menu_opened"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -18230,6 +18284,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.533
 tags = ["canonical", "facing:front (points screen-left)", "baked_motion"]
+system = true
 event = "timer.fired"
 base_clip = "point"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -18321,6 +18376,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.531
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "update.available"
 base_clip = "spell_orb_cast"
 base_frames = [20, 20, 21, 21, 22, 22, 21, 21, 22, 22]
@@ -18412,6 +18468,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "usb.added"
 base_clip = "wave"
 base_frames = [0, 1, 2, 4, 5, 6, 7, 9, 10, 11]
@@ -18503,6 +18560,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "usb.removed"
 base_clip = "wave"
 base_frames = [0, 1, 2, 4, 5, 6, 7, 9, 10, 11]
@@ -18592,6 +18650,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.533
 tags = ["canonical", "facing:front (points screen-left)", "baked_motion"]
+system = true
 event = "volume.changed"
 base_clip = "point"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -18681,6 +18740,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "vpn.up"
 base_clip = "event_vpn_up"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -18772,6 +18832,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.528
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "wifi.changed"
 base_clip = "think"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -18861,6 +18922,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "window.closed"
 base_clip = "wave"
 base_frames = [0, 1, 2, 4, 5, 6, 7, 9, 10, 11]
@@ -18950,6 +19012,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "window.minimized"
 base_clip = "nod"
 base_frames = [0, 2, 4, 6, 8, 10, 13, 15, 17, 19]
@@ -19039,6 +19102,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.535
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "window.opened.app"
 base_clip = "tada_celebrate"
 base_frames = [0, 1, 2, 4, 5, 6, 7, 9, 10, 11, 12, 14]
@@ -19142,6 +19206,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "window.opened.browser"
 base_clip = "salute"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -19233,6 +19298,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "window.opened.folder"
 base_clip = "lean_forward"
 base_frames = [0, 2, 4, 6, 8, 10, 12, 12, 12, 14]
@@ -19324,6 +19390,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "window.opened.media"
 base_clip = "dance"
 base_frames = [17, 19, 22, 25, 28, 30, 17, 19, 22, 25]
@@ -19415,6 +19482,7 @@ mode = "once"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 event = "window.opened.terminal"
 base_clip = "event_window_opened_terminal"
 base_frames = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -19602,6 +19670,7 @@ frame_durations_ms = [81, 81, 81, 81, 81, 81, 217, 217, 81, 81, 81, 81, 81, 81, 
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:3/4 front", "baked_motion", "allure"]
+severity = 1
 video = "lean_tease/lean_tease.mp4"
 
 [[clips.finger_wag_tease.frames]]
@@ -19779,6 +19848,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 2
 video = "finger_walk_on_glass/finger_walk_on_glass.mp4"
 
 [[clips.finger_walk_on_glass.frames]]
@@ -20209,6 +20279,8 @@ frame_durations_ms = [73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 153, 1
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
+disable_springs = ["pigtails"]
 video = "hair_flip/hair_flip.mp4"
 
 [[clips.hair_flip.frames]]
@@ -20386,6 +20458,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "variant_of:idle", "idle_variant"]
+severity = 2
+disable_springs = ["pigtails"]
 video = "hair_lift_stretch/hair_lift_stretch.mp4"
 
 [[clips.hair_lift_stretch.frames]]
@@ -20647,6 +20721,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 jiggle_baked = true
 disable_springs = ["chest", "pigtails", "hip"]
 video = "hair_lift_stretch_long/hair_lift_stretch_long.mp4"
@@ -21925,6 +22000,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
+disable_springs = ["pigtails"]
 video = "hair_twirl/hair_twirl.mp4"
 
 [[clips.hair_twirl.frames]]
@@ -22032,6 +22109,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "idle_variant", "variant_of:idle"]
+severity = 2
+disable_springs = ["pigtails"]
 video = "hair_twirl_lip_bite/hair_twirl_lip_bite.mp4"
 
 [[clips.hair_twirl_lip_bite.frames]]
@@ -22461,6 +22540,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "outfit:halloween", "season:halloween", "seasonal"]
+severity = 2
 video = "halloween_broom_sit_lollipop/halloween_broom_sit_lollipop.mp4"
 
 [[clips.halloween_broom_sit_lollipop.frames]]
@@ -23814,6 +23894,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "outfit:halloween", "season:halloween", "seasonal"]
+severity = 2
 video = "halloween_cape_swirl_arch/halloween_cape_swirl_arch.mp4"
 
 [[clips.halloween_cape_swirl_arch.frames]]
@@ -25167,6 +25248,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "outfit:halloween", "season:halloween", "seasonal"]
+severity = 1
 video = "halloween_hat_tip_wink/halloween_hat_tip_wink.mp4"
 
 [[clips.halloween_hat_tip_wink.frames]]
@@ -26520,6 +26602,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "outfit:halloween", "season:halloween", "seasonal"]
+severity = 1
 video = "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy.mp4"
 
 [[clips.halloween_pumpkin_hug_candy.frames]]
@@ -27873,6 +27956,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
 video = "idle_flirt_stretch/idle_flirt_stretch.mp4"
 
 [[clips.hands_behind_head_pose.frames]]
@@ -28212,6 +28296,7 @@ frame_durations_ms = [73, 73, 73, 73, 73, 73, 73, 153, 153, 153, 73, 73, 73, 73,
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
 video = "heart_hands/heart_hands.mp4"
 
 [clips.heart_hands.points]
@@ -28395,6 +28480,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 2
 video = "hip_pop_beckon/hip_pop_beckon.mp4"
 
 [[clips.hip_pop_beckon.frames]]
@@ -28825,6 +28911,7 @@ frame_durations_ms = [63, 63, 63, 63, 63, 63, 63, 186, 186, 63, 63, 63, 63, 63, 
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
 video = "hip_pop_wink/hip_pop_wink.mp4"
 
 [clips.hip_pop_wink.points]
@@ -29008,6 +29095,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+severity = 1
 video = "hip_sway/hip_sway.mp4"
 
 [[clips.hip_sway.frames]]
@@ -29178,6 +29266,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "idle_variant", "variant_of:idle"]
+severity = 2
 video = "hip_sway_slow/hip_sway_slow.mp4"
 
 [[clips.hip_sway_slow.frames]]
@@ -29607,6 +29696,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "hug_screen_possessive/hug_screen_possessive.mp4"
 
 [[clips.hug_screen_possessive.frames]]
@@ -30036,6 +30126,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom", "variant_of:idle", "idle_variant"]
+severity = 2
 video = "hungry_lip_lick/hungry_lip_lick.mp4"
 
 [[clips.hungry_lip_lick.frames]]
@@ -32085,11 +32176,12 @@ anchor = [200, 392]
 
 [clips.idle_flirt_foot_tap]
 page = "idle_flirt_foot_tap/idle_flirt_foot_tap_sheet.png"
-fps = 8.0
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
 video = "idle_flirt_foot_tap/idle_flirt_foot_tap.mp4"
 
 [[clips.idle_flirt_foot_tap.frames]]
@@ -32421,6 +32513,167 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[[clips.idle_flirt_foot_tap.frames]]
+x = 18800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 19200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 19600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 20000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 20400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 20800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 21200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 21600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 22000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 22400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 22800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 23200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 23600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 24000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 24400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 24800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 25200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 25600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 26000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 26400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 26800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 27200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 27600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.idle_flirt_glove_adjust]
 page = "idle_flirt_glove_adjust/idle_flirt_glove_adjust_sheet.png"
 fps = 12.0
@@ -32428,6 +32681,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
 video = "idle_flirt_glove_adjust/idle_flirt_glove_adjust.mp4"
 
 [[clips.idle_flirt_glove_adjust.frames]]
@@ -32761,11 +33015,12 @@ anchor = [200, 392]
 
 [clips.idle_flirt_hands_behind_sway]
 page = "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway_sheet.png"
-fps = 10.5
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
 video = "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway.mp4"
 
 [[clips.idle_flirt_hands_behind_sway.frames]]
@@ -33097,6 +33352,55 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 18800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 19200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 19600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 20000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 20400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 20800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 21200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.idle_flirt_hip_lean]
 page = "idle_flirt_hip_lean/idle_flirt_hip_lean_sheet.png"
 fps = 12.0
@@ -33104,6 +33408,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
 video = "idle_flirt_hip_lean/idle_flirt_hip_lean.mp4"
 
 [[clips.idle_flirt_hip_lean.frames]]
@@ -33442,6 +33747,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
 video = "idle_flirt_lip_bite/idle_flirt_lip_bite.mp4"
 
 [[clips.idle_flirt_lip_bite.frames]]
@@ -33780,6 +34086,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
 video = "idle_flirt_look_away/idle_flirt_look_away.mp4"
 
 [[clips.idle_flirt_look_away.frames]]
@@ -34118,6 +34425,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
+disable_springs = ["pigtails"]
 video = "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl.mp4"
 
 [[clips.idle_flirt_pigtail_twirl.frames]]
@@ -34540,6 +34849,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
 video = "idle_flirt_shy_giggle/idle_flirt_shy_giggle.mp4"
 
 [[clips.idle_flirt_shy_giggle.frames]]
@@ -34878,6 +35188,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
 video = "idle_flirt_stretch/idle_flirt_stretch.mp4"
 
 [[clips.idle_flirt_stretch.frames]]
@@ -35216,6 +35527,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+severity = 1
 video = "idle_flirt_tail_curl/idle_flirt_tail_curl.mp4"
 
 [[clips.idle_flirt_tail_curl.frames]]
@@ -36568,6 +36880,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 1
 video = "kiss_mark_on_glass/kiss_mark_on_glass.mp4"
 
 [[clips.kiss_mark_on_glass.frames]]
@@ -36997,6 +37310,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "kiss_then_come_here/kiss_then_come_here.mp4"
 
 [[clips.kiss_then_come_here.frames]]
@@ -37426,6 +37740,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 2
 video = "kneel_hands_on_thighs/kneel_hands_on_thighs.mp4"
 
 [[clips.kneel_hands_on_thighs.frames]]
@@ -37687,6 +38002,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 jiggle_baked = true
 disable_springs = ["chest", "pigtails", "hip"]
 video = "kneel_hands_on_thighs_long/kneel_hands_on_thighs_long.mp4"
@@ -38965,6 +39281,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "kneel_pout_beg/kneel_pout_beg.mp4"
 
 [[clips.kneel_pout_beg.frames]]
@@ -39478,6 +39795,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 2
 video = "kneel_sit_back_beckon/kneel_sit_back_beckon.mp4"
 
 [[clips.kneel_sit_back_beckon.frames]]
@@ -40520,6 +40838,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "idle_variant", "variant_of:idle"]
+severity = 2
 video = "lean_doorframe_smolder/lean_doorframe_smolder.mp4"
 
 [[clips.lean_doorframe_smolder.frames]]
@@ -40949,6 +41268,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion"]
+severity = 1
 video = "lean_forward/lean_forward.mp4"
 
 [[clips.lean_forward.frames]]
@@ -41120,6 +41440,7 @@ frame_durations_ms = [81, 81, 81, 81, 81, 81, 217, 217, 81, 81, 81, 81, 81, 81, 
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:3/4 front", "baked_motion", "allure"]
+severity = 1
 video = "lean_tease/lean_tease.mp4"
 
 [[clips.lean_tease.frames]]
@@ -41297,6 +41618,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front (seated on an edge, legs crossed)", "allure", "baked_motion", "sit_base"]
+severity = 2
 seat_y = 226
 seat_x_range = [156, 240]
 feet_lowest_y = 392
@@ -43586,6 +43908,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:newyear", "outfit:newyear"]
+severity = 3
 video = "newyear_champagne_rim_lick/newyear_champagne_rim_lick.mp4"
 
 [[clips.newyear_champagne_rim_lick.frames]]
@@ -44939,6 +45262,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:newyear", "outfit:newyear"]
+severity = 3
 video = "newyear_midnight_kiss_squeeze/newyear_midnight_kiss_squeeze.mp4"
 
 [[clips.newyear_midnight_kiss_squeeze.frames]]
@@ -46292,6 +46616,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:newyear", "outfit:newyear"]
+severity = 3
 video = "newyear_strap_oops/newyear_strap_oops.mp4"
 
 [[clips.newyear_strap_oops.frames]]
@@ -47645,6 +47970,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:newyear", "outfit:newyear"]
+severity = 2
 video = "newyear_strawberry_bite/newyear_strawberry_bite.mp4"
 
 [[clips.newyear_strawberry_bite.frames]]
@@ -50445,6 +50771,7 @@ frame_durations_ms = [99, 99, 200, 200, 99, 99, 444, 99, 99, 99, 99, 200, 1003, 
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
 video = "over_shoulder_look/over_shoulder_look.mp4"
 
 [[clips.over_shoulder_look.frames]]
@@ -51994,6 +52321,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.559
 tags = ["canonical", "facing:side (lying on her side along the top edge, head left)", "baked_motion", "lounge_base"]
+severity = 1
 seat_y = 390
 seat_x_range = [197, 372]
 feet_lowest_y = 390
@@ -54171,6 +54499,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 video = "pose_hacking/pose_hacking.mp4"
 
 [[clips.pose_hacking.frames]]
@@ -55056,6 +55385,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion"]
+system = true
 video = "pose_wait_palm/pose_wait_palm.mp4"
 
 [[clips.pose_wait_palm.frames]]
@@ -55233,6 +55563,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "predator_lean_in/predator_lean_in.mp4"
 
 [[clips.predator_lean_in.frames]]
@@ -55901,6 +56232,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "seduce_beckon_finger/seduce_beckon_finger.mp4"
 
 [[clips.seduce_beckon_finger.frames]]
@@ -56330,6 +56662,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 1
 video = "seduce_blow_kiss_screen/seduce_blow_kiss_screen.mp4"
 
 [[clips.seduce_blow_kiss_screen.frames]]
@@ -56759,6 +57092,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "seduce_lean_to_screen_whisper/seduce_lean_to_screen_whisper.mp4"
 
 [[clips.seduce_lean_to_screen_whisper.frames]]
@@ -57188,6 +57522,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 2
 video = "seduce_lip_bite_glance/seduce_lip_bite_glance.mp4"
 
 [[clips.seduce_lip_bite_glance.frames]]
@@ -57617,6 +57952,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+severity = 1
 video = "seduce_tap_glass/seduce_tap_glass.mp4"
 
 [[clips.seduce_tap_glass.frames]]
@@ -58216,6 +58552,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.53
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
 video = "shoulder_shimmy/shoulder_shimmy.mp4"
 
 [[clips.shoulder_shimmy.frames]]
@@ -60452,6 +60789,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 video = "slow_turn_spin_tease/slow_turn_spin_tease.mp4"
 
 [[clips.slow_turn_spin_tease.frames]]
@@ -60713,6 +61051,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 jiggle_baked = true
 disable_springs = ["chest", "pigtails", "hip"]
 video = "slow_turn_spin_tease_long/slow_turn_spin_tease_long.mp4"
@@ -61991,6 +62330,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom", "variant_of:idle", "idle_variant"]
+severity = 1
 video = "smug_smirk/smug_smirk.mp4"
 
 [[clips.smug_smirk.frames]]
@@ -62420,6 +62760,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom"]
+system = true
 video = "soul_contract_sign/soul_contract_sign.mp4"
 
 [[clips.soul_contract_sign.frames]]
@@ -63118,6 +63459,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front (kneeling)", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:spring", "outfit:spring"]
+severity = 3
 video = "spring_kneel_berries/spring_kneel_berries.mp4"
 
 [[clips.spring_kneel_berries.frames]]
@@ -64471,6 +64813,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "outfit:spring", "season:spring", "seasonal"]
+severity = 3
 video = "spring_lollipop_lick/spring_lollipop_lick.mp4"
 
 [[clips.spring_lollipop_lick.frames]]
@@ -65824,6 +66167,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:spring", "outfit:spring"]
+severity = 3
 video = "spring_petal_squeeze/spring_petal_squeeze.mp4"
 
 [[clips.spring_petal_squeeze.frames]]
@@ -67177,6 +67521,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:three-quarter front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:spring", "outfit:spring"]
+severity = 3
 video = "spring_vine_oops/spring_vine_oops.mp4"
 
 [[clips.spring_vine_oops.frames]]
@@ -68530,6 +68875,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "squeeze"]
+severity = 3
 video = "squeeze_bent_over_cleavage/squeeze_bent_over_cleavage.mp4"
 
 [[clips.squeeze_bent_over_cleavage.frames]]
@@ -69967,6 +70313,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "squeeze"]
+severity = 3
 video = "squeeze_chest_push_shimmy/squeeze_chest_push_shimmy.mp4"
 
 [[clips.squeeze_chest_push_shimmy.frames]]
@@ -71236,6 +71583,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "squeeze"]
+severity = 3
 video = "squeeze_hands_press_tease/squeeze_hands_press_tease.mp4"
 
 [[clips.squeeze_hands_press_tease.frames]]
@@ -72673,6 +73021,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front (kneeling)", "allure", "baked_motion", "cleavage_zoom", "squeeze"]
+severity = 3
 video = "squeeze_kneel_press_wink/squeeze_kneel_press_wink.mp4"
 
 [[clips.squeeze_kneel_press_wink.frames]]
@@ -73942,6 +74291,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "squeeze"]
+severity = 3
 video = "squeeze_lean_forward_arms/squeeze_lean_forward_arms.mp4"
 
 [[clips.squeeze_lean_forward_arms.frames]]
@@ -75379,6 +75729,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front (seated on an edge)", "allure", "baked_motion", "cleavage_zoom", "sit_base", "squeeze"]
+severity = 3
 seat_y = 244
 seat_x_range = [155, 244]
 feet_lowest_y = 392
@@ -77022,6 +77373,7 @@ frame_durations_ms = [74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 196, 196, 196, 154
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
 video = "stretch_arch/stretch_arch.mp4"
 
 [[clips.stretch_arch.frames]]
@@ -77199,6 +77551,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.537
 tags = ["canonical", "facing:left", "baked_motion", "allure"]
+severity = 1
 disable_springs = ["gait"]
 video = "strut_left/strut_left.mp4"
 
@@ -77272,6 +77625,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.537
 tags = ["canonical", "facing:right", "baked_motion", "allure"]
+severity = 1
 disable_springs = ["gait"]
 video = "strut_right/strut_right.mp4"
 
@@ -77345,6 +77699,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:summer", "outfit:summer"]
+severity = 3
 video = "summer_lotion_squeeze/summer_lotion_squeeze.mp4"
 
 [[clips.summer_lotion_squeeze.frames]]
@@ -78698,6 +79053,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:summer", "outfit:summer"]
+severity = 3
 video = "summer_popsicle_lick/summer_popsicle_lick.mp4"
 
 [[clips.summer_popsicle_lick.frames]]
@@ -80051,6 +80407,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:summer", "outfit:summer"]
+severity = 1
 video = "summer_shades_peek_wink/summer_shades_peek_wink.mp4"
 
 [[clips.summer_shades_peek_wink.frames]]
@@ -81404,6 +81761,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:summer", "outfit:summer"]
+severity = 3
 video = "summer_string_oops/summer_string_oops.mp4"
 
 [[clips.summer_string_oops.frames]]
@@ -82752,7 +83110,7 @@ anchor = [200, 392]
 
 [clips.sway_dance]
 page = "sway_dance/sway_dance_sheet.png"
-fps = 8.0
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -83172,6 +83530,209 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[[clips.sway_dance.frames]]
+x = 23600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 24000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 24400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 24800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 25200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 25600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 26000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 26400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 26800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 27200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 27600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 28000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 28400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 28800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 29200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 29600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 30000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 30400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 30800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 31200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 31600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 32000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 32400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 32800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 33200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 33600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 34000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 34400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 34800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.tada_celebrate]
 page = "tada_celebrate/tada_celebrate_sheet.png"
 fps = 8.0
@@ -83308,6 +83869,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 1
 video = "tail_heart_wink/tail_heart_wink.mp4"
 
 [[clips.tail_heart_wink.frames]]
@@ -83737,6 +84299,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 1
 video = "tail_tease/tail_tease.mp4"
 
 [[clips.tail_tease.frames]]
@@ -83909,7 +84472,7 @@ anchor = [200, 392]
 
 [clips.tail_wag]
 page = "tail_wag/tail_wag_sheet.png"
-fps = 8.0
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -83993,6 +84556,41 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[[clips.tail_wag.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_wag.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_wag.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_wag.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_wag.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.tail_wrap_pull]
 page = "tail_wrap_pull/tail_wrap_pull_sheet.png"
 fps = 12.0
@@ -84000,6 +84598,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "dom", "variant_of:idle", "idle_variant"]
+severity = 2
 video = "tail_wrap_pull/tail_wrap_pull.mp4"
 
 [[clips.tail_wrap_pull.frames]]
@@ -84429,6 +85028,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.43
 tags = ["canonical", "facing:side (lying on her side along the bottom edge, head left)", "allure", "baked_motion"]
+severity = 2
 seat_y = 391
 seat_x_range = [180, 377]
 feet_lowest_y = 391
@@ -84861,6 +85461,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "tease"]
+severity = 2
 video = "tease_arms_crossed_lift/tease_arms_crossed_lift.mp4"
 
 [[clips.tease_arms_crossed_lift.frames]]
@@ -86298,6 +86899,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 video = "tease_closeup/tease_closeup.mp4"
 
 [[clips.tease_closeup.frames]]
@@ -86559,6 +87161,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "tease"]
+severity = 3
 video = "tease_hipsway_chest_press/tease_hipsway_chest_press.mp4"
 
 [[clips.tease_hipsway_chest_press.frames]]
@@ -87828,6 +88431,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:three-quarter back, looking over her shoulder", "allure", "baked_motion", "cleavage_zoom", "tease"]
+severity = 2
 video = "tease_shoulder_glance_arch/tease_shoulder_glance_arch.mp4"
 
 [[clips.tease_shoulder_glance_arch.frames]]
@@ -89265,6 +89869,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.38
 tags = ["canonical", "facing:side (lying on her side along the bottom edge, head left)", "allure", "baked_motion", "cleavage_zoom", "tease"]
+severity = 3
 seat_y = 391
 seat_x_range = [180, 383]
 feet_lowest_y = 391
@@ -90870,6 +91475,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 1
 video = "trace_heart_on_glass/trace_heart_on_glass.mp4"
 
 [[clips.trace_heart_on_glass.frames]]
@@ -91300,6 +91906,7 @@ frame_durations_ms = [97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+disable_springs = ["pigtails"]
 video = "twirl/twirl.mp4"
 
 [[clips.twirl.frames]]
@@ -91477,6 +92084,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:valentines", "outfit:valentines"]
+severity = 3
 video = "valentines_heart_squeeze/valentines_heart_squeeze.mp4"
 
 [[clips.valentines_heart_squeeze.frames]]
@@ -92830,6 +93438,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front (kneeling)", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:valentines", "outfit:valentines"]
+severity = 2
 video = "valentines_kneel_chocolate/valentines_kneel_chocolate.mp4"
 
 [[clips.valentines_kneel_chocolate.frames]]
@@ -94183,6 +94792,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:three-quarter front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:valentines", "outfit:valentines"]
+severity = 3
 video = "valentines_strap_oops/valentines_strap_oops.mp4"
 
 [[clips.valentines_strap_oops.frames]]
@@ -95536,6 +96146,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "cleavage_zoom", "outfit:valentines", "season:valentines", "seasonal"]
+severity = 3
 video = "valentines_strawberry_lick/valentines_strawberry_lick.mp4"
 
 [[clips.valentines_strawberry_lick.frames]]
@@ -98050,6 +98661,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion"]
+severity = 2
 video = "wall_lean_invisible/wall_lean_invisible.mp4"
 
 [[clips.wall_lean_invisible.frames]]
@@ -98311,6 +98923,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+severity = 2
 jiggle_baked = true
 disable_springs = ["chest", "pigtails", "hip"]
 video = "wall_lean_invisible_long/wall_lean_invisible_long.mp4"
@@ -99584,7 +100197,7 @@ anchor = [200, 392]
 
 [clips.wave]
 page = "wave/wave_sheet.png"
-fps = 8.5
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -99675,6 +100288,41 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[[clips.wave.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wave.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wave.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wave.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wave.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.xmas_candy_cane_lick]
 page = "xmas_candy_cane_lick/xmas_candy_cane_lick_sheet.png"
 fps = 12.0
@@ -99682,6 +100330,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:xmas", "outfit:xmas"]
+severity = 3
 video = "xmas_candy_cane_lick/xmas_candy_cane_lick.mp4"
 
 [[clips.xmas_candy_cane_lick.frames]]
@@ -101035,6 +101684,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:xmas", "outfit:xmas"]
+severity = 2
 video = "xmas_gift_sit_crossleg/xmas_gift_sit_crossleg.mp4"
 
 [[clips.xmas_gift_sit_crossleg.frames]]
@@ -102388,6 +103038,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:xmas", "outfit:xmas"]
+severity = 1
 video = "xmas_mistletoe_blow_kiss/xmas_mistletoe_blow_kiss.mp4"
 
 [[clips.xmas_mistletoe_blow_kiss.frames]]
@@ -103741,6 +104392,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "cleavage_zoom", "seasonal", "season:xmas", "outfit:xmas"]
+severity = 1
 video = "xmas_scarf_shiver_hug/xmas_scarf_shiver_hug.mp4"
 
 [[clips.xmas_scarf_shiver_hug.frames]]
