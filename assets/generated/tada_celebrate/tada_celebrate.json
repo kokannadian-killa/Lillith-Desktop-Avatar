@@ -401,13 +401,13 @@
     "height": 400,
     "frame_count": 37,
     "fps": 8.0,
-    "bytes": 575194,
+    "bytes": 575415,
     "quality": {
-      "edge_mae": 2.419,
+      "edge_mae": 2.42,
       "edge_p99": 20.0,
-      "halo_dark": 0.06,
-      "halo_light": -0.137,
-      "alpha_mae": 0.0601
+      "halo_dark": 0.061,
+      "halo_light": -0.139,
+      "alpha_mae": 0.0602
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -448,6 +448,7 @@
       "frame_durations_ms",
       "horn_fix.mean_hue_shift_deg_per_frame"
     ],
-    "note": "Fast jump/arm-raise (pairs 0-9) re-sampled from the real source video at full 24 fps (both in-between source frames per pair, keyed with key_combined + matte_clean.clean_cell + horn_fix); each pair's duration spread over its frames at >= 50 ms, so the move is never faster than before."
+    "note": "Fast jump/arm-raise (pairs 0-9) re-sampled from the real source video at full 24 fps (both in-between source frames per pair, keyed with key_combined + matte_clean.clean_cell + horn_fix); each pair's duration spread over its frames at >= 50 ms, so the move is never faster than before.",
+    "edge_recolour": "frames 13 and 22 (source-keyed in-betweens): light soft-edge pixels (<=3 px from clear) recoloured from the nearest opaque interior; alpha untouched"
   }
 }
