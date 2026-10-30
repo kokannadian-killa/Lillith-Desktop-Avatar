@@ -7500,6 +7500,36 @@
    "video": "spring_kneel_berries/spring_kneel_berries.mp4",
    "season": "spring",
    "outfit": "spring"
+  },
+  {
+   "name": "perch_bounce_kick",
+   "frame_count": 83,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "perch_bounce_kick/",
+   "sheet": "perch_bounce_kick/perch_bounce_kick_sheet.png",
+   "manifest": "perch_bounce_kick/perch_bounce_kick.json",
+   "preview": "perch_bounce_kick/perch_bounce_kick_preview.gif",
+   "tags": [
+    "baked_motion",
+    "variant_of:perch_sit"
+   ],
+   "allure": true,
+   "video": "perch_bounce_kick/perch_bounce_kick.mp4",
+   "severity": 4
   }
  ]
 }
