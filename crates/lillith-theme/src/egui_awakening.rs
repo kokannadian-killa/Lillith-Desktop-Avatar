@@ -74,17 +74,27 @@ processes, listeners, key configs and load — all local, all light."
         c32(pal::CYBER_CYAN),
         inner_w - 16.0,
     );
-    let h = 12.0
+    // Size the plate to measured content + pad so DISMISS/AWAKEN sit fully
+    // inside the frame (no bottom-border clip).
+    let subtitle_h = 16.0;
+    let gap_after_title = 4.0;
+    let gap_before_term = 12.0;
+    let gap_before_btns = 16.0;
+    let btn_h = 36.0;
+    // Extra bottom clearance so neon/frame strokes never cut the buttons.
+    let bottom_pad = pad + 20.0;
+    let content_h = pad
         + title.size().y
-        + 10.0
+        + gap_after_title
+        + subtitle_h
         + whisper.size().y
-        + 12.0
+        + gap_before_term
         + (term.size().y + 16.0)
-        + 16.0
-        + 40.0
-        + 12.0;
-
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, h + 2.0 * frame_t), Sense::hover());
+        + gap_before_btns
+        + btn_h
+        + bottom_pad;
+    let (rect, _) =
+        ui.allocate_exact_size(Vec2::new(w, content_h + 2.0 * frame_t), Sense::hover());
     let outer = rect;
     let inner = outer.shrink(frame_t);
 
@@ -105,7 +115,7 @@ processes, listeners, key configs and load — all local, all light."
     // Title first — no glow over lettering (glow_blob would wash crimson to white).
     ui.painter()
         .galley(Pos2::new(x, y), title.clone(), c32(pal::CYBER_CRIMSON));
-    y += title.size().y + 4.0;
+    y += title.size().y + gap_after_title;
     ui.painter().text(
         Pos2::new(x, y),
         Align2::LEFT_TOP,
@@ -113,7 +123,7 @@ processes, listeners, key configs and load — all local, all light."
         label_font,
         c32(pal::CYBER_PURPLE),
     );
-    y += 16.0;
+    y += subtitle_h;
     // Soft pulse sits under the subtitle / above the body, never over the title.
     let pulse = 0.5 + 0.5 * (t * 2.2).sin();
     glow_blob(
@@ -125,7 +135,7 @@ processes, listeners, key configs and load — all local, all light."
     );
     ui.painter()
         .galley(Pos2::new(x, y), whisper.clone(), c32(pal::CYBER_TEXT));
-    y += whisper.size().y + 12.0;
+    y += whisper.size().y + gap_before_term;
 
     let term_r = Rect::from_min_size(Pos2::new(x, y), Vec2::new(inner_w, term.size().y + 16.0));
     ui.painter()
@@ -141,12 +151,15 @@ processes, listeners, key configs and load — all local, all light."
         term,
         c32(pal::CYBER_CYAN),
     );
-    y = term_r.bottom() + 16.0;
+    y = term_r.bottom() + gap_before_btns;
 
     let btn_w = (inner_w - 10.0) / 2.0;
-    let btn_h = 36.0;
     let dismiss_r = Rect::from_min_size(Pos2::new(x, y), Vec2::new(btn_w, btn_h));
     let cont_r = Rect::from_min_size(Pos2::new(x + btn_w + 10.0, y), Vec2::new(btn_w, btn_h));
+    debug_assert!(
+        dismiss_r.bottom() + pad <= inner.bottom() + 0.5,
+        "awakening buttons clipped by frame"
+    );
 
     if cyber_button(ui, id.with("dismiss"), dismiss_r, "DISMISS", false, t) {
         choice = Some(AwakeningChoice::Dismiss);

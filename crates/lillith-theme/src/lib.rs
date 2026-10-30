@@ -39,6 +39,8 @@ pub mod egui_awakening;
 #[cfg(feature = "egui")]
 pub mod egui_blood_seal;
 #[cfg(feature = "egui")]
+pub mod egui_whisper;
+#[cfg(feature = "egui")]
 pub mod egui_contract;
 #[cfg(feature = "egui")]
 pub mod egui_deletion;

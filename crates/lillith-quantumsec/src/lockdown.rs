@@ -60,6 +60,18 @@ impl LockdownProposal {
         }
     }
 
+    /// Custom proposal (caller sets `local_simulation`).
+    pub fn new(summary: impl Into<String>, commands: Vec<String>) -> Self {
+        let summary = summary.into();
+        Self {
+            id: format!("lockdown-{}", now_unix()),
+            summary,
+            commands,
+            local_simulation: false,
+            proposed_unix: now_unix(),
+        }
+    }
+
     /// Exact text shown on the blood-seal terminal slab.
     pub fn detail_block(&self) -> String {
         let flag = if self.local_simulation {

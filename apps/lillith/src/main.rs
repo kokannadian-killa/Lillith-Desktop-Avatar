@@ -1378,23 +1378,6 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     let backend = Backend::detect_env(cli.backend);
     let (cfg, config_path) = load_config(cli);
     kwin_pre_start(cfg.overlay.auto_fix_kwin);
-    // QuantumSec shield (additive): background protons → ~/.biotek/quantumsec/status.json.
-    // Dropped when the overlay exits. Failures are logged; the avatar still runs.
-    let _qsec_shield = match lillith_quantumsec::QuantumSecShield::new(
-        lillith_quantumsec::ShieldConfig::default(),
-    ) {
-        Ok(s) => {
-            tracing::info!(path = %s.status_path().display(), "QuantumSec shield armed");
-            Some(lillith_quantumsec::ShieldHandle::spawn(
-                s,
-                std::time::Duration::from_secs(5),
-            ))
-        }
-        Err(e) => {
-            tracing::warn!("QuantumSec shield not started: {e}");
-            None
-        }
-    };
     let manifest = preview::resolve(cli.manifest.clone())?;
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1504,6 +1487,40 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     // Memory learns app habits / errors from the same feed (a non-blocking
     // tee) and speaks proactive lines back into it (`memory.suggest`).
     let memory = memory_wiring::start(&cfg.memory, feed.clone());
+    // QuantumSec shield (additive): background protons → ~/.biotek/quantumsec/status.json.
+    // Events (non-nominal) feed the memory bridge via quantumsec.* names.
+    let _qsec_shield = match lillith_quantumsec::QuantumSecShield::new(
+        lillith_quantumsec::ShieldConfig::default(),
+    ) {
+        Ok(mut s) => {
+            tracing::info!(path = %s.status_path().display(), "QuantumSec shield armed");
+            let mem = std::sync::Arc::clone(&memory);
+            s.on_event(move |ev| {
+                use lillith_quantumsec::memory_hook::event_for_shield;
+                use lillith_quantumsec::ShieldEvent;
+                use lillith_quantumsec::StatusLevel;
+                let skip = matches!(
+                    &ev,
+                    ShieldEvent::Status(st) if st.level == StatusLevel::Nominal
+                );
+                if skip {
+                    return;
+                }
+                if let Some(e) = event_for_shield(&ev) {
+                    mem.observe(&e);
+                }
+            });
+            Some(lillith_quantumsec::ShieldHandle::spawn(
+                s,
+                std::time::Duration::from_secs(5),
+            ))
+        }
+        Err(e) => {
+            tracing::warn!("QuantumSec shield not started: {e}");
+            None
+        }
+    };
+
     let tx = memory_wiring::tee(feed, &memory);
     // The idle learner (own thread + memory connection) sees the same
     // events: activity pauses it; `chat.safeword` doesn't touch it (the
