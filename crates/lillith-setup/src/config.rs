@@ -188,7 +188,8 @@ impl LlmConfig {
         if let Some(v) = n("temperature") {
             c.temperature = v as f32;
         }
-        // `num_ctx` is the old Aether key; `ctx_size` wins.
+        // `num_ctx` is the old Aether (pre-Biotek Engine) app key, kept as a
+        // deprecated read alias; `ctx_size` wins.
         if let Some(v) = n("ctx_size").or_else(|| n("num_ctx")) {
             c.ctx_size = v.max(0.0) as u32;
         }
