@@ -36,10 +36,12 @@ pub struct SessionCardRequest {
     pub card: String,
     pub session: String,
     pub minutes: u64,
-    /// The end time shown on the card (UTC). The session ends at exactly
-    /// this time: its deadline is fixed when the card appears, not at the
-    /// click (review N3-1), so a slow click shortens the session instead
-    /// of moving its end past what the card said.
+    /// The end time (UTC; audit and binding use this). The card shows it in
+    /// the system local time zone with a zone label, the stamp after it.
+    /// The session ends at exactly this time: its deadline is fixed when
+    /// the card appears, not at the click (review N3-1), so a slow click
+    /// shortens the session instead of moving its end past what the card
+    /// said.
     pub deadline_utc: String,
     /// The budgets shown on the card.
     pub budgets: String,
