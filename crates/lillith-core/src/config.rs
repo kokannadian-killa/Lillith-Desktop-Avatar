@@ -1227,7 +1227,16 @@ impl Config {
     /// Loads `path`; a missing file gives the defaults.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         match std::fs::read_to_string(path) {
-            Ok(s) => Ok(Self::from_toml_str(&s)?),
+            Ok(s) => {
+                let cfg = Self::from_toml_str(&s)?;
+                for k in unknown_keys(&s) {
+                    tracing::warn!(
+                        "{}: unknown key `{k}` is ignored (typo? see assets/config.example.toml)",
+                        path.display()
+                    );
+                }
+                Ok(cfg)
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e.into()),
         }
@@ -1243,10 +1252,12 @@ pub enum ConfigError {
     Parse(#[from] toml::de::Error),
     #[error("config write: {0}")]
     Ser(#[from] toml::ser::Error),
+    #[error("config edit: {0}")]
+    Edit(String),
 }
 
 /// Writes `pos` into the `[overlay]` table of `path`, creating the file and
-/// its directory if needed. Other keys are kept (comments are not).
+/// its directory if needed. Other keys and comments are kept.
 pub fn save_overlay(path: &Path, pos: &OverlayPos) -> Result<(), ConfigError> {
     update_config(path, |t| {
         let entry = t
@@ -1333,22 +1344,142 @@ pub fn save_loneliness_mode(path: &Path, on: bool) -> Result<(), ConfigError> {
     })
 }
 
+/// Persists the mute toggle (right-click ▸ Mute voice, the M key) as the
+/// top-level `muted`, and `[voice] mute` too when the file sets it (start-up
+/// mutes when either is true, so an unmute has to clear both).
+pub fn save_muted(path: &Path, muted: bool) -> Result<(), ConfigError> {
+    update_config(path, |t| {
+        t.insert("muted".into(), toml::Value::Boolean(muted));
+        if let Some(v) = t.get_mut("voice").and_then(toml::Value::as_table_mut) {
+            if v.contains_key("mute") {
+                v.insert("mute".into(), toml::Value::Boolean(muted));
+            }
+        }
+    })
+}
+
 /// Read-modify-write of the config file as a TOML table (atomic rename;
-/// creates the file and directory; comments are not kept).
+/// creates the file and directory). Only the keys `f` changes are
+/// rewritten: comments, blank lines and the order of everything else are
+/// kept (`toml_edit`).
 pub fn update_config(path: &Path, f: impl FnOnce(&mut toml::Table)) -> Result<(), ConfigError> {
-    let mut table: toml::Table = match std::fs::read_to_string(path) {
-        Ok(s) => s.parse()?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => toml::Table::new(),
+    let text = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e.into()),
     };
-    f(&mut table);
+    let out = update_config_text(&text, f)?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
     let tmp = path.with_extension("toml.tmp");
-    std::fs::write(&tmp, toml::to_string_pretty(&table)?)?;
+    std::fs::write(&tmp, out)?;
     std::fs::rename(&tmp, path)?;
     Ok(())
+}
+
+/// [`update_config`] on the file's text: the new text.
+pub fn update_config_text(
+    text: &str,
+    f: impl FnOnce(&mut toml::Table),
+) -> Result<String, ConfigError> {
+    let old: toml::Table = text.parse()?;
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|e: toml_edit::TomlError| ConfigError::Edit(e.to_string()))?;
+    let mut new = old.clone();
+    f(&mut new);
+    sync_table(doc.as_table_mut(), &old, &new)?;
+    Ok(doc.to_string())
+}
+
+/// Makes `doc` hold `new` (it held `old`), touching only what changed.
+fn sync_table(
+    doc: &mut toml_edit::Table,
+    old: &toml::Table,
+    new: &toml::Table,
+) -> Result<(), ConfigError> {
+    let gone: Vec<String> = old
+        .keys()
+        .filter(|k| !new.contains_key(*k))
+        .cloned()
+        .collect();
+    for k in gone {
+        doc.remove(&k);
+    }
+    let empty = toml::Table::new();
+    for (k, v) in new {
+        if old.get(k) == Some(v) {
+            continue;
+        }
+        let was = old.get(k).and_then(toml::Value::as_table).unwrap_or(&empty);
+        match (v, doc.get_mut(k)) {
+            (toml::Value::Table(nt), Some(toml_edit::Item::Table(t))) => sync_table(t, was, nt)?,
+            (toml::Value::Table(nt), _) => {
+                let mut t = toml_edit::Table::new();
+                t.set_implicit(true);
+                sync_table(&mut t, &empty, nt)?;
+                doc.insert(k, toml_edit::Item::Table(t));
+            }
+            (v, Some(toml_edit::Item::Value(cur))) => {
+                let decor = cur.decor().clone();
+                let mut nv = edit_value(v)?;
+                *nv.decor_mut() = decor;
+                *cur = nv;
+            }
+            (v, _) => {
+                doc.insert(k, toml_edit::Item::Value(edit_value(v)?));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn edit_value(v: &toml::Value) -> Result<toml_edit::Value, ConfigError> {
+    v.to_string()
+        .parse::<toml_edit::Value>()
+        .map_err(|e| ConfigError::Edit(e.to_string()))
+}
+
+/// Top-level tables of `config.toml` other crates own (`[voice]`:
+/// lillith-voice, `[llm]`: the setup wizard); [`unknown_keys`] skips them.
+pub const FOREIGN_TABLES: &[&str] = &["voice", "llm"];
+
+/// Keys in `text` that [`Config`] does not know (typos like `scael`, a
+/// table in the wrong place), as dotted paths. Empty when the text does not
+/// parse (the parse error says more). [`Config::load`] logs a warning for
+/// each one; the file still loads (unknown keys are ignored).
+pub fn unknown_keys(text: &str) -> Vec<String> {
+    let (Ok(input), Ok(cfg)) = (text.parse::<toml::Table>(), Config::from_toml_str(text)) else {
+        return Vec::new();
+    };
+    let Ok(known) = toml::Table::try_from(&cfg) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    unknown_in("", &input, &known, &mut out);
+    out
+}
+
+fn unknown_in(prefix: &str, input: &toml::Table, known: &toml::Table, out: &mut Vec<String>) {
+    for (k, v) in input {
+        if prefix.is_empty() && FOREIGN_TABLES.contains(&k.as_str()) {
+            continue;
+        }
+        let path = if prefix.is_empty() {
+            k.clone()
+        } else {
+            format!("{prefix}.{k}")
+        };
+        match known.get(k) {
+            None => out.push(path),
+            Some(kv) => {
+                if let (Some(it), Some(kt)) = (v.as_table(), kv.as_table()) {
+                    unknown_in(&path, it, kt, out);
+                }
+            }
+        }
+    }
 }
 
 /// `$XDG_CONFIG_HOME/autostart` (else `~/.config/autostart`).
@@ -1388,6 +1519,118 @@ pub fn set_autostart(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn update_config_keeps_comments_and_order() {
+        let text = "# Lillith config\n\
+scale = 0.5   # how big she is\n\
+\n\
+# where she sits\n\
+[overlay]\n\
+margin_left = 10 # px\n\
+\n\
+[behavior.loneliness]\n\
+# lonely poses\n\
+mode = \"auto\"\n";
+        let out = update_config_text(text, |t| {
+            t.insert("scale".into(), toml::Value::Float(0.75));
+            let b = t["behavior"].as_table_mut().unwrap();
+            let l = b["loneliness"].as_table_mut().unwrap();
+            l.insert("mode".into(), toml::Value::String("off".into()));
+        })
+        .unwrap();
+        assert_eq!(
+            out,
+            text.replace("0.5", "0.75").replace("\"auto\"", "\"off\""),
+            "only the two values change"
+        );
+    }
+
+    #[test]
+    fn update_config_adds_and_removes_keys() {
+        let text =
+            "# keep me\nscale = 0.5\nicon = \"classic\"\n[overlay]\noutput = \"DP-1\" # monitor\n";
+        let out = update_config_text(text, |t| {
+            t.remove("icon");
+            t["overlay"].as_table_mut().unwrap().remove("output");
+            let mut v = toml::Table::new();
+            v.insert("enabled".into(), toml::Value::Boolean(false));
+            t.insert("voice".into(), toml::Value::Table(v));
+            t.insert("muted".into(), toml::Value::Boolean(true));
+        })
+        .unwrap();
+        assert!(out.starts_with("# keep me\nscale = 0.5\n"), "{out}");
+        assert!(!out.contains("icon") && !out.contains("DP-1"), "{out}");
+        let back: toml::Table = out.parse().unwrap();
+        assert_eq!(back["voice"]["enabled"].as_bool(), Some(false));
+        assert_eq!(back["muted"].as_bool(), Some(true));
+        assert!(back["overlay"].as_table().unwrap().is_empty());
+        // From nothing (a missing file).
+        let out = update_config_text("", |t| {
+            t.insert("scale".into(), toml::Value::Float(0.55));
+        })
+        .unwrap();
+        assert_eq!(out.trim(), "scale = 0.55");
+    }
+
+    #[test]
+    fn save_muted_persists_and_clears_voice_mute() {
+        let dir = std::env::temp_dir().join(format!("lillith-mute-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = dir.join("config.toml");
+        save_muted(&p, true).unwrap();
+        assert!(Config::load(&p).unwrap().muted);
+        std::fs::write(&p, "# mine\nmuted = true\n[voice]\nmute = true # quiet\n").unwrap();
+        save_muted(&p, false).unwrap();
+        let t = std::fs::read_to_string(&p).unwrap();
+        assert_eq!(t, "# mine\nmuted = false\n[voice]\nmute = false # quiet\n");
+        // No [voice] mute in the file: none is added.
+        std::fs::write(&p, "[voice]\nenabled = true\n").unwrap();
+        save_muted(&p, true).unwrap();
+        let t = std::fs::read_to_string(&p).unwrap();
+        assert!(!t.contains("mute ="), "{t}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unknown_keys_are_reported() {
+        let text = "scael = 0.5\nscale = 0.6\n[overlay]\nmargin_lefft = 3\n[voice]\nwhatever = 1\n[llm]\nx = 2\n[behavior.loneliness]\nmode = \"auto\"\nmood = 3\n";
+        assert_eq!(
+            unknown_keys(text),
+            ["behavior.loneliness.mood", "overlay.margin_lefft", "scael"]
+        );
+        assert!(unknown_keys("scale = 0.5\n").is_empty());
+        assert!(unknown_keys("not toml [").is_empty());
+    }
+
+    #[test]
+    fn example_and_portable_configs_have_no_unknown_keys() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        // The example is all comments: uncomment its key and table lines.
+        let ex = std::fs::read_to_string(root.join("assets/config.example.toml")).unwrap();
+        let mut un = String::new();
+        for line in ex.lines() {
+            let l = line.strip_prefix("# ").unwrap_or(line);
+            let k = l.split('=').next().unwrap_or("").trim();
+            let key_line = l.contains('=')
+                && !k.is_empty()
+                && k.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_.-\"".contains(c));
+            if l.starts_with('[') || key_line {
+                un.push_str(l);
+                un.push('\n');
+            }
+        }
+        let t: toml::Table = un.parse().expect("uncommented example parses");
+        assert!(t.len() > 20, "{un}");
+        assert_eq!(
+            unknown_keys(&un),
+            Vec::<String>::new(),
+            "example config:\n{un}"
+        );
+        let port = std::fs::read_to_string(root.join("linux/portable/config.toml")).unwrap();
+        assert_eq!(unknown_keys(&port), Vec::<String>::new());
+    }
 
     #[test]
     fn data_dir_has_a_windows_fallback() {
