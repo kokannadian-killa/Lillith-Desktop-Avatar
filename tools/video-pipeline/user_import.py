@@ -603,7 +603,7 @@ class Matter:
                            + '. ' + matte_model.fix_hint() + ' Or pass --model <file>.')
             if not _has_ort():
                 raise Fail("--matte isnet needs the onnxruntime Python package. "
-                           + ('Fix: sudo pacman -S --needed python-onnxruntime (or run the Lillith installer again).' if os.name != 'nt'
+                           + ('Fix: sudo pacman -S --needed python-onnxruntime-cpu (or run the Lillith installer again).' if os.name != 'nt'
                               else 'Fix: run Lillith-Setup.exe again.'))
 
     def describe(self):
@@ -1157,8 +1157,9 @@ def main(argv=None):
     ap.add_argument('--json-progress', action='store_true', help='JSON lines on stdout (the GUI contract)')
     ap.add_argument('--max-ram-mb', type=int, default=1500, help='RAM cap for the importer + its ffmpeg (default 1500)')
     ap.add_argument('--matte', choices=('auto', 'isnet', 'key', 'alpha'), default='auto')
-    ap.add_argument('--model', help='isnet-anime.onnx file or folder. Lookup: --model, then $U2NET_HOME/isnet-anime.onnx, then '
-                         '~/.rembg/models/isnet-anime/isnet-anime.onnx (%%USERPROFILE%% on Windows); never downloaded')
+    ap.add_argument('--model', help='isnet-anime.onnx file or folder. Lookup: --model, $U2NET_HOME, the installer copy '
+                         '(<install>/models/rembg), ~/.u2net, ~/.rembg/models/isnet-anime (%%USERPROFILE%% on Windows); '
+                         'never downloaded (see matte_model.py)')
     ap.add_argument('--zmax', type=float, default=ZMAX, help='peak cleavage zoom (1 = no zoom; default 1.8)')
     ap.add_argument('--min-seconds', type=float, default=1.5)
     ap.add_argument('--max-seconds', type=float, default=8.0)

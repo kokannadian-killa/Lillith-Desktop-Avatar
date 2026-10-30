@@ -125,7 +125,7 @@ def check(need_model=True, flag=None, env=None, home=None, here=None, modules=No
         try:
             __import__(m)
         except Exception as e:  # noqa: BLE001 (a broken install can raise anything)
-            pkg = {'cv2': 'python-opencv', 'PIL': 'python-pillow', 'onnxruntime': 'python-onnxruntime'}.get(m, 'python-' + m)
+            pkg = {'cv2': 'python-opencv', 'PIL': 'python-pillow', 'onnxruntime': 'python-onnxruntime-cpu'}.get(m, 'python-' + m)
             how = (f'Fix: sudo pacman -S --needed {pkg} (or run the Lillith installer again, it installs it).' if os.name != 'nt'
                    else 'Fix: run Lillith-Setup.exe again (it installs the Python packages next to Lillith).')
             problems.append({'item': m, 'detail': f"the Python package '{m}' can't be imported ({type(e).__name__}: {e}). {how}"})
@@ -177,15 +177,15 @@ def require(need_model=True):
 _SESSION = {}
 
 
-def session(threads=2, flag=None):
-    import onnxruntime as ort
-    r = require()
-    key = (r['model'], threads)
-    if key not in _SESSION:
+def session(threads=2):
+    """One cached onnxruntime session; the model and packages are checked once, on first use."""
+    if threads not in _SESSION:
+        import onnxruntime as ort
+        r = require()
         so = ort.SessionOptions(); so.intra_op_num_threads = threads; so.inter_op_num_threads = 1
         _SESSION.clear()
-        _SESSION[key] = ort.InferenceSession(r['model'], so, providers=['CPUExecutionProvider'])
-    return _SESSION[key]
+        _SESSION[threads] = ort.InferenceSession(r['model'], so, providers=['CPUExecutionProvider'])
+    return _SESSION[threads]
 
 
 def isnet_mask(rgb, threads=2):
@@ -202,7 +202,7 @@ def isnet_mask(rgb, threads=2):
     pred = s.run(None, {s.get_inputs()[0].name: x})[0][:, 0, :, :]
     ma, mi = np.max(pred), np.min(pred)
     pred = np.squeeze((pred - mi) / (ma - mi))
-    m = Image.fromarray((pred * 255).astype('uint8'), mode='L')
+    m = Image.fromarray((pred * 255).astype('uint8'))   # 2-D uint8 -> mode L
     return np.asarray(m.resize(img.size, Image.Resampling.LANCZOS))
 
 

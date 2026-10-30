@@ -1,7 +1,7 @@
 # New pose → MP4 in one command
 
 ```sh
-# venv with numpy, Pillow, scipy, opencv, onnxruntime (+ the isnet-anime model in $U2NET_HOME); ffmpeg with libx264
+# venv with numpy, Pillow, scipy, opencv, onnxruntime (+ isnet-anime.onnx where matte_model.py finds it, e.g. $U2NET_HOME); ffmpeg with libx264
 tools/video-pipeline/new_pose.py <clip> --video ~/Downloads/<clip>.mp4 \
     --start 1 --stop 71 --step 2 --fps 12 --mode loop --scale 0.54 --anchor-x 200 \
     --finalize keyframed --allure
