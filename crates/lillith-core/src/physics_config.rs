@@ -60,6 +60,36 @@ pub struct PhysicsConfig {
     /// `enabled = false` (the bundled file) = also off, tunables kept.
     #[serde(default)]
     pub gait: Option<Gait>,
+    /// Engine secondary motion layered over clips tagged `baked_motion`
+    /// (the v2 video clips). Absent = the old behaviour (pigtail spring
+    /// fully off over baked clips).
+    #[serde(default)]
+    pub baked_motion: BakedMotion,
+}
+
+/// `[baked_motion]`: per-spring gains for the engine springs drawn over
+/// clips whose frames already bake their own bounce. The chest is NOT
+/// tuned here: it keeps `AnimatorConfig::baked_motion_gain` (0.2) and stays
+/// switched off by `baked_motion_springs_off`.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct BakedMotion {
+    /// Gain on the pigtail/hair spring offset over baked clips. 0 = the
+    /// pigtail spring stays switched off (pre-fluid-bounce behaviour).
+    pub pigtail_gain: f32,
+    /// Hard cap (px, before the renderer's skew) on that offset so clips
+    /// whose hair already moves a lot never get a big second sway on top.
+    pub pigtail_max_px: f32,
+}
+
+impl Default for BakedMotion {
+    /// Off: exactly the behaviour before `[baked_motion]` existed.
+    fn default() -> Self {
+        Self {
+            pigtail_gain: 0.0,
+            pigtail_max_px: 0.0,
+        }
+    }
 }
 
 /// `[gait]`: angles in DEGREES; positive arm = swung forward (toward

@@ -20209,6 +20209,7 @@ frame_durations_ms = [73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 153, 1
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+disable_springs = ["pigtails"]
 video = "hair_flip/hair_flip.mp4"
 
 [[clips.hair_flip.frames]]
@@ -20386,6 +20387,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "variant_of:idle", "idle_variant"]
+disable_springs = ["pigtails"]
 video = "hair_lift_stretch/hair_lift_stretch.mp4"
 
 [[clips.hair_lift_stretch.frames]]
@@ -21925,6 +21927,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+disable_springs = ["pigtails"]
 video = "hair_twirl/hair_twirl.mp4"
 
 [[clips.hair_twirl.frames]]
@@ -22032,6 +22035,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "idle_variant", "variant_of:idle"]
+disable_springs = ["pigtails"]
 video = "hair_twirl_lip_bite/hair_twirl_lip_bite.mp4"
 
 [[clips.hair_twirl_lip_bite.frames]]
@@ -32085,7 +32089,7 @@ anchor = [200, 392]
 
 [clips.idle_flirt_foot_tap]
 page = "idle_flirt_foot_tap/idle_flirt_foot_tap_sheet.png"
-fps = 8.0
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -32416,6 +32420,167 @@ anchor = [200, 392]
 
 [[clips.idle_flirt_foot_tap.frames]]
 x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 18800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 19200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 19600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 20000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 20400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 20800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 21200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 21600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 22000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 22400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 22800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 23200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 23600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 24000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 24400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 24800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 25200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 25600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 26000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 26400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 26800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 27200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_foot_tap.frames]]
+x = 27600
 y = 0
 w = 400
 h = 400
@@ -32761,7 +32926,7 @@ anchor = [200, 392]
 
 [clips.idle_flirt_hands_behind_sway]
 page = "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway_sheet.png"
-fps = 10.5
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -33092,6 +33257,55 @@ anchor = [200, 392]
 
 [[clips.idle_flirt_hands_behind_sway.frames]]
 x = 18400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 18800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 19200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 19600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 20000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 20400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 20800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.idle_flirt_hands_behind_sway.frames]]
+x = 21200
 y = 0
 w = 400
 h = 400
@@ -34118,6 +34332,7 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
+disable_springs = ["pigtails"]
 video = "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl.mp4"
 
 [[clips.idle_flirt_pigtail_twirl.frames]]
@@ -77844,7 +78059,7 @@ anchor = [200, 392]
 
 [clips.sway_dance]
 page = "sway_dance/sway_dance_sheet.png"
-fps = 8.0
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -78259,6 +78474,209 @@ anchor = [200, 392]
 
 [[clips.sway_dance.frames]]
 x = 23200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 23600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 24000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 24400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 24800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 25200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 25600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 26000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 26400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 26800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 27200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 27600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 28000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 28400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 28800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 29200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 29600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 30000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 30400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 30800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 31200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 31600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 32000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 32400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 32800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 33200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 33600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 34000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 34400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.sway_dance.frames]]
+x = 34800
 y = 0
 w = 400
 h = 400
@@ -79001,7 +79419,7 @@ anchor = [200, 392]
 
 [clips.tail_wag]
 page = "tail_wag/tail_wag_sheet.png"
-fps = 8.0
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
@@ -79080,6 +79498,41 @@ anchor = [200, 392]
 
 [[clips.tail_wag.frames]]
 x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_wag.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_wag.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_wag.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_wag.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.tail_wag.frames]]
+x = 6000
 y = 0
 w = 400
 h = 400
@@ -86392,6 +86845,7 @@ frame_durations_ms = [97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
+disable_springs = ["pigtails"]
 video = "twirl/twirl.mp4"
 
 [[clips.twirl.frames]]
@@ -94676,7 +95130,7 @@ anchor = [200, 392]
 
 [clips.wave]
 page = "wave/wave_sheet.png"
-fps = 8.5
+fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.53
@@ -94762,6 +95216,41 @@ anchor = [200, 392]
 
 [[clips.wave.frames]]
 x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wave.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wave.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wave.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wave.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.wave.frames]]
+x = 6400
 y = 0
 w = 400
 h = 400

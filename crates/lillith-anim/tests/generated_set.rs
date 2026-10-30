@@ -47,17 +47,26 @@ fn every_generated_clip_plays_and_renders() {
     }
 
     let mut a = Animator::new(m.clone(), AnimatorConfig::default()).unwrap();
-    // v2 baked_motion clips: engine chest / pigtail / hip jiggle off (the
-    // video already has it), via the same SpringMask as disable_springs.
+    // v2 baked_motion clips: engine chest / hip jiggle off (the video
+    // already has it), via the same SpringMask as disable_springs. Hair
+    // (pigtails) stays live at physics.toml [baked_motion] pigtail_gain,
+    // unless the clip opts out with disable_springs = ["pigtails"].
+    let hair_live = AnimatorConfig::default().baked_pigtail_gain > 0.0;
     for (name, clip) in m.clips.iter().filter(|(_, c)| c.has_tag("baked_motion")) {
         let mask = a.clip_mask(clip);
         for ch in [
             lillith_core::spring::Channel::Chest,
-            lillith_core::spring::Channel::Pigtail,
             lillith_core::spring::Channel::RootX,
         ] {
             assert!(mask.contains(ch), "{name}: {ch:?} not masked");
         }
+        let pig = lillith_core::spring::Channel::Pigtail;
+        let opted_out = clip.spring_mask().contains(pig) || clip.bakes_gait();
+        assert_eq!(
+            mask.contains(pig),
+            !hair_live || opted_out,
+            "{name}: pigtail mask"
+        );
     }
     assert_eq!(a.base(), "idle");
     assert!(
