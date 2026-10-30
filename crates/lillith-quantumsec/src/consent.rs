@@ -63,9 +63,8 @@ pub struct ConsentLog {
 impl ConsentLog {
     /// Open (creating) the consent directory under the Biotek home.
     pub fn open_default() -> io::Result<Self> {
-        let home = lillith_setup::biotek::biotek_home().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "no Biotek home")
-        })?;
+        let home = lillith_setup::biotek::biotek_home()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no Biotek home"))?;
         Self::open_in(home.join("consent"))
     }
 
@@ -142,7 +141,6 @@ impl ConsentLog {
         self.append(&rec)
     }
 
-
     /// Read recent records from every `consent-*.jsonl` (newest files first).
     pub fn list_recent(&self, limit: usize) -> io::Result<Vec<ConsentRecord>> {
         let mut files: Vec<_> = std::fs::read_dir(&self.dir)?
@@ -205,8 +203,7 @@ impl ConsentLog {
             std::fs::create_dir_all(parent)?;
         }
         let mut f = OpenOptions::new().create(true).append(true).open(path)?;
-        serde_json::to_writer(&mut f, rec)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        serde_json::to_writer(&mut f, rec).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         f.write_all(b"\n")?;
         let _ = self.rotate_keep(30);
         Ok(())
@@ -254,8 +251,7 @@ pub struct AwakeningState {
 impl AwakeningState {
     /// Path of the awakening flag file.
     pub fn path_default() -> Option<PathBuf> {
-        lillith_setup::biotek::biotek_home()
-            .map(|h| h.join("config").join("awakening.json"))
+        lillith_setup::biotek::biotek_home().map(|h| h.join("config").join("awakening.json"))
     }
 
     /// Load from disk (missing → default).
