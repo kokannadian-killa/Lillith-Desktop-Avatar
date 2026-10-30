@@ -31,6 +31,7 @@ use std::path::PathBuf;
 
 mod chat;
 mod contract_consent;
+mod dream_wiring;
 mod learn_wiring;
 mod memory_wiring;
 mod preview;
@@ -175,6 +176,14 @@ enum Cmd {
         /// Rebuild the notes index from disk.
         #[arg(long, conflicts_with = "once")]
         reindex: bool,
+    },
+    /// Dream learning (P7): opens the dream Soul Contract card for DURATION
+    /// (`2h`, `90m`, `1h30m`; default inside `[learn.dream]`'s range) and,
+    /// only after a mouse click on its Yes, learns over Tor until the
+    /// deadline. Ctrl-C ends it. Off unless `[learn] online = true`.
+    Dream {
+        /// How long, e.g. `2h` or `90m`.
+        duration: Option<String>,
     },
     /// First-run setup (the Windows installer runs this): point Lily's
     /// brain at a GGUF model and llama-server on this computer. Writes
@@ -339,8 +348,19 @@ fn quiet_broken_pipe() {
     }));
 }
 
+fn main() -> Result<()> {
+    // `lillith learn-worker` (a dream-learning helper): no runtime, no
+    // logging, no config. Its seccomp no-exec filter is per thread, so it
+    // is installed here, before any other thread exists.
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new(dream_wiring::WORKER_ARG))
+    {
+        std::process::exit(lillith_learn::workers::worker::main_stdio());
+    }
+    app_main()
+}
+
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn app_main() -> Result<()> {
     quiet_broken_pipe();
     let log = tracing_subscriber::fmt().with_env_filter(
         tracing_subscriber::EnvFilter::try_from_default_env()
@@ -428,6 +448,11 @@ async fn main() -> Result<()> {
             ref endpoint,
         }) => {
             let (full, config_path) = load_config(&cli);
+            // `/dream` in the console: the card opens; a click starts it.
+            // One-shot mode exits right away, so it has no dream wiring.
+            if message.is_none() {
+                dream_wiring::register(&full, dream_wiring::print_announce());
+            }
             let mut cfg = full.chat;
             if let Some(e) = endpoint {
                 cfg.endpoint = e.clone();
@@ -618,6 +643,18 @@ async fn main() -> Result<()> {
         }) => {
             let (cfg, _) = load_config(&cli);
             learn_wiring::cli(&cfg, once, dry_run, reindex)?;
+        }
+        Some(Cmd::Dream { ref duration }) => {
+            let (cfg, _) = load_config(&cli);
+            // Ctrl-C: the kill switch stops the session and its workers.
+            tokio::spawn(async {
+                if tokio::signal::ctrl_c().await.is_ok() {
+                    let r = lillith_core::access::kill_switch::stop_all();
+                    println!("\n[stop] {}", r.chat_line());
+                }
+            });
+            let d = duration.clone();
+            tokio::task::spawn_blocking(move || dream_wiring::cli(&cfg, d.as_deref())).await??;
         }
         None => run_overlay(&cli, rules.rules.len()).await?,
     }
@@ -1453,6 +1490,9 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     // safeword only hushes her voice), Ctrl-C / stop drops a step.
     let learner = learn_wiring::start(&cfg, !cli.no_llm);
     let tx = learn_wiring::tee(tx, learner.as_ref());
+    // Dream learning (P7): right-click "Dream learning…" / `/dream` in the
+    // bubble open its card; her lines go out as speech on the feed.
+    dream_wiring::register(&cfg, dream_wiring::speech_announce(tx.clone()));
     let monitor = start_monitor(cli, &cfg, tx.clone());
     let chat_on = cfg.chat.enabled;
     // Optional self-spawned llama-server (`[chat.server]`), stopped on exit.
@@ -1507,6 +1547,10 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     if let Some(l) = &launcher {
         l.close();
     }
+    // She is closing: a running dream stops with her (its workers die with
+    // this process anyway) and the hooks go.
+    lillith_learn::workers::stop_dream();
+    lillith_core::dream::clear_hooks();
     server.stop();
     drop(monitor);
     r.map_err(|e| anyhow::anyhow!("overlay: {e}"))

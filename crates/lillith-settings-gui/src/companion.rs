@@ -257,6 +257,7 @@ pub fn extras_for(poses: Vec<PoseGroup>, avatars: Option<&AvatarStore>) -> MenuE
         outfit: lillith_core::seasons::AUTO.into(),
         outfit_active: None,
         outfit_page: false,
+        dream: None,
     }
 }
 
@@ -366,6 +367,7 @@ mod tests {
             outfit: "auto".into(),
             outfit_active: None,
             outfit_page: false,
+            dream: None,
         }
     }
 

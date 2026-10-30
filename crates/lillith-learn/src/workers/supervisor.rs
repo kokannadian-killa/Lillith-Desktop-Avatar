@@ -156,6 +156,13 @@ impl Session {
         self
     }
 
+    /// Tests only: where `finish` writes its `DREAM\tend` line.
+    #[cfg(test)]
+    pub(crate) fn with_audit_log(mut self, log: Option<PathBuf>) -> Self {
+        self.audit_log = log;
+        self
+    }
+
     #[cfg(test)]
     pub(crate) fn with_external_tick(mut self, t: bool) -> Self {
         self.external = t;

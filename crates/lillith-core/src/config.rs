@@ -950,7 +950,9 @@ impl LearnConfig {
     }
 }
 
-/// `[learn.dream]` (docs/SELF_LEARNING.md §11; not used before P7).
+/// `[learn.dream]` (docs/SELF_LEARNING.md §11): read by the dream card
+/// (`lillith_learn::workers::dream`) and the dream orchestration
+/// (`lillith_learn::workers::orchestrator`, P7).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LearnDreamConfig {
