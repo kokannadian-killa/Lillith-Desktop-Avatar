@@ -111,7 +111,7 @@ impl BotsTab {
                 cfg,
                 timeout: Duration::from_secs(180),
             });
-        let runs = roster.iter().map(|b| off_run(b)).collect();
+        let runs = roster.iter().map(off_run).collect();
         Self {
             saved: roster.clone(),
             roster,

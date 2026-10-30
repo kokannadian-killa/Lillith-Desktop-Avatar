@@ -218,7 +218,7 @@ fn os_respin(base: &Path, job: &str) -> Plan {
         pk.push_str(p);
         pk.push('\n');
     }
-    let build = format!(
+    let build = String::from(
         "#!/bin/sh\n# Builds the ISO with archiso. Baal never runs this by himself:\n# run it yourself, or ask Baal and approve the card.\nset -eu\ncd \"$(dirname \"$0\")\"\n# needs: sudo pacman -S archiso   (install it yourself first)\nsudo mkarchiso -v -w /tmp/demonos-work -o ./out .\n"
     );
     let readme = format!(
