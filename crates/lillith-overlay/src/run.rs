@@ -582,7 +582,6 @@ impl Controller {
         self.outfit_check_s = 0.0;
     }
 
-    /// Re-picks the outfit if the local date changed (auto mode).
     /// Feeds loneliness what only the overlay knows: a system interaction
     /// open in any Lillith process (cards, settings, wizard, dialogs; see
     /// `lillith_core::system_ui`), the local hour, and a hush from anywhere
@@ -603,6 +602,7 @@ impl Controller {
         // factor is neutral (1.0).
     }
 
+    /// Re-picks the outfit if the local date changed (auto mode).
     fn check_outfit_date(&mut self) {
         let today = lillith_core::seasons::today();
         if self.outfit_date != Some(today) {
@@ -1854,6 +1854,10 @@ impl Controller {
         }
         if ev.name == CHAT_BARGE_IN || ev.name == CHAT_SAFEWORD {
             let safeword = ev.name == CHAT_SAFEWORD;
+            if !safeword {
+                // Ko spoke over her (voice barge-in): real attention.
+                self.brain.note_attention();
+            }
             if safeword {
                 // The safeword stops her talking (not her work: running
                 // commands and the admin helper are left alone).
@@ -1884,6 +1888,10 @@ impl Controller {
             return;
         }
         if ev.name.starts_with("chat.") {
+            if ev.name == crate::chat::CHAT_OPENED {
+                // Ko opened the chat bubble to talk to her: attention.
+                self.brain.note_attention();
+            }
             if ev.name == crate::chat::CHAT_START {
                 // Ko wrote to her (a reply starts): real attention.
                 self.brain.note_attention();
@@ -3897,9 +3905,18 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         assert_eq!(parse_presence(Some("1,2,3")), None);
         assert_eq!(parse_presence(Some("0,0,0,0,0,0,0,0,1")), None);
         assert_eq!(parse_presence(Some("1, 2,3,4,5,6,7,8")).unwrap()[1], 2.0);
-        // A chat reply starting = Ko wrote to her.
+        // A chat reply starting = Ko wrote (or spoke) to her.
         c.event(&Event::new(crate::chat::CHAT_START));
         assert_eq!(c.brain.loneliness().score(), 0.0);
+        // Opening the bubble and a voice barge-in are attention too.
+        for ev in [crate::chat::CHAT_OPENED, CHAT_BARGE_IN] {
+            for _ in 0..600 {
+                let _ = c.brain.tick(10.0, false);
+            }
+            assert!(c.brain.loneliness().score() > 0.0, "{ev}: lonely first");
+            c.event(&Event::new(ev));
+            assert_eq!(c.brain.loneliness().score(), 0.0, "{ev}");
+        }
         let _ = std::fs::remove_dir_all(dir);
     }
 

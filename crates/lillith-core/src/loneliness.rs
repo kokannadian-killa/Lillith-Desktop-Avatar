@@ -6,14 +6,17 @@
 //!
 //! Pure and I/O-free, driven by a fake clock like [`crate::state::Brain`]:
 //!
-//! - **Score** `0.0..=1.0`: rises with time since Ko's last *real*
-//!   interaction with her (a click, drag, key, long hover, chat, voice):
-//!   `score += dt / (minutes_to_max · 60) · habit_factor(hour)`.
+//! - **Neglect** `0.0..=1.0`: grows linearly with time since Ko's last
+//!   *real* interaction with her (a click, drag, key, long hover, chat,
+//!   voice): `neglect += dt / (minutes_to_max · 60) · habit_factor(hour)`.
+//! - **Score** `0.0..=1.0` = [`ease`]`(neglect)` (smoothstep): eased, so
+//!   a short absence barely registers, the middle climbs steadily and the
+//!   top levels out instead of slamming into the cap.
 //!   [`habit_factor`] comes from his learned presence by time of day
 //!   (the memory DB's `events` table, read only): at hours he is usually
 //!   around it is up to 1.5× (rises faster); at hours he is usually away
 //!   down to 0.5× (rises slower); no data = 1×. A real interaction resets
-//!   the score to 0. Quiet hours and system interactions hold it still.
+//!   neglect and score to 0. Quiet hours and system interactions hold it still.
 //! - **Level** `0..=3` ([`MAX_LEVEL`]): thresholds 0.25 / 0.5 / 0.75 with
 //!   hysteresis (a level drops only once the score is
 //!   `hysteresis` below its threshold, so it does not flicker), then capped
@@ -161,6 +164,16 @@ pub fn in_quiet_hours(quiet: &[u8], hour: u32) -> bool {
     }
 }
 
+/// Easing from neglect to score: smoothstep `x²(3 − 2x)` on `0..=1`.
+pub fn ease(x: f32) -> f32 {
+    let x = if x.is_finite() {
+        x.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    x * x * (3.0 - 2.0 * x)
+}
+
 /// Level for `score` given the previous level (hysteresis: rising needs
 /// the threshold, falling needs `hysteresis` below it).
 pub fn level_for(score: f32, prev: u8, hysteresis: f32) -> u8 {
@@ -201,6 +214,7 @@ pub struct Loneliness {
     cfg: LonelinessConfig,
     enabled: bool,
     t: f32,
+    neglect: f32,
     score: f32,
     level: u8,
     hour: u32,
@@ -220,6 +234,7 @@ impl Loneliness {
             enabled: cfg.mode == LonelinessMode::Auto,
             cfg,
             t: 0.0,
+            neglect: 0.0,
             score: 0.0,
             level: 0,
             hour: 12,
@@ -249,6 +264,7 @@ impl Loneliness {
     pub fn set_enabled(&mut self, on: bool) {
         self.enabled = on;
         if !on {
+            self.neglect = 0.0;
             self.score = 0.0;
             self.level = 0;
         }
@@ -291,12 +307,19 @@ impl Loneliness {
 
     /// Ko really interacted with her: she's not lonely any more.
     pub fn attend(&mut self) {
+        self.neglect = 0.0;
         self.score = 0.0;
         self.level = 0;
     }
 
+    /// Eased loneliness score, `0.0..=1.0`.
     pub fn score(&self) -> f32 {
         self.score
+    }
+
+    /// Raw (linear) neglect, `0.0..=1.0`.
+    pub fn neglect(&self) -> f32 {
+        self.neglect
     }
 
     /// Current level, capped by `max_severity`; 0 when off.
@@ -339,7 +362,8 @@ impl Loneliness {
         }
         let span = (self.cfg.minutes_to_max.max(0.1)) * 60.0;
         let f = habit_factor(&self.presence, self.hour);
-        self.score = (self.score + dt / span * f).clamp(0.0, 1.0);
+        self.neglect = (self.neglect + dt / span * f).clamp(0.0, 1.0);
+        self.score = ease(self.neglect);
         self.level = level_for(self.score, self.level, self.cfg.hysteresis);
     }
 
@@ -422,17 +446,22 @@ mod tests {
     fn score_rises_with_neglect_and_resets_on_attention() {
         let mut l = eng(LonelinessConfig::default());
         assert_eq!((l.score(), l.level()), (0.0, 0));
-        run_min(&mut l, 29.0);
-        assert_eq!(l.level(), 0);
-        run_min(&mut l, 2.0);
-        assert!((l.score() - 31.0 / 120.0).abs() < 0.01, "{}", l.score());
+        run_min(&mut l, 38.0);
+        assert_eq!(l.level(), 0, "eased: 38 min is still calm");
+        run_min(&mut l, 3.0);
+        assert!((l.neglect() - 41.0 / 120.0).abs() < 0.01, "{}", l.neglect());
+        assert!(
+            (l.score() - ease(41.0 / 120.0)).abs() < 0.01,
+            "{}",
+            l.score()
+        );
         assert_eq!(l.level(), 1);
         run_min(&mut l, 60.0);
         assert_eq!(l.level(), 3);
         run_min(&mut l, 600.0);
         assert_eq!(l.score(), 1.0, "clamped");
         l.attend();
-        assert_eq!((l.score(), l.level()), (0.0, 0));
+        assert_eq!((l.score(), l.neglect(), l.level()), (0.0, 0.0, 0));
     }
 
     #[test]
@@ -489,6 +518,24 @@ mod tests {
         run_min(&mut l, 2.0);
         assert_eq!(l.blocked(), None);
         assert!(l.want_bid());
+    }
+
+    #[test]
+    fn easing_is_smooth_monotonic_and_bounded() {
+        assert_eq!(ease(0.0), 0.0);
+        assert_eq!(ease(1.0), 1.0);
+        assert!((ease(0.5) - 0.5).abs() < 1e-6);
+        assert_eq!(ease(-3.0), 0.0);
+        assert_eq!(ease(7.0), 1.0);
+        assert_eq!(ease(f32::NAN), 0.0);
+        let mut prev = 0.0;
+        for i in 1..=100 {
+            let e = ease(i as f32 / 100.0);
+            assert!(e >= prev, "monotonic");
+            prev = e;
+        }
+        // Slow start, slow finish: the ends move less than the middle.
+        assert!(ease(0.1) < 0.1 && ease(0.9) > 0.9);
     }
 
     #[test]
@@ -552,7 +599,7 @@ mod tests {
     fn picks_follow_the_level() {
         let mut l = eng(LonelinessConfig::default());
         assert_eq!(l.pick(|_| true), None, "level 0: calm mood cycle");
-        run_min(&mut l, 32.0);
+        run_min(&mut l, 42.0);
         assert_eq!(l.level(), 1);
         for _ in 0..200 {
             assert!(sev(&l.pick(|_| true).unwrap()) <= 1);
@@ -570,7 +617,7 @@ mod tests {
     fn bid_cooldown() {
         let mut l = eng(LonelinessConfig::default());
         assert!(!l.want_bid(), "not lonely yet");
-        run_min(&mut l, 31.0);
+        run_min(&mut l, 41.0);
         assert!(l.want_bid());
         assert!(!l.want_bid());
         run_min(&mut l, 9.0);
