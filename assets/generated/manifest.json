@@ -14179,7 +14179,7 @@
    "placeholder": false,
    "source": "grok-imagine-video",
    "dir": "lonely_tier3_attention_tease/",
-   "sheet": "lonely_tier3_attention_tease_sheet.png",
+   "sheet": "lonely_tier3_attention_tease/lonely_tier3_attention_tease_sheet.png",
    "manifest": "lonely_tier3_attention_tease/lonely_tier3_attention_tease.json",
    "preview": "lonely_tier3_attention_tease/lonely_tier3_attention_tease_preview.gif",
    "tags": [
@@ -14187,26 +14187,7 @@
     "lonely_idle"
    ],
    "allure": true,
-   "video": {
-    "file": "lonely_tier3_attention_tease.mp4",
-    "layout": "alpha_side_by_side",
-    "codec": "h264 high yuv420p full-range bt709",
-    "crf": 16,
-    "edge_bleed_px": 0,
-    "width": 800,
-    "height": 400,
-    "frame_count": 95,
-    "fps": 12.0,
-    "bytes": 944359,
-    "quality": {
-     "edge_mae": 2.075,
-     "edge_p99": 18.0,
-     "halo_dark": 0.041,
-     "halo_light": -0.085,
-     "alpha_mae": 0.056
-    },
-    "tool": "tools/video-pipeline/pack_mp4.py"
-   },
+   "video": "lonely_tier3_attention_tease/lonely_tier3_attention_tease.mp4",
    "severity": 4,
    "canvas_w": 400,
    "canvas_h": 400,
@@ -14214,7 +14195,7 @@
    "frames_dir": "frames/",
    "style": "canonical_ko (thigh-highs + shorts)",
    "source_files": [
-    "../../source/video/lonely_tier3_attention_tease/lonely_tier3_attention_tease_v3_c.mp4"
+    "../../source/video/lonely_tier3_attention_tease/lonely_tier3_attention_tease_v3_e.mp4"
    ],
    "source_frame_range": {
     "first": 1,
