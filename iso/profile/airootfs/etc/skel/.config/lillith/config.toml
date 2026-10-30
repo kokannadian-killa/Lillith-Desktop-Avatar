@@ -1,0 +1,15 @@
+# DemonOS live defaults for Lillith (the settings window can change all of it).
+# Fully local: llama-server on 127.0.0.1 with the bundled qwen2.5 0.5B GGUF.
+# The server is only started by Lillith after the Soul Contract / awakening
+# consent; nothing listens on the network at boot.
+
+[chat]
+endpoint = "http://127.0.0.1:8080"
+model = "local"
+
+[chat.server]
+binary = "/opt/llama/llama-server"
+model_path = "/usr/share/lillith/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+ctx_size = 2048
+threads = 0
+extra_args = ["--jinja"]   # host is always 127.0.0.1 (lillith-mind server.rs)

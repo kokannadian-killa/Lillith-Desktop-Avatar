@@ -114,6 +114,16 @@ enum Cmd {
     /// One system-monitor snapshot: CPU, RAM, load, battery, backlight,
     /// network, VPN, removable drives (reads procfs/sysfs, ~1 s).
     Status,
+    /// Run the QuantumSec shield poll loop (writes ~/.biotek/quantumsec/status.json).
+    /// Used by `lillith-quantumsec.service`. Light polling; Ctrl-C to stop.
+    Quantumsec {
+        /// Seconds between proton polls (default 5).
+        #[arg(long, default_value_t = 5)]
+        interval: u64,
+        /// Tick once and exit (smoke / tests).
+        #[arg(long)]
+        once: bool,
+    },
     /// Run only the system monitor and print every event it emits
     /// (no overlay; Ctrl-C to stop). Handy to test thresholds.
     Monitor {
@@ -422,6 +432,9 @@ async fn app_main() -> Result<()> {
             let s = lillith_sense::Sample::read(&sys, &cfg);
             m.step(1.0, &s);
             println!("{}", m.summary(&s));
+        }
+        Some(Cmd::Quantumsec { interval, once }) => {
+            run_quantumsec(interval, once).await?;
         }
         Some(Cmd::Monitor { exit_after }) => {
             let mut cfg = load_config(&cli).0.monitor;
@@ -1371,6 +1384,32 @@ fn start_voice(
     voice
 }
 
+/// QuantumSec shield poll loop (`lillith quantumsec`). Writes status under
+/// `~/.biotek/quantumsec/`. Never enables systemd; never runs lockdown
+/// without a blood-seal token (this loop only monitors).
+async fn run_quantumsec(interval_s: u64, once: bool) -> Result<()> {
+    let mut shield = lillith_quantumsec::QuantumSecShield::new(lillith_quantumsec::ShieldConfig {
+        poll: std::time::Duration::from_secs(interval_s.max(1)),
+        ..lillith_quantumsec::ShieldConfig::default()
+    })?;
+    tracing::info!(
+        path = %shield.status_path().display(),
+        "QuantumSec shield starting"
+    );
+    let st = shield.tick();
+    println!("{}", st.summary);
+    if once {
+        return Ok(());
+    }
+    let handle = lillith_quantumsec::ShieldHandle::spawn(
+        shield,
+        std::time::Duration::from_secs(interval_s.max(1)),
+    );
+    tokio::signal::ctrl_c().await?;
+    handle.stop();
+    Ok(())
+}
+
 async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     let backend = Backend::detect_env(cli.backend);
     let (cfg, config_path) = load_config(cli);
@@ -1484,6 +1523,40 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     // Memory learns app habits / errors from the same feed (a non-blocking
     // tee) and speaks proactive lines back into it (`memory.suggest`).
     let memory = memory_wiring::start(&cfg.memory, feed.clone());
+    // QuantumSec shield (additive): background protons → ~/.biotek/quantumsec/status.json.
+    // Events (non-nominal) feed the memory bridge via quantumsec.* names.
+    let _qsec_shield = match lillith_quantumsec::QuantumSecShield::new(
+        lillith_quantumsec::ShieldConfig::default(),
+    ) {
+        Ok(mut s) => {
+            tracing::info!(path = %s.status_path().display(), "QuantumSec shield armed");
+            let mem = std::sync::Arc::clone(&memory);
+            s.on_event(move |ev| {
+                use lillith_quantumsec::memory_hook::event_for_shield;
+                use lillith_quantumsec::ShieldEvent;
+                use lillith_quantumsec::StatusLevel;
+                let skip = matches!(
+                    &ev,
+                    ShieldEvent::Status(st) if st.level == StatusLevel::Nominal
+                );
+                if skip {
+                    return;
+                }
+                if let Some(e) = event_for_shield(&ev) {
+                    mem.observe(&e);
+                }
+            });
+            Some(lillith_quantumsec::ShieldHandle::spawn(
+                s,
+                std::time::Duration::from_secs(5),
+            ))
+        }
+        Err(e) => {
+            tracing::warn!("QuantumSec shield not started: {e}");
+            None
+        }
+    };
+
     let tx = memory_wiring::tee(feed, &memory);
     // The idle learner (own thread + memory connection) sees the same
     // events: activity pauses it; `chat.safeword` doesn't touch it (the

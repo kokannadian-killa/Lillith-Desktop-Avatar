@@ -19,6 +19,8 @@
 //! * [`fonts`] — bundled OFL fonts as `&'static [u8]` (licenses in `fonts/`).
 //! * `egui_theme` (feature `egui`) — `install(ctx)` for fonts + Visuals,
 //!   and Painter helpers built on [`geom`].
+//! * `egui_awakening` / `egui_blood_seal` (feature `egui`) — QuantumSec
+//!   early-usage popup and the blood-seal consent gate (Soul Contract).
 //! * `bubble` (feature `egui`) — the chat bubble's plum-glass look
 //!   (colours, Visuals, frame), used by `lillith-panel`.
 //!
@@ -33,6 +35,10 @@ pub mod palette;
 #[cfg(feature = "egui")]
 pub mod bubble;
 #[cfg(feature = "egui")]
+pub mod egui_awakening;
+#[cfg(feature = "egui")]
+pub mod egui_blood_seal;
+#[cfg(feature = "egui")]
 pub mod egui_contract;
 #[cfg(feature = "egui")]
 pub mod egui_deletion;
@@ -40,6 +46,8 @@ pub mod egui_deletion;
 pub mod egui_plan;
 #[cfg(feature = "egui")]
 pub mod egui_theme;
+#[cfg(feature = "egui")]
+pub mod egui_whisper;
 
 pub use accent::Accent;
 pub use palette::Rgba;

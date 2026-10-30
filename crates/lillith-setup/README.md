@@ -48,7 +48,7 @@ Extra scan dirs: `--dir DIR` (repeatable) or `[llm] scan_paths`.
 | `ollama_host` | `"http://127.0.0.1:11434"` | Ollama base URL, loopback only |
 | `ollama_model` | `"lily"` | Name for `ollama create` |
 | `temperature` | `0.95` | 0–2 (Lily's default, `LILY_TEMPERATURE`) |
-| `ctx_size` | `4096` | `-c` / `num_ctx` (old Aether key `num_ctx` is read and migrated) |
+| `ctx_size` | `4096` | `-c` / `num_ctx` (old Aether / pre-Biotek Engine key `num_ctx` is still read and migrated) |
 | `chat_template` | `"chatml"` | Ollama `TEMPLATE`/stop tokens (`chatml`, `llama3`, `gemma`, `phi3`, `mistral-v1`); llama-server uses the GGUF's own template via `--jinja` |
 | `llama_server_bin` | `""` | Path to llama-server (empty = PATH) |
 | `modelfile_path` | `""` | Lily's Modelfile (default `~/.config/lillith/Modelfile.lily`) |

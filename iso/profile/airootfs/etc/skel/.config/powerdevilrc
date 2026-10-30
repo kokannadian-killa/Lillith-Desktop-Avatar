@@ -1,0 +1,27 @@
+# DemonOS live session: never dim, blank (DPMS) or suspend on idle.
+# Plasma 6 powerdevil reads this through the XDG config cascade; the same
+# file is in /etc/skel/.config for the live user.
+
+[AC][Display]
+DimDisplayWhenIdle=false
+TurnOffDisplayWhenIdle=false
+
+[AC][SuspendAndShutdown]
+AutoSuspendAction=0
+LidAction=0
+
+[Battery][Display]
+DimDisplayWhenIdle=false
+TurnOffDisplayWhenIdle=false
+
+[Battery][SuspendAndShutdown]
+AutoSuspendAction=0
+LidAction=0
+
+[LowBattery][Display]
+DimDisplayWhenIdle=false
+TurnOffDisplayWhenIdle=false
+
+[LowBattery][SuspendAndShutdown]
+AutoSuspendAction=0
+LidAction=0

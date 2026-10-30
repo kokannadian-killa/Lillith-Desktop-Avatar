@@ -24,6 +24,7 @@
 //! Settings…       (lillith-settings window; xdg-open config.toml fallback)
 //! Icon…           (lillith-settings ▸ Icon: pick the app icon)
 //! Reset position
+//! QuantumSec      ▸ Status · Open panel…
 //! About Lillith
 //! ─────────────
 //! Close
@@ -194,6 +195,10 @@ pub enum MenuAction {
     ChooseIcon,
     ResetPosition,
     About,
+    /// QuantumSec shield one-line status (spoken / bubble).
+    QuantumSecStatus,
+    /// Open Settings on the QuantumSec tab (lockdown / blood seal live there).
+    OpenQuantumSec,
     /// "Close": quit Lillith.
     Quit,
 }
@@ -446,6 +451,41 @@ impl MenuState {
     }
 }
 
+/// One-line QuantumSec status for the menu (reads `~/.biotek/quantumsec/status.json`
+/// when present; otherwise a paused placeholder). Kept here so the overlay
+/// does not depend on `lillith-quantumsec`.
+pub fn quantumsec_status_line() -> String {
+    let path = lillith_setup_biotek_status_path();
+    match path.and_then(|p| std::fs::read_to_string(p).ok()) {
+        Some(s) => {
+            // Prefer the "summary" field when the JSON looks right; else raw.
+            if let Some(sum) = s.split("\"summary\":").nth(1) {
+                let sum = sum.trim_start();
+                if let Some(rest) = sum.strip_prefix('"') {
+                    if let Some(end) = rest.find('"') {
+                        return rest[..end].to_string();
+                    }
+                }
+            }
+            "QuantumSec: status on disk".into()
+        }
+        None => "QuantumSec: PAUSED (no status yet)".into(),
+    }
+}
+
+fn lillith_setup_biotek_status_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("BIOTEK_HOME")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .filter(|v| !v.is_empty())
+                .map(|h| std::path::PathBuf::from(h).join(".biotek"))
+        })?;
+    Some(home.join("quantumsec").join("status.json"))
+}
+
 /// "About" text.
 pub fn about_text() -> String {
     format!(
@@ -630,6 +670,13 @@ pub fn build_menu(s: &MenuState) -> Menu {
         MenuAction::ResetPosition,
         Check::None,
     ));
+    items.push(MenuItem::Submenu {
+        label: "QuantumSec".into(),
+        items: vec![
+            MenuItem::leaf("Status", MenuAction::QuantumSecStatus, Check::None),
+            MenuItem::leaf("Open panel…", MenuAction::OpenQuantumSec, Check::None),
+        ],
+    });
     items.push(MenuItem::leaf(
         "About Lillith",
         MenuAction::About,
@@ -772,6 +819,10 @@ pub enum MenuEffect {
     SetSeasonalOutfit(String),
     /// Re-open the menu at the Avatar ▸ Outfit page.
     OpenOutfitPage,
+    /// Speak / show the QuantumSec status line.
+    ShowQuantumSecStatus(String),
+    /// Open the settings window on its QuantumSec tab.
+    OpenQuantumSec,
 }
 
 /// What to do after a pick.
@@ -865,6 +916,11 @@ pub fn on_menu_action(action: MenuAction, brain: &mut Brain, state: &MenuState) 
             .effects
             .push(MenuEffect::ResetPosition(OverlayPos::default())),
         MenuAction::About => out.effects.push(MenuEffect::ShowAbout(about_text())),
+        MenuAction::QuantumSecStatus => {
+            let line = quantumsec_status_line();
+            out.effects.push(MenuEffect::ShowQuantumSecStatus(line));
+        }
+        MenuAction::OpenQuantumSec => out.effects.push(MenuEffect::OpenQuantumSec),
         MenuAction::Quit => out.actions.push(Action::Quit),
     }
     out
@@ -948,6 +1004,10 @@ pub mod wire {
     pub const CHOOSE_ICON: &str = "choose_icon";
     pub const RESET_POSITION: &str = "reset_position";
     pub const ABOUT: &str = "about";
+    /// QuantumSec ▸ Status.
+    pub const QUANTUMSEC_STATUS: &str = "quantumsec_status";
+    /// QuantumSec ▸ Open panel…
+    pub const OPEN_QUANTUMSEC: &str = "open_quantumsec";
     /// "Close": quit Lillith.
     pub const QUIT: &str = "quit";
     /// config.toml changed on disk (Motion / Avatar / Chat knobs): the
@@ -1041,6 +1101,8 @@ pub fn action_line(a: MenuAction) -> String {
         MenuAction::ChooseIcon => (CHOOSE_ICON, None),
         MenuAction::ResetPosition => (RESET_POSITION, None),
         MenuAction::About => (ABOUT, None),
+        MenuAction::QuantumSecStatus => (QUANTUMSEC_STATUS, None),
+        MenuAction::OpenQuantumSec => (OPEN_QUANTUMSEC, None),
         MenuAction::Quit => (QUIT, None),
     };
     line_of(name, value)
@@ -1141,6 +1203,8 @@ pub fn parse_action_line(line: &str) -> Option<MenuAction> {
         CHOOSE_ICON => MenuAction::ChooseIcon,
         RESET_POSITION => MenuAction::ResetPosition,
         ABOUT => MenuAction::About,
+        QUANTUMSEC_STATUS => MenuAction::QuantumSecStatus,
+        OPEN_QUANTUMSEC => MenuAction::OpenQuantumSec,
         QUIT => MenuAction::Quit,
         _ => return None,
     })
@@ -1315,14 +1379,15 @@ mod tests {
                 Some("Settings…"),
                 Some("Icon…"),
                 Some("Reset position"),
+                Some("QuantumSec"),
                 Some("About Lillith"),
                 None,
                 Some("Close"),
             ]
         );
         // Chat, avatar (Lillith + Custom), resize (5 + 2), minimize, mode,
-        // mood, mute/monitor, settings/icon/reset/about, close.
-        assert_eq!(m.leaves().len(), 1 + 2 + 7 + 1 + 3 + 5 + 2 + 4 + 1);
+        // mood, mute/monitor, settings/icon/reset/quantumsec(2)/about, close.
+        assert_eq!(m.leaves().len(), 1 + 2 + 7 + 1 + 3 + 5 + 2 + 4 + 2 + 1);
         let moods: Vec<String> = radios(&m, "Mood").into_iter().map(|r| r.0).collect();
         assert_eq!(
             moods,

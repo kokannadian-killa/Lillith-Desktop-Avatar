@@ -1,0 +1,4 @@
+# build outputs never live in the repo (iso/build-iso.sh uses /workspace/qsec/iso-build)
+work/
+out/
+*.iso

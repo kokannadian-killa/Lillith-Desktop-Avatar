@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Lillith QuantumSec
+GenericName=QuantumSec panel
+Comment=DemonOS / PhantomCore local shield panel (protons, blood seal, teams)
+Exec=lillith-settings --tab quantumsec
+Icon=lillith
+Terminal=false
+Categories=Utility;Security;
+Keywords=quantumsec;biotek;demonos;phantomcore;security;
+StartupNotify=false

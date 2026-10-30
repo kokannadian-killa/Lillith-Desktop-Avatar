@@ -1,0 +1,8 @@
+{
+    "KPlugin": {
+        "Authors": [ { "Name": "Ko Kannadian" } ],
+        "Id": "DemonOS",
+        "License": "See repository",
+        "Name": "DemonOS PhantomCore"
+    }
+}

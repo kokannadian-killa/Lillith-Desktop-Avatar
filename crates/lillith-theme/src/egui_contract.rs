@@ -358,10 +358,11 @@ fn plate(
     let plate_h = em.y.max(text_h) + 2.0 * HEADER_PAD;
     let header_top = if narrow { 8.0 } else { 12.0 };
     let summary = painter.layout(summary_line(view), f.body.clone(), c32(pal::TEXT), inner_w);
-    let target = view
-        .target
-        .filter(|s| !s.is_empty())
-        .map(|p| painter.layout(format!("⛧ {p}"), f.mono.clone(), c32(pal::EMBER), inner_w));
+    let target = view.target.filter(|s| !s.is_empty()).map(|p| {
+        // U+26A0 WARNING SIGN — present in bundled JetBrains Mono.
+        // Do not use U+26E7 (inverted pentagram): missing glyph → tofu box.
+        painter.layout(format!("⚠ {p}"), f.mono.clone(), c32(pal::EMBER), inner_w)
+    });
     let detail = detail_text(view)
         .map(|d| painter.layout(d, f.mono.clone(), c32(pal::BONE), inner_w - 16.0));
     // A scrolling slab is at most DETAIL_LINES rows tall; the rest scrolls.
@@ -641,22 +642,23 @@ fn plate(
             Sense::CLICK
         },
     );
+    // Plain ASCII labels only: leading ✕/✓ tofu on the DemonOS font.
     let (no_txt, yes_txt) = if narrow {
         (
-            "✕ REFUSE",
+            "REFUSE",
             if view.busy {
                 "FORGING…"
             } else {
-                "✓ SIGN · YES"
+                "SIGN · YES"
             },
         )
     } else {
         (
-            "✕ REFUSE — NO",
+            "REFUSE — NO",
             if view.busy {
                 "THE FORGE IS BUSY…"
             } else {
-                "✓ SIGN IN BLOOD — YES"
+                "SIGN IN BLOOD — YES"
             },
         )
     };
