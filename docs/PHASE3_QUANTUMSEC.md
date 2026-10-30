@@ -14,12 +14,13 @@ Additive on `quantumsec/integration` after Phase 2 (PR #11).
 | Fish helpers | `linux/fish/biotek_qsec.fish` (status / reports / consent_tail) |
 | Live proton status | Tab refreshes status.json every ~2s; tray tooltip via `QuantumSecTooltip` |
 | Info-rune pass | About (+ other tabs keep chrome tooltips); QuantumSec already covered |
-| Systemd enable UX | Blood-seal proposals in QuantumSec tab (`units::enable_*`, echo dry-run) |
+| Systemd enable UX | Blood-seal **real** commands (`units::enable_*`); run only after YES; result → consent log |
 | DemonOS / PhantomCore branding | About section; tray title; wizard copy |
+| Teams labels | Red = LOCAL SIMULATION ONLY (echo); Blue = PROPOSAL, not run (exact cmds, no spawn) |
 
 ## Rules kept
 
-`~/.biotek` via `lillith_setup::biotek`; additive only; units never auto-enabled; Red = local sim.
+`~/.biotek` via `lillith_setup::biotek`; additive only; units never auto-enabled; Red = local sim only.
 
 ## Out of scope (later)
 

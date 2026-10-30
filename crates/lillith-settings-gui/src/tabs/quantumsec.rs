@@ -245,7 +245,7 @@ impl SettingsTab for QuantumSecTab {
                 egui::Id::new("qsec-blood-seal"),
                 &p.summary,
                 &p.detail_block(),
-                p.local_simulation,
+                p.seal_banner(),
             ) {
                 let home = self.biotek.clone();
                 match choice {
@@ -253,9 +253,52 @@ impl SettingsTab for QuantumSecTab {
                         if let Some(h) = home {
                             if let Ok(log) = ConsentLog::open_in(h.join("consent")) {
                                 if let Ok(mut tok) = log.approve(&p) {
-                                    let _ = lillith_quantumsec::lockdown::execute_with_token(
+                                    let nonce = tok.nonce.clone();
+                                    match lillith_quantumsec::lockdown::execute_with_token(
                                         &p, &mut tok,
-                                    );
+                                    ) {
+                                        Ok(outs) => {
+                                            let codes: Vec<String> = outs
+                                                .iter()
+                                                .map(|o| {
+                                                    o.status
+                                                        .code()
+                                                        .map(|c| c.to_string())
+                                                        .unwrap_or_else(|| "signal".into())
+                                                })
+                                                .collect();
+                                            let summary = if p.proposal_only {
+                                                format!(
+                                                    "acknowledged proposal (not run); cmds={}",
+                                                    p.commands.len()
+                                                )
+                                            } else {
+                                                format!(
+                                                    "executed {} cmds; exit=[{}]",
+                                                    outs.len(),
+                                                    codes.join(",")
+                                                )
+                                            };
+                                            let _ = log.record(
+                                                "lockdown_result",
+                                                &p.id,
+                                                lillith_quantumsec::consent::ConsentDecision::Approve,
+                                                &summary,
+                                                &p.commands,
+                                                &nonce,
+                                            );
+                                        }
+                                        Err(e) => {
+                                            let _ = log.record(
+                                                "lockdown_result",
+                                                &p.id,
+                                                lillith_quantumsec::consent::ConsentDecision::Deny,
+                                                &format!("execute failed: {e}"),
+                                                &p.commands,
+                                                &nonce,
+                                            );
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -514,7 +557,7 @@ impl SettingsTab for QuantumSecTab {
         chrome::section(ui, "SYSTEMD_USER", Some("blood-seal enable"), |ui| {
             ui.label(
                 RichText::new(
-                    "lillith-quantumsec.service is never auto-enabled. Propose enable/disable via blood seal (echo dry-run by default).",
+                    "lillith-quantumsec.service is never auto-enabled. Propose enable/disable via blood seal — exact real systemctl commands run only after SIGN IN BLOOD.",
                 )
                 .color(c32(pal::TEXT_DIM)),
             );
