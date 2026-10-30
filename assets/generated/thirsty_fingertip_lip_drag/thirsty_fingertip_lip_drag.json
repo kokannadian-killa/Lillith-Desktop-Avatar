@@ -1459,5 +1459,112 @@
   },
   "severity": 3,
   "system": false,
-  "allure": true
+  "allure": true,
+  "thirsty_polish1": {
+    "tool": "polish/thirsty-tease-1 (targeted; matte_clean not re-run)",
+    "dropout_fill": {
+      "note": "single-frame matte dropouts both flow-compensated neighbours agree on were filled from them (coverage only added, never removed; translucent strands kept)",
+      "frames": [
+        14,
+        17,
+        19,
+        20,
+        23,
+        32,
+        37,
+        47,
+        48,
+        50,
+        51,
+        55,
+        59,
+        60,
+        63,
+        70,
+        76,
+        133,
+        144,
+        146,
+        148,
+        151,
+        153,
+        155,
+        157,
+        163,
+        165,
+        167,
+        170
+      ],
+      "px": 823
+    },
+    "retime": {
+      "note": "frames resampled along optical-flow arc length inside fixed-endpoint segments (frame count, fps, anchor, zoom keys unchanged)",
+      "segments": {
+        "93:100:smooth": [
+          94,
+          95,
+          96,
+          97,
+          98,
+          99
+        ],
+        "128:150:smooth": [
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149
+        ],
+        "173:192:smooth": [
+          174,
+          175,
+          176,
+          177,
+          178,
+          179,
+          180,
+          181,
+          182,
+          183,
+          184,
+          185,
+          186,
+          187,
+          188,
+          189,
+          190,
+          191
+        ]
+      }
+    },
+    "light_edge_recolour_px": {
+      "138": 2,
+      "139": 1,
+      "143": 1,
+      "145": 3,
+      "146": 7,
+      "148": 2,
+      "149": 2
+    },
+    "restored_from_original": {
+      "131": 59,
+      "133": 44
+    }
+  }
 }
