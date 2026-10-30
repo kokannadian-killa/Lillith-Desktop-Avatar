@@ -16865,7 +16865,7 @@
    "placeholder": false,
    "source": "grok-imagine-video",
    "dir": "oops_drop_bend/",
-   "sheet": "oops_drop_bend_sheet.png",
+   "sheet": "oops_drop_bend/oops_drop_bend_sheet.png",
    "manifest": "oops_drop_bend/oops_drop_bend.json",
    "preview": "oops_drop_bend/oops_drop_bend_preview.gif",
    "tags": [
@@ -16873,29 +16873,10 @@
     "oops"
    ],
    "allure": true,
-   "video": {
-    "file": "oops_drop_bend.mp4",
-    "layout": "alpha_side_by_side",
-    "codec": "h264 high yuv420p full-range bt709",
-    "crf": 16,
-    "edge_bleed_px": 0,
-    "width": 800,
-    "height": 400,
-    "frame_count": 95,
-    "fps": 12.0,
-    "bytes": 1079115,
-    "quality": {
-     "edge_mae": 2.105,
-     "edge_p99": 21.0,
-     "halo_dark": 0.023,
-     "halo_light": -0.085,
-     "alpha_mae": 0.0702
-    },
-    "tool": "tools/video-pipeline/pack_mp4.py"
-   },
+   "video": "oops_drop_bend/oops_drop_bend.mp4",
    "severity": 4,
    "source_files": [
-    "../../source/video/oops_drop_bend/oops_drop_bend_v3_c.mp4"
+    "../../source/video/oops_drop_bend/oops_drop_bend_v3_g.mp4"
    ],
    "bbox_per_frame": [
     [
