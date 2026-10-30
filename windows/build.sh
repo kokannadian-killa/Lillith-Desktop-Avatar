@@ -28,6 +28,9 @@
 #        (section "Lillith's voice" -> %LOCALAPPDATA%\Lillith\voice, HKCU Run
 #        autostart) and to the portable zip (Lillith\voice\ + "Start Lillith
 #        with voice.cmd"). Without it both are built without voice, as before.
+#        The payload's lib\lillith_voice must match this tree
+#        (tools/lillith-voice/windows/check-payload-fresh.sh; VOICE_ALLOW_STALE=1
+#        to override).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -128,6 +131,8 @@ if [[ -n "${VOICE_PAYLOAD:-}" ]]; then
   [[ -f "$VOICE_STAGE/voice/python/pythonw.exe" && -f "$VOICE_STAGE/voice/models/pocket/voices/lillith.npy" ]] \
     || { echo "error: $VOICE_PAYLOAD is not a voice-win payload (voice/python, voice/models)" >&2; exit 1; }
   (cd "$VOICE_STAGE/voice" && sha256sum -c --quiet SHA256SUMS) || { echo "error: voice payload SHA256SUMS mismatch" >&2; exit 1; }
+  # Its daemon code must be this tree's (an old payload has no mic gate / safeword drop).
+  "$ROOT/tools/lillith-voice/windows/check-payload-fresh.sh" "$VOICE_STAGE"
   VOICE_ARGS=(-DVOICE="$VOICE_STAGE/voice")
 fi
 
