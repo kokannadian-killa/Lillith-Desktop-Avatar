@@ -2106,7 +2106,10 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "hair_flip/hair_flip.mp4"
+   "video": "hair_flip/hair_flip.mp4",
+   "engine_springs": [
+    "pigtails"
+   ]
   },
   {
    "frame_count": 14,
@@ -2134,7 +2137,10 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "hair_twirl/hair_twirl.mp4"
+   "video": "hair_twirl/hair_twirl.mp4",
+   "engine_springs": [
+    "pigtails"
+   ]
   },
   {
    "frame_count": 47,
@@ -2414,10 +2420,10 @@
    "video": "idle_bored_sigh/idle_bored_sigh.mp4"
   },
   {
-   "frame_count": 47,
+   "frame_count": 70,
    "frame_width": 400,
    "frame_height": 400,
-   "fps": 8.0,
+   "fps": 12.0,
    "loop": true,
    "baseline_y": 392,
    "anchor": [
@@ -2472,10 +2478,10 @@
    "video": "idle_flirt_glove_adjust/idle_flirt_glove_adjust.mp4"
   },
   {
-   "frame_count": 47,
+   "frame_count": 54,
    "frame_width": 400,
    "frame_height": 400,
-   "fps": 10.5,
+   "fps": 12.0,
    "loop": true,
    "baseline_y": 392,
    "anchor": [
@@ -2614,7 +2620,10 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl.mp4"
+   "video": "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl.mp4",
+   "engine_springs": [
+    "pigtails"
+   ]
   },
   {
    "frame_count": 47,
@@ -3747,10 +3756,10 @@
    "video": "strut_right/strut_right.mp4"
   },
   {
-   "frame_count": 59,
+   "frame_count": 88,
    "frame_width": 400,
    "frame_height": 400,
-   "fps": 8.0,
+   "fps": 12.0,
    "loop": true,
    "baseline_y": 392,
    "anchor": [
@@ -3849,10 +3858,10 @@
    "video": "tail_tease/tail_tease.mp4"
   },
   {
-   "frame_count": 11,
+   "frame_count": 16,
    "frame_width": 400,
    "frame_height": 400,
-   "fps": 8.0,
+   "fps": 12.0,
    "loop": true,
    "baseline_y": 392,
    "anchor": [
@@ -4010,7 +4019,10 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "twirl/twirl.mp4"
+   "video": "twirl/twirl.mp4",
+   "engine_springs": [
+    "pigtails"
+   ]
   },
   {
    "frame_count": 24,
@@ -4387,10 +4399,10 @@
    "video": "walk_skip_right/walk_skip_right.mp4"
   },
   {
-   "frame_count": 12,
+   "frame_count": 17,
    "frame_width": 400,
    "frame_height": 400,
-   "fps": 8.5,
+   "fps": 12.0,
    "loop": true,
    "baseline_y": 392,
    "anchor": [
@@ -4588,7 +4600,10 @@
    ],
    "allure": true,
    "video": "hair_lift_stretch/hair_lift_stretch.mp4",
-   "idle_variant": true
+   "idle_variant": true,
+   "engine_springs": [
+    "pigtails"
+   ]
   },
   {
    "frame_count": 36,
@@ -5968,7 +5983,10 @@
    ],
    "allure": true,
    "video": "hair_twirl_lip_bite/hair_twirl_lip_bite.mp4",
-   "idle_variant": true
+   "idle_variant": true,
+   "engine_springs": [
+    "pigtails"
+   ]
   },
   {
    "name": "dom_chin_tilt_summon",

@@ -1,6 +1,7 @@
 # >>> COPY of /workspace/lillith/physics-lab/physics.toml (authoritative; bundled by lillith-core physics_config.rs). Re-copy, don't fork. <<<
 # >>> ONE deliberate difference: [gait] enabled = false (the canonical v2 walk/strut/run clips are baked-motion video
 # >>> takes; procedural gait would double the leg/arm motion). Keep that line when re-copying. <<<
+# >>> SECOND repo-only addition: the [baked_motion] table (art/fluid-bounce, engine-side, not in the lab file). Keep it. <<<
 # =============================================================================
 # Lillith jiggle-physics config  (physics.toml, schema_version 1)
 # AUTHORITATIVE COPY: /workspace/lillith/physics-lab/physics.toml
@@ -152,6 +153,18 @@ tail_figure8_walk = 0.3         #   idle figure-8 shrinks to 30% at full stride 
 velocity_keep = 0.15            # spring velocities x0.15
 offset_keep = 0.4               # offsets from target x0.4
 on_locomotion_change = true
+
+# --- Baked-motion clips (repo-only, art/fluid-bounce 2026-10-30). Every v2 video clip is tagged baked_motion, so the
+# engine chest / pigtail / hip springs were switched fully off over them (no double jiggle). Hair is the exception:
+# the pigtail spring (rendered as a small whole-sprite skew about the feet) now runs over baked clips at its own
+# gain, hard-capped so clips that already swing their hair never get a big second sway. Clips whose hair motion is
+# the whole point opt out per clip with manifest engine_springs = ["pigtails"]; baked walks (disable_springs "gait")
+# keep hair off automatically (they swing it every step and get footfall pigtail kicks). CHEST IS NOT TUNED HERE: it keeps
+# AnimatorConfig.baked_motion_gain (0.2) and stays switched off over baked clips. root_x (hip) stays off too:
+# it moves the whole sprite and the clips bake their own hip sway.
+[baked_motion]
+pigtail_gain = 0.55             # was effectively 0 (spring off); 0.2 would be the old chest/breath gain
+pigtail_max_px = 5.0            # cap on the scaled offset: skew <= 5 * 0.003 = 0.015 (~6 px at the head)
 
 # --- Pigtails (phys_pigtail_top.bin.txt, phys_bikini_top_jiggle.txt master prompt).
 [pigtails]

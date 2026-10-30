@@ -279,7 +279,7 @@ def build(clip, out=None, use_temporal=True, threads=2, keep_cache=False, tspan=
         return finish(clip, old, frames, outdir, t0)
     rng = js['source_frame_range']; S = float(js['scale'])
     video = os.path.normpath(os.path.join(V2, clip, js['source_files'][0]))
-    idx = list(range(rng['first'], rng['last'] + 1, rng['step']))
+    idx = list(rng['frames']) if rng.get('frames') else list(range(rng['first'], rng['last'] + 1, rng['step']))
     old = [np.asarray(Image.open(p).convert('RGBA')) for p in frames_of(clip)]
     assert len(old) == len(idx), (len(old), len(idx))
     fd = os.path.join(CACHE, os.path.splitext(os.path.basename(video))[0])
