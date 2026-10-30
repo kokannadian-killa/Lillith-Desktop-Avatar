@@ -50,12 +50,10 @@ impl LockdownProposal {
         let id = format!("lockdown-sim-{}", now_unix());
         Self {
             id: id.clone(),
-            summary: "LOCAL SIMULATION ONLY — QuantumSec dry-run lockdown (no host changes)"
-                .into(),
+            summary: "LOCAL SIMULATION ONLY — QuantumSec dry-run lockdown (no host changes)".into(),
             commands: vec![
                 "echo '[QuantumSec] LOCAL SIMULATION: lockdown begin'".into(),
-                "echo '[QuantumSec] LOCAL SIMULATION: would pause non-essential user units'"
-                    .into(),
+                "echo '[QuantumSec] LOCAL SIMULATION: would pause non-essential user units'".into(),
                 "echo '[QuantumSec] LOCAL SIMULATION: lockdown end'".into(),
                 "true".into(),
             ],

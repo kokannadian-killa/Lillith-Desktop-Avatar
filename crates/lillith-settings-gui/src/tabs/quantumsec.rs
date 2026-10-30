@@ -118,8 +118,10 @@ impl QuantumSecTab {
     fn draw_consent_section(&mut self, ui: &mut Ui, shared: &mut Shared) {
         chrome::section(ui, "CONSENT_LOG", Some("viewer · rotation"), |ui| {
             ui.label(
-                RichText::new("Append-only under ~/.biotek/consent/. Daily files rotate (keep 30).")
-                    .color(c32(pal::TEXT_DIM)),
+                RichText::new(
+                    "Append-only under ~/.biotek/consent/. Daily files rotate (keep 30).",
+                )
+                .color(c32(pal::TEXT_DIM)),
             );
             if chrome::stone_button(ui, "Refresh consent log").clicked() {
                 self.refresh_consent();
@@ -128,8 +130,11 @@ impl QuantumSecTab {
                 if let Some(h) = &self.biotek {
                     if let Ok(log) = ConsentLog::open_in(h.join("consent")) {
                         match log.rotate_keep(30) {
-                            Ok(n) => shared.toast(format!("Removed {n} old consent files"), pal::CYBER_CYAN),
-                            Err(e) => shared.toast(format!("Rotate failed: {e}"), pal::CYBER_CRIMSON),
+                            Ok(n) => shared
+                                .toast(format!("Removed {n} old consent files"), pal::CYBER_CYAN),
+                            Err(e) => {
+                                shared.toast(format!("Rotate failed: {e}"), pal::CYBER_CRIMSON)
+                            }
                         }
                     }
                 }
@@ -148,9 +153,7 @@ impl QuantumSecTab {
                 }
             }
         });
-
     }
-
 }
 
 impl Default for QuantumSecTab {
@@ -212,7 +215,6 @@ impl SettingsTab for QuantumSecTab {
             _ => {}
         }
     }
-
 
     fn tick(&mut self, ctx: &egui::Context, _shared: &mut Shared) {
         self.ensure_awakening_flag();
@@ -425,7 +427,8 @@ impl SettingsTab for QuantumSecTab {
                 for item in catalog.iter().filter(|i| i.team == color) {
                     ui.horizontal(|ui| {
                         let resp = ui.label(
-                            RichText::new(format!("  ▸ {}", item.title)).color(c32(pal::CYBER_TEXT)),
+                            RichText::new(format!("  ▸ {}", item.title))
+                                .color(c32(pal::CYBER_TEXT)),
                         );
                         resp.on_hover_text(&item.tooltip);
                         if info_rune(ui, ui.id().with(("item-i", item.id.as_str()))) {
@@ -433,10 +436,7 @@ impl SettingsTab for QuantumSecTab {
                         }
                         if chrome::blade_button(ui, "Propose…", true).clicked() {
                             self.pending = Some(item.as_proposal());
-                            shared.toast(
-                                format!("Blood seal: {}", item.title),
-                                pal::CYBER_CRIMSON,
-                            );
+                            shared.toast(format!("Blood seal: {}", item.title), pal::CYBER_CRIMSON);
                         }
                     });
                 }
@@ -462,7 +462,11 @@ impl SettingsTab for QuantumSecTab {
                                 pal::CYBER_CYAN
                             })),
                     );
-                    ui.label(RichText::new(lane.tooltip()).small().color(c32(pal::TEXT_MUTE)));
+                    ui.label(
+                        RichText::new(lane.tooltip())
+                            .small()
+                            .color(c32(pal::TEXT_MUTE)),
+                    );
                     if info_rune(ui, ui.id().with(("lane-i", lane.label()))) {
                         self.open_whisper(lane.label(), lane.whisper());
                     }
@@ -504,10 +508,7 @@ impl SettingsTab for QuantumSecTab {
                     match profile.save_markdown(h) {
                         Ok(path) => {
                             self.last_report = Some(path.clone());
-                            shared.toast(
-                                format!("Report → {}", path.display()),
-                                pal::CYBER_CYAN,
-                            );
+                            shared.toast(format!("Report → {}", path.display()), pal::CYBER_CYAN);
                         }
                         Err(e) => shared.toast(format!("Report failed: {e}"), pal::CYBER_CRIMSON),
                     }

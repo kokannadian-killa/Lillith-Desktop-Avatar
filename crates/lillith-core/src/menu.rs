@@ -429,7 +429,6 @@ impl MenuState {
     }
 }
 
-
 /// One-line QuantumSec status for the menu (reads `~/.biotek/quantumsec/status.json`
 /// when present; otherwise a paused placeholder). Kept here so the overlay
 /// does not depend on `lillith-quantumsec`.
@@ -630,16 +629,8 @@ pub fn build_menu(s: &MenuState) -> Menu {
     items.push(MenuItem::Submenu {
         label: "QuantumSec".into(),
         items: vec![
-            MenuItem::leaf(
-                "Status",
-                MenuAction::QuantumSecStatus,
-                Check::None,
-            ),
-            MenuItem::leaf(
-                "Open panel…",
-                MenuAction::OpenQuantumSec,
-                Check::None,
-            ),
+            MenuItem::leaf("Status", MenuAction::QuantumSecStatus, Check::None),
+            MenuItem::leaf("Open panel…", MenuAction::OpenQuantumSec, Check::None),
         ],
     });
     items.push(MenuItem::leaf(
@@ -868,8 +859,7 @@ pub fn on_menu_action(action: MenuAction, brain: &mut Brain, state: &MenuState) 
         MenuAction::About => out.effects.push(MenuEffect::ShowAbout(about_text())),
         MenuAction::QuantumSecStatus => {
             let line = quantumsec_status_line();
-            out.effects
-                .push(MenuEffect::ShowQuantumSecStatus(line));
+            out.effects.push(MenuEffect::ShowQuantumSecStatus(line));
         }
         MenuAction::OpenQuantumSec => out.effects.push(MenuEffect::OpenQuantumSec),
         MenuAction::Quit => out.actions.push(Action::Quit),

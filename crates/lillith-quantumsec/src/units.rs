@@ -19,10 +19,7 @@ pub fn enable_quantumsec_unit_proposal(unit_path_hint: &Path) -> LockdownProposa
         "systemctl --user daemon-reload".into(),
         "systemctl --user enable --now lillith-quantumsec.service".into(),
     ];
-    let mut p = LockdownProposal::new(
-        "Enable QuantumSec user unit (systemctl --user)",
-        cmds,
-    );
+    let mut p = LockdownProposal::new("Enable QuantumSec user unit (systemctl --user)", cmds);
     p.local_simulation = false;
     p.proposal_only = false;
     p
@@ -30,13 +27,8 @@ pub fn enable_quantumsec_unit_proposal(unit_path_hint: &Path) -> LockdownProposa
 
 /// Blood-seal proposal to disable/stop the unit (exact real commands).
 pub fn disable_quantumsec_unit_proposal() -> LockdownProposal {
-    let cmds = vec![
-        "systemctl --user disable --now lillith-quantumsec.service".into(),
-    ];
-    let mut p = LockdownProposal::new(
-        "Disable QuantumSec user unit (systemctl --user)",
-        cmds,
-    );
+    let cmds = vec!["systemctl --user disable --now lillith-quantumsec.service".into()];
+    let mut p = LockdownProposal::new("Disable QuantumSec user unit (systemctl --user)", cmds);
     p.local_simulation = false;
     p.proposal_only = false;
     p

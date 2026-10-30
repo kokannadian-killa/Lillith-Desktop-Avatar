@@ -38,9 +38,15 @@ impl TeamColor {
     /// One-line tooltip.
     pub fn tooltip(self) -> &'static str {
         match self {
-            TeamColor::Red => "Local simulation only. No host changes. Every step is an echo dry-run.",
-            TeamColor::Blue => "Hardening proposals. Exact commands shown; blood seal required to run.",
-            TeamColor::Purple => "Feedback loop: map Red findings to Blue fixes. Notes only until sealed.",
+            TeamColor::Red => {
+                "Local simulation only. No host changes. Every step is an echo dry-run."
+            }
+            TeamColor::Blue => {
+                "Hardening proposals. Exact commands shown; blood seal required to run."
+            }
+            TeamColor::Purple => {
+                "Feedback loop: map Red findings to Blue fixes. Notes only until sealed."
+            }
         }
     }
 
@@ -113,10 +119,7 @@ impl TeamItem {
                 cmds.push("true".into());
             }
         }
-        let mut p = LockdownProposal::new(
-            format!("{} — {}", self.team.label(), self.title),
-            cmds,
-        );
+        let mut p = LockdownProposal::new(format!("{} — {}", self.team.label(), self.title), cmds);
         p.id = format!("{}-{}", self.id, p.proposed_unix);
         p.local_simulation = self.local_simulation;
         p.proposal_only = self.proposal_only && !self.local_simulation;
@@ -250,7 +253,11 @@ mod tests {
             assert!(!p.local_simulation);
             assert!(p.proposal_only);
             assert_eq!(p.seal_banner(), "PROPOSAL, not run");
-            assert!(!p.commands.iter().any(|c| c.contains("echo ")), "{}", item.id);
+            assert!(
+                !p.commands.iter().any(|c| c.contains("echo ")),
+                "{}",
+                item.id
+            );
             assert!(p.detail_block().contains("PROPOSAL, not run"));
         }
     }

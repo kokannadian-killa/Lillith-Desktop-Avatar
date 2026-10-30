@@ -95,11 +95,8 @@ pub fn info_rune(ui: &mut egui::Ui, id: Id) -> bool {
     } else {
         pal::CYBER_PURPLE
     };
-    ui.painter().circle_stroke(
-        rect.center(),
-        7.0,
-        Stroke::new(1.0, c32(col)),
-    );
+    ui.painter()
+        .circle_stroke(rect.center(), 7.0, Stroke::new(1.0, c32(col)));
     ui.painter().text(
         rect.center(),
         Align2::CENTER_CENTER,
@@ -114,6 +111,6 @@ pub fn info_rune(ui: &mut egui::Ui, id: Id) -> bool {
 mod tests {
     #[test]
     fn module_links() {
-        assert!(true);
+        // Compiling this module (and linking the test binary) is the check.
     }
 }

@@ -36,10 +36,9 @@ pub fn event_for_shield(ev: &ShieldEvent) -> Option<Event> {
 /// Habit-log pair `(kind, subject)` for [`lillith_memory::Brain::log_event`].
 pub fn habit_for_shield(ev: &ShieldEvent) -> Option<(&'static str, String)> {
     match ev {
-        ShieldEvent::Status(status) => Some((
-            "quantumsec",
-            format!("status:{}", level_slug(status.level)),
-        )),
+        ShieldEvent::Status(status) => {
+            Some(("quantumsec", format!("status:{}", level_slug(status.level))))
+        }
         ShieldEvent::LockdownProposed(_) => Some(("quantumsec", "lockdown_proposed".into())),
         ShieldEvent::LockdownExecuted { .. } => Some(("quantumsec", "lockdown_executed".into())),
         ShieldEvent::LockdownRefused { .. } => Some(("quantumsec", "lockdown_refused".into())),

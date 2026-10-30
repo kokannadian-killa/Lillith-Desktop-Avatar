@@ -52,9 +52,7 @@ impl ProtonId {
             ProtonId::FileIntegrity => {
                 "Hashes key config files under ~/.biotek and ~/.config/lillith."
             }
-            ProtonId::ResourceLoad => {
-                "CPU, memory and load averages. Idle polling stays light."
-            }
+            ProtonId::ResourceLoad => "CPU, memory and load averages. Idle polling stays light.",
         }
     }
 }
