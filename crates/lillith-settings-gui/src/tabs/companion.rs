@@ -17,6 +17,7 @@ use lillith_core::menu::{
 };
 use lillith_core::seasons::{Outfit, Seasons};
 use lillith_theme::egui_theme::{self as th, c32};
+use lillith_theme::egui_whisper::info_rune;
 use lillith_theme::geom;
 use lillith_theme::palette::{self as pal, Rgba};
 use std::collections::HashMap;
@@ -638,6 +639,7 @@ impl SettingsTab for CompanionTab {
         }
     }
     fn ui(&mut self, ui: &mut egui::Ui, shared: &mut Shared) {
+        let _ = info_rune(ui, ui.id().with("companion-info"));
         let ids: Vec<String> = self
             .state
             .extras

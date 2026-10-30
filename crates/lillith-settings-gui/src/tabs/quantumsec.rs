@@ -3,13 +3,14 @@
 use super::{SettingsTab, Shared};
 use crate::chrome;
 use egui::{RichText, Ui};
-use lillith_quantumsec::consent::{AwakeningState, ConsentLog};
+use lillith_quantumsec::consent::{AwakeningState, ConsentLog, ConsentRecord};
 use lillith_quantumsec::lockdown::LockdownProposal;
 use lillith_quantumsec::registry::{self, BotEntry, BotLane};
-use lillith_quantumsec::report::DeviceProfile;
+use lillith_quantumsec::report::{DeviceProfile, REPORT_KEEP};
 use lillith_quantumsec::shield::QuantumSecShield;
 use lillith_quantumsec::status::{ShieldStatus, StatusLevel};
 use lillith_quantumsec::teams::{self, TeamColor, TeamItem};
+use lillith_quantumsec::units;
 use lillith_theme::egui_awakening::{quantumsec_awakening_popup, AwakeningChoice};
 use lillith_theme::egui_blood_seal::lockdown_blood_seal;
 use lillith_theme::egui_contract::ContractChoice;
@@ -28,6 +29,10 @@ pub struct QuantumSecTab {
     bots: Vec<BotEntry>,
     whisper: Option<(String, String)>,
     last_report: Option<PathBuf>,
+    /// Screenshot / deep-link: put CONSENT_LOG at top.
+    focus_consent: bool,
+    consent_rows: Vec<ConsentRecord>,
+    last_refresh: f64,
 }
 
 impl QuantumSecTab {
@@ -51,6 +56,9 @@ impl QuantumSecTab {
             bots,
             whisper: None,
             last_report: None,
+            focus_consent: false,
+            consent_rows: Vec::new(),
+            last_refresh: 0.0,
         }
     }
 
@@ -63,6 +71,17 @@ impl QuantumSecTab {
     fn refresh_status(&mut self) {
         if let Some(p) = self.status_path() {
             self.last_status = QuantumSecShield::load_status_file(&p);
+        }
+    }
+
+    fn refresh_consent(&mut self) {
+        self.consent_rows.clear();
+        if let Some(h) = &self.biotek {
+            if let Ok(log) = ConsentLog::open_in(h.join("consent")) {
+                if let Ok(rows) = log.list_recent(24) {
+                    self.consent_rows = rows;
+                }
+            }
         }
     }
 
@@ -95,6 +114,43 @@ impl QuantumSecTab {
     fn open_whisper(&mut self, title: impl Into<String>, body: impl Into<String>) {
         self.whisper = Some((title.into(), body.into()));
     }
+
+    fn draw_consent_section(&mut self, ui: &mut Ui, shared: &mut Shared) {
+        chrome::section(ui, "CONSENT_LOG", Some("viewer · rotation"), |ui| {
+            ui.label(
+                RichText::new("Append-only under ~/.biotek/consent/. Daily files rotate (keep 30).")
+                    .color(c32(pal::TEXT_DIM)),
+            );
+            if chrome::stone_button(ui, "Refresh consent log").clicked() {
+                self.refresh_consent();
+            }
+            if chrome::stone_button(ui, "Rotate now (keep 30)").clicked() {
+                if let Some(h) = &self.biotek {
+                    if let Ok(log) = ConsentLog::open_in(h.join("consent")) {
+                        match log.rotate_keep(30) {
+                            Ok(n) => shared.toast(format!("Removed {n} old consent files"), pal::CYBER_CYAN),
+                            Err(e) => shared.toast(format!("Rotate failed: {e}"), pal::CYBER_CRIMSON),
+                        }
+                    }
+                }
+            }
+            ui.add_space(4.0);
+            if self.consent_rows.is_empty() {
+                ui.label(RichText::new("(empty)").color(c32(pal::TEXT_MUTE)));
+            } else {
+                let rows = self.consent_rows.clone();
+                for rec in rows.iter().take(12) {
+                    let line = format!(
+                        "† {} · {} · {} — {}",
+                        rec.ts, rec.decision, rec.kind, rec.summary
+                    );
+                    ui.label(RichText::new(line).small().color(c32(pal::CYBER_TEXT_DIM)));
+                }
+            }
+        });
+
+    }
+
 }
 
 impl Default for QuantumSecTab {
@@ -141,13 +197,32 @@ impl SettingsTab for QuantumSecTab {
                 self.awakening_checked = true;
                 self.show_awakening = false;
             }
+            "consent" | "consent-log" => {
+                self.awakening_checked = true;
+                self.show_awakening = false;
+                self.focus_consent = true;
+                self.refresh_consent();
+            }
+            "unit-enable" | "systemd" | "enable-unit" => {
+                self.awakening_checked = true;
+                self.show_awakening = false;
+                let hint = PathBuf::from("/usr/lib/systemd/user/lillith-quantumsec.service");
+                self.pending = Some(units::enable_quantumsec_unit_proposal(&hint));
+            }
             _ => {}
         }
     }
 
+
     fn tick(&mut self, ctx: &egui::Context, _shared: &mut Shared) {
         self.ensure_awakening_flag();
-        self.refresh_status();
+        let now = ctx.input(|i| i.time);
+        if now - self.last_refresh > 2.0 {
+            self.refresh_status();
+            self.refresh_consent();
+            self.last_refresh = now;
+            ctx.request_repaint_after(std::time::Duration::from_secs(2));
+        }
         if self.show_awakening {
             if let Some(c) = quantumsec_awakening_popup(ctx, egui::Id::new("qsec-awakening")) {
                 match c {
@@ -204,6 +279,11 @@ impl SettingsTab for QuantumSecTab {
         self.refresh_status();
         let catalog = self.catalog.clone();
         let bots = self.bots.clone();
+
+        if self.focus_consent {
+            self.draw_consent_section(ui, shared);
+            ui.add_space(10.0);
+        }
 
         chrome::section(ui, "QUANTUMSEC_SHIELD", Some("local protons"), |ui| {
             ui.horizontal(|ui| {
@@ -371,7 +451,7 @@ impl SettingsTab for QuantumSecTab {
         chrome::section(ui, "PERSONALIZATION", Some("reports"), |ui| {
             ui.label(
                 RichText::new(
-                    "Device profile → Markdown in ~/.biotek/reports. Fish helpers shown; seal to acknowledge.",
+                    format!("Device profile → Markdown in ~/.biotek/reports (keep {REPORT_KEEP}). Fish helpers shown; seal to acknowledge."),
                 )
                 .color(c32(pal::TEXT_DIM)),
             );
@@ -424,6 +504,27 @@ impl SettingsTab for QuantumSecTab {
                     let s = AwakeningState::default();
                     let _ = s.save(&path);
                 }
+            }
+        });
+
+        if !self.focus_consent {
+            self.draw_consent_section(ui, shared);
+        }
+
+        chrome::section(ui, "SYSTEMD_USER", Some("blood-seal enable"), |ui| {
+            ui.label(
+                RichText::new(
+                    "lillith-quantumsec.service is never auto-enabled. Propose enable/disable via blood seal (echo dry-run by default).",
+                )
+                .color(c32(pal::TEXT_DIM)),
+            );
+            if chrome::blade_button(ui, "Propose enable user unit…", true).clicked() {
+                let hint = PathBuf::from("/usr/lib/systemd/user/lillith-quantumsec.service");
+                self.pending = Some(units::enable_quantumsec_unit_proposal(&hint));
+                shared.toast("Blood seal: enable QuantumSec unit", pal::CYBER_CRIMSON);
+            }
+            if chrome::stone_button(ui, "Propose disable user unit…").clicked() {
+                self.pending = Some(units::disable_quantumsec_unit_proposal());
             }
         });
 

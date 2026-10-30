@@ -22,6 +22,7 @@ pub mod report;
 pub mod shield;
 pub mod status;
 pub mod teams;
+pub mod units;
 
 pub use consent::{ConsentDecision, ConsentLog, ConsentRecord};
 pub use lockdown::{ConsentToken, LockdownError, LockdownProposal};
