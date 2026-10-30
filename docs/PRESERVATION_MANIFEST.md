@@ -32,6 +32,10 @@ never in place of it. A regression check against this list is part of every phas
 
 Binaries: `lillith`, `lillith-settings`, `lillith-admin` (Windows).
 Baseline build: `cargo check --workspace --all-targets` passes with 0 warnings (rustc 1.85.1).
+Baseline tests (`cargo test --workspace`, LFS **not** smudged): 1354 passed, 6 failed across 48 suites. All 6 failures
+load real PNG art and fail only because the files are LFS pointers (`InvalidSignature` / "no opaque pixel"):
+`android/rust/tests/engine.rs` (4), `crates/lillith-anim/tests/generated_set.rs` (1),
+`lillith-overlay stage::tests::bundled_art_buffer_is_transparent_and_surface_sized` (1). With `git lfs pull` they are expected to pass.
 
 ## 2. Linux / Arch / Garuda installer & desktop integration
 
@@ -114,15 +118,17 @@ Baseline build: `cargo check --workspace --all-targets` passes with 0 warnings (
 | Personalization report generator | **Absent**. |
 | Consent-gated deployment ("blood seal") | **Partial**: Soul Contract card is the existing gate; blood-seal bot-deploy dialog absent — build on top of Soul Contract. |
 | Bot registry / anon swarm | **Partial**: lillith-py bots (templates, store, API) exist; no swarm, no registry manifest dir. Tor: only lillith-learn online research. |
-| `~/.aether/` data home | **Absent** in repo (only name references to `aether_animator`). Created on dev box Phase 0. |
+| Biotek Engine data home `~/.biotek/` (mandate originally said `~/.aether/`; renamed by Ko) | **Absent** in repo (the only "aether" hits are the unrelated `aether_animator` gesture-port names). Created on the dev box in Phase 0. |
 | systemd user service | **Partial**: voice + lillith-py units exist; no unit for `lillith` itself / QuantumSec daemon. |
 | ISO / archiso / build-demonos / GRUB / Plymouth / SDDM theming | **Absent** (no archiso profile or ISO script in repo). |
 | PyQt6 code | **Absent** (mentioned only in docs/PLAN.md, FEATURES.md). |
 
-## 12. Planned `~/.aether/` layout (spec only — the app creates dirs at runtime)
+## 12. Planned Biotek Engine data home `~/.biotek/` (spec only — the app creates dirs at runtime)
+
+Renamed from `~/.aether/` (Biotek Engine naming). New code must use `~/.biotek/`.
 
 ```
-~/.aether/
+~/.biotek/
 ├── README.md
 ├── config/          QuantumSec / teams / swarm settings (never overrides ~/.config/lillith/config.toml)
 ├── logs/            shield + exercise logs (rotated)
