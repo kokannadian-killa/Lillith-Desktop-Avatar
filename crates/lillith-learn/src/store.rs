@@ -428,6 +428,20 @@ impl NoteStore {
         write_atomic(path, bytes)
     }
 
+    /// Deletes the note file at `path` (inside the root, a regular file,
+    /// never a symlink). The caller holds [`lock`](Self::lock).
+    pub fn remove(&self, _lock: &WriteLock, path: &Path) -> io::Result<()> {
+        self.check_inside(path)?;
+        let md = std::fs::symlink_metadata(path)?;
+        if !md.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "not a regular note file",
+            ));
+        }
+        std::fs::remove_file(path)
+    }
+
     /// Reads the note at `rel` (relative to the root).
     pub fn read(&self, rel: &str) -> Option<Note> {
         let p = self.root.join(rel);

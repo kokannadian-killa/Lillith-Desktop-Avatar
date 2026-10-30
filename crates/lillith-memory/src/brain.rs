@@ -163,7 +163,7 @@ pub struct Brain {
     cfg: MemoryConfig,
     path: Option<PathBuf>,
     extractor: Box<dyn Extractor>,
-    last_retrieved: RefCell<Vec<i64>>,
+    pub(crate) last_retrieved: RefCell<Vec<i64>>,
     local_offset: Cell<Option<i32>>,
     last_maintain: Cell<f64>,
     /// The shared `<data>/lillith/audit.log` (also with a custom
@@ -1035,6 +1035,29 @@ impl Brain {
                 [0.0; 8]
             }
         }
+    }
+
+    /// What Ko recently asked about (`request` event subjects of the last
+    /// [`HABIT_WINDOW_S`], newest first, deduped, at most `limit`).
+    /// Read-only; empty when memory is off or the read fails.
+    pub fn recent_requests(&self, ctx: &Ctx, limit: usize) -> Vec<String> {
+        let rows = match self.recent_events(ctx) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("memory: recent requests failed: {e}");
+                return Vec::new();
+            }
+        };
+        let mut out: Vec<String> = Vec::new();
+        for r in rows {
+            if out.len() >= limit {
+                break;
+            }
+            if r.kind == "request" && !out.contains(&r.subject) {
+                out.push(r.subject);
+            }
+        }
+        out
     }
 
     /// Ranked guesses at what Ko will want around `ctx.now` (best first).

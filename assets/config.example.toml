@@ -347,6 +347,8 @@
 # dream_strength = 0.2
 # stop_battery_pct = 20
 # stop_cpu_temp_c = 85
+# summarize = true       # after a session, a short digest of the saved notes from the
+#                        # local model (127.0.0.1 only; skipped if it's down or chat needs it)
 # blocklist_terms = []   # extra words no dream request may ever send (e.g. your street,
 #                        # employer, a nickname), on top of the person names memory
 #                        # knows. Private: never logged, audited or printed (counts only).

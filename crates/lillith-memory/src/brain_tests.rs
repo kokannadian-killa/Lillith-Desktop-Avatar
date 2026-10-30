@@ -1083,3 +1083,26 @@ fn custom_db_path_still_audits_to_the_shared_data_dir_log() {
     let _ = std::fs::remove_dir_all(&data);
     let _ = std::fs::remove_dir_all(&elsewhere);
 }
+
+#[test]
+fn recent_requests_are_newest_first_deduped_and_requests_only() {
+    let b = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
+    b.log_event("request", "btrfs snapshot", &at(MON)).unwrap();
+    b.log_event("app", "firefox", &at(MON + 1.0)).unwrap();
+    b.log_event("request", "lifetimes rust", &at(MON + 2.0))
+        .unwrap();
+    b.log_event("request", "btrfs snapshot", &at(MON + 3.0))
+        .unwrap();
+    let now = at(MON + 10.0);
+    assert_eq!(
+        b.recent_requests(&now, 10),
+        ["btrfs snapshot", "lifetimes rust"]
+    );
+    assert_eq!(b.recent_requests(&now, 1), ["btrfs snapshot"]);
+    let off = Brain::open_in_memory(&MemoryConfig {
+        enabled: false,
+        ..MemoryConfig::default()
+    })
+    .unwrap();
+    assert!(off.recent_requests(&now, 10).is_empty());
+}

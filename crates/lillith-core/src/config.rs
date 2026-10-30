@@ -967,9 +967,12 @@ pub struct LearnDreamConfig {
     pub dream_strength: f32,
     pub stop_battery_pct: u32,
     pub stop_cpu_temp_c: u32,
+    /// After a session, one short digest of the saved notes from the
+    /// local model (loopback only; skipped when it's down or chat needs it).
+    pub summarize: bool,
     /// Extra words no outgoing dream request may contain, on top of the
     /// person names memory knows (unioned in
-    /// `lillith_learn::workers::orchestrator::request_blocklist`). Private:
+    /// `lillith_learn::online::IdentityDenylist::for_requests`). Private:
     /// never logged, audited or printed; `Debug` shows only the count.
     pub blocklist_terms: BlockTerms,
 }
@@ -1016,6 +1019,7 @@ impl Default for LearnDreamConfig {
             dream_strength: 0.2,
             stop_battery_pct: 20,
             stop_cpu_temp_c: 85,
+            summarize: true,
             blocklist_terms: BlockTerms::default(),
         }
     }
@@ -1886,6 +1890,7 @@ mod tests {
     #[test]
     fn dream_blocklist_terms_parse_and_never_debug_print() {
         assert!(Config::default().learn.dream.blocklist_terms.is_empty());
+        assert!(Config::default().learn.dream.summarize);
         let c: Config =
             toml::from_str("[learn.dream]\nblocklist_terms = [\"zebrafinch\", \"Quokka Lane\"]\n")
                 .unwrap();
