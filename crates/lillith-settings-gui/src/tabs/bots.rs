@@ -471,14 +471,14 @@ impl BotsTab {
                 self.view = View::NewBot;
                 self.new_name = bots::new_bot(self.new_kind, &self.roster).name;
             }
-            if chrome::stone_button(ui, "⏻ Stop all").clicked() {
+            if chrome::stone_button(ui, "■ Stop all").clicked() {
                 let _ = kill_switch::stop_all();
             }
         });
         chrome::hint(ui, "Stop all = the kill switch (Ctrl-C does the same).");
         ui.add_space(6.0);
         let line = self.dream_line();
-        chrome::section(ui, "DREAM LEARNING", Some("Tor · Ko-gated"), |ui| {
+        chrome::section(ui, "DREAM LEARNING", None, |ui| {
             ui.label(RichText::new(line).small().color(c32(pal::TEXT_DIM)));
         });
     }
