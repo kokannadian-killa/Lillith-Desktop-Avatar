@@ -1756,7 +1756,15 @@ impl Controller {
                 Action::MoodChanged(m) => tracing::info!(mood = ?m, "mood"),
                 Action::ContextMenu => self.open_menu(),
                 Action::OpenChat => self.open_chat(),
-                Action::Muted(m) => tracing::info!(muted = m, "sound"),
+                Action::Muted(m) => {
+                    tracing::info!(muted = m, "sound");
+                    // Right-click ▸ Mute voice / the M key survive a restart.
+                    if let Some(path) = &self.config_path {
+                        if let Err(e) = lillith_core::config::save_muted(path, m) {
+                            tracing::warn!("could not save mute to {}: {e}", path.display());
+                        }
+                    }
+                }
                 Action::ModeChanged(m) => tracing::info!(mode = ?m, "movement mode"),
                 Action::Quit => {
                     tracing::info!("quit requested");
@@ -3885,6 +3893,26 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
             c.brain.loneliness().hushed(),
             "no lonely attention bids after the safeword"
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn mute_toggle_is_saved_to_config() {
+        let (dir, mut c) = m3_controller("mutesave", MoveMode::Stay);
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "# Ko's config\nscale = 2.0\n").unwrap();
+        c.config_path = Some(path.clone());
+        c.menu_pick(MenuAction::ToggleMute);
+        assert!(c.brain.muted());
+        assert!(
+            Config::load(&path).unwrap().muted,
+            "mute survives a restart"
+        );
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("# Ko's config\n"), "comments kept: {text}");
+        c.menu_pick(MenuAction::ToggleMute);
+        assert!(!c.brain.muted());
+        assert!(!Config::load(&path).unwrap().muted, "unmute is saved too");
         let _ = std::fs::remove_dir_all(dir);
     }
 
