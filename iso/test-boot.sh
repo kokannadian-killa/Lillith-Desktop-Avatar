@@ -116,7 +116,7 @@ run_one(){ # $1 = uefi|bios
     done
     echo "screenshots: $(ls "$d"/shot-*.png 2>/dev/null | wc -l)"
     # screen-not-blanked: the last shot must not be a blank / "Display output is not active" frame
-    last="$(ls "$d"/shot-*.png 2>/dev/null | tail -1)"
+    last="$(ls "$d"/shot-[0-9]*.png 2>/dev/null | tail -1)"
     [[ -n "$last" ]] && python3 -c 'import sys
 from PIL import Image, ImageStat
 im = Image.open(sys.argv[1]).convert("L"); m = ImageStat.Stat(im).mean[0]
