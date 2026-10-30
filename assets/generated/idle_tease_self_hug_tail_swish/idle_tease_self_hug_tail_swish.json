@@ -1441,13 +1441,13 @@
     "height": 400,
     "frame_count": 192,
     "fps": 12.0,
-    "bytes": 2816611,
+    "bytes": 2822052,
     "quality": {
-      "edge_mae": 1.881,
+      "edge_mae": 1.877,
       "edge_p99": 14.54,
-      "halo_dark": 0.029,
-      "halo_light": -0.071,
-      "alpha_mae": 0.0773
+      "halo_dark": 0.03,
+      "halo_light": -0.065,
+      "alpha_mae": 0.0772
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
