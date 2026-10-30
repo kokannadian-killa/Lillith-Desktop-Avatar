@@ -79,4 +79,9 @@ package() {
   # User units (packaged only — never enabled by the package).
   install -Dm644 linux/systemd/lillith.service "$pkgdir/usr/lib/systemd/user/lillith.service"
   install -Dm644 linux/systemd/lillith-quantumsec.service "$pkgdir/usr/lib/systemd/user/lillith-quantumsec.service"
+  # Package-path drop-ins: ExecStart=/usr/bin/lillith (the shared units use ~/.local/bin).
+  install -Dm644 linux/systemd/package/lillith.service.d/10-package-path.conf \
+    "$pkgdir/usr/lib/systemd/user/lillith.service.d/10-package-path.conf"
+  install -Dm644 linux/systemd/package/lillith-quantumsec.service.d/10-package-path.conf \
+    "$pkgdir/usr/lib/systemd/user/lillith-quantumsec.service.d/10-package-path.conf"
 }

@@ -1,0 +1,47 @@
+# DemonOS PhantomCore GRUB theme. background.png, select_*.png and the
+# demonos-mono-*.pf2 fonts are generated at build time (iso/chroot-build.sh).
+title-text: ""
+desktop-image: "background.png"
+desktop-color: "#0a0a0f"
+terminal-font: "DemonOS Mono Regular 16"
+
++ boot_menu {
+    left = 43%
+    top = 25%
+    width = 47%
+    height = 50%
+    item_font = "DemonOS Mono Regular 24"
+    selected_item_font = "DemonOS Mono Regular 24"
+    item_color = "#00f0ff"
+    selected_item_color = "#0a0a0f"
+    selected_item_pixmap_style = "select_*.png"
+    item_height = 40
+    item_padding = 10
+    item_spacing = 8
+    icon_width = 0
+    icon_height = 0
+    scrollbar = false
+}
+
++ progress_bar {
+    id = "__timeout__"
+    left = 43%
+    top = 79%
+    width = 47%
+    height = 6
+    show_text = false
+    fg_color = "#ff3e6c"
+    bg_color = "#2a1030"
+    border_color = "#b829f7"
+}
+
++ label {
+    left = 43%
+    top = 82%
+    width = 47%
+    align = "left"
+    id = "__timeout__"
+    text = "the core awakens in %d s  ·  e: edit  ·  c: console"
+    font = "DemonOS Mono Regular 16"
+    color = "#b829f7"
+}

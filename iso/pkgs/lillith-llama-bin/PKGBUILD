@@ -1,0 +1,36 @@
+# Maintainer: Ko Kannadian
+#
+# The llama.cpp prebuilt llama-server pinned in bundle/llama/llama.lock
+# (asset linux-x64), installed flat into /opt/llama so its $ORIGIN RUNPATH
+# finds the bundled libggml*/libllama*. /opt/llama/llama-server is the path
+# Lillith's settings window and the DemonOS config.toml use.
+# llama.cpp is not in the Arch repos, hence this local package.
+# Keep _tag/_commit/sha256sums in step with bundle/llama/llama.lock
+# (iso/build-iso.sh refuses to build when they differ).
+# shellcheck shell=bash disable=SC2034,SC2154
+
+pkgname=lillith-llama-bin
+_tag=b11829
+_commit=184f6536024668e8908ab8c86033d56708e62b40
+pkgver=${_tag#b}
+pkgrel=1
+pkgdesc="llama.cpp llama-server (CPU, prebuilt ${_tag}) for Lillith's local chat; Lillith starts it on 127.0.0.1 only"
+arch=('x86_64')
+url="https://github.com/ggml-org/llama.cpp"
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'openssl' 'zlib' 'zstd')
+provides=('llama-server')
+options=('!strip' '!debug')
+source=("https://github.com/ggml-org/llama.cpp/releases/download/${_tag}/llama-${_tag}-bin-ubuntu-x64.tar.gz"
+        "LICENSE-llama.cpp::https://raw.githubusercontent.com/ggml-org/llama.cpp/${_commit}/LICENSE")
+sha256sums=('281df0193466d75022958c331697ba3d702bbecb62c5c82e09178facbc851f5c'
+            '94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d')
+
+package() {
+  local d="$srcdir/llama-${_tag}"
+  [[ -d "$d" ]] || d="$(dirname "$(find "$srcdir" -name llama-server -type f | head -n1)")"
+  install -dm755 "$pkgdir/opt/llama"
+  cp -a "$d"/. "$pkgdir/opt/llama/"
+  chmod 755 "$pkgdir/opt/llama/llama-server"
+  install -Dm644 "$srcdir/LICENSE-llama.cpp" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

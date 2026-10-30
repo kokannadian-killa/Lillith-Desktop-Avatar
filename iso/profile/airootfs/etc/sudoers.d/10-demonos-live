@@ -1,0 +1,4 @@
+# Live session only: the "demon" user has no password, so sudo can't ask for one.
+# Every system-changing action Lillith / QuantumSec offers still goes through
+# its own consent dialog (blood seal) that shows the exact command first.
+%wheel ALL=(ALL:ALL) NOPASSWD: ALL
