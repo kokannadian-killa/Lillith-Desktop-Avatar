@@ -194,7 +194,15 @@ fn perch_sit_is_a_seated_base_with_its_variants() {
     let variants = lillith_anim::animator::variant_map(&m);
     assert_eq!(
         variants["perch_sit"],
-        ["arch_trace", "chest_press_tease", "cleavage_beckon"]
+        [
+            "arch_trace",
+            "chest_press_tease",
+            "cleavage_beckon",
+            "oops_perch_slip",
+            "perch_bounce_kick",
+            "perch_lean_cleavage_bounce",
+            "perch_stretch_arch"
+        ]
     );
     for v in &variants["perch_sit"] {
         assert!(m.clips[v].seat_y.is_some(), "{v}: no seat line");
