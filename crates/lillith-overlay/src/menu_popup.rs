@@ -174,7 +174,7 @@ impl Fonts {
     }
 
     #[cfg(feature = "text")]
-    fn get(&mut self) -> &mut (cosmic_text::FontSystem, cosmic_text::SwashCache) {
+    pub(crate) fn get(&mut self) -> &mut (cosmic_text::FontSystem, cosmic_text::SwashCache) {
         if self.ready.is_none() {
             let fs = self
                 .loader
@@ -938,32 +938,62 @@ mod tests {
         }
     }
 
-    /// When `LILLITH_MENU_SHOT` is set, write a PNG of the popup with
-    /// QuantumSec expanded (Status / Open panel… visible beside the old rows).
+    /// When `LILLITH_MENU_SHOT` is set, write a PNG of the popup.
+    ///
+    /// **Requires** `--features text` (cosmic-text). Without it the real
+    /// production menu still has labels (lillith enables `text` via
+    /// wayland/x11), but this tiny-skia harness draws chrome only — that is
+    /// a harness gap, not a regression. Expand QuantumSec when present so
+    /// Status / Open panel… appear next to the old rows.
     #[test]
     fn quantumsec_menu_shot_optional() {
         let Some(path) = std::env::var_os("LILLITH_MENU_SHOT") else {
             return;
         };
-        let mut fonts = Fonts::preload();
-        let mut p = MenuPopup::new(state());
-        let qsec = find(
-            &p,
-            |r| matches!(r, Row::Header { label, .. } if label == "QuantumSec"),
-        );
-        p.click(20.0, row_y(&p, qsec));
-        let px = p.render(&mut fonts).expect("render").clone();
-        // Sanity: expanded QuantumSec leaves appear.
-        assert!(
-            p.rows().iter().any(|r| matches!(r, Row::Leaf { label, .. } if label == "Status")),
-            "Status leaf missing: {:?}",
-            p.rows()
-        );
-        assert!(
-            p.rows().iter().any(|r| matches!(r, Row::Leaf { label, .. } if label.starts_with("Open panel"))),
-            "Open panel leaf missing"
-        );
-        px.save_png(&path).expect("save_png");
+        #[cfg(not(feature = "text"))]
+        {
+            panic!(
+                "LILLITH_MENU_SHOT requires: cargo test -p lillith-overlay --features text …                  (without `text` the harness draws blades/arrows only; production enables text)"
+            );
+        }
+        #[cfg(feature = "text")]
+        {
+            let mut fonts = Fonts::preload();
+            // Force font join before paint so the first frame has glyphs.
+            let _ = fonts.get();
+            let mut p = MenuPopup::new(state());
+            if let Some(qsec) = p.rows().iter().position(
+                |r| matches!(r, Row::Header { label, .. } if label == "QuantumSec"),
+            ) {
+                p.click(20.0, row_y(&p, qsec));
+                assert!(
+                    p.rows().iter().any(|r| matches!(r, Row::Leaf { label, .. } if label == "Status")),
+                    "Status leaf missing: {:?}",
+                    p.rows()
+                );
+                assert!(
+                    p.rows()
+                        .iter()
+                        .any(|r| matches!(r, Row::Leaf { label, .. } if label.starts_with("Open panel"))),
+                    "Open panel leaf missing"
+                );
+            }
+            let px = p.render(&mut fonts).expect("render").clone();
+            // Labels must actually rasterize (not chrome-only).
+            let data = px.data();
+            let mut bright = 0usize;
+            for chunk in data.chunks_exact(4) {
+                let (r, g, b, a) = (chunk[0], chunk[1], chunk[2], chunk[3]);
+                if a > 200 && r > 180 && g > 180 && b > 180 {
+                    bright += 1;
+                }
+            }
+            assert!(
+                bright > 200,
+                "menu shot has almost no light text pixels ({bright}); is `text` feature on?"
+            );
+            px.save_png(&path).expect("save_png");
+        }
     }
 
     #[test]
