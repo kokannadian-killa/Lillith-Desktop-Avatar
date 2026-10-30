@@ -134,6 +134,9 @@ pub fn mode_label(m: MoveMode) -> &'static str {
     }
 }
 
+/// Menu / settings label of [`MenuAction::ToggleLoneliness`].
+pub const LONELY_LABEL: &str = "Lonely poses";
+
 /// Menu / settings label of [`MenuAction::ToggleSpeaker`].
 pub const SPEAKER_LABEL: &str = "Speak out loud (speakers)";
 
@@ -149,6 +152,8 @@ pub enum MenuAction {
     ToggleSpeaker,
     /// Pause / resume the system-monitor event feed.
     ToggleMonitor,
+    /// "Lonely poses": loneliness → attention poses on (`auto`) / `off`.
+    ToggleLoneliness,
     SetSize(Size),
     /// Resize by `n` × [`SCALE_STEP`] (Bigger / Smaller).
     ScaleStep(i8),
@@ -228,6 +233,9 @@ pub struct MenuExtras {
     /// "Speak out loud (speakers)" state (`None` = no voice wired: the item
     /// is left out).
     pub speaker: Option<bool>,
+    /// "Lonely poses" (`[behavior.loneliness] mode = auto`) state (`None` =
+    /// not offered).
+    pub lonely: Option<bool>,
     /// Seasonal outfits (non-hidden, file order; empty = no Outfit item).
     pub outfits: Vec<OutfitChoice>,
     /// The `seasonal_outfit` setting: `auto` (or empty) / `off` / an id.
@@ -574,6 +582,13 @@ pub fn build_menu(s: &MenuState) -> Menu {
         MenuAction::ToggleMonitor,
         Check::Checkbox(s.monitor_paused),
     ));
+    if let Some(on) = s.extras.lonely {
+        items.push(MenuItem::leaf(
+            LONELY_LABEL,
+            MenuAction::ToggleLoneliness,
+            Check::Checkbox(on),
+        ));
+    }
     items.push(MenuItem::Separator);
     items.push(MenuItem::leaf(
         "Settings…",
@@ -688,6 +703,9 @@ pub enum MenuEffect {
     /// Stop / resume applying system-monitor events (e.g. drop them in
     /// `Controller::drain_feed` while paused).
     SetMonitorPaused(bool),
+    /// Lonely poses on / off now; persist `[behavior.loneliness] mode`
+    /// (`auto` / `off`).
+    SetLoneliness(bool),
     /// Re-create the stage at this scale and persist `scale` in config.toml.
     SetScale(f32),
     /// Open the config file (create it first if missing), e.g. with
@@ -748,6 +766,11 @@ pub fn on_menu_action(action: MenuAction, brain: &mut Brain, state: &MenuState) 
         MenuAction::ToggleMonitor => out
             .effects
             .push(MenuEffect::SetMonitorPaused(!state.monitor_paused)),
+        MenuAction::ToggleLoneliness => {
+            let on = !brain.loneliness_enabled();
+            brain.set_loneliness_enabled(on);
+            out.effects.push(MenuEffect::SetLoneliness(on));
+        }
         MenuAction::ToggleSpeaker => {
             // The settings window has no voice state: it always offers "on".
             let on = state.extras.speaker.unwrap_or(false);
@@ -854,6 +877,7 @@ pub mod wire {
     /// "Speak out loud (speakers)" on/off.
     pub const TOGGLE_SPEAKER: &str = "toggle_speaker";
     pub const TOGGLE_MONITOR: &str = "toggle_monitor";
+    pub const TOGGLE_LONELINESS: &str = "toggle_loneliness";
     /// Resize preset. `value`: `small` | `normal` | `large` | `xl` | `xxl`.
     pub const SET_SIZE: &str = "set_size";
     /// Resize ▸ Bigger / Smaller. `value`: steps of 0.05, e.g. `+1`, `-1`.
@@ -940,6 +964,7 @@ pub fn action_line(a: MenuAction) -> String {
         MenuAction::ToggleMute => (TOGGLE_MUTE, None),
         MenuAction::ToggleSpeaker => (TOGGLE_SPEAKER, None),
         MenuAction::ToggleMonitor => (TOGGLE_MONITOR, None),
+        MenuAction::ToggleLoneliness => (TOGGLE_LONELINESS, None),
         MenuAction::SetSize(z) => (SET_SIZE, Some(size_key(z))),
         MenuAction::ScaleStep(n) => {
             owned = format!("{n:+}");
@@ -1043,6 +1068,7 @@ pub fn parse_action_line(line: &str) -> Option<MenuAction> {
         TOGGLE_MUTE => MenuAction::ToggleMute,
         TOGGLE_SPEAKER => MenuAction::ToggleSpeaker,
         TOGGLE_MONITOR => MenuAction::ToggleMonitor,
+        TOGGLE_LONELINESS => MenuAction::ToggleLoneliness,
         SET_SIZE => MenuAction::SetSize(*Size::ALL.iter().find(|s| Some(size_key(**s)) == v)?),
         SCALE_STEP => MenuAction::ScaleStep(i8::try_from(num(v)?).ok().filter(|n| *n != 0)?),
         POSE_INDEX => MenuAction::Pose(u16::try_from(num(v)?).ok()?),
@@ -1286,6 +1312,7 @@ mod tests {
             avatar: Some("mug".into()),
             chat: true,
             speaker: Some(true),
+            lonely: None,
             outfits: vec![
                 OutfitChoice {
                     id: "halloween".into(),
@@ -1636,6 +1663,26 @@ mod tests {
         };
         let o = on_menu_action(MenuAction::ToggleMonitor, &mut b, &paused);
         assert_eq!(o.effects, [MenuEffect::SetMonitorPaused(false)]);
+
+        // Lonely poses: offered when the overlay reports it; flips the brain.
+        assert_eq!(build_menu(&s).find(MenuAction::ToggleLoneliness), None);
+        let lonely = s.clone().with_extras(MenuExtras {
+            lonely: Some(b.loneliness_enabled()),
+            ..MenuExtras::default()
+        });
+        assert_eq!(
+            build_menu(&lonely).check_of(MenuAction::ToggleLoneliness),
+            Some(Check::Checkbox(true))
+        );
+        let o = on_menu_action(MenuAction::ToggleLoneliness, &mut b, &lonely);
+        assert_eq!(o.effects, [MenuEffect::SetLoneliness(false)]);
+        assert!(!b.loneliness_enabled());
+        let o = on_menu_action(MenuAction::ToggleLoneliness, &mut b, &lonely);
+        assert_eq!(o.effects, [MenuEffect::SetLoneliness(true)]);
+        assert!(b.loneliness_enabled());
+        let l = action_line(MenuAction::ToggleLoneliness);
+        assert_eq!(l, r#"{"menu_action":"toggle_loneliness"}"#);
+        assert_eq!(parse_action_line(&l), Some(MenuAction::ToggleLoneliness));
 
         // Speakers: only offered when the overlay reports a voice.
         assert_eq!(build_menu(&s).find(MenuAction::ToggleSpeaker), None);

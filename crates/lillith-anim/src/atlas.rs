@@ -129,6 +129,15 @@ pub struct Clip {
     pub scale: Option<f64>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// How suggestive the pose is, 0 (neutral / fun) ..= 5 (most
+    /// explicit); see [`lillith_core::loneliness`] for the scale. Loneliness weights her idle picks toward her level and
+    /// never past the configured cap ([`lillith_core::loneliness`]).
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub severity: u8,
+    /// A system-interaction clip (cards, contracts, install / hacking
+    /// poses): never picked for idle or attention bids.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub system: bool,
     /// Optional named attachment points in cell coordinates (same space as
     /// the feet anchor), e.g. `beam_origin` for a cast or `grab_point` (the
     /// spot to pin to the cursor while she is dragged).
@@ -256,6 +265,8 @@ impl Default for Clip {
             baseline_y: None,
             scale: None,
             tags: Vec::new(),
+            severity: 0,
+            system: false,
             points: BTreeMap::new(),
             seat_y: None,
             seat_x_range: None,
@@ -286,6 +297,13 @@ impl Default for Clip {
 fn is_false(b: &bool) -> bool {
     !*b
 }
+
+fn is_zero_u8(n: &u8) -> bool {
+    *n == 0
+}
+
+/// Highest clip [`Clip::severity`].
+pub const MAX_SEVERITY: u8 = lillith_core::loneliness::MAX_SEVERITY;
 
 fn default_fps() -> f32 {
     12.0
@@ -397,6 +415,12 @@ impl Clip {
         };
         if self.frames.is_empty() {
             return Err(bad("no frames".into()));
+        }
+        if self.severity > MAX_SEVERITY {
+            return Err(bad(format!(
+                "severity {} is above {MAX_SEVERITY}",
+                self.severity
+            )));
         }
         if let Some(ms) = &self.frame_durations_ms {
             if ms.len() != self.frames.len() {
@@ -939,6 +963,49 @@ mod tests {
     }
 
     #[test]
+    fn loads_and_validates_severity_tags() {
+        let m = Manifest::from_toml_str(
+            r#"
+            [clips.calm]
+            page = "c.png"
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.bold]
+            page = "b.png"
+            severity = 3
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.boldest]
+            page = "b.png"
+            severity = 5
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.card]
+            page = "s.png"
+            system = true
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            "#,
+        )
+        .unwrap();
+        assert_eq!(m.clips["calm"].severity, 0);
+        assert!(!m.clips["calm"].system);
+        assert_eq!(m.clips["bold"].severity, 3);
+        assert_eq!(m.clips["boldest"].severity, 5);
+        assert!(m.clips["card"].system);
+        // Defaults are not written back out.
+        let out = toml::to_string(&m).unwrap();
+        assert_eq!(out.matches("severity").count(), 2, "{out}");
+        assert_eq!(out.matches("system").count(), 1, "{out}");
+        let err = Manifest::from_toml_str(
+            r#"
+            [clips.x]
+            page = "x.png"
+            severity = 6
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            "#,
+        )
+        .unwrap_err();
+        assert!(matches!(err, AtlasError::InvalidClip { .. }), "{err}");
+    }
+
+    #[test]
     fn rejects_bad_base_references() {
         let base = r#"
             [clips.b]
@@ -971,6 +1038,8 @@ mod tests {
                 baseline_y: Some(392),
                 scale: Some(0.5),
                 tags: vec!["t".into()],
+                severity: 2,
+                system: true,
                 points: [("beam_origin".to_string(), (306, 78))].into(),
                 seat_y: Some(230),
                 seat_x_range: Some((136, 279)),

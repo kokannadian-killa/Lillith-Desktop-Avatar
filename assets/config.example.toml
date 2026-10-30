@@ -127,6 +127,15 @@
 # approach_clips = ["idle_flirt_hands_behind_sway", "hip_sway", "hip_sway_slow", "hair_twirl_lip_bite", "lean_doorframe_smolder", "body_roll_to_viewer"]
 # beat_clips = ["tease_closeup", "bend_forward_wink", "predator_lean_in", "kneel_sit_back_beckon", "dom_throne_lean", "tail_heart_wink", "trace_heart_on_glass", "dom_chin_tilt_summon", "kiss_mark_on_glass", "finger_walk_on_glass", "dom_snap_kneel_order", "hip_pop_beckon", "dom_screen_edge_whisper", "lean_tease", "idle_flirt_lip_bite", "hip_pop_wink"]
 # pause_clips = ["blink_wink"]
+# [behavior.loneliness]        # left alone, she bids for attention with bolder poses (adult content)
+# mode = "auto"                # "auto" | "off" (right-click ▸ Lonely poses)
+# max_severity = 5             # cap 0..=5: 0 neutral/fun, 1 flirty, 2 sultry, 3 explicit, 4 more explicit, 5 most explicit
+#                              # (tiers reach 2 / 4 / 5 as she gets lonelier; 5 only at the top tier; adults only)
+# minutes_to_max = 120.0       # neglect (at a usual-habits pace) from calm to the top level
+# bid_cooldown_min = 10.0      # least time between attention bids
+# hush_hold_min = 10.0         # no bids this long after the safeword
+# quiet_hours = []             # [start, end) local hours with no rise or bids, e.g. [23, 7]
+# hysteresis = 0.08            # score margin before the level drops back
 
 # ── System monitor (lillith --no-monitor turns it off) ───────────────────────
 # [monitor]

@@ -479,7 +479,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "blink_wink/blink_wink.mp4"
+   "video": "blink_wink/blink_wink.mp4",
+   "severity": 1
   },
   {
    "frame_count": 24,
@@ -533,7 +534,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "blow_kiss/blow_kiss.mp4"
+   "video": "blow_kiss/blow_kiss.mp4",
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -616,7 +618,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "cheeky_tongue_wink/cheeky_tongue_wink.mp4"
+   "video": "cheeky_tongue_wink/cheeky_tongue_wink.mp4",
+   "severity": 1
   },
   {
    "frame_count": 48,
@@ -711,7 +714,8 @@
     9
    ],
    "pose_base_dir": "_poses/pose_wait_palm/",
-   "video": "event_approval_needed/event_approval_needed.mp4"
+   "video": "event_approval_needed/event_approval_needed.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -738,7 +742,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_archiving/event_archiving.mp4"
+   "video": "event_archiving/event_archiving.mp4",
+   "system": true
   },
   {
    "frame_count": 12,
@@ -765,7 +770,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_battery_low/event_battery_low.mp4"
+   "video": "event_battery_low/event_battery_low.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -792,7 +798,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_bluetooth/event_bluetooth.mp4"
+   "video": "event_bluetooth/event_bluetooth.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -819,7 +826,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_brightness/event_brightness.mp4"
+   "video": "event_brightness/event_brightness.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -846,7 +854,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_browser_bookmark/event_browser_bookmark.mp4"
+   "video": "event_browser_bookmark/event_browser_bookmark.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -873,7 +882,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_browser_history/event_browser_history.mp4"
+   "video": "event_browser_history/event_browser_history.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -900,7 +910,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_calendar/event_calendar.mp4"
+   "video": "event_calendar/event_calendar.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -927,7 +938,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_clipboard/event_clipboard.mp4"
+   "video": "event_clipboard/event_clipboard.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -968,7 +980,8 @@
     9
    ],
    "pose_base_dir": "_poses/pose_vsign/",
-   "video": "event_clipboard_cut/event_clipboard_cut.mp4"
+   "video": "event_clipboard_cut/event_clipboard_cut.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -995,7 +1008,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_cloud_sync/event_cloud_sync.mp4"
+   "video": "event_cloud_sync/event_cloud_sync.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1022,7 +1036,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_cpu_busy/event_cpu_busy.mp4"
+   "video": "event_cpu_busy/event_cpu_busy.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1049,7 +1064,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_diagnostics/event_diagnostics.mp4"
+   "video": "event_diagnostics/event_diagnostics.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1076,7 +1092,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_error/event_error.mp4"
+   "video": "event_error/event_error.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1103,7 +1120,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_firewall_block/event_firewall_block.mp4"
+   "video": "event_firewall_block/event_firewall_block.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1130,7 +1148,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_help/event_help.mp4"
+   "video": "event_help/event_help.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1157,7 +1176,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_hotspot_on/event_hotspot_on.mp4"
+   "video": "event_hotspot_on/event_hotspot_on.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1184,7 +1204,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_incognito/event_incognito.mp4"
+   "video": "event_incognito/event_incognito.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1211,7 +1232,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_input_click_double/event_input_click_double.mp4"
+   "video": "event_input_click_double/event_input_click_double.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1252,7 +1274,8 @@
     9
    ],
    "pose_base_dir": "_poses/pose_present/",
-   "video": "event_input_click_right/event_input_click_right.mp4"
+   "video": "event_input_click_right/event_input_click_right.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1279,7 +1302,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_input_hover_long/event_input_hover_long.mp4"
+   "video": "event_input_hover_long/event_input_hover_long.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1306,7 +1330,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_loading/event_loading.mp4"
+   "video": "event_loading/event_loading.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1347,7 +1372,8 @@
     9
    ],
    "pose_base_dir": "_poses/pose_pout/",
-   "video": "event_net_lost/event_net_lost.mp4"
+   "video": "event_net_lost/event_net_lost.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1374,7 +1400,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_notification/event_notification.mp4"
+   "video": "event_notification/event_notification.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1401,7 +1428,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_printing/event_printing.mp4"
+   "video": "event_printing/event_printing.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1442,7 +1470,8 @@
     9
    ],
    "pose_base_dir": "_poses/pose_clutch_head/",
-   "video": "event_ram_high/event_ram_high.mp4"
+   "video": "event_ram_high/event_ram_high.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1469,7 +1498,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_recycle_bin/event_recycle_bin.mp4"
+   "video": "event_recycle_bin/event_recycle_bin.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1496,7 +1526,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_screenshot/event_screenshot.mp4"
+   "video": "event_screenshot/event_screenshot.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1523,7 +1554,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_search_opened/event_search_opened.mp4"
+   "video": "event_search_opened/event_search_opened.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1564,7 +1596,8 @@
     9
    ],
    "pose_base_dir": "_poses/pose_present/",
-   "video": "event_start_menu_opened/event_start_menu_opened.mp4"
+   "video": "event_start_menu_opened/event_start_menu_opened.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1591,7 +1624,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_timer_fired/event_timer_fired.mp4"
+   "video": "event_timer_fired/event_timer_fired.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1618,7 +1652,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_update_available/event_update_available.mp4"
+   "video": "event_update_available/event_update_available.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1645,7 +1680,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_usb_added/event_usb_added.mp4"
+   "video": "event_usb_added/event_usb_added.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1672,7 +1708,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_usb_eject/event_usb_eject.mp4"
+   "video": "event_usb_eject/event_usb_eject.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1699,7 +1736,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_volume/event_volume.mp4"
+   "video": "event_volume/event_volume.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1740,7 +1778,8 @@
     9
    ],
    "pose_base_dir": "_poses/pose_shush/",
-   "video": "event_vpn_up/event_vpn_up.mp4"
+   "video": "event_vpn_up/event_vpn_up.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1767,7 +1806,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_wifi/event_wifi.mp4"
+   "video": "event_wifi/event_wifi.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1794,7 +1834,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_window_close/event_window_close.mp4"
+   "video": "event_window_close/event_window_close.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1821,7 +1862,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_window_minimize/event_window_minimize.mp4"
+   "video": "event_window_minimize/event_window_minimize.mp4",
+   "system": true
   },
   {
    "frame_count": 12,
@@ -1848,7 +1890,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_window_open/event_window_open.mp4"
+   "video": "event_window_open/event_window_open.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1875,7 +1918,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_window_opened_browser/event_window_opened_browser.mp4"
+   "video": "event_window_opened_browser/event_window_opened_browser.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1902,7 +1946,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_window_opened_folder/event_window_opened_folder.mp4"
+   "video": "event_window_opened_folder/event_window_opened_folder.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1929,7 +1974,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "event_window_opened_media/event_window_opened_media.mp4"
+   "video": "event_window_opened_media/event_window_opened_media.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -1970,7 +2016,8 @@
     9
    ],
    "pose_base_dir": "_poses/pose_hacking/",
-   "video": "event_window_opened_terminal/event_window_opened_terminal.mp4"
+   "video": "event_window_opened_terminal/event_window_opened_terminal.mp4",
+   "system": true
   },
   {
    "frame_count": 12,
@@ -2052,7 +2099,8 @@
    ],
    "allure": true,
    "alias_of": "lean_tease",
-   "video": "lean_tease/lean_tease.mp4"
+   "video": "lean_tease/lean_tease.mp4",
+   "severity": 1
   },
   {
    "frame_count": 24,
@@ -2109,7 +2157,8 @@
    "video": "hair_flip/hair_flip.mp4",
    "engine_springs": [
     "pigtails"
-   ]
+   ],
+   "severity": 1
   },
   {
    "frame_count": 14,
@@ -2140,7 +2189,8 @@
    "video": "hair_twirl/hair_twirl.mp4",
    "engine_springs": [
     "pigtails"
-   ]
+   ],
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -2169,7 +2219,8 @@
    ],
    "allure": true,
    "alias_of": "idle_flirt_stretch",
-   "video": "idle_flirt_stretch/idle_flirt_stretch.mp4"
+   "video": "idle_flirt_stretch/idle_flirt_stretch.mp4",
+   "severity": 1
   },
   {
    "frame_count": 24,
@@ -2223,7 +2274,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "heart_hands/heart_hands.mp4"
+   "video": "heart_hands/heart_hands.mp4",
+   "severity": 1
   },
   {
    "frame_count": 24,
@@ -2277,7 +2329,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "hip_pop_wink/hip_pop_wink.mp4"
+   "video": "hip_pop_wink/hip_pop_wink.mp4",
+   "severity": 1
   },
   {
    "frame_count": 23,
@@ -2304,7 +2357,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "hip_sway/hip_sway.mp4"
+   "video": "hip_sway/hip_sway.mp4",
+   "severity": 1
   },
   {
    "frame_count": 72,
@@ -2446,7 +2500,8 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_foot_tap/idle_flirt_foot_tap.mp4"
+   "video": "idle_flirt_foot_tap/idle_flirt_foot_tap.mp4",
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -2475,7 +2530,8 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_glove_adjust/idle_flirt_glove_adjust.mp4"
+   "video": "idle_flirt_glove_adjust/idle_flirt_glove_adjust.mp4",
+   "severity": 1
   },
   {
    "frame_count": 54,
@@ -2504,7 +2560,8 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway.mp4"
+   "video": "idle_flirt_hands_behind_sway/idle_flirt_hands_behind_sway.mp4",
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -2533,7 +2590,8 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_hip_lean/idle_flirt_hip_lean.mp4"
+   "video": "idle_flirt_hip_lean/idle_flirt_hip_lean.mp4",
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -2562,7 +2620,8 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_lip_bite/idle_flirt_lip_bite.mp4"
+   "video": "idle_flirt_lip_bite/idle_flirt_lip_bite.mp4",
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -2591,7 +2650,8 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_look_away/idle_flirt_look_away.mp4"
+   "video": "idle_flirt_look_away/idle_flirt_look_away.mp4",
+   "severity": 1
   },
   {
    "frame_count": 59,
@@ -2623,7 +2683,8 @@
    "video": "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl.mp4",
    "engine_springs": [
     "pigtails"
-   ]
+   ],
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -2652,7 +2713,8 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_shy_giggle/idle_flirt_shy_giggle.mp4"
+   "video": "idle_flirt_shy_giggle/idle_flirt_shy_giggle.mp4",
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -2681,7 +2743,8 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_stretch/idle_flirt_stretch.mp4"
+   "video": "idle_flirt_stretch/idle_flirt_stretch.mp4",
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -2710,7 +2773,8 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_tail_curl/idle_flirt_tail_curl.mp4"
+   "video": "idle_flirt_tail_curl/idle_flirt_tail_curl.mp4",
+   "severity": 1
   },
   {
    "frame_count": 47,
@@ -2851,7 +2915,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "lean_forward/lean_forward.mp4"
+   "video": "lean_forward/lean_forward.mp4",
+   "severity": 1
   },
   {
    "frame_count": 24,
@@ -2905,7 +2970,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "lean_tease/lean_tease.mp4"
+   "video": "lean_tease/lean_tease.mp4",
+   "severity": 1
   },
   {
    "frame_count": 24,
@@ -2986,7 +3052,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "over_shoulder_look/over_shoulder_look.mp4"
+   "video": "over_shoulder_look/over_shoulder_look.mp4",
+   "severity": 1
   },
   {
    "frame_count": 24,
@@ -3121,7 +3188,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "pose_hacking/pose_hacking.mp4"
+   "video": "pose_hacking/pose_hacking.mp4",
+   "system": true
   },
   {
    "frame_count": 24,
@@ -3256,7 +3324,8 @@
    "tags": [
     "baked_motion"
    ],
-   "video": "pose_wait_palm/pose_wait_palm.mp4"
+   "video": "pose_wait_palm/pose_wait_palm.mp4",
+   "system": true
   },
   {
    "frame_count": 10,
@@ -3394,7 +3463,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "shoulder_shimmy/shoulder_shimmy.mp4"
+   "video": "shoulder_shimmy/shoulder_shimmy.mp4",
+   "severity": 1
   },
   {
    "frame_count": 36,
@@ -3695,7 +3765,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "stretch_arch/stretch_arch.mp4"
+   "video": "stretch_arch/stretch_arch.mp4",
+   "severity": 1
   },
   {
    "frame_count": 9,
@@ -3724,7 +3795,8 @@
    ],
    "allure": true,
    "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)",
-   "video": "strut_left/strut_left.mp4"
+   "video": "strut_left/strut_left.mp4",
+   "severity": 1
   },
   {
    "frame_count": 9,
@@ -3753,7 +3825,8 @@
    ],
    "allure": true,
    "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)",
-   "video": "strut_right/strut_right.mp4"
+   "video": "strut_right/strut_right.mp4",
+   "severity": 1
   },
   {
    "frame_count": 88,
@@ -3855,7 +3928,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "tail_tease/tail_tease.mp4"
+   "video": "tail_tease/tail_tease.mp4",
+   "severity": 1
   },
   {
    "frame_count": 16,
@@ -3910,7 +3984,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "tease_closeup/tease_closeup.mp4"
+   "video": "tease_closeup/tease_closeup.mp4",
+   "severity": 2
   },
   {
    "frame_count": 12,
@@ -4454,7 +4529,8 @@
    ],
    "allure": true,
    "video": "body_roll_slow/body_roll_slow.mp4",
-   "idle_variant": true
+   "idle_variant": true,
+   "severity": 2
   },
   {
    "frame_count": 36,
@@ -4482,7 +4558,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "arch_back_over_shoulder/arch_back_over_shoulder.mp4"
+   "video": "arch_back_over_shoulder/arch_back_over_shoulder.mp4",
+   "severity": 2
   },
   {
    "frame_count": 36,
@@ -4511,7 +4588,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "kneel_hands_on_thighs/kneel_hands_on_thighs.mp4"
+   "video": "kneel_hands_on_thighs/kneel_hands_on_thighs.mp4",
+   "severity": 2
   },
   {
    "frame_count": 36,
@@ -4540,7 +4618,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "wall_lean_invisible/wall_lean_invisible.mp4"
+   "video": "wall_lean_invisible/wall_lean_invisible.mp4",
+   "severity": 2
   },
   {
    "frame_count": 36,
@@ -4569,7 +4648,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "blow_kiss_hip_pop/blow_kiss_hip_pop.mp4"
+   "video": "blow_kiss_hip_pop/blow_kiss_hip_pop.mp4",
+   "severity": 2
   },
   {
    "frame_count": 36,
@@ -4603,7 +4683,8 @@
    "idle_variant": true,
    "engine_springs": [
     "pigtails"
-   ]
+   ],
+   "severity": 2
   },
   {
    "frame_count": 36,
@@ -4631,7 +4712,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "slow_turn_spin_tease/slow_turn_spin_tease.mp4"
+   "video": "slow_turn_spin_tease/slow_turn_spin_tease.mp4",
+   "severity": 2
   },
   {
    "frame_count": 36,
@@ -4659,7 +4741,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "bend_forward_wink/bend_forward_wink.mp4"
+   "video": "bend_forward_wink/bend_forward_wink.mp4",
+   "severity": 2
   },
   {
    "name": "body_roll_slow_long",
@@ -4687,7 +4770,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "body_roll_slow_long/body_roll_slow_long.mp4"
+   "video": "body_roll_slow_long/body_roll_slow_long.mp4",
+   "severity": 2
   },
   {
    "name": "arch_back_over_shoulder_long",
@@ -4715,7 +4799,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "arch_back_over_shoulder_long/arch_back_over_shoulder_long.mp4"
+   "video": "arch_back_over_shoulder_long/arch_back_over_shoulder_long.mp4",
+   "severity": 2
   },
   {
    "name": "kneel_hands_on_thighs_long",
@@ -4743,7 +4828,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "kneel_hands_on_thighs_long/kneel_hands_on_thighs_long.mp4"
+   "video": "kneel_hands_on_thighs_long/kneel_hands_on_thighs_long.mp4",
+   "severity": 2
   },
   {
    "name": "wall_lean_invisible_long",
@@ -4771,7 +4857,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "wall_lean_invisible_long/wall_lean_invisible_long.mp4"
+   "video": "wall_lean_invisible_long/wall_lean_invisible_long.mp4",
+   "severity": 2
   },
   {
    "name": "blow_kiss_hip_pop_long",
@@ -4799,7 +4886,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "blow_kiss_hip_pop_long/blow_kiss_hip_pop_long.mp4"
+   "video": "blow_kiss_hip_pop_long/blow_kiss_hip_pop_long.mp4",
+   "severity": 2
   },
   {
    "name": "hair_lift_stretch_long",
@@ -4827,7 +4915,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "hair_lift_stretch_long/hair_lift_stretch_long.mp4"
+   "video": "hair_lift_stretch_long/hair_lift_stretch_long.mp4",
+   "severity": 2
   },
   {
    "name": "slow_turn_spin_tease_long",
@@ -4855,7 +4944,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "slow_turn_spin_tease_long/slow_turn_spin_tease_long.mp4"
+   "video": "slow_turn_spin_tease_long/slow_turn_spin_tease_long.mp4",
+   "severity": 2
   },
   {
    "name": "bend_forward_wink_long",
@@ -4883,7 +4973,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "bend_forward_wink_long/bend_forward_wink_long.mp4"
+   "video": "bend_forward_wink_long/bend_forward_wink_long.mp4",
+   "severity": 2
   },
   {
    "name": "perch_sit",
@@ -5043,7 +5134,8 @@
     "baked_motion",
     "variant_of:perch_sit"
    ],
-   "video": "cleavage_beckon/cleavage_beckon.mp4"
+   "video": "cleavage_beckon/cleavage_beckon.mp4",
+   "severity": 3
   },
   {
    "name": "chest_press_tease",
@@ -5071,7 +5163,8 @@
     "baked_motion",
     "variant_of:perch_sit"
    ],
-   "video": "chest_press_tease/chest_press_tease.mp4"
+   "video": "chest_press_tease/chest_press_tease.mp4",
+   "severity": 3
   },
   {
    "name": "arch_trace",
@@ -5099,7 +5192,8 @@
     "baked_motion",
     "variant_of:perch_sit"
    ],
-   "video": "arch_trace/arch_trace.mp4"
+   "video": "arch_trace/arch_trace.mp4",
+   "severity": 2
   },
   {
    "name": "perch_lounge",
@@ -5127,7 +5221,8 @@
     "baked_motion",
     "lounge_base"
    ],
-   "video": "perch_lounge/perch_lounge.mp4"
+   "video": "perch_lounge/perch_lounge.mp4",
+   "severity": 1
   },
   {
    "name": "blend_drag_held_to_perch_sit",
@@ -5189,7 +5284,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "seduce_beckon_finger/seduce_beckon_finger.mp4"
+   "video": "seduce_beckon_finger/seduce_beckon_finger.mp4",
+   "severity": 2
   },
   {
    "frame_count": 59,
@@ -5310,7 +5406,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "seduce_lip_bite_glance/seduce_lip_bite_glance.mp4"
+   "video": "seduce_lip_bite_glance/seduce_lip_bite_glance.mp4",
+   "severity": 2
   },
   {
    "name": "seduce_lean_to_screen_whisper",
@@ -5340,7 +5437,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "seduce_lean_to_screen_whisper/seduce_lean_to_screen_whisper.mp4"
+   "video": "seduce_lean_to_screen_whisper/seduce_lean_to_screen_whisper.mp4",
+   "severity": 2
   },
   {
    "name": "dom_beckon_finger",
@@ -5370,7 +5468,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "dom_beckon_finger/dom_beckon_finger.mp4"
+   "video": "dom_beckon_finger/dom_beckon_finger.mp4",
+   "severity": 2
   },
   {
    "name": "dom_point_down",
@@ -5400,7 +5499,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "dom_point_down/dom_point_down.mp4"
+   "video": "dom_point_down/dom_point_down.mp4",
+   "severity": 2
   },
   {
    "name": "dom_arms_crossed_demand",
@@ -5430,7 +5530,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "dom_arms_crossed_demand/dom_arms_crossed_demand.mp4"
+   "video": "dom_arms_crossed_demand/dom_arms_crossed_demand.mp4",
+   "severity": 2
   },
   {
    "name": "hungry_lip_lick",
@@ -5462,7 +5563,8 @@
    ],
    "allure": true,
    "video": "hungry_lip_lick/hungry_lip_lick.mp4",
-   "idle_variant": true
+   "idle_variant": true,
+   "severity": 2
   },
   {
    "name": "predator_lean_in",
@@ -5492,7 +5594,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "predator_lean_in/predator_lean_in.mp4"
+   "video": "predator_lean_in/predator_lean_in.mp4",
+   "severity": 2
   },
   {
    "name": "kneel_pout_beg",
@@ -5522,7 +5625,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "kneel_pout_beg/kneel_pout_beg.mp4"
+   "video": "kneel_pout_beg/kneel_pout_beg.mp4",
+   "severity": 2
   },
   {
    "name": "smug_smirk",
@@ -5554,7 +5658,8 @@
    ],
    "allure": true,
    "video": "smug_smirk/smug_smirk.mp4",
-   "idle_variant": true
+   "idle_variant": true,
+   "severity": 1
   },
   {
    "name": "tail_wrap_pull",
@@ -5586,7 +5691,8 @@
    ],
    "allure": true,
    "video": "tail_wrap_pull/tail_wrap_pull.mp4",
-   "idle_variant": true
+   "idle_variant": true,
+   "severity": 2
   },
   {
    "name": "kiss_then_come_here",
@@ -5616,7 +5722,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "kiss_then_come_here/kiss_then_come_here.mp4"
+   "video": "kiss_then_come_here/kiss_then_come_here.mp4",
+   "severity": 2
   },
   {
    "name": "hug_screen_possessive",
@@ -5646,7 +5753,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "hug_screen_possessive/hug_screen_possessive.mp4"
+   "video": "hug_screen_possessive/hug_screen_possessive.mp4",
+   "severity": 2
   },
   {
    "name": "soul_contract_sign",
@@ -5676,7 +5784,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "soul_contract_sign/soul_contract_sign.mp4"
+   "video": "soul_contract_sign/soul_contract_sign.mp4",
+   "system": true
   },
   {
    "name": "seduce_blow_kiss_screen",
@@ -5706,7 +5815,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "seduce_blow_kiss_screen/seduce_blow_kiss_screen.mp4"
+   "video": "seduce_blow_kiss_screen/seduce_blow_kiss_screen.mp4",
+   "severity": 1
   },
   {
    "name": "seduce_tap_glass",
@@ -5736,7 +5846,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "seduce_tap_glass/seduce_tap_glass.mp4"
+   "video": "seduce_tap_glass/seduce_tap_glass.mp4",
+   "severity": 1
   },
   {
    "frame_count": 13,
@@ -5828,7 +5939,8 @@
    ],
    "allure": true,
    "video": "hip_sway_slow/hip_sway_slow.mp4",
-   "idle_variant": true
+   "idle_variant": true,
+   "severity": 2
   },
   {
    "name": "dom_throne_lean",
@@ -5858,7 +5970,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "dom_throne_lean/dom_throne_lean.mp4"
+   "video": "dom_throne_lean/dom_throne_lean.mp4",
+   "severity": 2
   },
   {
    "name": "kneel_sit_back_beckon",
@@ -5887,7 +6000,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "kneel_sit_back_beckon/kneel_sit_back_beckon.mp4"
+   "video": "kneel_sit_back_beckon/kneel_sit_back_beckon.mp4",
+   "severity": 2
   },
   {
    "name": "taskbar_lounge_lie",
@@ -5922,7 +6036,8 @@
     180,
     377
    ],
-   "feet_lowest_y": 391
+   "feet_lowest_y": 391,
+   "severity": 2
   },
   {
    "name": "come_hither_crawl",
@@ -5951,7 +6066,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "come_hither_crawl/come_hither_crawl.mp4"
+   "video": "come_hither_crawl/come_hither_crawl.mp4",
+   "severity": 2
   },
   {
    "name": "hair_twirl_lip_bite",
@@ -5986,7 +6102,8 @@
    "idle_variant": true,
    "engine_springs": [
     "pigtails"
-   ]
+   ],
+   "severity": 2
   },
   {
    "name": "dom_chin_tilt_summon",
@@ -6016,7 +6133,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "dom_chin_tilt_summon/dom_chin_tilt_summon.mp4"
+   "video": "dom_chin_tilt_summon/dom_chin_tilt_summon.mp4",
+   "severity": 2
   },
   {
    "name": "tail_heart_wink",
@@ -6045,7 +6163,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "tail_heart_wink/tail_heart_wink.mp4"
+   "video": "tail_heart_wink/tail_heart_wink.mp4",
+   "severity": 1
   },
   {
    "name": "trace_heart_on_glass",
@@ -6074,7 +6193,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "trace_heart_on_glass/trace_heart_on_glass.mp4"
+   "video": "trace_heart_on_glass/trace_heart_on_glass.mp4",
+   "severity": 1
   },
   {
    "name": "leg_cross_slow_sit",
@@ -6110,7 +6230,8 @@
     156,
     240
    ],
-   "feet_lowest_y": 392
+   "feet_lowest_y": 392,
+   "severity": 2
   },
   {
    "name": "lean_doorframe_smolder",
@@ -6142,7 +6263,8 @@
    ],
    "allure": true,
    "video": "lean_doorframe_smolder/lean_doorframe_smolder.mp4",
-   "idle_variant": true
+   "idle_variant": true,
+   "severity": 2
   },
   {
    "name": "kiss_mark_on_glass",
@@ -6171,7 +6293,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "kiss_mark_on_glass/kiss_mark_on_glass.mp4"
+   "video": "kiss_mark_on_glass/kiss_mark_on_glass.mp4",
+   "severity": 1
   },
   {
    "name": "dom_snap_kneel_order",
@@ -6201,7 +6324,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "dom_snap_kneel_order/dom_snap_kneel_order.mp4"
+   "video": "dom_snap_kneel_order/dom_snap_kneel_order.mp4",
+   "severity": 2
   },
   {
    "name": "finger_walk_on_glass",
@@ -6230,7 +6354,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "finger_walk_on_glass/finger_walk_on_glass.mp4"
+   "video": "finger_walk_on_glass/finger_walk_on_glass.mp4",
+   "severity": 2
   },
   {
    "name": "chin_rest_slow_wink",
@@ -6266,7 +6391,8 @@
     159,
     244
    ],
-   "feet_lowest_y": 392
+   "feet_lowest_y": 392,
+   "severity": 1
   },
   {
    "name": "hip_pop_beckon",
@@ -6295,7 +6421,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "hip_pop_beckon/hip_pop_beckon.mp4"
+   "video": "hip_pop_beckon/hip_pop_beckon.mp4",
+   "severity": 2
   },
   {
    "name": "body_roll_to_viewer",
@@ -6324,7 +6451,8 @@
     "baked_motion"
    ],
    "allure": true,
-   "video": "body_roll_to_viewer/body_roll_to_viewer.mp4"
+   "video": "body_roll_to_viewer/body_roll_to_viewer.mp4",
+   "severity": 2
   },
   {
    "name": "dom_screen_edge_whisper",
@@ -6354,7 +6482,8 @@
     "dom"
    ],
    "allure": true,
-   "video": "dom_screen_edge_whisper/dom_screen_edge_whisper.mp4"
+   "video": "dom_screen_edge_whisper/dom_screen_edge_whisper.mp4",
+   "severity": 2
   },
   {
    "name": "tease_hipsway_chest_press",
@@ -6385,7 +6514,8 @@
     "tease"
    ],
    "allure": true,
-   "video": "tease_hipsway_chest_press/tease_hipsway_chest_press.mp4"
+   "video": "tease_hipsway_chest_press/tease_hipsway_chest_press.mp4",
+   "severity": 3
   },
   {
    "name": "tease_arms_crossed_lift",
@@ -6416,7 +6546,8 @@
     "tease"
    ],
    "allure": true,
-   "video": "tease_arms_crossed_lift/tease_arms_crossed_lift.mp4"
+   "video": "tease_arms_crossed_lift/tease_arms_crossed_lift.mp4",
+   "severity": 2
   },
   {
    "name": "tease_side_lie_cleavage",
@@ -6453,7 +6584,8 @@
     180,
     383
    ],
-   "feet_lowest_y": 391
+   "feet_lowest_y": 391,
+   "severity": 3
   },
   {
    "name": "tease_shoulder_glance_arch",
@@ -6484,7 +6616,8 @@
     "tease"
    ],
    "allure": true,
-   "video": "tease_shoulder_glance_arch/tease_shoulder_glance_arch.mp4"
+   "video": "tease_shoulder_glance_arch/tease_shoulder_glance_arch.mp4",
+   "severity": 2
   },
   {
    "name": "squeeze_kneel_press_wink",
@@ -6515,7 +6648,8 @@
     "squeeze"
    ],
    "allure": true,
-   "video": "squeeze_kneel_press_wink/squeeze_kneel_press_wink.mp4"
+   "video": "squeeze_kneel_press_wink/squeeze_kneel_press_wink.mp4",
+   "severity": 3
   },
   {
    "name": "squeeze_bent_over_cleavage",
@@ -6546,7 +6680,8 @@
     "squeeze"
    ],
    "allure": true,
-   "video": "squeeze_bent_over_cleavage/squeeze_bent_over_cleavage.mp4"
+   "video": "squeeze_bent_over_cleavage/squeeze_bent_over_cleavage.mp4",
+   "severity": 3
   },
   {
    "name": "squeeze_seated_lip_bite",
@@ -6584,7 +6719,8 @@
     155,
     244
    ],
-   "feet_lowest_y": 392
+   "feet_lowest_y": 392,
+   "severity": 3
   },
   {
    "name": "squeeze_chest_push_shimmy",
@@ -6615,7 +6751,8 @@
     "squeeze"
    ],
    "allure": true,
-   "video": "squeeze_chest_push_shimmy/squeeze_chest_push_shimmy.mp4"
+   "video": "squeeze_chest_push_shimmy/squeeze_chest_push_shimmy.mp4",
+   "severity": 3
   },
   {
    "name": "squeeze_lean_forward_arms",
@@ -6646,7 +6783,8 @@
     "squeeze"
    ],
    "allure": true,
-   "video": "squeeze_lean_forward_arms/squeeze_lean_forward_arms.mp4"
+   "video": "squeeze_lean_forward_arms/squeeze_lean_forward_arms.mp4",
+   "severity": 3
   },
   {
    "name": "squeeze_hands_press_tease",
@@ -6677,7 +6815,8 @@
     "squeeze"
    ],
    "allure": true,
-   "video": "squeeze_hands_press_tease/squeeze_hands_press_tease.mp4"
+   "video": "squeeze_hands_press_tease/squeeze_hands_press_tease.mp4",
+   "severity": 3
   },
   {
    "name": "halloween_hat_tip_wink",
@@ -6712,7 +6851,8 @@
    "allure": true,
    "video": "halloween_hat_tip_wink/halloween_hat_tip_wink.mp4",
    "season": "halloween",
-   "outfit": "halloween"
+   "outfit": "halloween",
+   "severity": 1
   },
   {
    "name": "halloween_broom_sit_lollipop",
@@ -6747,7 +6887,8 @@
    "allure": true,
    "video": "halloween_broom_sit_lollipop/halloween_broom_sit_lollipop.mp4",
    "season": "halloween",
-   "outfit": "halloween"
+   "outfit": "halloween",
+   "severity": 2
   },
   {
    "name": "halloween_cape_swirl_arch",
@@ -6782,7 +6923,8 @@
    "allure": true,
    "video": "halloween_cape_swirl_arch/halloween_cape_swirl_arch.mp4",
    "season": "halloween",
-   "outfit": "halloween"
+   "outfit": "halloween",
+   "severity": 2
   },
   {
    "name": "halloween_pumpkin_hug_candy",
@@ -6817,7 +6959,8 @@
    "allure": true,
    "video": "halloween_pumpkin_hug_candy/halloween_pumpkin_hug_candy.mp4",
    "season": "halloween",
-   "outfit": "halloween"
+   "outfit": "halloween",
+   "severity": 1
   },
   {
    "name": "valentines_strawberry_lick",
@@ -6852,7 +6995,8 @@
    "allure": true,
    "video": "valentines_strawberry_lick/valentines_strawberry_lick.mp4",
    "season": "valentines",
-   "outfit": "valentines"
+   "outfit": "valentines",
+   "severity": 3
   },
   {
    "name": "spring_lollipop_lick",
@@ -6887,7 +7031,8 @@
    "allure": true,
    "video": "spring_lollipop_lick/spring_lollipop_lick.mp4",
    "season": "spring",
-   "outfit": "spring"
+   "outfit": "spring",
+   "severity": 3
   },
   {
    "name": "summer_shades_peek_wink",
@@ -6922,7 +7067,8 @@
    "allure": true,
    "video": "summer_shades_peek_wink/summer_shades_peek_wink.mp4",
    "season": "summer",
-   "outfit": "summer"
+   "outfit": "summer",
+   "severity": 1
   },
   {
    "name": "summer_string_oops",
@@ -6957,7 +7103,8 @@
    "allure": true,
    "video": "summer_string_oops/summer_string_oops.mp4",
    "season": "summer",
-   "outfit": "summer"
+   "outfit": "summer",
+   "severity": 3
   },
   {
    "name": "newyear_champagne_rim_lick",
@@ -6992,7 +7139,8 @@
    "allure": true,
    "video": "newyear_champagne_rim_lick/newyear_champagne_rim_lick.mp4",
    "season": "newyear",
-   "outfit": "newyear"
+   "outfit": "newyear",
+   "severity": 3
   },
   {
    "name": "newyear_strawberry_bite",
@@ -7027,7 +7175,8 @@
    "allure": true,
    "video": "newyear_strawberry_bite/newyear_strawberry_bite.mp4",
    "season": "newyear",
-   "outfit": "newyear"
+   "outfit": "newyear",
+   "severity": 2
   },
   {
    "name": "newyear_midnight_kiss_squeeze",
@@ -7062,7 +7211,8 @@
    "allure": true,
    "video": "newyear_midnight_kiss_squeeze/newyear_midnight_kiss_squeeze.mp4",
    "season": "newyear",
-   "outfit": "newyear"
+   "outfit": "newyear",
+   "severity": 3
   },
   {
    "name": "newyear_strap_oops",
@@ -7097,7 +7247,8 @@
    "allure": true,
    "video": "newyear_strap_oops/newyear_strap_oops.mp4",
    "season": "newyear",
-   "outfit": "newyear"
+   "outfit": "newyear",
+   "severity": 3
   },
   {
    "name": "xmas_candy_cane_lick",
@@ -7132,7 +7283,8 @@
    "allure": true,
    "video": "xmas_candy_cane_lick/xmas_candy_cane_lick.mp4",
    "season": "xmas",
-   "outfit": "xmas"
+   "outfit": "xmas",
+   "severity": 3
   },
   {
    "name": "xmas_mistletoe_blow_kiss",
@@ -7167,7 +7319,8 @@
    "allure": true,
    "video": "xmas_mistletoe_blow_kiss/xmas_mistletoe_blow_kiss.mp4",
    "season": "xmas",
-   "outfit": "xmas"
+   "outfit": "xmas",
+   "severity": 1
   },
   {
    "name": "xmas_scarf_shiver_hug",
@@ -7202,7 +7355,8 @@
    "allure": true,
    "video": "xmas_scarf_shiver_hug/xmas_scarf_shiver_hug.mp4",
    "season": "xmas",
-   "outfit": "xmas"
+   "outfit": "xmas",
+   "severity": 1
   },
   {
    "name": "xmas_gift_sit_crossleg",
@@ -7237,7 +7391,8 @@
    "allure": true,
    "video": "xmas_gift_sit_crossleg/xmas_gift_sit_crossleg.mp4",
    "season": "xmas",
-   "outfit": "xmas"
+   "outfit": "xmas",
+   "severity": 2
   },
   {
    "name": "valentines_kneel_chocolate",
@@ -7272,7 +7427,8 @@
    "allure": true,
    "video": "valentines_kneel_chocolate/valentines_kneel_chocolate.mp4",
    "season": "valentines",
-   "outfit": "valentines"
+   "outfit": "valentines",
+   "severity": 2
   },
   {
    "name": "spring_vine_oops",
@@ -7307,7 +7463,8 @@
    "allure": true,
    "video": "spring_vine_oops/spring_vine_oops.mp4",
    "season": "spring",
-   "outfit": "spring"
+   "outfit": "spring",
+   "severity": 3
   },
   {
    "name": "summer_popsicle_lick",
@@ -7342,7 +7499,8 @@
    "allure": true,
    "video": "summer_popsicle_lick/summer_popsicle_lick.mp4",
    "season": "summer",
-   "outfit": "summer"
+   "outfit": "summer",
+   "severity": 3
   },
   {
    "name": "valentines_heart_squeeze",
@@ -7377,7 +7535,8 @@
    "allure": true,
    "video": "valentines_heart_squeeze/valentines_heart_squeeze.mp4",
    "season": "valentines",
-   "outfit": "valentines"
+   "outfit": "valentines",
+   "severity": 3
   },
   {
    "name": "valentines_strap_oops",
@@ -7412,7 +7571,8 @@
    "allure": true,
    "video": "valentines_strap_oops/valentines_strap_oops.mp4",
    "season": "valentines",
-   "outfit": "valentines"
+   "outfit": "valentines",
+   "severity": 3
   },
   {
    "name": "spring_petal_squeeze",
@@ -7447,7 +7607,8 @@
    "allure": true,
    "video": "spring_petal_squeeze/spring_petal_squeeze.mp4",
    "season": "spring",
-   "outfit": "spring"
+   "outfit": "spring",
+   "severity": 3
   },
   {
    "name": "summer_lotion_squeeze",
@@ -7482,7 +7643,8 @@
    "allure": true,
    "video": "summer_lotion_squeeze/summer_lotion_squeeze.mp4",
    "season": "summer",
-   "outfit": "summer"
+   "outfit": "summer",
+   "severity": 3
   },
   {
    "name": "spring_kneel_berries",
@@ -7517,7 +7679,8 @@
    "allure": true,
    "video": "spring_kneel_berries/spring_kneel_berries.mp4",
    "season": "spring",
-   "outfit": "spring"
+   "outfit": "spring",
+   "severity": 3
   }
  ]
 }
