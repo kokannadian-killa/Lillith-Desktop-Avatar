@@ -383,7 +383,8 @@ impl<'f> Supervisor<'f> {
             limits,
             budgets: Budgets::research(&cfg.learn),
             pacer: Pacer::from_config(&cfg.learn),
-            deny: IdentityDenylist::from_local().with_names(names),
+            // Memory's person names ∪ `[learn.dream] blocklist_terms`.
+            deny: IdentityDenylist::for_requests(names, cfg.learn.dream.blocklist_terms.terms()),
             block_hosts: cfg
                 .learn
                 .block_hosts

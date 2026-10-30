@@ -347,6 +347,9 @@
 # dream_strength = 0.2
 # stop_battery_pct = 20
 # stop_cpu_temp_c = 85
+# blocklist_terms = []   # extra words no dream request may ever send (e.g. your street,
+#                        # employer, a nickname), on top of the person names memory
+#                        # knows. Private: never logged, audited or printed (counts only).
 # [learn.workers]
 # heartbeat_s = 10
 # missed_heartbeats_kill = 3

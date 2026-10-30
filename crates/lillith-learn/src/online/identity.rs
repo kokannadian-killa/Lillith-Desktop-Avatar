@@ -145,6 +145,40 @@ impl IdentityDenylist {
         self
     }
 
+    /// Adds private blocklist terms (`[learn.dream] blocklist_terms`):
+    /// each term whole, and a multi-word term also joined by `+`, `-` and
+    /// `_` (how it shows up in a URL). Unlike [`Self::with_names`], parts are
+    /// not added (so `Quokka Lane` doesn't block every `lane`).
+    pub fn with_terms<I: IntoIterator<Item = S>, S: AsRef<str>>(mut self, terms: I) -> Self {
+        for t in terms {
+            let words: Vec<&str> = t.as_ref().split_whitespace().collect();
+            if words.is_empty() {
+                continue;
+            }
+            self.add(&words.join(" "));
+            if words.len() > 1 {
+                for sep in ["+", "-", "_"] {
+                    self.add(&words.join(sep));
+                }
+            }
+        }
+        self
+    }
+
+    /// The outgoing-request blocklist: this machine's identifiers, the
+    /// person `names` from memory and the configured private `terms`.
+    /// Logs counts only, never a word.
+    pub fn for_requests(names: &[String], terms: &[String]) -> Self {
+        let d = Self::from_local().with_names(names).with_terms(terms);
+        tracing::debug!(
+            names = names.len(),
+            terms = terms.len(),
+            total = d.words.len(),
+            "request blocklist"
+        );
+        d
+    }
+
     fn add(&mut self, w: &str) {
         let w = w.trim().to_lowercase();
         if w.chars().count() < 2 || GENERIC.contains(&w.as_str()) || self.words.contains(&w) {
@@ -177,7 +211,9 @@ impl IdentityDenylist {
                 t.contains(w.as_str())
             };
             if found {
-                return Some(format!("a local identifier ({w})"));
+                // Never the word itself: this reaches job logs and the
+                // audit, and the list holds private names / blocklist terms.
+                return Some("a local identifier".to_string());
             }
         }
         None
@@ -198,10 +234,38 @@ mod tests {
             "short ids match whole words only"
         );
         assert!(d.hit("https://a.org/u/KoKannadian").is_some());
+        let msg = d.hit("https://a.org/search?q=ko+lillith").unwrap();
+        assert_eq!(msg, "a local identifier", "never the word itself");
         assert!(d.hit("https://a.org/?h=garuda-box").is_some());
         assert!(d.hit("https://a.org/?tz=America%2FEdmonton").is_some());
         assert!(d.hit("https://a.org/?p=%2Fhome%2Fx%2Ffile").is_some());
         assert!(d.hit("https://doc.rust-lang.org/std/").is_none());
+    }
+
+    #[test]
+    fn blocklist_terms_are_unioned_whole_and_url_joined() {
+        let names = vec!["Ko Kannadian".to_string()];
+        let terms = vec![
+            "Quokka  Lane".to_string(),
+            " ".to_string(),
+            "zebrafinch".into(),
+        ];
+        let d = IdentityDenylist::empty()
+            .with_names(&names)
+            .with_terms(&terms);
+        for url in [
+            "https://a.org/?q=quokka+lane",
+            "https://a.org/?q=Quokka%20Lane",
+            "https://a.org/quokka-lane",
+            "https://a.org/?q=ZebraFinch",
+            "https://a.org/?q=kannadian",
+        ] {
+            assert_eq!(d.hit(url).as_deref(), Some("a local identifier"), "{url}");
+        }
+        assert!(d.hit("https://a.org/?q=lane+changes").is_none(), "no parts");
+        let all = IdentityDenylist::for_requests(&names, &terms);
+        assert!(all.hit("https://a.org/?q=quokka+lane").is_some());
+        assert!(all.hit("https://a.org/?q=ko+kannadian").is_some());
         // Generic values never become identifiers.
         let g = IdentityDenylist::empty().with(["root", "en_US", "C"]);
         assert!(g.words().is_empty());
