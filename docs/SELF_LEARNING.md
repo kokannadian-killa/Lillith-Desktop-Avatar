@@ -664,6 +664,17 @@ model pass, the panel's live log / per-item Forget (the Bots tab can read
   <date>").
 - **Job log:** each delegated job is also recorded in the D8 job log with
   `bot = taskcompletion:<bot id>` and `backend = external`.
+- **Status: a documented stub, not wired.** `workers::external::send`
+  always refuses (`ExternalError::NotImplemented`) and never touches the
+  network; `Backend::choose` and the request shape / result validation are
+  in place. It was not built because it does not fit cleanly behind the
+  existing card option: the app has no sanctioned agent-messaging
+  transport (it would be the first outgoing path that is not the
+  card-gated Tor trip), no cancel path for a remote job, and the click card
+  (`ClickSessionCard`) has no tick box, so the external option always stays
+  unticked. Wiring it needs Ko's decision on the transport first. When it
+  is built, its topics come from the curiosity queue
+  (`workers::curiosity`), already free of names and blocklist terms.
 
 ## 12. Helper workers: lifespans, capture handling, errors — decided by Ko
 
