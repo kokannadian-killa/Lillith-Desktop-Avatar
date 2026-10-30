@@ -8,7 +8,7 @@ tools/video-pipeline/new_pose.py <clip> --video ~/Downloads/<clip>.mp4 \
 ```
 
 This runs ingest → `build_clip.py` → `matte_v2.py` → `finalize_keyframed_loop.py` → copy into
-`assets/generated/<clip>/` → register in `manifest.json` → `pack_mp4.py` → `import-manifest --check`.
+`assets/generated/<clip>/` → register in `manifest.json` → `pack_mp4.py` → `import-manifest` (writes) → `import-manifest --check` (verifies, never writes).
 After that, review `$LILLITH_V2/<clip>/<clip>_preview.gif` and commit `assets/generated/<clip>/` along with `manifest.*`.
 
 - `--from STEP` / `--to STEP` re-run part of the chain. For example, `--from pack` after you hand-fix

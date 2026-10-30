@@ -41,8 +41,10 @@ and not committed. Examples: a deep bow, or a turn that shows her back.
      `variant_of:idle`, and the `blend` and `frame_points` fields.
    - `review_sheet.py`, `blend_sheet.py`, `event_strip.py` and `all_sheet.py` make contact sheets for
      review.
-6. **Import:** `cargo run -p import-manifest -- --input assets/generated/manifest.json --tag canonical --check`
-   writes `assets/generated/manifest.toml`, then loads it and bounds-checks every page and frame.
+6. **Import:** `cargo run -p import-manifest -- --input assets/generated/manifest.json --tag canonical`
+   writes `assets/generated/manifest.toml` (deterministic; untouched when nothing changed). The same
+   command with `--check` never writes: it fails if the file differs from what the import renders, then
+   loads it and bounds-checks every page and frame.
    `cargo test -p lillith-anim --test generated_set` plays and renders every clip.
 
 ## Layout and environment

@@ -46,7 +46,8 @@ MC_JOBS=3 python3 tools/matte-clean/matte_clean.py assets/generated/g* --report 
 # 3. after: must print OK for every clip and exit 0
 python3 tools/video-pipeline/qa_all.py --white-edge --mp4 assets/generated/g* | tee /workspace/verify/nowhite/qa_after_g.log
 
-# 4. import check (prebuilt binary, no cargo; ~2 min, rewrites manifest.toml which should come out unchanged)
+# 4. import check (prebuilt binary, no cargo; ~2 min; --check never writes and fails if manifest.toml
+#    is not what the import renders: then run it once without --check to regenerate)
 /workspace/lillith/bin/import-manifest --input assets/generated/manifest.json --tag canonical --check
 git diff --stat -- assets/generated/manifest.toml assets/generated/manifest.json   # expect nothing
 

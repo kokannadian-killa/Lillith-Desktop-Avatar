@@ -21259,8 +21259,8 @@ frame_durations_ms = [73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 73, 153, 1
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
-disable_springs = ["pigtails"]
 severity = 1
+disable_springs = ["pigtails"]
 video = "hair_flip/hair_flip.mp4"
 
 [[clips.hair_flip.frames]]
@@ -21438,8 +21438,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "variant_of:idle", "idle_variant"]
-disable_springs = ["pigtails"]
 severity = 2
+disable_springs = ["pigtails"]
 video = "hair_lift_stretch/hair_lift_stretch.mp4"
 
 [[clips.hair_lift_stretch.frames]]
@@ -23176,8 +23176,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure"]
-disable_springs = ["pigtails"]
 severity = 1
+disable_springs = ["pigtails"]
 video = "hair_twirl/hair_twirl.mp4"
 
 [[clips.hair_twirl.frames]]
@@ -23285,8 +23285,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "allure", "baked_motion", "idle_variant", "variant_of:idle"]
-disable_springs = ["pigtails"]
 severity = 2
+disable_springs = ["pigtails"]
 video = "hair_twirl_lip_bite/hair_twirl_lip_bite.mp4"
 
 [[clips.hair_twirl_lip_bite.frames]]
@@ -35601,8 +35601,8 @@ mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
-disable_springs = ["pigtails"]
 severity = 1
+disable_springs = ["pigtails"]
 video = "idle_flirt_pigtail_twirl/idle_flirt_pigtail_twirl.mp4"
 
 [[clips.idle_flirt_pigtail_twirl.frames]]
