@@ -43,6 +43,7 @@ def isnet(rgb, threads=2):
     global _S
     import onnxruntime as ort
     if _S is None:
+        import matte_model; matte_model.check_file(MODEL)   # clear error, never a raw onnxruntime failure
         so = ort.SessionOptions(); so.intra_op_num_threads = threads; so.inter_op_num_threads = 1
         so.enable_cpu_mem_arena = False; so.enable_mem_pattern = False
         _S = ort.InferenceSession(MODEL, so, providers=['CPUExecutionProvider'])
@@ -344,5 +345,6 @@ if __name__ == '__main__':
     ap.add_argument('--no-temporal', action='store_true'); ap.add_argument('--threads', type=int, default=2)
     ap.add_argument('--keep-cache', action='store_true'); ap.add_argument('--tspan', type=int, default=2, help='temporal radius in video frames (2 -> median of 5)')
     a = ap.parse_args()
+    import matte_model; matte_model.preflight_or_exit()
     for c in a.clips:
         build(c, a.out if len(a.clips) == 1 else None, not a.no_temporal, a.threads, a.keep_cache, a.tspan)

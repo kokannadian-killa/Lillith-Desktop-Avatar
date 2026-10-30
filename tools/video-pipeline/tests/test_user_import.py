@@ -256,21 +256,26 @@ class Units(unittest.TestCase):
         try:
             home = tmp / 'home'; env = {'U2NET_HOME': str(tmp / 'u2')}
             flag = tmp / 'mine.onnx'
-            exp = [flag, tmp / 'u2' / 'isnet-anime.onnx', home / '.rembg' / 'models' / 'isnet-anime' / 'isnet-anime.onnx']
-            self.assertEqual(ui.model_candidates(str(flag), env, home), exp)
-            self.assertEqual(ui.model_candidates(str(tmp / 'dir'), {}, home)[0], tmp / 'dir' / 'isnet-anime.onnx')
-            self.assertEqual(ui.find_model(str(flag), env, home), (None, exp))   # nothing exists: None + every path tried
+            bund = tmp / 'install' / 'models' / 'rembg' / 'isnet-anime.onnx'
+            here = tmp / 'install' / 'tools' / 'video-pipeline'
+            kw = dict(here=here, posix=False)       # no /opt lookup: the real box may have one
+            exp = [flag, tmp / 'u2' / 'isnet-anime.onnx', bund, home / '.u2net' / 'isnet-anime.onnx',
+                   home / '.rembg' / 'models' / 'isnet-anime' / 'isnet-anime.onnx']
+            self.assertEqual(ui.model_candidates(str(flag), env, home, **kw), exp)
+            self.assertEqual(ui.model_candidates(str(tmp / 'dir'), {}, home, **kw)[0], tmp / 'dir' / 'isnet-anime.onnx')
+            self.assertEqual(ui.find_model(str(flag), env, home, **kw), (None, exp))   # nothing exists: None + every path tried
             for want in reversed(exp):          # create from the lowest priority up: the highest present always wins
                 want.parent.mkdir(parents=True, exist_ok=True); want.write_bytes(b'x')
-                self.assertEqual(ui.find_model(str(flag), env, home)[0], want.resolve())
+                self.assertEqual(ui.find_model(str(flag), env, home, **kw)[0], want.resolve())
             # Windows: the default comes from the pathlib home (%USERPROFILE%), never a hard-coded ~
             wh = PureWindowsPath(r'C:\Users\Ko Kannadian')
-            c = ui.model_candidates(None, {}, wh)
-            self.assertEqual(c, [PureWindowsPath(r'C:\Users\Ko Kannadian\.rembg\models\isnet-anime\isnet-anime.onnx')])
+            c = ui.model_candidates(None, {}, wh, here=False, posix=False)
+            self.assertEqual(c, [PureWindowsPath(r'C:\Users\Ko Kannadian\.u2net\isnet-anime.onnx'),
+                                 PureWindowsPath(r'C:\Users\Ko Kannadian\.rembg\models\isnet-anime\isnet-anime.onnx')])
             old = ui.Path.home
             try:
                 ui.Path.home = classmethod(lambda cls: home)
-                self.assertEqual(ui.model_candidates(None, {})[-1], exp[-1])
+                self.assertEqual(ui.model_candidates(None, {}, here=False, posix=False)[-1], exp[-1])
             finally:
                 ui.Path.home = old
         finally:
