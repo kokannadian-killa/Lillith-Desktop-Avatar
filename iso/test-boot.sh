@@ -115,6 +115,14 @@ run_one(){ # $1 = uefi|bios
       printf '%-55s %s\n' "$pat" "$(grep -Eci "$pat" "$d/serial.log" 2>/dev/null || true)"
     done
     echo "screenshots: $(ls "$d"/shot-*.png 2>/dev/null | wc -l)"
+    # screen-not-blanked: the last shot must not be a blank / "Display output is not active" frame
+    last="$(ls "$d"/shot-*.png 2>/dev/null | tail -1)"
+    [[ -n "$last" ]] && python3 -c 'import sys
+from PIL import Image, ImageStat
+im = Image.open(sys.argv[1]).convert("L"); m = ImageStat.Stat(im).mean[0]
+import os; n = os.path.basename(sys.argv[1])
+print("last shot %s mean=%.1f -> %s" % (n, m, "SCREEN-LIVE" if m > 8 else "SCREEN-BLANK"))' "$last" || true
+    [[ -f "$d/guest-check.txt" ]] && grep '^RESULT' "$d/guest-check.txt" || true
   } | tee "$d/summary.txt"
 }
 

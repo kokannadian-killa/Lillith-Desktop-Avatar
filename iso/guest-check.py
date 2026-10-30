@@ -15,7 +15,8 @@ import re, socket, sys, time
 
 sock_path, log_path, after = sys.argv[1], sys.argv[2], int(sys.argv[3])
 MODEL = "/usr/share/lillith/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-U = "runuser -u demon -- env HOME=/home/demon XDG_RUNTIME_DIR=/run/user/1000"
+U = ("runuser -u demon -- env HOME=/home/demon XDG_RUNTIME_DIR=/run/user/1000"
+     " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus")
 
 def log(*a):
     print(*a, flush=True)
@@ -117,6 +118,25 @@ R["`lillith quantumsec --once` exits 0"] = "exit=0" in t
 rc, t = run("systemd user units", "ls -l /usr/lib/systemd/user/lillith*.service; systemctl --global is-enabled lillith.service lillith-quantumsec.service; ls -la /home/demon/.config/systemd/user 2>&1; " + U + " systemctl --user is-enabled lillith.service lillith-quantumsec.service; " + U + " systemctl --user is-active lillith.service lillith-quantumsec.service")
 R["user units present"] = "/usr/lib/systemd/user/lillith.service" in t and "/usr/lib/systemd/user/lillith-quantumsec.service" in t
 R["user units not enabled"] = "enabled" not in re.sub(r"disabled|not-enabled", "", t)
+# DoD "systemd service works": enable + start the shield unit as demon (the same
+# command the blood-seal / unit docs show), then check it runs /usr/bin/lillith
+# and keeps rewriting status.json.
+SJ = "/home/demon/.biotek/quantumsec/status.json"
+rc, t = run("enable --now lillith-quantumsec.service", f"{U} systemctl --user enable --now lillith-quantumsec.service; sleep 30; "
+            f"{U} systemctl --user is-active lillith-quantumsec.service; "
+            f"{U} systemctl --user show -p ExecStart -p MainPID -p NRestarts lillith-quantumsec.service; "
+            f"{U} systemctl --user cat lillith-quantumsec.service | grep -E '^(# /|ExecStart)'; "
+            f"a=$(stat -c %Y {SJ}); sleep 45; b=$(stat -c %Y {SJ}); echo status_json_mtime $a '->' $b; "
+            f"[ \"$b\" -gt \"$a\" ] && echo STATUS_JSON_UPDATING; head -c 300 {SJ}; echo; "
+            f"{U} journalctl --user -u lillith-quantumsec.service --no-pager -n 5", 400)
+R["lillith-quantumsec.service active (enabled for the test)"] = re.search(r"^active\s*$", t, re.M) is not None and "/usr/bin/lillith" in t
+R["shield unit keeps writing status.json"] = "STATUS_JSON_UPDATING" in t
+rc, t = run("live session: no blanking / no lock", f"{U} kreadconfig6 --file powerdevilrc --group AC --group Display --key TurnOffDisplayWhenIdle; "
+            f"{U} kreadconfig6 --file powerdevilrc --group AC --group Display --key DimDisplayWhenIdle; "
+            f"{U} kreadconfig6 --file kscreenlockerrc --group Daemon --key Autolock")
+R["powerdevil DPMS/dim off, autolock off"] = t.split().count("false") >= 3
+rc, t = run("LLMNR off", "resolvectl status 2>/dev/null | grep -iE 'LLMNR|mDNS' | head -4; ss -Hlntup | grep -E ':5355|:5353' || echo NO_LLMNR_MDNS_LISTENER")
+R["no LLMNR/mDNS listener"] = "NO_LLMNR_MDNS_LISTENER" in t
 run("listening sockets before model", "ss -Hltnp")
 run("start llama-server on 127.0.0.1", f"{U} sh -c 'nohup /opt/llama/llama-server -m {MODEL} --host 127.0.0.1 --port 8080 -c 512 -t 2 --jinja >/tmp/llama.log 2>&1 &'; sleep 2; pgrep -a llama-server")
 rc, t = run("wait for /health", "for i in $(seq 1 120); do curl -sf http://127.0.0.1:8080/health && break; sleep 10; done; echo; tail -5 /tmp/llama.log", 1500)

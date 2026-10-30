@@ -213,13 +213,31 @@ Under TCG a Plasma boot takes many minutes, so give it a generous run time.
 
   Lillith itself never starts the server without a clicked consent card. After the check, the run takes `POST_SHOTS` (3) more shots and stops.
 
+## Live-session settings
+
+* **No blanking, no lock.** `/etc/xdg/powerdevilrc` and `/etc/skel/.config/powerdevilrc` set `DimDisplayWhenIdle=false`, `TurnOffDisplayWhenIdle=false` and `AutoSuspendAction=0` for AC, Battery and LowBattery. `kscreenlockerrc` sets `Autolock=false` and `LockOnResume=false`. Before this, Plasma turned the display off ("Display output is not active") about 10 minutes into the first boot test.
+* **Local-only resolver.** `/etc/systemd/resolved.conf.d/10-demonos-local-only.conf` sets `LLMNR=no` and `MulticastDNS=no`. releng's default left an LLMNR responder on `0.0.0.0:5355`.
+* **User units.** The package installs `lillith.service` and `lillith-quantumsec.service` unchanged, plus drop-ins (`linux/systemd/package/*.service.d/10-package-path.conf`) that point `ExecStart` at `/usr/bin/lillith`. Neither unit is enabled. To turn the shield on: `systemctl --user enable --now lillith-quantumsec.service`. The boot test does exactly that and checks the unit is active and that `status.json` keeps updating.
+
+## QuantumSec status under TCG (documented, not changed)
+
+The Resource Load proton (`crates/lillith-quantumsec/src/proton.rs`, `poll_resources`) reports:
+* **Alert** at CPU or memory use ≥ 90%;
+* **Notice** at CPU ≥ 70% or memory ≥ 80%.
+
+Any Alert makes the overall status **CRITICAL**. In a QEMU/TCG guest the emulated CPUs run at about 100% while Plasma starts, so the shield shows `STATUS CRITICAL … cpu=100%` for the first minutes, then ELEVATED (cpu≈81%). That is the threshold working as designed on an overloaded VM; on real hardware it settles to normal. The File Integrity notice ("2 missing") comes from watched config files that a fresh live user doesn't have yet.
+
+## Build history
+
+| date (MDT) | lillith | ISO sha256 | notes |
+|---|---|---|---|
+| 2026-10-30 06:06 | 20dee27 | `6411be1f73ff05df0900d380091375358cf37a476664a97ab22a5ccf27dfdaff` | first build; UEFI + BIOS reached the desktop; display blanked after ~10 min; LLMNR on; units pointed at `~/.local/bin`. Replaced by the next build (deleted for disk). |
+
 ## Known limits
 
-* `linux/systemd/lillith.service` has `ExecStart=%h/.local/bin/lillith`. That
-  path is right for `install.sh` but wrong for the package (`/usr/bin/lillith`).
-  * The ISO doesn't use the unit; it starts Lillith from
-    `~/.config/autostart/lillith.desktop`.
-  * Fix it upstream later with a drop-in or a package-specific unit.
+* Lillith starts from `~/.config/autostart/lillith.desktop`, not from
+  `lillith.service`, so the two never run together. The unit is there for users
+  who prefer it; the package drop-ins point it at `/usr/bin/lillith`.
 * `llama.cpp` isn't in the Arch repos. That's why `pkgs/lillith-llama-bin`
   repackages the pinned upstream Ubuntu build, which runs fine on Arch: it needs
   glibc, libstdc++, libgomp, openssl, zlib and zstd.
