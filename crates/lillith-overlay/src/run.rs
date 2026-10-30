@@ -2256,6 +2256,11 @@ impl Controller {
                 tracing::info!("about: {text}");
                 self.apply(vec![Action::Say(text)]);
             }
+            MenuEffect::ShowQuantumSecStatus(text) => {
+                tracing::info!("quantumsec: {text}");
+                self.apply(vec![Action::Say(text)]);
+            }
+            MenuEffect::OpenQuantumSec => self.open_settings_tab(Some("quantumsec")),
         }
     }
 

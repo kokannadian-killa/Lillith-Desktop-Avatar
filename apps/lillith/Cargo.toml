@@ -51,6 +51,7 @@ lillith-mind.workspace = true
 lillith-memory.workspace = true
 # Idle self-learning from installed docs (P1).
 lillith-learn.workspace = true
+lillith-quantumsec.workspace = true
 # `lillith setup` (first-run model choice; loopback-only config writer).
 lillith-setup.workspace = true
 # `voice`: the speech worker + subprocess TTS engines (piper / espeak-ng /

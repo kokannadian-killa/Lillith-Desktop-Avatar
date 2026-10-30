@@ -19,6 +19,7 @@ members = [
     "android/rust",
     "crates/lillith-memory",
     "crates/lillith-learn",
+    "crates/lillith-quantumsec",
 ]
 default-members = [
     "crates/lillith-core",
@@ -39,6 +40,7 @@ default-members = [
     "android/rust",
     "crates/lillith-memory",
     "crates/lillith-learn",
+    "crates/lillith-quantumsec",
 ]
 
 [workspace.package]
@@ -66,6 +68,7 @@ lillith-setup = { path = "crates/lillith-setup" }
 lillith-admin = { path = "crates/lillith-admin" }
 lillith-memory = { path = "crates/lillith-memory" }
 lillith-learn = { path = "crates/lillith-learn" }
+lillith-quantumsec = { path = "crates/lillith-quantumsec" }
 lillith-android = { path = "android/rust" }
 
 # Common

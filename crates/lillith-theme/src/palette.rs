@@ -142,6 +142,20 @@ pub const TEXT: Rgba = Rgba::hex(0xf3e4e6);
 pub const TEXT_DIM: Rgba = Rgba::hex(0xc9a3a8);
 pub const TEXT_MUTE: Rgba = Rgba::hex(0x94767c);
 
+// ---- cyberpunk / QuantumSec (additive palette; existing colours untouched) ------
+/// Void black (QuantumSec awakening / cyber panels).
+pub const CYBER_VOID: Rgba = Rgba::hex(0x0a0a0f);
+/// Crimson accent (#ff3e6c).
+pub const CYBER_CRIMSON: Rgba = Rgba::hex(0xff3e6c);
+/// Cyber cyan (#00f0ff).
+pub const CYBER_CYAN: Rgba = Rgba::hex(0x00f0ff);
+/// Phantom purple (#b829f7).
+pub const CYBER_PURPLE: Rgba = Rgba::hex(0xb829f7);
+/// Soft cyan for body text on void.
+pub const CYBER_TEXT: Rgba = Rgba::hex(0xd6fbff);
+/// Dim cyan/gray secondary text.
+pub const CYBER_TEXT_DIM: Rgba = Rgba::hex(0x7aa8b0);
+
 // ---- status ------------------------------------------------------------------
 pub const OK: Rgba = Rgba::hex(0x39ff88);
 pub const WARN: Rgba = Rgba::hex(0xffb02e);
@@ -182,6 +196,15 @@ mod tests {
         }
         assert!(TERMINAL_TEXT.contrast(BLOOD_DEEP) >= 4.5);
         assert!(TEXT_MUTE.contrast(VOID) >= 4.5);
+    }
+
+    #[test]
+    fn cyberpunk_palette_hexes() {
+        assert_eq!(CYBER_VOID.to_array(), [0x0a, 0x0a, 0x0f, 255]);
+        assert_eq!(CYBER_CRIMSON.to_array(), [0xff, 0x3e, 0x6c, 255]);
+        assert_eq!(CYBER_CYAN.to_array(), [0x00, 0xf0, 0xff, 255]);
+        assert_eq!(CYBER_PURPLE.to_array(), [0xb8, 0x29, 0xf7, 255]);
+        assert!(CYBER_TEXT.contrast(CYBER_VOID) >= 4.5);
     }
 
     #[test]
