@@ -1,7 +1,7 @@
 {
   "name": "tada_celebrate",
   "placeholder": false,
-  "frame_count": 17,
+  "frame_count": 37,
   "frame_width": 400,
   "frame_height": 400,
   "canvas_w": 400,
@@ -52,6 +52,26 @@
     631.8,
     631.8,
     631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
+    631.8,
     631.8
   ],
   "horn_fix": {
@@ -59,15 +79,35 @@
     "ref_hue_median": 277.4,
     "mean_hue_shift_deg_per_frame": [
       0.0,
+      0.1667,
+      0.3333,
       0.5,
+      0.4333,
+      0.3667,
       0.3,
+      1.7667,
+      3.2333,
       4.7,
+      2.4333,
+      0.1667,
       -2.1,
+      -6.1,
+      -10.1,
       -14.1,
+      -21.7667,
+      -29.4333,
       -37.1,
+      -31.6,
+      -26.1,
       -20.6,
+      -22.0,
+      -23.4,
       -24.8,
+      -20.0667,
+      -15.3333,
       -10.6,
+      -11.0667,
+      -11.5333,
       -12.0,
       -15.5,
       -16.1,
@@ -87,16 +127,36 @@
   "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
   "notes": "Hop + arms-up ta-da, one-shot from the idle still to the tada_01 pose (video 2 s, every 3rd frame). Timings derived from old (accelerating profile + 500 ms final hold).",
   "frame_durations_ms": [
-    112,
-    112,
-    87,
-    87,
-    99,
-    112,
-    112,
-    112,
-    112,
-    124,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
+    50,
     124,
     137,
     149,
@@ -115,9 +175,33 @@
       387
     ],
     [
+      139,
+      278,
+      22,
+      387
+    ],
+    [
+      138,
+      279,
+      25,
+      387
+    ],
+    [
       138,
       281,
       31,
+      387
+    ],
+    [
+      139,
+      283,
+      39,
+      387
+    ],
+    [
+      141,
+      284,
+      48,
       387
     ],
     [
@@ -127,9 +211,33 @@
       387
     ],
     [
+      140,
+      287,
+      64,
+      387
+    ],
+    [
+      141,
+      288,
+      66,
+      387
+    ],
+    [
       145,
       288,
       64,
+      387
+    ],
+    [
+      148,
+      286,
+      56,
+      387
+    ],
+    [
+      142,
+      284,
+      44,
       387
     ],
     [
@@ -139,10 +247,34 @@
       387
     ],
     [
+      133,
+      283,
+      16,
+      384
+    ],
+    [
+      130,
+      282,
+      16,
+      373
+    ],
+    [
       129,
       281,
       16,
       358
+    ],
+    [
+      130,
+      278,
+      16,
+      344
+    ],
+    [
+      132,
+      272,
+      16,
+      336
     ],
     [
       136,
@@ -151,10 +283,34 @@
       336
     ],
     [
+      135,
+      275,
+      16,
+      345
+    ],
+    [
+      133,
+      276,
+      16,
+      359
+    ],
+    [
       128,
       282,
       16,
       376
+    ],
+    [
+      112,
+      296,
+      16,
+      389
+    ],
+    [
+      103,
+      303,
+      23,
+      391
     ],
     [
       94,
@@ -163,9 +319,33 @@
       391
     ],
     [
+      86,
+      319,
+      40,
+      391
+    ],
+    [
+      82,
+      324,
+      39,
+      391
+    ],
+    [
       79,
       326,
       36,
+      391
+    ],
+    [
+      78,
+      326,
+      32,
+      391
+    ],
+    [
+      79,
+      327,
+      27,
       391
     ],
     [
@@ -219,15 +399,15 @@
     "edge_bleed_px": 0,
     "width": 800,
     "height": 400,
-    "frame_count": 17,
+    "frame_count": 37,
     "fps": 8.0,
-    "bytes": 267362,
+    "bytes": 575194,
     "quality": {
-      "edge_mae": 2.477,
-      "edge_p99": 20.41,
-      "halo_dark": 0.046,
-      "halo_light": -0.153,
-      "alpha_mae": 0.0675
+      "edge_mae": 2.419,
+      "edge_p99": 20.0,
+      "halo_dark": 0.06,
+      "halo_light": -0.137,
+      "alpha_mae": 0.0601
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -243,5 +423,31 @@
     "tool": "tools/matte-clean/matte_clean.py",
     "sheet_sha256": "f7321c6fff7e76f8932b17b973383c1f7df5e421c4ace4b353d04d9c6458f521",
     "source_sha256": "297b12acd4e39e7da08a155fbd893046ed2c9b0f0229870d492d214c2ff46419"
+  },
+  "fluid_polish3": {
+    "tool": "fluid-polish-3 retime (DIS optical-flow in-betweens on premultiplied RGBA; originals kept)",
+    "frame_count_from_to": [
+      17,
+      37
+    ],
+    "inserted_after_original": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "inserted_source": "real source-video frames (srckey.py)",
+    "fields_expanded": [
+      "body_point_src_x",
+      "frame_durations_ms",
+      "horn_fix.mean_hue_shift_deg_per_frame"
+    ],
+    "note": "Fast jump/arm-raise (pairs 0-9) re-sampled from the real source video at full 24 fps (both in-between source frames per pair, keyed with key_combined + matte_clean.clean_cell + horn_fix); each pair's duration spread over its frames at >= 50 ms, so the move is never faster than before."
   }
 }

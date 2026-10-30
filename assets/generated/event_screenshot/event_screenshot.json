@@ -156,13 +156,13 @@
     [
       82,
       303,
-      0,
+      1,
       397
     ],
     [
       88,
       297,
-      0,
+      1,
       397
     ],
     [
@@ -180,7 +180,7 @@
     [
       31,
       354,
-      0,
+      1,
       397
     ],
     [
@@ -224,13 +224,13 @@
     "height": 400,
     "frame_count": 10,
     "fps": 8.5,
-    "bytes": 160348,
+    "bytes": 160412,
     "quality": {
-      "edge_mae": 2.092,
-      "edge_p99": 19.96,
-      "halo_dark": 0.01,
-      "halo_light": -0.099,
-      "alpha_mae": 0.1048
+      "edge_mae": 2.091,
+      "edge_p99": 19.0,
+      "halo_dark": 0.013,
+      "halo_light": -0.092,
+      "alpha_mae": 0.1058
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -240,5 +240,6 @@
     "sheet_sha256": "2979e0bbe53e060ea6391dcdf6f113287458ff861c3d0e5128f870ee151f2cfc",
     "source_sha256": "e8a02dcb6f1a905b80ab323c0e5195362d24979b06ba7ff685293b763c5dbae3",
     "event_pass": "fix/no-white-fringe-ev: base-matched body swap + residual edge/pocket pass, icons/panels/FX kept"
-  }
+  },
+  "fluid_polish3_edge": "frames 0-1: top viewfinder brackets moved down 4 px so they no longer touch the cell top edge (were cut at y=0). Frame 4: the flash glow (alpha<=7) feathered to 0 over the top 8 rows so nothing touches the cell edge."
 }
