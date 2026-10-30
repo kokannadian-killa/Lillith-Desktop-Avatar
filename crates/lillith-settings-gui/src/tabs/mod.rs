@@ -11,6 +11,7 @@ pub mod companion;
 pub mod icon;
 pub mod import;
 pub mod knobs;
+pub mod quantumsec;
 pub mod sealed;
 
 use crate::store::ConfigStore;
@@ -93,8 +94,8 @@ pub struct TabRegistry {
 
 impl TabRegistry {
     /// Companion, Motion, Chat / Brain, Avatar, Icon, Voice, Build, About,
-    /// Access (`[mind.access]`, in the first add-in slot), Pose Builder
-    /// (video import, in the second).
+    /// QuantumSec, Access (`[mind.access]`, in the first add-in slot), Pose
+    /// Builder (video import, in the second).
     pub fn with_defaults(shared: &Shared) -> Self {
         let mut r = Self::default();
         r.register(Box::new(companion::CompanionTab::new(shared)));
@@ -105,6 +106,7 @@ impl TabRegistry {
         r.register(Box::new(knobs::KnobTab::voice()));
         r.register(Box::new(build::BuildTab::new(shared)));
         r.register(Box::new(about::AboutTab));
+        r.register(Box::new(quantumsec::QuantumSecTab::new()));
         for n in 1..=2 {
             r.register(Box::new(sealed::SealedTab::new(n)));
         }
@@ -188,6 +190,7 @@ pub(crate) mod tests {
                 "voice",
                 "build",
                 "about",
+                "quantumsec",
                 "access",
                 "import"
             ]
@@ -195,6 +198,6 @@ pub(crate) mod tests {
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 0);
         // No sealed slot left: an add-in is appended.
         r.unseal(Box::new(Dummy));
-        assert_eq!(r.index_of("dummy"), Some(10));
+        assert_eq!(r.index_of("dummy"), Some(11));
     }
 }

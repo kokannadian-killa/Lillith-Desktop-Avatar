@@ -2389,6 +2389,7 @@ dependencies = [
  "lillith-mind",
  "lillith-overlay",
  "lillith-panel",
+ "lillith-quantumsec",
  "lillith-sense",
  "lillith-setup",
  "lillith-tray",
@@ -2539,6 +2540,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lillith-quantumsec"
+version = "0.0.1"
+dependencies = [
+ "lillith-setup",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
 name = "lillith-sense"
 version = "0.0.1"
 dependencies = [
@@ -2568,6 +2581,7 @@ dependencies = [
  "libc",
  "lillith-anim",
  "lillith-core",
+ "lillith-quantumsec",
  "lillith-setup",
  "lillith-theme",
  "rfd",
@@ -2934,6 +2948,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42b8cfee0e339a0337359f3c88165702ac6e600dc01c0cc9579a92d62b08477a"
 dependencies = [
  "bitflags 2.13.2",
+]
+
+[[package]]
+name = "ntapi"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3b335231dfd352ffb0f8017f3b6027a4917f7df785ea2143d8af2adc66980ae"
+dependencies = [
+ "winapi",
 ]
 
 [[package]]
@@ -4612,6 +4635,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8eab9a99a024a169fe8a903cf9d4a3b3601109bcc13bd9e3c6fff259138626c4"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fc858248ea01b66f19d8e8a6d55f41deaf91e9d495246fd01368d99935c6c01"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+ "memchr",
+ "ntapi",
+ "rayon",
+ "windows 0.54.0",
 ]
 
 [[package]]

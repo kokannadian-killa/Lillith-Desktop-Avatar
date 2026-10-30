@@ -24,6 +24,7 @@ lillith-core.workspace = true
 lillith-anim.workspace = true
 lillith-setup.workspace = true
 lillith-theme = { workspace = true, features = ["egui"] }
+lillith-quantumsec.workspace = true
 eframe.workspace = true
 egui = { version = "0.31", default-features = false }
 image.workspace = true
