@@ -308,7 +308,7 @@ fn click(at: egui::Pos2) -> Vec<egui::Event> {
     vec![egui::Event::PointerMoved(at), b(true), b(false)]
 }
 
-fn key(k: egui::Key) -> Vec<egui::Event> {
+fn key_tap(k: egui::Key) -> Vec<egui::Event> {
     let e = |pressed| egui::Event::Key {
         key: k,
         physical_key: None,
@@ -338,9 +338,9 @@ fn dream_items_show_and_forget_is_mouse_only() {
     assert_eq!(t.dream_hits.len(), 2, "both saved items are listed");
     // Keyboard never forgets: Tab around and press Enter / Space.
     for _ in 0..40 {
-        frame(&ctx, &mut t, &mut s, key(egui::Key::Tab));
-        frame(&ctx, &mut t, &mut s, key(egui::Key::Enter));
-        frame(&ctx, &mut t, &mut s, key(egui::Key::Space));
+        frame(&ctx, &mut t, &mut s, key_tap(egui::Key::Tab));
+        frame(&ctx, &mut t, &mut s, key_tap(egui::Key::Enter));
+        frame(&ctx, &mut t, &mut s, key_tap(egui::Key::Space));
     }
     assert!(gone.lock().unwrap().is_empty(), "a key forgot a note");
     // A mouse click on the newest item's Forget does (newest is listed first).
