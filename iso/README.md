@@ -32,6 +32,7 @@ All of this is **additive**. Nothing outside `iso/` changes; the build copies
 | `build-iso.sh` | host driver (below) |
 | `chroot-build.sh` | runs inside the Arch chroot: makepkg, repo-add, art, mkarchiso |
 | `test-boot.sh` | QEMU **TCG-only** boot test (OVMF + BIOS), with a serial log and PNG screendumps |
+| `guest-check.py` | in-guest checks over the serial console, run by `test-boot.sh` |
 
 Palette: void `#0a0a0f`, crimson `#ff3e6c`, cyan `#00f0ff`, purple `#b829f7`.
 
@@ -199,7 +200,18 @@ Under TCG a Plasma boot takes many minutes, so give it a generous run time.
 * **BIOS** uses SeaBIOS.
 * **Display:** `virtio-vga` (`VGA=std` for bochs).
 * **Network:** no NIC by default (`NET=1` gives a user-mode NIC).
-* **Monitor:** the HMP monitor is on a unix socket, and `screendump FILE -f png` runs every `SHOT_EVERY` seconds.
+* **Monitor:** the HMP monitor is on a unix socket. `screendump FILE -f png` runs every `EARLY_EVERY` (6) seconds for the first `EARLY_SECS` (180), to catch GRUB and Plymouth, then every `SHOT_EVERY` seconds.
+* **CPU / memory:** `-cpu qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16` (x86-64-v2), `MEM=3072`, `tb-size=256`. Guest RAM is a `memory-backend-file` in the run dir, so under host memory pressure the kernel can write it back. Plain anonymous `-m 4096`/`2560`/`2048` runs were OOM-killed by the host (other agents' JVMs) 3–4 minutes in. The file is deleted when the run ends.
+* **Serial:** ttyS0 is a chardev socket plus a logfile. `guest-check.py` (on by default, `GUEST_CHECK=0` to skip) always keeps the socket drained, because an unread socket stalls the guest UART. It waits for the getty, then `CHECK_AFTER` (420) more seconds for the desktop. Then it logs in as root (the live image has no root password, the same as releng) and writes `guest-check.txt`, which covers:
+  * the desktop processes;
+  * that `lillith` is running as `demon`;
+  * `~/.biotek`;
+  * the awakening state (dialog up, or armed with no `awakening.json`);
+  * `lillith quantumsec --once`;
+  * the user units (present, not enabled);
+  * a llama-server started inside the guest on `127.0.0.1:8080` with the bundled qwen model, answering a chat completion, with its bind address checked with `ss`.
+
+  Lillith itself never starts the server without a clicked consent card. After the check, the run takes `POST_SHOTS` (3) more shots and stops.
 
 ## Known limits
 
