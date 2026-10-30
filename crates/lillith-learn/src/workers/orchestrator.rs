@@ -94,6 +94,9 @@ pub struct DreamStatus {
     pub started: Option<String>,
     /// UTC hard deadline (the card's end time).
     pub deadline: Option<String>,
+    /// The same deadline as she says it, in the system's local time zone
+    /// (`7:30 PM MDT`, [`lillith_core::localtime::clock_label`]).
+    pub deadline_local: Option<String>,
     /// What she is looking up right now (`topic — host`).
     pub where_now: Option<String>,
     /// Addresses fetched so far (newest last, at most [`MAX_VISITED_SHOWN`]).
@@ -113,8 +116,9 @@ impl DreamStatus {
             DreamState::Proposed => "The dream card is up, waiting for a click.".into(),
             DreamState::Running | DreamState::Ending => format!(
                 "Dreaming{}: {} page{} visited, {} saved{}{}.",
-                self.deadline
+                self.deadline_local
                     .as_deref()
+                    .or(self.deadline.as_deref())
                     .map(|d| format!(" until {d}"))
                     .unwrap_or_default(),
                 self.visited.len(),
@@ -143,6 +147,7 @@ impl DreamStatus {
             "session": self.session,
             "started": self.started,
             "deadline": self.deadline,
+            "deadline_local": self.deadline_local,
             "where_now": self.where_now,
             "visited": self.visited,
             "saved_count": self.saved_count,
@@ -160,6 +165,7 @@ impl DreamStatus {
             session: s("session"),
             started: s("started"),
             deadline: s("deadline"),
+            deadline_local: s("deadline_local"),
             where_now: s("where_now"),
             visited: v
                 .get("visited")
@@ -259,9 +265,11 @@ impl DreamControl {
         });
     }
 
-    fn attach(&self, session: &Session) {
+    pub(super) fn attach(&self, session: &Session) {
         let now = crate::now_s();
-        let deadline = crate::audit::utc(now + session.remaining().as_secs_f64());
+        let end = now + session.remaining().as_secs_f64();
+        let deadline = crate::audit::utc(end);
+        let deadline_local = lillith_core::localtime::clock_label(end.round() as i64);
         self.lock().session = Some(session.clone());
         self.update(|s| {
             *s = DreamStatus {
@@ -269,6 +277,7 @@ impl DreamControl {
                 session: Some(session.id().to_string()),
                 started: Some(crate::audit::utc(now)),
                 deadline: Some(deadline),
+                deadline_local: Some(deadline_local),
                 ..Default::default()
             }
         });
@@ -380,7 +389,10 @@ fn write_private(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
 pub enum DreamEvent {
     Started {
         session: String,
+        /// UTC (for the audit).
         deadline: String,
+        /// Local wall clock (what she says), e.g. `7:30 PM MDT`.
+        deadline_local: String,
     },
     /// Where she's going.
     Going {
@@ -424,8 +436,17 @@ impl DreamEvent {
     /// Her line.
     pub fn line(&self) -> String {
         match self {
-            DreamEvent::Started { deadline, .. } => {
-                format!("Going to dream now — I'll be back by {deadline}.")
+            DreamEvent::Started {
+                deadline,
+                deadline_local,
+                ..
+            } => {
+                let at = if deadline_local.is_empty() {
+                    deadline
+                } else {
+                    deadline_local
+                };
+                format!("Going to dream now — I'll be back by {at}.")
             }
             DreamEvent::Going { topic, urls } => format!(
                 "Dreaming about {topic}: going to {}.",
@@ -878,6 +899,7 @@ impl<'a, 'f> DreamRun<'a, 'f> {
         self.say(DreamEvent::Started {
             session: session.id().to_string(),
             deadline: st.deadline.clone().unwrap_or_default(),
+            deadline_local: st.deadline_local.clone().unwrap_or_default(),
         });
         let mut visited: Vec<String> = Vec::new();
         let mut saved: Vec<SavedFact> = Vec::new();

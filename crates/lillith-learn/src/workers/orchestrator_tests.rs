@@ -590,6 +590,7 @@ fn status_round_trips_through_its_file() {
         session: Some("s-1".into()),
         started: Some("2026-10-30T09:00:00Z".into()),
         deadline: Some("2026-10-30T11:00:00Z".into()),
+        deadline_local: Some("5:00 AM MDT".into()),
         where_now: None,
         visited: vec!["https://a.org/x".into()],
         saved_count: 3,
@@ -619,4 +620,42 @@ fn seeds_skip_personal_topics_and_interleave() {
         assert!(t.topic != "ko-preferences" && t.topic != "self");
         assert!(t.urls.iter().all(|u| u.starts_with("https://")));
     }
+}
+
+#[test]
+fn deadline_is_announced_in_local_time_and_audited_in_utc() {
+    let e = DreamEvent::Started {
+        session: "s-1".into(),
+        deadline: "2026-10-31T01:30:00Z".into(),
+        deadline_local: "7:30 PM MDT".into(),
+    };
+    assert_eq!(
+        e.line(),
+        "Going to dream now — I'll be back by 7:30 PM MDT."
+    );
+    let old = DreamEvent::Started {
+        session: "s-1".into(),
+        deadline: "2026-10-31T01:30:00Z".into(),
+        deadline_local: String::new(),
+    };
+    assert!(old.line().contains("01:30:00Z"), "UTC only as a fallback");
+    let st = DreamStatus {
+        state: DreamState::Running,
+        deadline: Some("2026-10-31T01:30:00Z".into()),
+        deadline_local: Some("7:30 PM MDT".into()),
+        ..Default::default()
+    };
+    assert!(
+        st.line().starts_with("Dreaming until 7:30 PM MDT:"),
+        "{}",
+        st.line()
+    );
+    // A live attach fills both: UTC stamp and a local clock label.
+    let c = DreamControl::with_status_file(None);
+    let s = Session::new("s-local", Duration::from_secs(3600));
+    c.attach(&s);
+    let live = c.status();
+    assert!(live.deadline.as_deref().unwrap().ends_with('Z'));
+    let local = live.deadline_local.unwrap();
+    assert!(local.contains("AM") || local.contains("PM"), "{local}");
 }
