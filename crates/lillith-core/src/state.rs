@@ -2170,7 +2170,7 @@ mod tests {
 
     #[test]
     fn neglect_brings_attention_bids_with_bolder_poses() {
-        let mut b = lonely_brain(3);
+        let mut b = lonely_brain(5);
         let early = run(&mut b, 10.0, false);
         assert!(lonely_reacts(&early).is_empty(), "not lonely yet");
         let a = run(&mut b, 120.0, false);
@@ -2207,7 +2207,7 @@ mod tests {
 
     #[test]
     fn no_attention_bids_during_system_interactions_or_the_hush() {
-        let mut b = lonely_brain(3);
+        let mut b = lonely_brain(5);
         run(&mut b, 120.0, false);
         b.set_system_busy(true);
         assert!(lonely_reacts(&run(&mut b, 300.0, false)).is_empty());
