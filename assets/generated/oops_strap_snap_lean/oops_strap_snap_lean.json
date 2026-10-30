@@ -1458,5 +1458,121 @@
   },
   "severity": 4,
   "system": false,
-  "allure": true
+  "allure": true,
+  "thirsty_polish1": {
+    "tool": "polish/thirsty-tease-1 (targeted; matte_clean not re-run)",
+    "frame_count_change": 0,
+    "dropout_fill": {
+      "note": "single-frame matte dropouts both flow-compensated neighbours agree on were filled from them (coverage only added, never removed)",
+      "frames": [
+        2,
+        14,
+        21,
+        28,
+        29,
+        31,
+        32,
+        34,
+        36,
+        37,
+        45,
+        47,
+        51,
+        53,
+        61,
+        63,
+        71,
+        72,
+        86,
+        90,
+        106,
+        130,
+        134,
+        138,
+        148,
+        152,
+        153,
+        154,
+        158,
+        160,
+        161,
+        162,
+        172,
+        185
+      ],
+      "px": 1912
+    },
+    "retime": {
+      "note": "frames resampled along optical-flow arc length inside fixed-endpoint segments (frame count, fps, anchor, zoom keys unchanged)",
+      "segments": {
+        "131:149:smooth": [
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148
+        ],
+        "174:182:smooth": [
+          175,
+          176,
+          177,
+          178,
+          179,
+          180,
+          181
+        ],
+        "182:192:ease": [
+          183,
+          184,
+          185,
+          186,
+          187,
+          188,
+          189,
+          190,
+          191
+        ]
+      }
+    },
+    "restored_from_original": {
+      "136": 51,
+      "140": 48,
+      "145": 128,
+      "148": 88
+    },
+    "light_edge_recolour_px": {
+      "36": 2,
+      "134": 1,
+      "135": 2,
+      "136": 1,
+      "138": 4,
+      "139": 1,
+      "140": 3,
+      "142": 1,
+      "143": 1,
+      "145": 1
+    },
+    "mp4_edge_recolour_px": {
+      "28": 33,
+      "36": 19,
+      "51": 4,
+      "63": 20,
+      "134": 5,
+      "147": 28,
+      "152": 5,
+      "158": 28
+    }
+  }
 }

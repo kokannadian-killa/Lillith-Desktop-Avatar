@@ -1459,5 +1459,104 @@
   },
   "severity": 3,
   "system": false,
-  "allure": true
+  "allure": true,
+  "thirsty_polish1": {
+    "tool": "polish/thirsty-tease-1 (targeted; matte_clean not re-run)",
+    "frame_count_change": 0,
+    "dropout_fill": {
+      "note": "single-frame matte dropouts both flow-compensated neighbours agree on were filled from them (coverage only added, never removed)",
+      "frames": [
+        5,
+        9,
+        24,
+        37,
+        38,
+        46,
+        48,
+        50,
+        52,
+        56,
+        61,
+        63,
+        64,
+        68,
+        71,
+        80,
+        84,
+        94,
+        109,
+        121,
+        123,
+        127,
+        137,
+        138,
+        140,
+        146,
+        156,
+        162,
+        164,
+        165,
+        177,
+        183,
+        186
+      ],
+      "px": 1787
+    },
+    "retime": {
+      "note": "frames resampled along optical-flow arc length inside fixed-endpoint segments (frame count, fps, anchor, zoom keys unchanged)",
+      "segments": {
+        "40:58:smooth": [
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57
+        ],
+        "130:148:smooth": [
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147
+        ]
+      }
+    },
+    "restored_from_original": {
+      "57": 60,
+      "133": 71,
+      "137": 106,
+      "139": 142,
+      "140": 58,
+      "141": 174
+    },
+    "light_edge_recolour_px": {
+      "52": 1,
+      "109": 1
+    },
+    "mp4_edge_recolour_px": {}
+  }
 }

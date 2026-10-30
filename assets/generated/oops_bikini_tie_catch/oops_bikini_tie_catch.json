@@ -1440,13 +1440,13 @@
     "height": 400,
     "frame_count": 192,
     "fps": 12.0,
-    "bytes": 2984055,
+    "bytes": 2982776,
     "quality": {
-      "edge_mae": 1.791,
-      "edge_p99": 14.0,
+      "edge_mae": 1.792,
+      "edge_p99": 14.29,
       "halo_dark": 0.035,
-      "halo_light": -0.071,
-      "alpha_mae": 0.0768
+      "halo_light": -0.07,
+      "alpha_mae": 0.0769
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -1458,5 +1458,111 @@
   },
   "severity": 4,
   "system": false,
-  "allure": true
+  "allure": true,
+  "thirsty_polish1": {
+    "tool": "polish/thirsty-tease-1 (targeted; matte_clean not re-run)",
+    "frame_count_change": 0,
+    "dropout_fill": {
+      "note": "single-frame matte dropouts both flow-compensated neighbours agree on were filled from them (coverage only added, never removed)",
+      "frames": [
+        1,
+        6,
+        20,
+        21,
+        22,
+        23,
+        25,
+        26,
+        27,
+        29,
+        31,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        51,
+        55,
+        57,
+        72,
+        73,
+        76,
+        83,
+        100,
+        104,
+        115,
+        118,
+        121,
+        124,
+        125,
+        128,
+        130,
+        133,
+        135,
+        138,
+        141,
+        142,
+        144,
+        147,
+        148,
+        153,
+        155,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        172,
+        178,
+        179,
+        185,
+        186
+      ],
+      "px": 2006
+    },
+    "retime": {
+      "note": "frames resampled along optical-flow arc length inside fixed-endpoint segments (frame count, fps, anchor, zoom keys unchanged)",
+      "segments": {
+        "52:70:smooth": [
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69
+        ]
+      }
+    },
+    "restored_from_original": {
+      "61": 83,
+      "63": 40
+    },
+    "light_edge_recolour_px": {
+      "51": 1,
+      "62": 1,
+      "73": 2,
+      "124": 1,
+      "153": 3,
+      "21": 6
+    },
+    "mp4_edge_recolour_px": {
+      "20": 14,
+      "21": 21,
+      "76": 5,
+      "125": 5
+    }
+  }
 }
