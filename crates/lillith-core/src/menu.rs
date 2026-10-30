@@ -134,6 +134,11 @@ pub fn mode_label(m: MoveMode) -> &'static str {
     }
 }
 
+/// Menu label of [`MenuAction::DreamLearning`].
+pub const DREAM_LABEL: &str = "Dream learning…";
+/// Menu label of [`MenuAction::EndDreamEarly`].
+pub const END_DREAM_LABEL: &str = "End dream early";
+
 /// Menu / settings label of [`MenuAction::ToggleSpeaker`].
 pub const SPEAKER_LABEL: &str = "Speak out loud (speakers)";
 
@@ -162,6 +167,12 @@ pub enum MenuAction {
     ShowOff,
     /// Open the chat bubble.
     Chat,
+    /// "Dream learning…": open the dream-session Soul Contract card
+    /// (docs/SELF_LEARNING.md §11). Only opens the card; a mouse click on
+    /// its Yes is the approval.
+    DreamLearning,
+    /// "End dream early": end the running dream session now.
+    EndDreamEarly,
     /// Shrink to the peek icon (a click on it restores her).
     Minimize,
     /// Avatar `0` = Lillith, `n` = [`MenuExtras::avatars`]`[n - 1]`.
@@ -236,6 +247,10 @@ pub struct MenuExtras {
     pub outfit_active: Option<String>,
     /// Showing the Outfit page instead of the main menu.
     pub outfit_page: bool,
+    /// Dream learning (docs §11): `None` = not wired here (no item),
+    /// `Some(false)` = idle ("Dream learning…"), `Some(true)` = a session is
+    /// running ("End dream early" too).
+    pub dream: Option<bool>,
 }
 
 impl MenuExtras {
@@ -471,6 +486,21 @@ pub fn build_menu(s: &MenuState) -> Menu {
         check: Check::None,
         enabled: x.chat,
     });
+    if let Some(dreaming) = x.dream {
+        items.push(MenuItem::Leaf {
+            label: DREAM_LABEL.into(),
+            action: MenuAction::DreamLearning,
+            check: Check::None,
+            enabled: !dreaming,
+        });
+        if dreaming {
+            items.push(MenuItem::leaf(
+                END_DREAM_LABEL,
+                MenuAction::EndDreamEarly,
+                Check::None,
+            ));
+        }
+    }
     let mut avatars = vec![MenuItem::leaf(
         "Lillith",
         MenuAction::Avatar(0),
@@ -703,6 +733,11 @@ pub enum MenuEffect {
     ShowOff,
     /// Open the chat bubble.
     OpenChat,
+    /// Open the dream-session card ([`crate::dream::open_card`]); never an
+    /// approval by itself.
+    OpenDreamCard,
+    /// End the running dream session early ([`crate::dream::end_early`]).
+    EndDreamEarly,
     /// Shrink to the peek icon.
     Minimize,
     /// Show this custom avatar (`None` = Lillith) and remember the choice.
@@ -778,6 +813,8 @@ pub fn on_menu_action(action: MenuAction, brain: &mut Brain, state: &MenuState) 
         MenuAction::MenuBack => out.effects.push(MenuEffect::OpenPage(None)),
         MenuAction::ShowOff => out.effects.push(MenuEffect::ShowOff),
         MenuAction::Chat => out.effects.push(MenuEffect::OpenChat),
+        MenuAction::DreamLearning => out.effects.push(MenuEffect::OpenDreamCard),
+        MenuAction::EndDreamEarly => out.effects.push(MenuEffect::EndDreamEarly),
         MenuAction::Minimize => out.effects.push(MenuEffect::Minimize),
         MenuAction::Avatar(0) => out.effects.push(MenuEffect::SetAvatar(None)),
         MenuAction::Avatar(n) => {
@@ -873,6 +910,10 @@ pub mod wire {
     pub const CHAT: &str = "chat";
     /// Minimize to peek.
     pub const MINIMIZE: &str = "minimize";
+    /// "Dream learning…" (opens the dream card; never approves).
+    pub const DREAM_LEARNING: &str = "dream_learning";
+    /// "End dream early".
+    pub const END_DREAM_EARLY: &str = "end_dream_early";
     /// Avatar switch. `value`: avatar id, or `lillith` for her own sprites.
     pub const AVATAR: &str = "avatar";
     /// Avatar by index into the overlay's recent list (`value`: `n` ≥ 1);
@@ -956,6 +997,8 @@ pub fn action_line(a: MenuAction) -> String {
         MenuAction::MenuBack => (MENU_BACK, None),
         MenuAction::ShowOff => (SHOW_OFF, None),
         MenuAction::Chat => (CHAT, None),
+        MenuAction::DreamLearning => (DREAM_LEARNING, None),
+        MenuAction::EndDreamEarly => (END_DREAM_EARLY, None),
         MenuAction::Minimize => (MINIMIZE, None),
         MenuAction::Avatar(0) => (AVATAR, Some(LILLITH)),
         MenuAction::Avatar(n) => {
@@ -1056,6 +1099,8 @@ pub fn parse_action_line(line: &str) -> Option<MenuAction> {
         MENU_BACK => MenuAction::MenuBack,
         SHOW_OFF => MenuAction::ShowOff,
         CHAT => MenuAction::Chat,
+        DREAM_LEARNING => MenuAction::DreamLearning,
+        END_DREAM_EARLY => MenuAction::EndDreamEarly,
         MINIMIZE => MenuAction::Minimize,
         AVATAR if v == Some(LILLITH) || v == Some("") => MenuAction::Avatar(0),
         AVATAR_INDEX => MenuAction::Avatar(u8::try_from(num(v)?).ok().filter(|n| *n > 0)?),
@@ -1826,6 +1871,52 @@ mod tests {
         // Escapes survive.
         let odd = MenuPick::Pose("a\"b\\c".into());
         assert_eq!(parse_pick(&pick_line(&odd)), Some(odd));
+    }
+
+    #[test]
+    fn dream_items_open_the_card_and_end_early() {
+        let b = brain();
+        let labels = |x: MenuExtras| -> Vec<(String, bool)> {
+            build_menu(&state(&b).with_extras(x))
+                .items
+                .iter()
+                .filter_map(|it| match it {
+                    MenuItem::Leaf { label, enabled, .. } => Some((label.clone(), *enabled)),
+                    _ => None,
+                })
+                .collect()
+        };
+        // Not wired: no dream items at all.
+        let none = labels(MenuExtras::default());
+        assert!(!none.iter().any(|(l, _)| l.starts_with("Dream")));
+        // Idle: "Dream learning…" right after Chat, top level.
+        let idle = labels(MenuExtras {
+            dream: Some(false),
+            ..Default::default()
+        });
+        let i = idle.iter().position(|(l, _)| l == "Chat").unwrap();
+        assert_eq!(idle[i + 1], (DREAM_LABEL.to_string(), true));
+        assert!(!idle.iter().any(|(l, _)| l == END_DREAM_LABEL));
+        // Running: Dream learning… disabled, End dream early offered.
+        let run = labels(MenuExtras {
+            dream: Some(true),
+            ..Default::default()
+        });
+        assert!(run.contains(&(DREAM_LABEL.to_string(), false)));
+        assert!(run.contains(&(END_DREAM_LABEL.to_string(), true)));
+        let mut br = brain();
+        let st = state(&b);
+        assert_eq!(
+            on_menu_action(MenuAction::DreamLearning, &mut br, &st).effects,
+            vec![MenuEffect::OpenDreamCard]
+        );
+        assert_eq!(
+            on_menu_action(MenuAction::EndDreamEarly, &mut br, &st).effects,
+            vec![MenuEffect::EndDreamEarly]
+        );
+        for a in [MenuAction::DreamLearning, MenuAction::EndDreamEarly] {
+            assert_eq!(parse_action_line(&action_line(a)), Some(a));
+        }
     }
 
     #[test]

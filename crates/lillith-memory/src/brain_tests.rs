@@ -129,6 +129,25 @@ fn attributes_update_in_place() {
 }
 
 #[test]
+fn person_names_are_people_only() {
+    let b = brain();
+    b.observe_interaction("call me Ko", "", &at(MON));
+    b.observe_interaction("my sister is Anna", "", &at(MON));
+    b.observe_interaction("my favorite color is blue", "", &at(MON));
+    let names = b.person_names();
+    assert!(
+        names.iter().any(|n| n.eq_ignore_ascii_case("ko")),
+        "{names:?}"
+    );
+    assert!(
+        names.iter().any(|n| n.eq_ignore_ascii_case("anna")),
+        "{names:?}"
+    );
+    assert!(!names.iter().any(|n| n.contains("blue")), "{names:?}");
+    assert!(Brain::disabled(&cfg()).person_names().is_empty());
+}
+
+#[test]
 fn ranking_relevance_then_strength_and_recency() {
     let b = brain();
     let old = at(MON - 20.0 * DAY);

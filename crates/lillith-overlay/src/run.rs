@@ -2127,6 +2127,7 @@ impl Controller {
             outfit: self.outfit_setting.clone(),
             outfit_active: active.map(|o| o.label().to_string()),
             outfit_page: self.menu_outfit_page,
+            dream: lillith_core::dream::menu_state(),
         })
     }
 
@@ -2223,6 +2224,14 @@ impl Controller {
             MenuEffect::PlayPose(clip) => self.command(Command::Pose(clip)),
             MenuEffect::ShowOff => self.command(Command::ShowOff),
             MenuEffect::OpenChat => self.command(Command::Chat),
+            MenuEffect::OpenDreamCard => {
+                let d = lillith_core::dream::open_card(None);
+                tracing::info!("menu: Dream learning… -> {d:?}");
+            }
+            MenuEffect::EndDreamEarly => {
+                let d = lillith_core::dream::end_early();
+                tracing::info!("menu: End dream early -> {d:?}");
+            }
             MenuEffect::Minimize => self.command(Command::Minimize),
             MenuEffect::SetAvatar(id) => self.command(Command::Avatar(id)),
             // Avatar import lives in the settings window (its Avatar tab).

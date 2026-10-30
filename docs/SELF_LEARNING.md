@@ -572,8 +572,10 @@ option and she can even use the task bots to do the reasearching for her"*.
    (card says so).
 3. **Visible and stoppable.** A visible "dreaming" indicator on the avatar
    and tray while it runs, plus an **End early** item in the right-click menu
-   and the tray. The safeword (red / `OOC: stop`) ends it instantly. Hard
-   stop at the deadline. Also stops on low battery (`stop_battery_pct`) or
+   and the tray. End early, `/dream stop`, the kill switch (`stop`) and
+   Ctrl-C end it at once (workers' process groups are killed). **The
+   safeword (red / `OOC: stop`) is voice-only (Ko: "Just the voice"): it
+   hushes her voice and never ends the dream.** Hard stop at the deadline. Also stops on low battery (`stop_battery_pct`) or
    thermal limits (`stop_cpu_temp_c`). If Ko chats, chat takes priority on
    `llama-server` (LlmGate §1) and dreaming yields until he is idle again; the
    deadline does not move. Every stop is audited (`DREAM\tend\t<reason>`).
@@ -601,6 +603,28 @@ option and she can even use the task bots to do the reasearching for her"*.
    `dream_id`), so they decay unless reinforced by use or Ko, and are easy to
    review and forget (forget "dream <date>" removes the whole session).
 
+### Status (P7, branch `feat/dream-session`)
+
+Built: the `DreamSession` card (`lillith_learn::workers::dream`), the
+orchestrator (`workers::orchestrator::DreamRun`: card-fixed deadline, the
+supervisor's sandboxed `lillith learn-worker` helpers, the parent does
+every GET over Tor, validated items saved as `kind: dream` web notes at
+`dream_strength` in the graph, quarantine never saved), announcements
+(`DreamEvent`: starting, where she's going, where she's been, what she
+saved, the summary) on the overlay speech / console and in the audit log
+(`DREAM\tgoing|visited|quarantined|saved|end`), the status API
+(`DreamStatus` + `dream_status()`, also in
+`$XDG_RUNTIME_DIR/lillith/dream-status.json`), and the entry points, which
+only open the card: right-click **Dream learning…** / **End dream early**,
+`/dream [2h|90m]` (`/dream end|stop|status`) in chat, and
+`lillith dream [duration]`. Stops: End early, `stop`, the kill switch,
+Ctrl-C, the deadline, low battery, heat, Tor down, the byte / disk budgets.
+Not yet: the curiosity queue (topics come from a fixed public-reference
+seed list per `[learn] topics`, never `ko-preferences` / `self`), a summary
+model pass, the panel's live log / per-item Forget (the Bots tab can read
+`dream_status()`), the external backend (§11.1), self-compression (P8 hook
+`DreamSink::after_session` is a no-op).
+
 ### 11.1 Optional backend: Ko's TaskCompletion bots (external) — decided by Ko
 
 > **Warning: this path leaves Ko's machine. It is NOT local and NOT
@@ -615,8 +639,8 @@ option and she can even use the task bots to do the reasearching for her"*.
   enabled, each dream session's card has a separate, unticked
   **"Also use my TaskCompletion bots (leaves this laptop, not anonymous)"**
   option; only Ko's click on that session's card turns it on for that
-  session. Typed or spoken yes never counts. The safeword disables it for
-  the rest of the session.
+  session. Typed or spoken yes never counts. (The safeword is voice-only
+  and does not change it.)
 - **What is sent (minimal):** a topic (short words from her curiosity
   queue), the budget (max time, max sources, max result size) and the
   session's deadline. **Never** chat text, memory contents, notes, file
@@ -626,7 +650,7 @@ option and she can even use the task bots to do the reasearching for her"*.
 - **Coordination (high level):** Lillith hands topic + budget to a
   TaskCompletion bot through Ko's sanctioned agent-messaging channel; the
   bot does the research and returns summarized results (text + source URLs).
-  End early, the deadline, or the safeword sends a cancel; anything arriving
+  End early, the deadline, `stop` or the kill switch sends a cancel; anything arriving
   after the session ended is discarded unread.
 - **Results are untrusted input.** They go through the same parent-side
   validation as local workers (ingest filter §7, schema, size, injection
@@ -651,7 +675,7 @@ research, compaction).
 page, byte and token budgets. The parent **supervisor** enforces them by
 killing the worker (SIGKILL of its process group; no asking). Heartbeat
 every `heartbeat_s`; `missed_heartbeats_kill` missed → kill. Workers never
-outlive the dream session, the safeword, End early, or the parent process
+outlive the dream session, End early, `stop` / the kill switch, or the parent process
 (`PR_SET_PDEATHSIG`, bwrap `--die-with-parent`).
 
 **Capture / compromise handling.**
@@ -822,7 +846,7 @@ lru_cache_mb = 8
 | **P4** Sandbox practice (card per run) | generator, static check, bwrap wrapper, `SandboxRun` card, skills write, proposal queue | argv golden test; network denied; write outside `/work` fails; limits kill fork bomb / 1 GiB / infinite loop; no card → no launch; spoken yes rejected | ≤ 6 proposals/day; rustc single file ≤ 15 s | bwrap / userns missing |
 | **P5** Online research (Tor) + gated install path + Bots/Pose API | `OnlineResearch` card, Tor SOCKS client, trip reporting, `Install`/`Download` cards, pkexec, installs ledger, `KnowledgeApi`, bots JSONL layout | Tor missing → online off; non-listed redirect refused; caps; no cookies/POST; circuit isolation; fetched text fenced untrusted; install refused without a Ko-asked task; learner never proposes install; pkexec cancel = DENY; uninstall card | trip ≤ 60 s wall; install card → agent ≤ 30 s to show | Tor/arti absent; exit-node HTTP risk; polkit UX |
 | **P6** Shared pages | share socket, native-messaging host + extension, KDE share action, block list | peer-uid check; blocked/denylisted host refused; no browser-profile reads (denylist test); URL stored; injection text dropped | share → queued ≤ 50 ms | extension packaging per browser |
-| **P7** Helper workers + dream learning | supervisor, worker sandbox, TTL/heartbeat, breakers, quarantine; `DreamSession` card, curiosity queue, live log, End early (menu/tray), dream report, `source=dream` memories | duration outside 30–480 min rejected; one click covers only that session's trips; deadline hard stop; safeword/End early/battery/thermal stop ≤ 1 s; chat preempts; worker killed on TTL/missed heartbeat/anomaly; quarantine never reaches memory; scratch wiped; breaker opens; Tor down → offline only; per-item forget | 1 fetch at a time; dream CPU outside model calls < 5 % one core | injection via pages; 3B summary quality; external backend (D12) leaks topics off-machine, so off by default, labelled and audited |
+| **P7** Helper workers + dream learning | supervisor, worker sandbox, TTL/heartbeat, breakers, quarantine; `DreamSession` card, curiosity queue, live log, End early (menu/tray), dream report, `source=dream` memories | duration outside 30–480 min rejected; one click covers only that session's trips; deadline hard stop; End early/stop/kill switch/battery/thermal stop ≤ 1 s; the safeword does **not** stop it (voice-only); chat preempts; worker killed on TTL/missed heartbeat/anomaly; quarantine never reaches memory; scratch wiped; breaker opens; Tor down → offline only; per-item forget | 1 fetch at a time; dream CPU outside model calls < 5 % one core | injection via pages; 3B summary quality; external backend (D12) leaks topics off-machine, so off by default, labelled and audited |
 | **P8** Memory compaction | digests, prune-after-summarise, zstd blobs + dictionary, LRU, vacuum/optimize/checkpoint, size budget, forget rebuilds digests | digest keeps entity/habit links (retrieval golden test); forget topic scrubs + rebuilds digests; budget prunes oldest-weakest first, never `origin: ko`; resumable after kill; safeword aborts; audit line per run | chunk ≤ 2 s CPU; lookup p95 unchanged (≤ 20 ms on 5k notes) | dictionary drift; summary loses detail |
 
 ## Decisions
@@ -835,7 +859,7 @@ lru_cache_mb = 8
 | **D2** | Sandbox: **user-gated, option A** — every compile/run needs a mouse-click Yes on a Soul Contract card + audit. Standing approval (B) removed. Batching (C) may queue proposals only; each still gets its own card. |
 | **D5** | She learns from **saved chat history** (`chat_history.json`, skipping safeword and forgotten turns) **as well as** memory, habits, and installed docs. |
 | **Sources** | Exactly: installed docs (man/info/`/usr/share/doc`/Rust/Python), saved chat + memory + habits, and **pages Ko shares** via an explicit "Share this page with Lillith" action. Nothing else. No allow-listed folders, no Bots job results. |
-| **D9 Dream learning** | Ko-started sessions of 30 min–8 h, one session-scoped click, her own topic choice, Tor/read-only rules, End early + safeword + deadline stops, light budgets, local helper workers, live log + dream report with per-item forget, `source=dream` low-strength memories (§11). |
+| **D9 Dream learning** | Ko-started sessions of 30 min–8 h, one session-scoped click, her own topic choice, Tor/read-only rules, End early + stop / kill switch + deadline stops (the safeword is voice-only), light budgets, local helper workers, live log + dream report with per-item forget, `source=dream` low-strength memories (§11). |
 | **D10 Workers** | Anonymity hard rule for workers (plain GET via Tor `socks5h`, generic headers, stream isolation, jitter, no identifiers, tmpfs scratch, smart early stopping); hard TTLs + heartbeats enforced by the supervisor, least privilege, quarantine on anomalies, fresh worker per task, restart limits/backoff, circuit breakers, error memory, resumable job log, graceful degradation (§12). |
 | **D12 Research backends** | "Task bots" = Ko's own TaskCompletion bots (cloud). Default backend stays local helper workers over Tor; delegating to TaskCompletion bots is optional, off by default, Ko opt-in per session, leaves the machine and is not anonymous, results validated/quarantined and labelled "external (TaskCompletion bot)" (§11.1). |
 | **D11 Compaction** | Self-compression of memory: digests, zstd blobs, vacuum/optimize, size budget, fast lookup, idle/AC only, audited (§13). |

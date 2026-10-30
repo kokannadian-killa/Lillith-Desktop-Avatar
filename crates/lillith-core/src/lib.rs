@@ -32,6 +32,7 @@ pub mod card_process;
 pub mod command;
 pub mod config;
 pub mod desktop;
+pub mod dream;
 pub mod event;
 pub mod icons;
 pub mod idle;

@@ -1,6 +1,9 @@
-//! Helper workers (docs/SELF_LEARNING.md §12, D10), milestone P7, first
-//! slice: the parent **supervisor** and the worker lifecycle. No dream
-//! orchestration, cards, chat, CLI or panel here.
+//! Helper workers (docs/SELF_LEARNING.md §12, D10), milestone P7: the
+//! parent **supervisor** and the worker lifecycle, the dream-session card
+//! ([`dream`]), the session orchestration and its status API
+//! ([`orchestrator`]) and the production research worker ([`worker`], run
+//! as `lillith learn-worker`). The chat command, menu items and CLI live
+//! in their own crates and only open the card (`lillith_core::dream`).
 //!
 //! A helper worker is a fresh child process per task that does one bounded
 //! piece of research and hands **candidate facts** back to the parent. The
@@ -46,6 +49,7 @@ pub mod build;
 pub mod dream;
 pub mod external;
 pub mod joblog;
+pub mod orchestrator;
 pub mod policy;
 pub mod process;
 pub mod protocol;
@@ -54,7 +58,10 @@ pub mod scratch;
 pub mod static_check;
 pub mod supervisor;
 pub mod validate;
+pub mod worker;
 
+#[cfg(test)]
+mod orchestrator_tests;
 #[cfg(test)]
 mod tests;
 
@@ -69,6 +76,10 @@ pub use dream::{
 };
 pub use external::{Backend, ExternalBudget, ExternalRequest};
 pub use joblog::{JobEntry, JobLog, JobStatus};
+pub use orchestrator::{
+    dream_status, end_dream_early, read_status_file, stop_dream, DreamControl, DreamEvent,
+    DreamPlanner, DreamReport, DreamRun, DreamSink, DreamState, DreamStatus, NoteSink, SeedPlanner,
+};
 pub use static_check::Lang;
 pub use supervisor::{JobReport, Refused, Session, Supervisor, Task};
 pub use validate::Candidate;
