@@ -1331,6 +1331,7 @@ mod tests {
             avatar: Some("mug".into()),
             chat: true,
             speaker: Some(true),
+            dream: None,
             outfits: vec![
                 OutfitChoice {
                     id: "halloween".into(),
