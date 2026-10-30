@@ -7711,6 +7711,36 @@
    "allure": true,
    "video": "oops_perch_slip/oops_perch_slip.mp4",
    "severity": 4
+  },
+  {
+   "name": "oops_drop_bend",
+   "frame_count": 95,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "oops_drop_bend/",
+   "sheet": "oops_drop_bend/oops_drop_bend_sheet.png",
+   "manifest": "oops_drop_bend/oops_drop_bend.json",
+   "preview": "oops_drop_bend/oops_drop_bend_preview.gif",
+   "tags": [
+    "baked_motion",
+    "oops"
+   ],
+   "allure": true,
+   "video": "oops_drop_bend/oops_drop_bend.mp4",
+   "severity": 4
   }
  ]
 }
