@@ -1132,8 +1132,9 @@ def pipeline(job):
 
 
 def preflight(argv):
-    """`user_import.py --preflight [--matte M] [--model F]`: one JSON line on stdout, exit 0. The Pose Builder runs
-    this before it starts a job and shows the problems (what is missing and how to fix it) instead of crashing."""
+    """`user_import.py --preflight [--matte M] [--model F]`: one JSON line on stdout, exit 0. For a front end
+    (or a support check) to ask, before a job, what is missing and how to fix it; a run itself never crashes on a
+    missing model either (isnet -> `error` event with the fix, auto -> backdrop key)."""
     ap = argparse.ArgumentParser()
     ap.add_argument('--preflight', action='store_true')
     ap.add_argument('--matte', choices=('auto', 'isnet', 'key', 'alpha'), default='auto')

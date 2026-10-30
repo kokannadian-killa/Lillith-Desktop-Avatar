@@ -1,5 +1,5 @@
 """Tests for tools/video-pipeline/matte_model.py (where isnet-anime.onnx lives, whether it is whole, running it
-without rembg) and the `user_import.py --preflight` the Pose Builder runs before it starts.
+without rembg) and `user_import.py --preflight` (what is missing and how to fix it, as one JSON line).
 
   python3 -m pytest -q -p no:cacheprovider tools/video-pipeline/tests/test_matte_model.py
 
