@@ -9,6 +9,7 @@ use egui::{pos2, vec2, Align2, RichText, Sense};
 use lillith_core::soul_contract::{
     MODEL_SERVER_KIND, OLLAMA_CREATE_KIND, OLLAMA_CREATE_UNGATED_TAG, SETTINGS_UNGATED_TAG,
 };
+use lillith_quantumsec::consent::AwakeningState;
 use lillith_setup::check::{self, ServerHealth};
 use lillith_setup::config::{self as llm, Backend, LlmConfig};
 use lillith_setup::modelfile::{
@@ -21,7 +22,6 @@ use lillith_setup::template::ChatTemplate;
 use lillith_setup::validate::{self, ValidateCtx};
 use lillith_setup::{launch, paths, wizard};
 use lillith_theme::egui_theme::{self as th, c32};
-use lillith_quantumsec::consent::AwakeningState;
 use lillith_theme::geom;
 use lillith_theme::palette::{self as pal, Rgba};
 use std::path::{Path, PathBuf};
@@ -1359,7 +1359,6 @@ impl BrainTab {
         }
     }
 
-
     fn quantumsec_wizard_ui(&mut self, ui: &mut egui::Ui, shared: &mut Shared) {
         chrome::section(ui, "QUANTUMSEC", Some("DemonOS · PhantomCore"), |ui| {
             ui.label(
@@ -1390,10 +1389,8 @@ impl BrainTab {
                     let mut state = AwakeningState::load(&path);
                     state.mark_shown();
                     match state.save(&path) {
-                        Ok(()) => shared.toast(
-                            "Awakening flagged under ~/.biotek/config/",
-                            pal::CYBER_CYAN,
-                        ),
+                        Ok(()) => shared
+                            .toast("Awakening flagged under ~/.biotek/config/", pal::CYBER_CYAN),
                         Err(e) => shared.toast(format!("awakening: {e}"), pal::BLOOD_SHEEN),
                     }
                 }

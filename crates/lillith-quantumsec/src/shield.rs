@@ -2,9 +2,7 @@
 //! proposals. Never executes a lockdown without a [`ConsentToken`].
 
 use crate::consent::ConsentLog;
-use crate::lockdown::{
-    execute_with_token, ConsentToken, LockdownError, LockdownProposal,
-};
+use crate::lockdown::{execute_with_token, ConsentToken, LockdownError, LockdownProposal};
 use crate::proton::{default_watch_paths, Proton, ProtonId, ProtonReading, DEFAULT_POLL};
 use crate::status::{ShieldStatus, StatusLevel};
 use std::path::{Path, PathBuf};
@@ -231,14 +229,8 @@ impl QuantumSecShield {
     /// Blood-seal approve: log consent, issue token, optionally execute.
     ///
     /// When `execute` is false, only the token is returned (caller runs later).
-    pub fn approve_lockdown(
-        &mut self,
-        execute: bool,
-    ) -> Result<ConsentToken, LockdownError> {
-        let proposal = self
-            .pending
-            .clone()
-            .ok_or(LockdownError::ConsentRequired)?;
+    pub fn approve_lockdown(&mut self, execute: bool) -> Result<ConsentToken, LockdownError> {
+        let proposal = self.pending.clone().ok_or(LockdownError::ConsentRequired)?;
         let mut token = self
             .consent
             .approve(&proposal)

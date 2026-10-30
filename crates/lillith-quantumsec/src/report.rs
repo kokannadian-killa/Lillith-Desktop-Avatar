@@ -153,7 +153,11 @@ fn rotate_reports(dir: &Path, keep: usize) -> std::io::Result<()> {
         .filter(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .map(|n| n.starts_with("personalization-") && n.ends_with(".md") && n != "personalization-latest.md")
+                .map(|n| {
+                    n.starts_with("personalization-")
+                        && n.ends_with(".md")
+                        && n != "personalization-latest.md"
+                })
                 .unwrap_or(false)
         })
         .collect();
@@ -191,13 +195,16 @@ mod tests {
         assert!(md.contains("blood seal"));
         let path = p.save_markdown(&dir).unwrap();
         assert!(path.exists());
-        assert!(dir.join("reports/personalization-latest.md").exists()
-            || dir.join("personalization-latest.md").exists()
-            || std::fs::read_to_string(dir.join("reports").join("personalization-latest.md")).is_ok()
-            || {
-                // save writes under biotek/reports
-                true
-            });
+        assert!(
+            dir.join("reports/personalization-latest.md").exists()
+                || dir.join("personalization-latest.md").exists()
+                || std::fs::read_to_string(dir.join("reports").join("personalization-latest.md"))
+                    .is_ok()
+                || {
+                    // save writes under biotek/reports
+                    true
+                }
+        );
         let latest = dir.join("reports").join("personalization-latest.md");
         assert!(latest.exists(), "{}", latest.display());
     }

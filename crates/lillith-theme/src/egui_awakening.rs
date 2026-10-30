@@ -93,8 +93,7 @@ processes, listeners, key configs and load — all local, all light."
         + gap_before_btns
         + btn_h
         + bottom_pad;
-    let (rect, _) =
-        ui.allocate_exact_size(Vec2::new(w, content_h + 2.0 * frame_t), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(w, content_h + 2.0 * frame_t), Sense::hover());
     let outer = rect;
     let inner = outer.shrink(frame_t);
 
@@ -170,14 +169,7 @@ processes, listeners, key configs and load — all local, all light."
     choice
 }
 
-fn cyber_button(
-    ui: &mut egui::Ui,
-    id: Id,
-    rect: Rect,
-    label: &str,
-    primary: bool,
-    t: f32,
-) -> bool {
+fn cyber_button(ui: &mut egui::Ui, id: Id, rect: Rect, label: &str, primary: bool, t: f32) -> bool {
     let resp = ui.interact(rect, id, Sense::click());
     let hover = resp.hovered();
     let fill = if primary {

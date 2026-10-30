@@ -74,10 +74,7 @@ impl QuantumSecTooltip {
 
     /// Current tooltip body.
     pub fn get(&self) -> String {
-        self.0
-            .read()
-            .map(|g| g.clone())
-            .unwrap_or_default()
+        self.0.read().map(|g| g.clone()).unwrap_or_default()
     }
 }
 

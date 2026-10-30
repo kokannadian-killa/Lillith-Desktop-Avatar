@@ -962,19 +962,23 @@ mod tests {
             // Force font join before paint so the first frame has glyphs.
             let _ = fonts.get();
             let mut p = MenuPopup::new(state());
-            if let Some(qsec) = p.rows().iter().position(
-                |r| matches!(r, Row::Header { label, .. } if label == "QuantumSec"),
-            ) {
+            if let Some(qsec) = p
+                .rows()
+                .iter()
+                .position(|r| matches!(r, Row::Header { label, .. } if label == "QuantumSec"))
+            {
                 p.click(20.0, row_y(&p, qsec));
                 assert!(
-                    p.rows().iter().any(|r| matches!(r, Row::Leaf { label, .. } if label == "Status")),
+                    p.rows()
+                        .iter()
+                        .any(|r| matches!(r, Row::Leaf { label, .. } if label == "Status")),
                     "Status leaf missing: {:?}",
                     p.rows()
                 );
                 assert!(
-                    p.rows()
-                        .iter()
-                        .any(|r| matches!(r, Row::Leaf { label, .. } if label.starts_with("Open panel"))),
+                    p.rows().iter().any(
+                        |r| matches!(r, Row::Leaf { label, .. } if label.starts_with("Open panel"))
+                    ),
                     "Open panel leaf missing"
                 );
             }

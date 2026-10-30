@@ -6,9 +6,7 @@
 //! click). Additive: the original [`crate::egui_contract::soul_contract_popup`]
 //! is unchanged.
 
-use crate::egui_contract::{
-    soul_contract_popup, ContractChoice, ContractView, Initiator,
-};
+use crate::egui_contract::{soul_contract_popup, ContractChoice, ContractView, Initiator};
 use egui::{Context, Id};
 
 /// Title shown on the blood-seal card for a lockdown.

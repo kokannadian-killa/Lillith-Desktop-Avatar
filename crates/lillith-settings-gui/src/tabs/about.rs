@@ -4,8 +4,8 @@ use super::{SettingsTab, Shared};
 use crate::chrome;
 use egui::RichText;
 use lillith_theme::egui_theme::{self as th, c32};
-use lillith_theme::palette as pal;
 use lillith_theme::egui_whisper::info_rune;
+use lillith_theme::palette as pal;
 
 pub struct AboutTab;
 

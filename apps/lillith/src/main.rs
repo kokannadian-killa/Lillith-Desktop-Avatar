@@ -1345,17 +1345,14 @@ fn start_voice(
     voice
 }
 
-
 /// QuantumSec shield poll loop (`lillith quantumsec`). Writes status under
 /// `~/.biotek/quantumsec/`. Never enables systemd; never runs lockdown
 /// without a blood-seal token (this loop only monitors).
 async fn run_quantumsec(interval_s: u64, once: bool) -> Result<()> {
-    let mut shield = lillith_quantumsec::QuantumSecShield::new(
-        lillith_quantumsec::ShieldConfig {
-            poll: std::time::Duration::from_secs(interval_s.max(1)),
-            ..lillith_quantumsec::ShieldConfig::default()
-        },
-    )?;
+    let mut shield = lillith_quantumsec::QuantumSecShield::new(lillith_quantumsec::ShieldConfig {
+        poll: std::time::Duration::from_secs(interval_s.max(1)),
+        ..lillith_quantumsec::ShieldConfig::default()
+    })?;
     tracing::info!(
         path = %shield.status_path().display(),
         "QuantumSec shield starting"
