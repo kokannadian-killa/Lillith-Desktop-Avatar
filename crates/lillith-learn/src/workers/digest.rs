@@ -205,8 +205,10 @@ mod tests {
 
     #[test]
     fn the_endpoint_must_be_loopback() {
-        let mut chat = lillith_core::config::ChatConfig::default();
-        chat.endpoint = "https://api.example.com/v1".into();
+        let chat = lillith_core::config::ChatConfig {
+            endpoint: "https://api.example.com/v1".into(),
+            ..Default::default()
+        };
         let gate = crate::LlmGate::at(&tmp("gate"));
         assert!(matches!(
             crate::LlmSummarizer::new(&chat, gate),
