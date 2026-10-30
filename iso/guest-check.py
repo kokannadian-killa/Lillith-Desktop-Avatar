@@ -145,12 +145,16 @@ R["mDNS off (no :5353 listener)"] = "NO_MDNS_LISTENER" in t
 rc, t = run("Bots tab + Dream learning present",
             "grep -a -c 'Dream learning' /usr/bin/lillith; grep -a -c 'End dream early' /usr/bin/lillith; "
             "lillith-settings --help 2>&1 | grep -E -- '--tab|bots' | head -3; "
-            f"{U} WAYLAND_DISPLAY=wayland-0 QT_QPA_PLATFORM=wayland setsid -f lillith-settings --tab bots >/tmp/bots-tab.log 2>&1; "
+            # copy the display env from the running session's lillith (the socket name is not fixed)
+            "LP=$(pgrep -u demon -x lillith | head -1); "
+            "E=$(tr '\\0' '\\n' </proc/$LP/environ | grep -E '^(WAYLAND_DISPLAY|DISPLAY|XDG_SESSION_TYPE|XDG_CURRENT_DESKTOP)=' | tr '\\n' ' '); "
+            "echo \"session env: $E\"; ls /run/user/1000 | grep -i wayland; "
+            f"{U} $E setsid -f lillith-settings --tab bots >/tmp/bots-tab.log 2>&1; "
             "sleep 40; pgrep -au demon -f 'lillith-settings --tab bots' | head -2; tail -3 /tmp/bots-tab.log", 200)
 lines = t.splitlines()
 nums = [int(x) for x in lines if x.strip().isdigit()]
 R["Dream learning strings in /usr/bin/lillith"] = len(nums) >= 2 and all(n > 0 for n in nums[:2])
-R["lillith-settings --tab bots running"] = "lillith-settings --tab bots" in t and "bots" in t
+R["lillith-settings --tab bots running"] = bool(re.search(r"^\s*\d+ \S*lillith-settings --tab bots", t, re.M))
 def screendump(name):
     import os
     mon = os.path.join(os.path.dirname(sock_path), "mon.sock")

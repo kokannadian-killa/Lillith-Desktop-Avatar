@@ -233,11 +233,10 @@ Any Alert makes the overall status **CRITICAL**. In a QEMU/TCG guest the emulate
 | date (MDT) | lillith | ISO sha256 | notes |
 |---|---|---|---|
 | 2026-10-30 06:06 | 20dee27 | `6411be1f73ff05df0900d380091375358cf37a476664a97ab22a5ccf27dfdaff` | first build; UEFI + BIOS reached the desktop; display blanked after ~10 min; LLMNR on; units pointed at `~/.local/bin`. Replaced by the next build (deleted for disk). |
-| 2026-10-30 07:56 | 20dee27 + unit drop-ins (bb50f4f) | `5ce04e868167a1265f5630f918c6982a259b3c5b82ed8fd3d8c8c2b29a704df3` | current. UEFI and BIOS TCG boot tests: every guest check passes, including the shield unit active and rewriting status.json, LLMNR off, and the screen still live at 14–17 min. |
+| 2026-10-30 07:56 | 20dee27 + unit drop-ins (bb50f4f) | `5ce04e868167a1265f5630f918c6982a259b3c5b82ed8fd3d8c8c2b29a704df3` | UEFI and BIOS TCG boot tests: every guest check passed, but mDNS was still on and the image had no Dream learning / Bots tab. Replaced by the next build (deleted). |
+| 2026-10-30 09:40 | integration 9270fa6 (main 07a7e9f merged: Dream learning, Bots tab) | `4ef75a435173afefd7c555691cdb0965843d8a0d270db88149dc6b0021751fe5` | current. 4,185,948,160 bytes. UEFI and BIOS TCG boot tests: every guest check passes. That includes mDNS and LLMNR off, the Dream learning strings in `/usr/bin/lillith`, and `lillith-settings --tab bots` showing the Bots tab (`shot-bots-tab.png`). |
 
 ## Known limits
-
-* Fixed in the 2026-10-30 second rebuild: the first drop-in (`10-…`) lost to `archiso.conf`, which left mDNS on `:5353`. It is now named `zz-…`.
 
 * Lillith starts from `~/.config/autostart/lillith.desktop`, not from
   `lillith.service`, so the two never run together. The unit is there for users
