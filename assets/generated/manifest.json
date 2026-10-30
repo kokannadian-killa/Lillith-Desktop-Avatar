@@ -7560,6 +7560,36 @@
    "allure": true,
    "video": "perch_lean_cleavage_bounce/perch_lean_cleavage_bounce.mp4",
    "severity": 4
+  },
+  {
+   "name": "perch_stretch_arch",
+   "frame_count": 83,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "perch_stretch_arch/",
+   "sheet": "perch_stretch_arch/perch_stretch_arch_sheet.png",
+   "manifest": "perch_stretch_arch/perch_stretch_arch.json",
+   "preview": "perch_stretch_arch/perch_stretch_arch_preview.gif",
+   "tags": [
+    "baked_motion",
+    "variant_of:perch_sit"
+   ],
+   "allure": true,
+   "video": "perch_stretch_arch/perch_stretch_arch.mp4",
+   "severity": 4
   }
  ]
 }
