@@ -7650,6 +7650,36 @@
    "allure": true,
    "video": "lonely_tier2_sway_beckon/lonely_tier2_sway_beckon.mp4",
    "severity": 4
+  },
+  {
+   "name": "lonely_tier3_attention_tease",
+   "frame_count": 95,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "lonely_tier3_attention_tease/",
+   "sheet": "lonely_tier3_attention_tease/lonely_tier3_attention_tease_sheet.png",
+   "manifest": "lonely_tier3_attention_tease/lonely_tier3_attention_tease.json",
+   "preview": "lonely_tier3_attention_tease/lonely_tier3_attention_tease_preview.gif",
+   "tags": [
+    "baked_motion",
+    "lonely_idle"
+   ],
+   "allure": true,
+   "video": "lonely_tier3_attention_tease/lonely_tier3_attention_tease.mp4",
+   "severity": 4
   }
  ]
 }
