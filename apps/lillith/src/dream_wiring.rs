@@ -25,10 +25,13 @@ use lillith_learn::workers::dream::{duration_range, ClickSessionCard};
 use lillith_learn::workers::orchestrator::{global, power_probe, Announce};
 use lillith_learn::workers::process::WorkerCommand;
 use lillith_learn::workers::{
-    propose_session, read_status_file, DreamEvent, DreamReport, DreamRun, NoteSink, SeedPlanner,
+    propose_session, read_status_file, CuriosityQueue, DreamEvent, DreamReport, DreamRun, NoteSink,
     Session, Supervisor,
 };
 use std::sync::Arc;
+
+/// Most recent requests read from memory for the curiosity queue.
+const CURIOSITY_READ: usize = 64;
 
 /// The worker subcommand (dispatched before the async runtime starts: the
 /// seccomp filter is per thread).
@@ -133,7 +136,18 @@ pub fn run_session(
         Ok(s) => s,
         Err(e) => return refuse(e.to_string()),
     };
-    let mut planner = SeedPlanner::from_config(cfg);
+    // Curiosity first (what Ko asked about lately; names / blocklist
+    // terms / personal topics never enter), then the `[learn] topics`
+    // rotation. Mentions only pick fixed public pages.
+    let deny = lillith_learn::online::IdentityDenylist::for_requests(
+        &names,
+        cfg.learn.dream.blocklist_terms.terms(),
+    );
+    let mentions = brain
+        .as_ref()
+        .map(|b| b.recent_requests(&lillith_memory::Ctx::now(), CURIOSITY_READ))
+        .unwrap_or_default();
+    let mut planner = CuriosityQueue::from_mentions(mentions, &deny).planner(cfg);
     let kdir = cfg.mind.resolved_knowledge_dir();
     let mut sink = NoteSink::new(cfg, kdir.as_deref(), brain, audit.clone());
     hooks::set_active(true);
@@ -142,7 +156,31 @@ pub fn run_session(
         .with_conditions(power_probe(cfg))
         .run(session);
     hooks::set_active(false);
+    if cfg.learn.dream.summarize && !report.saved.is_empty() {
+        digest(cfg, &report, global());
+    }
     Ok(report)
+}
+
+/// The optional after-session digest from the local model (loopback only,
+/// never waits for chat, no model means no digest).
+fn digest(cfg: &Config, report: &DreamReport, control: &lillith_learn::workers::DreamControl) {
+    let Some(gate) = lillith_learn::LlmGate::shared() else {
+        return;
+    };
+    let mut sum = match lillith_learn::LlmSummarizer::new(&cfg.chat, gate) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::debug!("dream digest off: {e:?}");
+            return;
+        }
+    };
+    let epoch = lillith_core::access::kill_switch::epoch();
+    let stop = || lillith_core::access::kill_switch::stopped_since(epoch);
+    match lillith_learn::workers::digest::summarize_session(&report.saved, &mut sum, &stop) {
+        Ok(text) => control.set_digest(text),
+        Err(why) => tracing::debug!("no dream digest: {why:?}"),
+    }
 }
 
 /// The chat bubble (its own process): `/dream …` is forwarded to the

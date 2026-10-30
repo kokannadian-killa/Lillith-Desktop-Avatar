@@ -714,7 +714,12 @@ fn identifiers_and_blocked_or_local_hosts_are_refused_before_proposing() {
         assert!(!env.audit().iter().any(|l| l.contains("PROPOSED")));
     }
     let deny = IdentityDenylist::empty().with(["kokannadian"]);
-    assert!(deny.hit("q=KoKannadian").unwrap().contains("kokannadian"));
+    let msg = deny.hit("q=KoKannadian").unwrap();
+    assert!(msg.contains("local identifier"), "{msg}");
+    assert!(
+        !msg.to_lowercase().contains("kokannadian"),
+        "never the word: {msg}"
+    );
     assert!(deny.hit("https://example.org/pacman").is_none());
 }
 

@@ -44,6 +44,40 @@ pub const MAX_FAILED_IN_A_ROW: u32 = 3;
 /// Most visited addresses kept in [`DreamStatus::visited`].
 pub const MAX_VISITED_SHOWN: usize = 200;
 
+/// Most saved items the live log keeps (oldest drop first).
+pub const MAX_ITEMS_SHOWN: usize = 500;
+
+/// One note the session saved, for the live log (Bots tab: title, where
+/// from, and a per-item Forget via [`forget_dream_item`]).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DreamItem {
+    /// The note id ([`forget_dream_item`] takes it).
+    pub id: String,
+    pub title: String,
+    /// The source host (`doc.rust-lang.org`).
+    pub host: String,
+    /// The note file (local, under the knowledge folder; empty when the
+    /// sink writes no file). An item whose file is gone was forgotten and
+    /// is dropped from the status ([`DreamStatus::without_forgotten`]).
+    pub path: String,
+}
+
+impl DreamItem {
+    fn to_json(&self) -> Value {
+        json!({ "id": self.id, "title": self.title, "host": self.host, "path": self.path })
+    }
+
+    fn from_json(v: &Value) -> Option<Self> {
+        let s = |k: &str| v.get(k).and_then(Value::as_str).map(String::from);
+        Some(Self {
+            id: s("id")?,
+            title: s("title").unwrap_or_default(),
+            host: s("host").unwrap_or_default(),
+            path: s("path").unwrap_or_default(),
+        })
+    }
+}
+
 /// Where a dream is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DreamState {
@@ -94,15 +128,24 @@ pub struct DreamStatus {
     pub started: Option<String>,
     /// UTC hard deadline (the card's end time).
     pub deadline: Option<String>,
+    /// The same deadline as she says it, in the system's local time zone
+    /// (`7:30 PM MDT`, [`lillith_core::localtime::clock_label`]).
+    pub deadline_local: Option<String>,
     /// What she is looking up right now (`topic — host`).
     pub where_now: Option<String>,
     /// Addresses fetched so far (newest last, at most [`MAX_VISITED_SHOWN`]).
     pub visited: Vec<String>,
     pub saved_count: usize,
+    /// What was saved (newest last, at most [`MAX_ITEMS_SHOWN`]).
+    pub items: Vec<DreamItem>,
     pub quarantined_count: usize,
     pub stop_reason: Option<StopReason>,
     /// The end-of-session summary.
     pub summary: Option<String>,
+    /// The optional local-model digest of the saved notes
+    /// ([`super::digest::summarize_session`]); `None` when off, the model
+    /// is down or chat needed it.
+    pub digest: Option<String>,
 }
 
 impl DreamStatus {
@@ -113,8 +156,9 @@ impl DreamStatus {
             DreamState::Proposed => "The dream card is up, waiting for a click.".into(),
             DreamState::Running | DreamState::Ending => format!(
                 "Dreaming{}: {} page{} visited, {} saved{}{}.",
-                self.deadline
+                self.deadline_local
                     .as_deref()
+                    .or(self.deadline.as_deref())
                     .map(|d| format!(" until {d}"))
                     .unwrap_or_default(),
                 self.visited.len(),
@@ -137,18 +181,29 @@ impl DreamStatus {
         }
     }
 
+    /// This status minus items whose note file is gone (forgotten, from
+    /// this or another process).
+    pub fn without_forgotten(mut self) -> Self {
+        self.items
+            .retain(|i| i.path.is_empty() || Path::new(&i.path).exists());
+        self
+    }
+
     pub fn to_json(&self) -> Value {
         json!({
             "state": self.state.word(),
             "session": self.session,
             "started": self.started,
             "deadline": self.deadline,
+            "deadline_local": self.deadline_local,
             "where_now": self.where_now,
             "visited": self.visited,
             "saved_count": self.saved_count,
+            "items": self.items.iter().map(DreamItem::to_json).collect::<Vec<_>>(),
             "quarantined_count": self.quarantined_count,
             "stop_reason": self.stop_reason.map(StopReason::word),
             "summary": self.summary,
+            "digest": self.digest,
         })
     }
 
@@ -160,6 +215,7 @@ impl DreamStatus {
             session: s("session"),
             started: s("started"),
             deadline: s("deadline"),
+            deadline_local: s("deadline_local"),
             where_now: s("where_now"),
             visited: v
                 .get("visited")
@@ -171,10 +227,16 @@ impl DreamStatus {
                 })
                 .unwrap_or_default(),
             saved_count: n("saved_count"),
+            items: v
+                .get("items")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(DreamItem::from_json).collect())
+                .unwrap_or_default(),
             quarantined_count: n("quarantined_count"),
             stop_reason: s("stop_reason")
                 .and_then(|w| StopReason::ALL.into_iter().find(|r| r.word() == w)),
             summary: s("summary"),
+            digest: s("digest"),
         })
     }
 }
@@ -201,11 +263,16 @@ impl DreamControl {
         c
     }
 
+    /// Records the after-session digest (the status file follows).
+    pub fn set_digest(&self, text: String) {
+        self.update(|s| s.digest = Some(text));
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, Ctl> {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    fn update(&self, f: impl FnOnce(&mut DreamStatus)) {
+    pub(super) fn update(&self, f: impl FnOnce(&mut DreamStatus)) {
         let mut g = self.lock();
         f(&mut g.status);
         if let Some(p) = g.file.clone() {
@@ -259,9 +326,11 @@ impl DreamControl {
         });
     }
 
-    fn attach(&self, session: &Session) {
+    pub(super) fn attach(&self, session: &Session) {
         let now = crate::now_s();
-        let deadline = crate::audit::utc(now + session.remaining().as_secs_f64());
+        let end = now + session.remaining().as_secs_f64();
+        let deadline = crate::audit::utc(end);
+        let deadline_local = lillith_core::localtime::clock_label(end.round() as i64);
         self.lock().session = Some(session.clone());
         self.update(|s| {
             *s = DreamStatus {
@@ -269,6 +338,7 @@ impl DreamControl {
                 session: Some(session.id().to_string()),
                 started: Some(crate::audit::utc(now)),
                 deadline: Some(deadline),
+                deadline_local: Some(deadline_local),
                 ..Default::default()
             }
         });
@@ -320,7 +390,7 @@ pub fn global() -> &'static DreamControl {
 
 /// The live status of this process's dream (the Bots tab API).
 pub fn dream_status() -> DreamStatus {
-    global().status()
+    global().status().without_forgotten()
 }
 
 /// End the running dream early (`true` if one was running).
@@ -343,7 +413,71 @@ pub fn status_file_path() -> Option<PathBuf> {
 pub fn read_status_file() -> Option<DreamStatus> {
     let p = status_file_path()?;
     let t = std::fs::read_to_string(p).ok()?;
-    DreamStatus::from_json(&serde_json::from_str(&t).ok()?)
+    DreamStatus::from_json(&serde_json::from_str(&t).ok()?).map(DreamStatus::without_forgotten)
+}
+
+/// Forgets one dream-saved note (the live log's per-item Forget): deletes
+/// its file under the knowledge folder and its memory index row + node.
+/// Only `kind: dream` notes; anything else is refused. Writes a
+/// `dream_forget` audit line (the id only). Returns the note's title.
+/// Works from any process (the settings window too): the item drops out
+/// of every status read once its file is gone.
+pub fn forget_dream_item(cfg: &Config, id: &str) -> Result<String, String> {
+    forget_dream_item_in(cfg, id, cfg.mind.audit_log_path().as_deref(), global())
+}
+
+/// [`forget_dream_item`] with an explicit audit log and control (tests).
+pub(super) fn forget_dream_item_in(
+    cfg: &Config,
+    id: &str,
+    audit_log: Option<&Path>,
+    control: &DreamControl,
+) -> Result<String, String> {
+    if !crate::store::id_ok(id) {
+        return Err("not a note id".into());
+    }
+    let topic = crate::online::WEB_TOPIC;
+    let dir = cfg
+        .mind
+        .resolved_knowledge_dir()
+        .ok_or("no knowledge folder")?;
+    let topics = [topic.to_string()];
+    let store = NoteStore::open(&dir, &topics, false).map_err(|e| format!("knowledge: {e}"))?;
+    let path = store.path_for(topic, id).map_err(|e| e.to_string())?;
+    let file_note = store.read(&store.rel(&path));
+    let brain = if cfg.memory.enabled {
+        lillith_memory::Brain::open(&cfg.memory).ok()
+    } else {
+        None
+    };
+    let row = brain.as_ref().and_then(|b| b.note(id));
+    let title = match (&file_note, &row) {
+        (None, None) => return Err("no such dream note".into()),
+        (Some(n), _) if n.kind != "dream" => return Err("not a dream note".into()),
+        (_, Some(r)) if r.kind != "dream" => return Err("not a dream note".into()),
+        (Some(n), _) => n.title.clone(),
+        (None, Some(r)) => r.title.clone(),
+    };
+    if file_note.is_some() {
+        let lock = match store.lock() {
+            Ok(Some(l)) => l,
+            Ok(None) => return Err("another writer holds knowledge/.lock".into()),
+            Err(e) => return Err(format!("lock: {e}")),
+        };
+        store
+            .remove(&lock, &path)
+            .map_err(|e| format!("remove: {e}"))?;
+    }
+    if let Some(b) = &brain {
+        b.forget_note(id).map_err(|e| format!("memory: {e}"))?;
+    }
+    crate::audit::record(audit_log, "dream_forget", topic, id);
+    // Only touch this process's status when it holds the item (the
+    // settings window must not overwrite the app's status file).
+    if control.status().items.iter().any(|i| i.id == id) {
+        control.update(|s| s.items.retain(|i| i.id != id));
+    }
+    Ok(title)
 }
 
 fn write_private(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -380,7 +514,10 @@ fn write_private(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
 pub enum DreamEvent {
     Started {
         session: String,
+        /// UTC (for the audit).
         deadline: String,
+        /// Local wall clock (what she says), e.g. `7:30 PM MDT`.
+        deadline_local: String,
     },
     /// Where she's going.
     Going {
@@ -424,8 +561,17 @@ impl DreamEvent {
     /// Her line.
     pub fn line(&self) -> String {
         match self {
-            DreamEvent::Started { deadline, .. } => {
-                format!("Going to dream now — I'll be back by {deadline}.")
+            DreamEvent::Started {
+                deadline,
+                deadline_local,
+                ..
+            } => {
+                let at = if deadline_local.is_empty() {
+                    deadline
+                } else {
+                    deadline_local
+                };
+                format!("Going to dream now — I'll be back by {at}.")
             }
             DreamEvent::Going { topic, urls } => format!(
                 "Dreaming about {topic}: going to {}.",
@@ -570,6 +716,8 @@ pub struct SavedFact {
     pub id: String,
     pub title: String,
     pub url: String,
+    /// The note file (empty when the sink writes none).
+    pub path: PathBuf,
     /// Bytes it took on disk.
     pub bytes: u64,
 }
@@ -714,6 +862,7 @@ impl DreamSink for NoteSink {
             id: note.id,
             title,
             url: c.url.clone(),
+            path,
             bytes,
         })
     }
@@ -878,6 +1027,7 @@ impl<'a, 'f> DreamRun<'a, 'f> {
         self.say(DreamEvent::Started {
             session: session.id().to_string(),
             deadline: st.deadline.clone().unwrap_or_default(),
+            deadline_local: st.deadline_local.clone().unwrap_or_default(),
         });
         let mut visited: Vec<String> = Vec::new();
         let mut saved: Vec<SavedFact> = Vec::new();
@@ -988,7 +1138,21 @@ impl<'a, 'f> DreamRun<'a, 'f> {
                         if !self.audit(&session, "saved", &format!("note={} url={}", f.id, f.url)) {
                             break;
                         }
-                        self.control.update(|s| s.saved_count += 1);
+                        let item = DreamItem {
+                            id: f.id.clone(),
+                            title: f.title.clone(),
+                            host: hosts_of(std::slice::from_ref(&f.url))
+                                .pop()
+                                .unwrap_or_default(),
+                            path: f.path.to_string_lossy().into_owned(),
+                        };
+                        self.control.update(|s| {
+                            s.saved_count += 1;
+                            s.items.push(item);
+                            if s.items.len() > MAX_ITEMS_SHOWN {
+                                s.items.remove(0);
+                            }
+                        });
                         self.say(DreamEvent::Saved {
                             id: f.id.clone(),
                             title: f.title.clone(),

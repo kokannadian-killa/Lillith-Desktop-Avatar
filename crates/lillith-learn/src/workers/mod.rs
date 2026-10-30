@@ -46,6 +46,8 @@
 
 pub mod breaker;
 pub mod build;
+pub mod curiosity;
+pub mod digest;
 pub mod dream;
 pub mod external;
 pub mod joblog;
@@ -70,6 +72,7 @@ pub use build::{
     BuildBudgets, BuildError, BuildJob, BuildStep, CardApproval, NetworkPolicy, Practice,
     PracticeOff, SandboxAnswer, SandboxCardRequest, SandboxConsent,
 };
+pub use curiosity::CuriosityQueue;
 pub use dream::{
     propose_session, DreamRefused, SessionAnswer, SessionApproval, SessionCardRequest,
     SessionConsent,
@@ -77,8 +80,9 @@ pub use dream::{
 pub use external::{Backend, ExternalBudget, ExternalRequest};
 pub use joblog::{JobEntry, JobLog, JobStatus};
 pub use orchestrator::{
-    dream_status, end_dream_early, read_status_file, stop_dream, DreamControl, DreamEvent,
-    DreamPlanner, DreamReport, DreamRun, DreamSink, DreamState, DreamStatus, NoteSink, SeedPlanner,
+    dream_status, end_dream_early, forget_dream_item, read_status_file, stop_dream, DreamControl,
+    DreamEvent, DreamItem, DreamPlanner, DreamReport, DreamRun, DreamSink, DreamState, DreamStatus,
+    NoteSink, SeedPlanner,
 };
 pub use static_check::Lang;
 pub use supervisor::{JobReport, Refused, Session, Supervisor, Task};

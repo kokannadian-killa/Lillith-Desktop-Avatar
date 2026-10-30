@@ -13,8 +13,9 @@ use std::time::{Duration, Instant};
 /// [`lillith_memory::bridge::SUGGEST_EVENT`] (shown by the normal speech
 /// bubble rule, dropped while the monitor is paused).
 pub fn start(cfg: &lillith_core::config::MemoryConfig, feed: Sender<Event>) -> Arc<MemoryBridge> {
+    let presence_feed = std::sync::Mutex::new(feed.clone());
     let feed = std::sync::Mutex::new(feed);
-    let bridge = MemoryBridge::spawn(
+    let mut opts = lillith_memory::bridge::BridgeOptions::new(
         cfg,
         Box::new(move |line| {
             if let Ok(f) = feed.lock() {
@@ -25,12 +26,28 @@ pub fn start(cfg: &lillith_core::config::MemoryConfig, feed: Sender<Event>) -> A
             }
         }),
     );
+    // Ko's "usually around" hours (read-only from memory events) for the
+    // overlay's loneliness time-of-day factor.
+    opts.presence = Some(Box::new(move |p| {
+        if let Ok(f) = presence_feed.lock() {
+            let _ = f.send(presence_event(&p));
+        }
+    }));
+    let bridge = MemoryBridge::spawn_with(opts);
     tracing::info!(
         on = bridge.is_enabled(),
         proactive = cfg.enabled && cfg.proactive,
         "memory bridge"
     );
     Arc::new(bridge)
+}
+
+/// The `lonely.presence` overlay event for a presence profile.
+pub fn presence_event(p: &[f32; 8]) -> Event {
+    Event::with_detail(
+        lillith_memory::bridge::PRESENCE_EVENT,
+        lillith_memory::bridge::presence_detail(p),
+    )
 }
 
 /// A sender that forwards everything to `feed` and offers each event to
@@ -240,6 +257,17 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         panic!("no plan");
+    }
+
+    #[test]
+    fn presence_event_is_the_one_the_overlay_reads() {
+        let p = [0.0, 0.0, 1.0, 4.0, 2.0, 6.0, 9.0, 3.0];
+        let ev = presence_event(&p);
+        assert_eq!(ev.name, lillith_overlay::run::LONELY_PRESENCE);
+        assert_eq!(
+            lillith_overlay::run::parse_presence(ev.detail.as_deref()),
+            Some(p)
+        );
     }
 
     #[test]

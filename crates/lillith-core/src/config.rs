@@ -967,6 +967,42 @@ pub struct LearnDreamConfig {
     pub dream_strength: f32,
     pub stop_battery_pct: u32,
     pub stop_cpu_temp_c: u32,
+    /// After a session, one short digest of the saved notes from the
+    /// local model (loopback only; skipped when it's down or chat needs it).
+    pub summarize: bool,
+    /// Extra words no outgoing dream request may contain, on top of the
+    /// person names memory knows (unioned in
+    /// `lillith_learn::online::IdentityDenylist::for_requests`). Private:
+    /// never logged, audited or printed; `Debug` shows only the count.
+    pub blocklist_terms: BlockTerms,
+}
+
+/// `[learn.dream] blocklist_terms`: a plain TOML string array whose `Debug`
+/// prints only how many terms there are, so a logged config never leaks
+/// them.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct BlockTerms(pub Vec<String>);
+
+impl BlockTerms {
+    /// The terms (callers must not log them).
+    pub fn terms(&self) -> &[String] {
+        &self.0
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl std::fmt::Debug for BlockTerms {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlockTerms({} term(s))", self.0.len())
+    }
 }
 
 impl Default for LearnDreamConfig {
@@ -983,6 +1019,8 @@ impl Default for LearnDreamConfig {
             dream_strength: 0.2,
             stop_battery_pct: 20,
             stop_cpu_temp_c: 85,
+            summarize: true,
+            blocklist_terms: BlockTerms::default(),
         }
     }
 }
@@ -1847,5 +1885,24 @@ mod tests {
         let old: Config =
             toml::from_str("[learn]\nsafeword_cooldown_min = 60.0\nmax_duty = 0.2\n").unwrap();
         assert_eq!(old.learn.max_duty, 0.2);
+    }
+
+    #[test]
+    fn dream_blocklist_terms_parse_and_never_debug_print() {
+        assert!(Config::default().learn.dream.blocklist_terms.is_empty());
+        assert!(Config::default().learn.dream.summarize);
+        let c: Config =
+            toml::from_str("[learn.dream]\nblocklist_terms = [\"zebrafinch\", \"Quokka Lane\"]\n")
+                .unwrap();
+        let t = &c.learn.dream.blocklist_terms;
+        assert_eq!(t.terms(), ["zebrafinch", "Quokka Lane"]);
+        assert_eq!(t.len(), 2);
+        // Logged configs show the count only.
+        let dbg = format!("{c:?}");
+        assert!(dbg.contains("BlockTerms(2 term(s))"), "{dbg}");
+        assert!(!dbg.contains("zebrafinch") && !dbg.contains("Quokka"));
+        // It round-trips as a plain string array.
+        let back: Config = toml::from_str(&toml::to_string(&c).unwrap()).unwrap();
+        assert_eq!(back.learn.dream.blocklist_terms, *t);
     }
 }

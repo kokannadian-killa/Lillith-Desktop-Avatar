@@ -194,6 +194,20 @@ impl Brain {
             .unwrap_or_default()
     }
 
+    /// Forgets one note: its index row and its graph node (edges go with
+    /// it). Returns whether a row was there. Additive: no schema change.
+    pub fn forget_note(&self, id: &str) -> Result<bool> {
+        let Some(c) = &self.conn else {
+            return Ok(false);
+        };
+        self.last_retrieved.borrow_mut().clear();
+        self.write_tx(|| {
+            let n = c.execute("DELETE FROM notes WHERE id = ?1", [id])?;
+            let m = c.execute("DELETE FROM nodes WHERE kind = 'note' AND key = ?1", [id])?;
+            Ok(n + m > 0)
+        })
+    }
+
     /// Drops every note row and note node (before a `--reindex`). Returns
     /// how many note rows went. Other memories are untouched.
     pub fn clear_note_index(&self) -> Result<usize> {
@@ -448,6 +462,25 @@ mod tests {
         assert_eq!(b.clear_note_index().unwrap(), 1);
         assert!(b.all_notes().is_empty());
         assert!(b.strength_of(Kind::Note, "n-1", &ctx).is_none());
+    }
+
+    #[test]
+    fn forget_note_drops_one_row_and_its_node_only() {
+        let b = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
+        let ctx = Ctx::at(100.0);
+        b.upsert_note_with_strength(&row("n-a", "kept fact"), "a", &ctx, 0.2)
+            .unwrap();
+        b.upsert_note_with_strength(&row("n-b", "dreamed fact"), "b", &ctx, 0.2)
+            .unwrap();
+        assert!(b.forget_note("n-b").unwrap());
+        assert!(b.note("n-b").is_none());
+        assert!(b.strength_of(Kind::Note, "n-b", &ctx).is_none());
+        assert!(b
+            .similar_notes("dreamed fact", 5)
+            .iter()
+            .all(|n| n.id != "n-b"));
+        assert!(b.note("n-a").is_some(), "others stay");
+        assert!(!b.forget_note("n-b").unwrap(), "already gone");
     }
 
     #[test]

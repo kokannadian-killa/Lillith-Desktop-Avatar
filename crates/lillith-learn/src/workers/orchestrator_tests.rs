@@ -138,6 +138,7 @@ impl DreamSink for MemSink {
             id: format!("n-{}", self.saved.len()),
             title: c.title.clone(),
             url: c.url.clone(),
+            path: PathBuf::new(),
             bytes: 1000,
         })
     }
@@ -255,6 +256,14 @@ fn runs_tasks_saves_weak_notes_announces_and_audits() {
     assert_eq!(st.visited.len(), 2);
     assert_eq!(st.stop_reason, Some(StopReason::Stop));
     assert!(st.where_now.is_none());
+    // Live log: each saved note with its id, title and source host.
+    assert_eq!(st.items.len(), 2, "{st:?}");
+    let hosts: Vec<&str> = st.items.iter().map(|i| i.host.as_str()).collect();
+    assert_eq!(hosts, ["doc.rust-lang.org", "wiki.archlinux.org"]);
+    for i in &st.items {
+        assert!(rep.saved.iter().any(|f| f.id == i.id && f.title == i.title));
+        assert!(std::path::Path::new(&i.path).is_file());
+    }
 }
 
 #[test]
@@ -590,12 +599,20 @@ fn status_round_trips_through_its_file() {
         session: Some("s-1".into()),
         started: Some("2026-10-30T09:00:00Z".into()),
         deadline: Some("2026-10-30T11:00:00Z".into()),
+        deadline_local: Some("5:00 AM MDT".into()),
         where_now: None,
         visited: vec!["https://a.org/x".into()],
         saved_count: 3,
+        items: vec![DreamItem {
+            id: "n-1".into(),
+            title: "Traits".into(),
+            host: "a.org".into(),
+            path: String::new(),
+        }],
         quarantined_count: 1,
         stop_reason: Some(StopReason::EndEarly),
         summary: Some("Back.".into()),
+        digest: Some("Traits share behaviour.".into()),
     };
     assert_eq!(DreamStatus::from_json(&st.to_json()), Some(st));
     let on_disk: serde_json::Value =
@@ -619,4 +636,114 @@ fn seeds_skip_personal_topics_and_interleave() {
         assert!(t.topic != "ko-preferences" && t.topic != "self");
         assert!(t.urls.iter().all(|u| u.starts_with("https://")));
     }
+}
+
+#[test]
+fn deadline_is_announced_in_local_time_and_audited_in_utc() {
+    let e = DreamEvent::Started {
+        session: "s-1".into(),
+        deadline: "2026-10-31T01:30:00Z".into(),
+        deadline_local: "7:30 PM MDT".into(),
+    };
+    assert_eq!(
+        e.line(),
+        "Going to dream now — I'll be back by 7:30 PM MDT."
+    );
+    let old = DreamEvent::Started {
+        session: "s-1".into(),
+        deadline: "2026-10-31T01:30:00Z".into(),
+        deadline_local: String::new(),
+    };
+    assert!(old.line().contains("01:30:00Z"), "UTC only as a fallback");
+    let st = DreamStatus {
+        state: DreamState::Running,
+        deadline: Some("2026-10-31T01:30:00Z".into()),
+        deadline_local: Some("7:30 PM MDT".into()),
+        ..Default::default()
+    };
+    assert!(
+        st.line().starts_with("Dreaming until 7:30 PM MDT:"),
+        "{}",
+        st.line()
+    );
+    // A live attach fills both: UTC stamp and a local clock label.
+    let c = DreamControl::with_status_file(None);
+    let s = Session::new("s-local", Duration::from_secs(3600));
+    c.attach(&s);
+    let live = c.status();
+    assert!(live.deadline.as_deref().unwrap().ends_with('Z'));
+    let local = live.deadline_local.unwrap();
+    assert!(local.contains("AM") || local.contains("PM"), "{local}");
+}
+
+#[test]
+fn forget_dream_item_removes_the_note_file_index_and_log_entry() {
+    let env = Env::new("forget");
+    let mut cfg = on();
+    let kdir = env.dir.join("knowledge");
+    std::fs::create_dir_all(&kdir).unwrap();
+    cfg.mind.knowledge_dir = kdir.to_string_lossy().into_owned();
+    cfg.memory.db_path = env.dir.join("memory.db").to_string_lossy().into_owned();
+    let brain = lillith_memory::Brain::open(&cfg.memory).unwrap();
+    let mut sink = NoteSink::new(&cfg, Some(&kdir), Some(brain), Some(env.log()));
+    let c = Candidate {
+        job: "j".into(),
+        title: "Traits".into(),
+        text: "Rust traits define shared behaviour across many types.".into(),
+        url: "https://doc.rust-lang.org/book/".into(),
+        backend: Backend::Local,
+    };
+    let keep = sink.save("rust", &c, "s-1").unwrap();
+    let gone = sink
+        .save(
+            "rust",
+            &Candidate {
+                title: "Lifetimes".into(),
+                text: "Lifetimes tell the borrow checker how long references are valid.".into(),
+                url: "https://doc.rust-lang.org/nomicon/".into(),
+                ..c
+            },
+            "s-1",
+        )
+        .unwrap();
+    let control = DreamControl::default();
+    control.update(|s| {
+        for f in [&keep, &gone] {
+            s.items.push(DreamItem {
+                id: f.id.clone(),
+                title: f.title.clone(),
+                host: "doc.rust-lang.org".into(),
+                path: f.path.to_string_lossy().into_owned(),
+            });
+        }
+    });
+    // A status read elsewhere (another process) sees both.
+    let other = control.status();
+    assert_eq!(other.clone().without_forgotten().items.len(), 2);
+    let title = forget_dream_item_in(&cfg, &gone.id, Some(&env.log()), &control).unwrap();
+    assert_eq!(title, "Lifetimes");
+    assert!(!gone.path.exists() && keep.path.exists());
+    let b = lillith_memory::Brain::open(&cfg.memory).unwrap();
+    assert!(b.note(&gone.id).is_none() && b.note(&keep.id).is_some());
+    assert_eq!(control.status().items.len(), 1);
+    // The other process's stale copy drops it too (file gone).
+    let other = other.without_forgotten();
+    assert_eq!(other.items.len(), 1);
+    assert_eq!(other.items[0].id, keep.id);
+    // Audit: the id, never the title.
+    let a = env.audit();
+    assert!(a.contains("dream_forget") && a.contains(&gone.id), "{a}");
+    assert!(!a.contains("Lifetimes"));
+    // Again, a bad id, or a non-dream note: refused, nothing touched.
+    assert!(forget_dream_item_in(&cfg, &gone.id, None, &control).is_err());
+    assert!(forget_dream_item_in(&cfg, "../etc/passwd", None, &control).is_err());
+    let store = crate::store::NoteStore::open(&kdir, &["web".to_string()], false).unwrap();
+    let mut n = crate::store::Note::parse(&std::fs::read_to_string(&keep.path).unwrap()).unwrap();
+    n.kind = "fact".into();
+    let lock = store.lock().unwrap().unwrap();
+    store.write(&lock, &n).unwrap();
+    drop(lock);
+    let err = forget_dream_item_in(&cfg, &keep.id, None, &control).unwrap_err();
+    assert!(err.contains("not a dream note"), "{err}");
+    assert!(keep.path.exists());
 }

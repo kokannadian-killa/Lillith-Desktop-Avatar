@@ -39,6 +39,7 @@ pub mod idle;
 pub mod interaction;
 pub mod launch_audit;
 pub mod llm_gate;
+pub mod localtime;
 pub mod loneliness;
 pub mod menu;
 pub mod mood;

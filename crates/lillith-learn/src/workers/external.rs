@@ -166,7 +166,9 @@ pub enum ExternalError {
 }
 
 /// Sending to a TaskCompletion bot is not wired yet: always refuses, and
-/// never touches the network.
+/// never touches the network. A documented stub (docs/SELF_LEARNING.md
+/// §11.1 "Status"): there is no sanctioned transport for it in the app, and
+/// it would be the only outgoing path besides the card-gated Tor trip.
 pub fn send(backend: &Backend, _req: &ExternalRequest) -> Result<(), ExternalError> {
     match backend {
         Backend::Local => Err(ExternalError::NotChosen),

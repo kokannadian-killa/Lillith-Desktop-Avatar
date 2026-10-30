@@ -84,7 +84,7 @@ pub const LONELY_PRESENCE: &str = "lonely.presence";
 const LONELY_POLL_S: f32 = 1.0;
 
 /// Parses a [`LONELY_PRESENCE`] detail.
-fn parse_presence(detail: Option<&str>) -> Option<[f32; 8]> {
+pub fn parse_presence(detail: Option<&str>) -> Option<[f32; 8]> {
     let mut out = [0.0f32; 8];
     let mut parts = detail?.split(',');
     for slot in &mut out {
