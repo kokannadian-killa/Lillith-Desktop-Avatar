@@ -259,8 +259,11 @@ class Units(unittest.TestCase):
             bund = tmp / 'install' / 'models' / 'rembg' / 'isnet-anime.onnx'
             here = tmp / 'install' / 'tools' / 'video-pipeline'
             kw = dict(here=here, posix=False)       # no /opt lookup: the real box may have one
-            exp = [flag, tmp / 'u2' / 'isnet-anime.onnx', bund, home / '.u2net' / 'isnet-anime.onnx',
-                   home / '.rembg' / 'models' / 'isnet-anime' / 'isnet-anime.onnx']
+            beside = tmp / 'install' / 'models' / 'isnet-anime.onnx'
+            user = home / 'AppData' / 'Local' / 'lillith' / 'models'
+            exp = [flag, bund, beside, user / 'rembg' / 'isnet-anime.onnx', user / 'isnet-anime.onnx',
+                   home / '.rembg' / 'models' / 'isnet-anime' / 'isnet-anime.onnx',
+                   home / '.u2net' / 'isnet-anime.onnx', tmp / 'u2' / 'isnet-anime.onnx']
             self.assertEqual(ui.model_candidates(str(flag), env, home, **kw), exp)
             self.assertEqual(ui.model_candidates(str(tmp / 'dir'), {}, home, **kw)[0], tmp / 'dir' / 'isnet-anime.onnx')
             self.assertEqual(ui.find_model(str(flag), env, home, **kw), (None, exp))   # nothing exists: None + every path tried
@@ -270,12 +273,12 @@ class Units(unittest.TestCase):
             # Windows: the default comes from the pathlib home (%USERPROFILE%), never a hard-coded ~
             wh = PureWindowsPath(r'C:\Users\Ko Kannadian')
             c = ui.model_candidates(None, {}, wh, here=False, posix=False)
-            self.assertEqual(c, [PureWindowsPath(r'C:\Users\Ko Kannadian\.u2net\isnet-anime.onnx'),
-                                 PureWindowsPath(r'C:\Users\Ko Kannadian\.rembg\models\isnet-anime\isnet-anime.onnx')])
+            self.assertEqual(c[-2:], [PureWindowsPath(r'C:\Users\Ko Kannadian\.rembg\models\isnet-anime\isnet-anime.onnx'),
+                                      PureWindowsPath(r'C:\Users\Ko Kannadian\.u2net\isnet-anime.onnx')])
             old = ui.Path.home
             try:
                 ui.Path.home = classmethod(lambda cls: home)
-                self.assertEqual(ui.model_candidates(None, {}, here=False, posix=False)[-1], exp[-1])
+                self.assertEqual(ui.model_candidates(None, {}, here=False, posix=False)[-1], exp[-2])
             finally:
                 ui.Path.home = old
         finally:

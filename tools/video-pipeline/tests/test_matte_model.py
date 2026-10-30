@@ -48,11 +48,51 @@ class Model(unittest.TestCase):
         self.assertEqual(p, b.resolve())
         self.assertEqual(mm.model_dir(env={}, home=self.home, here=self.here), str(b.resolve().parent))
 
-    def test_u2net_home_is_first(self):
-        self.put(self.bund / 'isnet-anime.onnx')
+    def test_u2net_home_is_last(self):
+        b = self.put(self.bund / 'isnet-anime.onnx')
         u = self.put(self.tmp / 'u2' / 'isnet-anime.onnx')
-        p, _ = mm.find_model(env={'U2NET_HOME': str(self.tmp / 'u2')}, strict=True, **self.kw)
-        self.assertEqual(p, u.resolve())
+        env = {'U2NET_HOME': str(self.tmp / 'u2')}
+        p, tried = mm.find_model(env=env, strict=True, **self.kw)
+        self.assertEqual(p, b.resolve(), 'the bundled copy beats an old U2NET_HOME export')
+        self.assertEqual(tried[-1], u)
+        os.remove(b)
+        self.assertEqual(mm.find_model(env=env, strict=True, **self.kw)[0], u.resolve())
+
+    def test_lookup_order_install_first_then_dev_user_rembg_u2net_home(self):
+        old = mm.LINUX_MODELS
+        try:
+            mm.LINUX_MODELS = str(self.tmp / 'opt' / 'lillith' / 'models')
+            opt = Path(mm.LINUX_MODELS)
+            beside = self.tmp / 'install' / 'models'
+            user = self.tmp / 'xdg' / 'lillith' / 'models'
+            env = {'U2NET_HOME': str(self.tmp / 'u2'), 'XDG_DATA_HOME': str(self.tmp / 'xdg')}
+            n = 'isnet-anime.onnx'
+            exp = [self.tmp / 'mine.onnx',
+                   opt / 'rembg' / n, opt / n,                      # the install's own models dir
+                   beside / 'rembg' / n, beside / n,                # next to tools/ (Windows install, or the repo)
+                   user / 'rembg' / n, user / n,                    # the user data dir
+                   self.home / '.rembg' / 'models' / 'isnet-anime' / n,
+                   self.home / '.u2net' / n,
+                   self.tmp / 'u2' / n]                             # $U2NET_HOME last
+            kw = dict(self.kw, posix=True)
+            self.assertEqual(mm.model_candidates(str(exp[0]), env, **kw), exp)
+            self.assertEqual(mm.find_model(str(exp[0]), env, strict=True, **kw), (None, exp))
+            for want in reversed(exp):          # add from the lowest priority up: the highest present always wins
+                self.put(want)
+                self.assertEqual(mm.find_model(str(exp[0]), env, strict=True, **kw)[0], want.resolve())
+            # without XDG_DATA_HOME the user dir is ~/.local/share/lillith/models
+            self.assertIn(self.home / '.local' / 'share' / 'lillith' / 'models' / n, mm.model_candidates(None, {}, **kw))
+        finally:
+            mm.LINUX_MODELS = old
+
+    def test_windows_order_uses_localappdata_and_userprofile(self):
+        from pathlib import PureWindowsPath as W
+        home = W(r'C:\Users\Ko Kannadian')
+        c = mm.model_candidates(None, {'LOCALAPPDATA': r'C:\Users\Ko Kannadian\AppData\Local'}, home, here=False, posix=False)
+        self.assertEqual(c, [W(r'C:\Users\Ko Kannadian\AppData\Local\lillith\models\rembg\isnet-anime.onnx'),
+                             W(r'C:\Users\Ko Kannadian\AppData\Local\lillith\models\isnet-anime.onnx'),
+                             W(r'C:\Users\Ko Kannadian\.rembg\models\isnet-anime\isnet-anime.onnx'),
+                             W(r'C:\Users\Ko Kannadian\.u2net\isnet-anime.onnx')])
 
     def test_half_downloaded_file_is_never_picked(self):
         bad = self.put(self.bund / 'isnet-anime.onnx', n=3)               # wrong size
@@ -72,8 +112,13 @@ class Model(unittest.TestCase):
         self.assertFalse(r['ok'])
         d = r['problems'][0]['detail']
         self.assertIn('isnet-anime.onnx', d); self.assertIn('not found', d)
-        self.assertIn(str(self.bund), d)
+        for t in r['tried']:                 # every path tried is listed
+            self.assertIn(t, d)
+        self.assertIn(str(self.bund / 'isnet-anime.onnx'), d)
         self.assertRegex(d, r'installer|Setup')
+        self.assertRegex(d, r'Put isnet-anime\.onnx \([\d,]+ bytes, sha256 f15622d8')
+        self.assertIn(str(self.bund), d.split('Put ')[1])                    # ... in the install folder
+        self.assertIn(str(self.home / 'AppData' / 'Local' / 'lillith' / 'models'), d.split('Put ')[1])   # exactly where to put it
         self.assertTrue(r['tried'])
 
     def test_missing_python_package_is_named(self):
@@ -115,12 +160,16 @@ class Model(unittest.TestCase):
 
     def test_configure_env_sets_u2net_home_to_the_model_folder(self):
         old = os.environ.get('U2NET_HOME')
+        old_home, old_here, old_opt = mm.Path.home, mm.HERE, mm.LINUX_MODELS
         try:
+            mm.Path.home = classmethod(lambda cls: self.home)      # this box has a real ~/.rembg model
+            mm.HERE, mm.LINUX_MODELS = self.here, str(self.tmp / 'no-opt')
             os.environ['U2NET_HOME'] = str(self.tmp / 'u2')
             self.put(self.tmp / 'u2' / 'isnet-anime.onnx')
             self.assertEqual(mm.configure_env(), str((self.tmp / 'u2').resolve()))
             self.assertEqual(os.environ['U2NET_HOME'], str((self.tmp / 'u2').resolve()))
         finally:
+            mm.Path.home, mm.HERE, mm.LINUX_MODELS = old_home, old_here, old_opt
             if old is None: os.environ.pop('U2NET_HOME', None)
             else: os.environ['U2NET_HOME'] = old
 
@@ -198,6 +247,7 @@ class SameMaskAsRembg(unittest.TestCase):
             from rembg import new_session, remove
             ref = np.asarray(remove(Image.fromarray(rgb), session=new_session('isnet-anime'), only_mask=True))
         finally:
+            mm.Path.home, mm.HERE, mm.LINUX_MODELS = old_home, old_here, old_opt
             if old is None: os.environ.pop('U2NET_HOME', None)
             else: os.environ['U2NET_HOME'] = old
         got = mm.isnet_mask(rgb)

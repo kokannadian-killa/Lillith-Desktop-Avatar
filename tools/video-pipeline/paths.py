@@ -8,9 +8,11 @@ LILLITH_V1         the old stop-motion set + its _tools (default $LILLITH_ASSETS
                    timing/points JSONs and allure key art
 LILLITH_SRC_VIDEO  raw I2V takes, <clip>/<clip>_v3_<take>.mp4 (default $LILLITH_ASSETS/source/video;
                    the repo copy is assets/source/video/)
-U2NET_HOME         folder holding isnet-anime.onnx. One resolution for everything (matte_model.py): $U2NET_HOME,
-                   else <install>/models/rembg (Arch /opt/lillith/models/rembg), else ~/.u2net (rembg's own
-                   folder), else ~/.rembg/models/isnet-anime. The model is bundled by the installers and never downloaded.
+U2NET_HOME         set to the folder holding isnet-anime.onnx. One resolution for everything (matte_model.py):
+                   the install's models dir first (Arch /opt/lillith/models[/rembg], Windows <install>\\models[\\rembg]),
+                   then the repo/dev models dir (tools/../models), the user data dir (~/.local/share/lillith/models),
+                   ~/.rembg/models/isnet-anime, ~/.u2net, and an existing $U2NET_HOME last. The model is bundled by the
+                   installers (tools/release/stage-matte-model.sh) and never downloaded.
 """
 import os
 import sys

@@ -514,6 +514,7 @@ fn poses(folders: &[PathBuf], base: &Path, job: &str) -> Result<Plan, String> {
             ffprobe: vi::bundled_tool("ffprobe"),
             matte: vi::Matte::Auto,
             max_candidates: 0,
+            model: vi::find_matte_model(),
         };
         let q = |p: &Path| format!("'{}'", p.display().to_string().replace('\'', "'\\''"));
         steps.push(Step::Run {

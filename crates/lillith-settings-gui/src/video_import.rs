@@ -458,6 +458,71 @@ pub struct ImportCmd {
     pub matte: Matte,
     /// `--max-candidates` (0 = no limit).
     pub max_candidates: u32,
+    /// `--model`: the install's isnet-anime.onnx ([`find_matte_model`]),
+    /// passed for `auto` / `isnet`. `None` lets the pipeline look.
+    pub model: Option<PathBuf>,
+}
+
+/// Pose Builder's AI cut-out model (never downloaded; the installers bundle
+/// it, see tools/release/stage-matte-model.sh).
+pub const MATTE_MODEL: &str = "isnet-anime.onnx";
+/// Its exact size: a half-copied file is never passed on.
+pub const MATTE_MODEL_SIZE: u64 = 176_069_933;
+/// The Arch package's models dir.
+pub const LINUX_MODELS: &str = "/opt/lillith/models";
+
+/// The install's own models dirs, in lookup order: next to the exe
+/// (`<install>\models` on Windows), one up (`/opt/lillith/bin/../models`),
+/// the Arch package's `/opt/lillith/models` (`opt`), then the user data dir
+/// (`~/.local/share/lillith/models`, `%LOCALAPPDATA%\lillith\models`).
+pub fn matte_model_dirs(
+    exe_dir: Option<&Path>,
+    opt: Option<&Path>,
+    data_dir: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut v = Vec::new();
+    if let Some(e) = exe_dir {
+        v.push(e.join("models"));
+        if let Some(up) = e.parent() {
+            v.push(up.join("models"));
+        }
+    }
+    v.extend(opt.map(Path::to_path_buf));
+    v.extend(data_dir.map(|d| d.join("models")));
+    let mut seen = Vec::new();
+    v.retain(|p| {
+        let new = !seen.contains(p);
+        seen.push(p.clone());
+        new
+    });
+    v
+}
+
+/// Every file tried: `<dir>/rembg/isnet-anime.onnx` (where the installers
+/// put it), then `<dir>/isnet-anime.onnx`, for each dir.
+pub fn matte_model_candidates(dirs: &[PathBuf]) -> Vec<PathBuf> {
+    dirs.iter()
+        .flat_map(|d| [d.join("rembg").join(MATTE_MODEL), d.join(MATTE_MODEL)])
+        .collect()
+}
+
+/// The first candidate that is a whole model (`size` bytes).
+pub fn find_matte_model_in(dirs: &[PathBuf], size: u64) -> Option<PathBuf> {
+    matte_model_candidates(dirs)
+        .into_iter()
+        .find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.len() == size))
+}
+
+/// The install's bundled isnet-anime.onnx, if any. The pipeline itself then
+/// still looks in the repo/dev models dir, `~/.rembg/models/isnet-anime/`,
+/// `~/.u2net` and `$U2NET_HOME` (last), and names every path it tried.
+pub fn find_matte_model() -> Option<PathBuf> {
+    let opt = cfg!(unix).then(|| Path::new(LINUX_MODELS));
+    let data = lillith_core::config::data_dir();
+    find_matte_model_in(
+        &matte_model_dirs(exe_dir().as_deref(), opt, data.as_deref()),
+        MATTE_MODEL_SIZE,
+    )
 }
 
 /// Background removal mode of the pipeline (`--matte`).
@@ -510,6 +575,9 @@ impl ImportCmd {
         }
         if self.max_candidates > 0 {
             v.extend(["--max-candidates".into(), self.max_candidates.to_string()]);
+        }
+        if let (Some(m), Matte::Auto | Matte::Isnet) = (&self.model, self.matte) {
+            v.extend(["--model".into(), m.display().to_string()]);
         }
         for (flag, p) in [("--ffmpeg", &self.ffmpeg), ("--ffprobe", &self.ffprobe)] {
             if let Some(p) = p {
@@ -1008,6 +1076,7 @@ mod tests {
             ffprobe: None,
             matte: Matte::Auto,
             max_candidates: 0,
+            model: None,
         };
         assert_eq!(
             c.display(),
@@ -1025,6 +1094,65 @@ mod tests {
         assert!(c.display().ends_with(
             "--threads 2 --matte key --max-candidates 3 --ffmpeg /opt/l/bin/ffmpeg --ffprobe /opt/l/bin/ffprobe"
         ), "{}", c.display());
+        // The bundled model goes with auto / isnet only.
+        let c = ImportCmd {
+            model: Some("/opt/lillith/models/rembg/isnet-anime.onnx".into()),
+            ..c
+        };
+        assert!(!c.display().contains("--model"), "{}", c.display());
+        for m in [Matte::Auto, Matte::Isnet] {
+            let c = ImportCmd {
+                matte: m,
+                ..c.clone()
+            };
+            assert!(
+                c.display()
+                    .contains(" --model /opt/lillith/models/rembg/isnet-anime.onnx"),
+                "{}",
+                c.display()
+            );
+        }
+    }
+
+    #[test]
+    fn matte_model_bundled_first_in_order() {
+        let root = std::env::temp_dir().join(format!("lillith-vi-matte-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let exe = root.join("install").join("bin");
+        let opt = root.join("opt-models");
+        let data = root.join("data");
+        let dirs = matte_model_dirs(Some(&exe), Some(&opt), Some(&data));
+        assert_eq!(
+            dirs,
+            vec![
+                exe.join("models"),
+                root.join("install").join("models"),
+                opt.clone(),
+                data.join("models")
+            ]
+        );
+        let cands = matte_model_candidates(&dirs);
+        assert_eq!(cands.len(), 8);
+        assert_eq!(cands[0], exe.join("models").join("rembg").join(MATTE_MODEL));
+        assert_eq!(cands[1], exe.join("models").join(MATTE_MODEL));
+        assert_eq!(cands[7], data.join("models").join(MATTE_MODEL));
+        // Nothing there: None (the pipeline then names every path it tried).
+        assert_eq!(find_matte_model_in(&dirs, 4), None);
+        // Add tiny dummies from the lowest priority up: the highest present wins.
+        for c in cands.iter().rev() {
+            std::fs::create_dir_all(c.parent().unwrap()).unwrap();
+            std::fs::write(c, b"onnx").unwrap();
+            assert_eq!(find_matte_model_in(&dirs, 4).as_ref(), Some(c));
+        }
+        // A file of the wrong size (half copied) is skipped.
+        std::fs::write(&cands[0], b"on").unwrap();
+        assert_eq!(find_matte_model_in(&dirs, 4).as_ref(), Some(&cands[1]));
+        // No exe dir / no /opt: only the user data dir.
+        assert_eq!(
+            matte_model_dirs(None, None, Some(&data)),
+            vec![data.join("models")]
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

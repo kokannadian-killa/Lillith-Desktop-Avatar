@@ -6,15 +6,20 @@ rembg looked in ~/.u2net. Now the installers bundle the model and every script r
 downloaded at run time (Lillith is loopback-only), and rembg itself is not needed: `isnet_mask()` runs the model
 with onnxruntime and reproduces rembg's isnet-anime mask (same resize, normalisation and scaling).
 
-Where the model is looked for, first usable file wins (`$U2NET_HOME` is set to the folder that holds it):
+Where the model is looked for, first usable file wins (`$U2NET_HOME` is then set to the folder that holds it).
+Every "models dir" below is tried as <dir>/rembg/isnet-anime.onnx (where the installers put it), then
+<dir>/isnet-anime.onnx:
   1. an explicit --model (a file, or a folder holding isnet-anime.onnx)
-  2. $U2NET_HOME/isnet-anime.onnx
-  3. the installer's folder: <install>/models/rembg  (Arch: /opt/lillith/models/rembg, Windows:
-     <install dir>\\models\\rembg), found relative to this script (tools/video-pipeline/../../models/rembg)
-  4. /opt/lillith/models/rembg (Linux package)
-  5. ~/.u2net/isnet-anime.onnx             (rembg's own folder: a model Ko copied by hand)
-  6. ~/.rembg/models/isnet-anime/isnet-anime.onnx   (older Lillith default)
+  2. the install's own models dir: /opt/lillith/models (Arch package, Linux only)
+  3. the models dir next to the tools, found relative to this script (tools/video-pipeline/../../models):
+     the Windows install's <install dir>\\models, or a source checkout's <repo>/models (dev)
+  4. the user data dir: ~/.local/share/lillith/models ($XDG_DATA_HOME), Windows %LOCALAPPDATA%\\lillith\\models
+  5. ~/.rembg/models/isnet-anime/isnet-anime.onnx   (older Lillith default)
+  6. ~/.u2net/isnet-anime.onnx             (rembg's own folder: a model copied by hand)
+  7. $U2NET_HOME/isnet-anime.onnx          (last: an old shell export never hides the bundled copy)
 A file is "usable" only with the exact size below (a half-finished download is never picked).
+Nothing is ever downloaded. The release packers copy the model in at build time with
+tools/release/stage-matte-model.sh (it verifies MODEL_SHA256; see docs/VIDEO_IMPORT.md).
 
 python3 matte_model.py [--json] [--verify]   prints the check (exit 0 = ready, 1 = something is missing)
 """
@@ -28,7 +33,8 @@ MODEL_NAME = 'isnet-anime.onnx'
 MODEL_SIZE = 176069933
 MODEL_SHA256 = 'f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99'
 HERE = Path(__file__).resolve().parent
-LINUX_BUNDLE = '/opt/lillith/models/rembg'
+LINUX_MODELS = '/opt/lillith/models'
+LINUX_BUNDLE = LINUX_MODELS + '/rembg'
 # modules the pose pipeline imports for the cut-out (rembg is NOT one of them any more)
 REQUIRED_MODULES = ('numpy', 'PIL', 'scipy', 'cv2', 'onnxruntime')
 
@@ -39,8 +45,26 @@ def _model_file(c):
 
 
 def bundled_dir(here=None):
-    """<install>/models/rembg, relative to tools/video-pipeline."""
-    return Path(here or HERE).parent.parent / 'models' / 'rembg'
+    """<install>/models/rembg, relative to tools/video-pipeline: where the installers put the model."""
+    return models_dir_beside(here) / 'rembg'
+
+
+def models_dir_beside(here=None):
+    """<install or repo>/models, relative to tools/video-pipeline."""
+    return Path(here or HERE).parent.parent / 'models'
+
+
+def user_models_dir(env=None, home=None, posix=None):
+    """The user data dir's models folder (no root needed): ~/.local/share/lillith/models
+    ($XDG_DATA_HOME/lillith/models), Windows %LOCALAPPDATA%\\lillith\\models."""
+    env = os.environ if env is None else env
+    home = Path.home() if home is None else home
+    posix = (os.name == 'posix') if posix is None else posix
+    if posix:
+        base = Path(env['XDG_DATA_HOME']) if env.get('XDG_DATA_HOME') else home / '.local' / 'share'
+    else:
+        base = type(home)(env['LOCALAPPDATA']) if env.get('LOCALAPPDATA') else home / 'AppData' / 'Local'
+    return base / 'lillith' / 'models'
 
 
 def model_candidates(flag=None, env=None, home=None, here=None, posix=None):
@@ -49,15 +73,20 @@ def model_candidates(flag=None, env=None, home=None, here=None, posix=None):
     home = Path.home() if home is None else home
     posix = (os.name == 'posix') if posix is None else posix
     out = []
-    for c in (flag, env.get('U2NET_HOME')):
-        if c:
-            out.append(_model_file(c))
-    if here is not False:
-        out.append(bundled_dir(here) / MODEL_NAME)
+    if flag:
+        out.append(_model_file(flag))
+    dirs = []
     if posix:
-        out.append(Path(LINUX_BUNDLE) / MODEL_NAME)
-    out.append(home / '.u2net' / MODEL_NAME)
+        dirs.append(Path(LINUX_MODELS))
+    if here is not False:
+        dirs.append(models_dir_beside(here))
+    dirs.append(user_models_dir(env, home, posix))
+    for d in dirs:
+        out += [d / 'rembg' / MODEL_NAME, d / MODEL_NAME]
     out.append(home / '.rembg' / 'models' / 'isnet-anime' / MODEL_NAME)
+    out.append(home / '.u2net' / MODEL_NAME)
+    if env.get('U2NET_HOME'):
+        out.append(_model_file(env['U2NET_HOME']))
     seen, res = set(), []
     for p in out:
         if str(p) not in seen:
@@ -106,11 +135,17 @@ def configure_env():
     return d
 
 
-def fix_hint():
-    if os.name == 'nt':
-        return 'Run Lillith-Setup.exe again (it puts the model in <install folder>\\models\\rembg).'
-    return ('Run the Lillith installer again (Lillith-Installer.AppImage, or bash Lillith-Install.sh); it puts '
-            f'{MODEL_NAME} in {LINUX_BUNDLE}.')
+def fix_hint(here=None, env=None, home=None, posix=None):
+    """Exactly where to put the file (nothing is downloaded)."""
+    posix = (os.name == 'posix') if posix is None else posix
+    user = user_models_dir(env, home, posix)
+    what = f'{MODEL_NAME} ({MODEL_SIZE:,} bytes, sha256 {MODEL_SHA256[:8]}…{MODEL_SHA256[-6:]})'
+    if not posix:
+        return (f'Put {what} in {bundled_dir(here)} (the install folder) or in {user}, or run Lillith-Setup.exe '
+                'again (it puts the model in <install folder>\\models\\rembg).')
+    return (f'Put {what} in {LINUX_BUNDLE}/ (the installed Lillith; needs sudo) or in {user}/ (no sudo), or run '
+            'the Lillith installer again (Lillith-Installer.AppImage, or bash Lillith-Install.sh); it puts '
+            f'the model in {LINUX_BUNDLE}.')
 
 
 class MatteModelError(RuntimeError):
@@ -135,14 +170,14 @@ def check(need_model=True, flag=None, env=None, home=None, here=None, modules=No
             wrong = [(str(t), _size(t)) for t in tried if _size(t) not in (None, MODEL_SIZE)]
             why = ('found but the wrong size (a half-finished download?): ' + '; '.join(f'{p} is {s} bytes, needs {MODEL_SIZE}' for p, s in wrong)
                    if wrong else 'not found. Looked in: ' + '; '.join(str(t) for t in tried))
-            problems.append({'item': MODEL_NAME, 'detail': f'the AI cut-out model {MODEL_NAME} is {why}. {fix_hint()}'})
+            problems.append({'item': MODEL_NAME, 'detail': f'the AI cut-out model {MODEL_NAME} is {why}. {fix_hint(here, env, home, posix)}'})
         elif verify:
             h = hashlib.sha256()
             with open(model, 'rb') as f:
                 for b in iter(lambda: f.read(1 << 22), b''):
                     h.update(b)
             if h.hexdigest() != MODEL_SHA256:
-                problems.append({'item': MODEL_NAME, 'detail': f'{model} has the right size but the wrong checksum (damaged). {fix_hint()}'})
+                problems.append({'item': MODEL_NAME, 'detail': f'{model} has the right size but the wrong checksum (damaged). {fix_hint(here, env, home, posix)}'})
     return {'ok': not problems, 'problems': problems, 'model': str(model) if model else None,
             'model_dir': str(model.parent) if model else model_dir(env, home, here), 'tried': [str(t) for t in tried]}
 

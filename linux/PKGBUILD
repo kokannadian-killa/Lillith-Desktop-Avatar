@@ -56,6 +56,13 @@ package() {
   install -Dm755 "$_target/release/lillith-settings" "$pkgdir/usr/bin/lillith-settings"
   # Found through $XDG_DATA_DIRS (/usr/share/lillith/generated/manifest.toml).
   python3 linux/stage-assets.py assets/generated "$pkgdir/usr/share/lillith/generated"
+  # Pose Builder: the import pipeline (found at <exe>/../share/lillith/tools)
+  # and its AI cut-out model in the install's models dir, /opt/lillith/models
+  # (sha256-checked from $LILLITH_MATTE_MODEL or the build box's copy; never in
+  # git, never downloaded; skipped with a warning when neither exists).
+  install -d "$pkgdir/usr/share/lillith/tools/video-pipeline"
+  install -m644 tools/video-pipeline/*.py "$pkgdir/usr/share/lillith/tools/video-pipeline/"
+  bash tools/release/stage-matte-model.sh "$pkgdir/opt/lillith/models" --optional
   install -Dm644 linux/lillith.desktop "$pkgdir/usr/share/applications/lillith.desktop"
   # The icon set (found through $XDG_DATA_DIRS: /usr/share/lillith/icons);
   # hicolor gets the default. A user's pick (Settings > Icon, `lillith icon`)
