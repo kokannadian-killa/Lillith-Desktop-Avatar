@@ -157,7 +157,7 @@ pub fn run_session(
         .run(session);
     hooks::set_active(false);
     if cfg.learn.dream.summarize && !report.saved.is_empty() {
-        digest(cfg, &report, &global());
+        digest(cfg, &report, global());
     }
     Ok(report)
 }
