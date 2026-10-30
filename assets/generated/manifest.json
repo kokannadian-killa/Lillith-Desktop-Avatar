@@ -7643,6 +7643,41 @@
    "video": "oops_bikini_tie_catch/oops_bikini_tie_catch.mp4",
    "severity": 4,
    "system": false
+  },
+  {
+   "name": "oops_strap_snap_lean",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "oops_strap_snap_lean/",
+   "sheet": "oops_strap_snap_lean/oops_strap_snap_lean_sheet.png",
+   "manifest": "oops_strap_snap_lean/oops_strap_snap_lean.json",
+   "preview": "oops_strap_snap_lean/oops_strap_snap_lean_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "oops",
+    "severity:4",
+    "thirsty"
+   ],
+   "allure": true,
+   "video": "oops_strap_snap_lean/oops_strap_snap_lean.mp4",
+   "severity": 4,
+   "system": false
   }
  ]
 }
