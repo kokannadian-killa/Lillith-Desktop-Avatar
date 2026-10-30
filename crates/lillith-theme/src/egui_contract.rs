@@ -645,22 +645,23 @@ fn plate(
             Sense::CLICK
         },
     );
+    // Plain ASCII labels only: leading ✕/✓ tofu on the DemonOS font.
     let (no_txt, yes_txt) = if narrow {
         (
-            "✕ REFUSE",
+            "REFUSE",
             if view.busy {
                 "FORGING…"
             } else {
-                "✓ SIGN · YES"
+                "SIGN · YES"
             },
         )
     } else {
         (
-            "✕ REFUSE — NO",
+            "REFUSE — NO",
             if view.busy {
                 "THE FORGE IS BUSY…"
             } else {
-                "✓ SIGN IN BLOOD — YES"
+                "SIGN IN BLOOD — YES"
             },
         )
     };

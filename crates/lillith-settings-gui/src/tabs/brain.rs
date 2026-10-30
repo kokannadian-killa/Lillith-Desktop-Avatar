@@ -21,6 +21,7 @@ use lillith_setup::template::ChatTemplate;
 use lillith_setup::validate::{self, ValidateCtx};
 use lillith_setup::{launch, paths, wizard};
 use lillith_theme::egui_theme::{self as th, c32};
+use lillith_quantumsec::consent::AwakeningState;
 use lillith_theme::geom;
 use lillith_theme::palette::{self as pal, Rgba};
 use std::path::{Path, PathBuf};
@@ -32,15 +33,18 @@ pub enum Step {
     PickModel,
     Persona,
     TestSave,
+    /// QuantumSec / DemonOS shield intro (additive; nothing removed).
+    QuantumSec,
 }
 
 impl Step {
-    pub const ALL: [Step; 5] = [
+    pub const ALL: [Step; 6] = [
         Step::Avatar,
         Step::Runtime,
         Step::PickModel,
         Step::Persona,
         Step::TestSave,
+        Step::QuantumSec,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -49,6 +53,7 @@ impl Step {
             Step::PickModel => "Pick model",
             Step::Persona => "Persona",
             Step::TestSave => "Test & save",
+            Step::QuantumSec => "QuantumSec",
         }
     }
     pub fn from_name(s: &str) -> Option<Self> {
@@ -63,6 +68,7 @@ impl Step {
             "pickmodel" | "model" | "pick" => Step::PickModel,
             "persona" | "modelfile" => Step::Persona,
             "testsave" | "test" | "save" => Step::TestSave,
+            "quantumsec" | "qsec" | "phantomcore" | "demonos" => Step::QuantumSec,
             _ => return None,
         })
     }
@@ -348,6 +354,7 @@ impl BrainTab {
             Step::PickModel => !self.cfg.gguf_path.trim().is_empty(),
             Step::Persona => self.mf_path.exists() && !self.mf_dirty,
             Step::TestSave => matches!(&self.ping_result, Some(Ok(h)) if h.ready),
+            Step::QuantumSec => true,
         }
     }
 
@@ -1352,6 +1359,48 @@ impl BrainTab {
         }
     }
 
+
+    fn quantumsec_wizard_ui(&mut self, ui: &mut egui::Ui, shared: &mut Shared) {
+        chrome::section(ui, "QUANTUMSEC", Some("DemonOS · PhantomCore"), |ui| {
+            ui.label(
+                RichText::new("PhantomCore lattice — local-only shield. Protons watch resources; blood seal gates lockdown / unit enable.")
+                    .color(c32(pal::TEXT)),
+            );
+            chrome::hint(
+                ui,
+                "Nothing leaves the box. Red team = echo dry-run. Consent JSONL under ~/.biotek/consent/. Reports rotate (keep 8).",
+            );
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                chrome::chip(ui, "LOCAL ONLY", pal::OK, true);
+                chrome::chip(ui, "CONSENT GATED", pal::CYBER_CYAN, true);
+                chrome::chip(ui, "NO AUTO-ENABLE", pal::WARN, true);
+            });
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("Open the QuantumSec tab for live proton status, consent log, personalization reports, and systemd user-unit proposals.")
+                    .color(c32(pal::TEXT_DIM)),
+            );
+            ui.add_space(6.0);
+            if chrome::blade_button(ui, "Open QuantumSec panel", true).clicked() {
+                shared.goto_tab = Some("quantumsec".into());
+            }
+            if chrome::stone_button(ui, "Mark awakened (local)").clicked() {
+                if let Some(path) = AwakeningState::path_default() {
+                    let mut state = AwakeningState::load(&path);
+                    state.mark_shown();
+                    match state.save(&path) {
+                        Ok(()) => shared.toast(
+                            "Awakening flagged under ~/.biotek/config/",
+                            pal::CYBER_CYAN,
+                        ),
+                        Err(e) => shared.toast(format!("awakening: {e}"), pal::BLOOD_SHEEN),
+                    }
+                }
+            }
+        });
+    }
+
     fn avatar_ui(&mut self, ui: &mut egui::Ui, shared: &mut Shared) {
         chrome::section(ui, "AVATAR", Some("✔ canon"), |ui| {
             ui.horizontal(|ui| {
@@ -1488,7 +1537,7 @@ impl SettingsTab for BrainTab {
         self.steps_row(ui, shared);
         let i = self.step.index();
         ui.label(
-            RichText::new(format!("FIRST-RUN SETUP · step {} of 5 · point Lily at a local GGUF + llama-server (loopback only)", i + 1))
+            RichText::new(format!("FIRST-RUN SETUP · step {} of {} · point Lily at a local GGUF + llama-server (loopback only); QuantumSec seals last", i + 1, Step::ALL.len()))
                 .font(th::display_font(9.5))
                 .color(c32(pal::TEXT_MUTE)),
         );
@@ -1499,6 +1548,7 @@ impl SettingsTab for BrainTab {
             Step::PickModel => self.pick_model_ui(ui, shared),
             Step::Persona => self.persona_ui(ui, shared),
             Step::TestSave => self.test_save_ui(ui, shared),
+            Step::QuantumSec => self.quantumsec_wizard_ui(ui, shared),
         }
         ui.add_space(6.0);
         ui.horizontal(|ui| {
@@ -1783,5 +1833,7 @@ mod tests {
     fn step_names() {
         assert_eq!(Step::from_name("pick-model"), Some(Step::PickModel));
         assert_eq!(Step::from_name("Test & save"), Some(Step::TestSave));
+        assert_eq!(Step::from_name("quantumsec"), Some(Step::QuantumSec));
+        assert_eq!(Step::ALL.len(), 6);
     }
 }

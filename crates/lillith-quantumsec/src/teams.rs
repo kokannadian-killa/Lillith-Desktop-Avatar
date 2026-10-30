@@ -88,6 +88,9 @@ pub struct TeamItem {
     pub commands: Vec<String>,
     /// True when Red (or any local-only) simulation.
     pub local_simulation: bool,
+    /// Blue: show exact commands as "PROPOSAL, not run" (no spawn on seal).
+    #[serde(default)]
+    pub proposal_only: bool,
     /// Optional Purple link to a Red finding id.
     #[serde(default)]
     pub links_to: Option<String>,
@@ -116,6 +119,7 @@ impl TeamItem {
         );
         p.id = format!("{}-{}", self.id, p.proposed_unix);
         p.local_simulation = self.local_simulation;
+        p.proposal_only = self.proposal_only && !self.local_simulation;
         p
     }
 }
@@ -134,6 +138,7 @@ pub fn default_catalog() -> Vec<TeamItem> {
                 "echo '[QuantumSec] LOCAL SIMULATION: report → ~/.biotek/teams/red/'".into(),
             ],
             local_simulation: true,
+            proposal_only: false,
             links_to: None,
         },
         TeamItem {
@@ -146,32 +151,33 @@ pub fn default_catalog() -> Vec<TeamItem> {
                 "echo '[QuantumSec] LOCAL SIMULATION: anomaly pid=0 name=phantom'".into(),
             ],
             local_simulation: true,
+            proposal_only: false,
             links_to: None,
         },
         TeamItem {
             id: "blue-harden-ssh".into(),
             team: TeamColor::Blue,
             title: "Propose SSH hardening check".into(),
-            tooltip: "Shows the exact sshd config grep; blood seal required.".into(),
+            tooltip: "Exact sshd grep shown as PROPOSAL, not run; blood seal acknowledges.".into(),
             whisper: "WHISPER FROM THE CORE — Blue does not rewrite sshd. It shows the read-only check first.".into(),
             commands: vec![
-                "echo '[QuantumSec] PROPOSAL: grep -E \"^(PermitRootLogin|PasswordAuthentication)\" /etc/ssh/sshd_config'".into(),
-                "true".into(),
+                "grep -E '^(PermitRootLogin|PasswordAuthentication)' /etc/ssh/sshd_config".into(),
             ],
-            local_simulation: true, // keep default proposals local until user elevates deliberately
+            local_simulation: false,
+            proposal_only: true,
             links_to: None,
         },
         TeamItem {
             id: "blue-harden-ufw".into(),
             team: TeamColor::Blue,
             title: "Propose firewall status check".into(),
-            tooltip: "Shows `ufw status` / `firewall-cmd --state` as a proposal only.".into(),
+            tooltip: "Exact ufw/firewall-cmd status as PROPOSAL, not run; blood seal acknowledges.".into(),
             whisper: "WHISPER FROM THE CORE — Status first. Enable never without a second seal.".into(),
             commands: vec![
-                "echo '[QuantumSec] PROPOSAL: ufw status verbose || firewall-cmd --state'".into(),
-                "true".into(),
+                "ufw status verbose || firewall-cmd --state".into(),
             ],
-            local_simulation: true,
+            local_simulation: false,
+            proposal_only: true,
             links_to: None,
         },
         TeamItem {
@@ -185,6 +191,7 @@ pub fn default_catalog() -> Vec<TeamItem> {
                 "true".into(),
             ],
             local_simulation: true,
+            proposal_only: false,
             links_to: Some("red-sim-listeners".into()),
         },
     ]
@@ -228,6 +235,23 @@ mod tests {
             let p = item.as_proposal();
             assert!(p.local_simulation);
             assert!(p.detail_block().contains("LOCAL SIMULATION"));
+        }
+    }
+
+    #[test]
+    fn blue_proposals_are_proposal_not_run() {
+        for item in default_catalog()
+            .into_iter()
+            .filter(|i| i.team == TeamColor::Blue)
+        {
+            assert!(!item.local_simulation, "{}", item.id);
+            assert!(item.proposal_only, "{}", item.id);
+            let p = item.as_proposal();
+            assert!(!p.local_simulation);
+            assert!(p.proposal_only);
+            assert_eq!(p.seal_banner(), "PROPOSAL, not run");
+            assert!(!p.commands.iter().any(|c| c.contains("echo ")), "{}", item.id);
+            assert!(p.detail_block().contains("PROPOSAL, not run"));
         }
     }
 

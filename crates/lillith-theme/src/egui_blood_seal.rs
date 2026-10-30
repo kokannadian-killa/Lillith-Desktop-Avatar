@@ -58,19 +58,15 @@ pub fn lockdown_blood_seal(
     id: Id,
     summary: &str,
     detail_block: &str,
-    local_simulation: bool,
+    // "LOCAL SIMULATION ONLY" | "PROPOSAL, not run" | "REAL COMMANDS — review carefully"
+    seal_banner: &str,
 ) -> Option<ContractChoice> {
-    let target = if local_simulation {
-        Some("LOCAL SIMULATION ONLY")
-    } else {
-        Some("REAL COMMANDS — review carefully")
-    };
     blood_seal_popup(
         ctx,
         id,
         LOCKDOWN_TITLE,
         summary,
-        target,
+        Some(seal_banner),
         detail_block,
         false,
     )

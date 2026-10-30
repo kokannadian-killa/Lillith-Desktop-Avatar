@@ -18,6 +18,22 @@ pub enum ConsentDecision {
     Deny,
 }
 
+impl ConsentDecision {
+    /// Short log label.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ConsentDecision::Approve => "approve",
+            ConsentDecision::Deny => "deny",
+        }
+    }
+}
+
+impl std::fmt::Display for ConsentDecision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// One consent-log line.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsentRecord {
@@ -126,6 +142,63 @@ impl ConsentLog {
         self.append(&rec)
     }
 
+
+    /// Read recent records from every `consent-*.jsonl` (newest files first).
+    pub fn list_recent(&self, limit: usize) -> io::Result<Vec<ConsentRecord>> {
+        let mut files: Vec<_> = std::fs::read_dir(&self.dir)?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("consent-") && n.ends_with(".jsonl"))
+                    .unwrap_or(false)
+            })
+            .collect();
+        files.sort();
+        files.reverse();
+        let mut out = Vec::new();
+        for path in files {
+            let text = std::fs::read_to_string(&path).unwrap_or_default();
+            for line in text.lines().rev() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if let Ok(rec) = serde_json::from_str::<ConsentRecord>(line) {
+                    out.push(rec);
+                    if out.len() >= limit {
+                        return Ok(out);
+                    }
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Keep at most `keep` daily consent-*.jsonl files (newest retained).
+    pub fn rotate_keep(&self, keep: usize) -> io::Result<usize> {
+        let mut files: Vec<_> = std::fs::read_dir(&self.dir)?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("consent-") && n.ends_with(".jsonl"))
+                    .unwrap_or(false)
+            })
+            .collect();
+        files.sort();
+        let excess = files.len().saturating_sub(keep);
+        let mut removed = 0usize;
+        for path in files.into_iter().take(excess) {
+            if std::fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
     fn append(&self, rec: &ConsentRecord) -> io::Result<()> {
         let path = self.today_path();
         if let Some(parent) = path.parent() {
@@ -135,6 +208,7 @@ impl ConsentLog {
         serde_json::to_writer(&mut f, rec)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         f.write_all(b"\n")?;
+        let _ = self.rotate_keep(30);
         Ok(())
     }
 }
@@ -231,6 +305,25 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("\"approve\""));
         assert!(lines[1].contains("\"deny\""));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rotate_keeps_newest() {
+        let dir = std::env::temp_dir().join(format!("lillith-qsec-rot-{}", now_unix()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.join(format!("consent-2020-01-0{i}.jsonl")), "{}\n").unwrap();
+        }
+        let log = ConsentLog::open_in(dir.clone()).unwrap();
+        assert_eq!(log.rotate_keep(2).unwrap(), 3);
+        let left: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(left.len(), 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

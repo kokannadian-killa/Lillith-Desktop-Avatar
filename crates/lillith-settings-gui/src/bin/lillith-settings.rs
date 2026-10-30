@@ -14,7 +14,8 @@ USAGE: lillith-settings [CONFIG_PATH] [OPTIONS]
   --step NAME          Chat/Brain wizard step: avatar runtime pick-model persona test-save;
                        Companion: poses/N opens Poses category N;
                        Avatar: import:PATH imports an image, anchors:ID edits one;
-                       QuantumSec: awakening | blood-seal | tab | whisper | teams
+                       QuantumSec: awakening | blood-seal | tab | whisper | teams | consent | unit-enable;
+                       Brain wizard: quantumsec
   --size WxH           initial window size (default 960x660, min 640x480)
   --decorated          use the window manager's title bar
   --manifest PATH      animation set manifest.toml for Companion ▸ Poses

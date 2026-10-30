@@ -34,8 +34,12 @@ pub struct LockdownProposal {
     pub summary: String,
     /// Exact command lines (each is one `sh -c` invocation if executed).
     pub commands: Vec<String>,
-    /// When true, every command is labeled local-simulation / dry-run.
+    /// When true, every command is labeled local-simulation / dry-run (Red team).
     pub local_simulation: bool,
+    /// When true (and not a local sim), the seal shows "PROPOSAL, not run"
+    /// and [`execute_with_token`] logs consent but does not spawn commands.
+    #[serde(default)]
+    pub proposal_only: bool,
     /// Unix epoch when proposed.
     pub proposed_unix: u64,
 }
@@ -56,11 +60,12 @@ impl LockdownProposal {
                 "true".into(),
             ],
             local_simulation: true,
+            proposal_only: false,
             proposed_unix: now_unix(),
         }
     }
 
-    /// Custom proposal (caller sets `local_simulation`).
+    /// Custom proposal (caller sets `local_simulation` / `proposal_only`).
     pub fn new(summary: impl Into<String>, commands: Vec<String>) -> Self {
         let summary = summary.into();
         Self {
@@ -68,7 +73,19 @@ impl LockdownProposal {
             summary,
             commands,
             local_simulation: false,
+            proposal_only: false,
             proposed_unix: now_unix(),
+        }
+    }
+
+    /// Banner / target chip on the blood-seal card.
+    pub fn seal_banner(&self) -> &'static str {
+        if self.local_simulation {
+            "LOCAL SIMULATION ONLY"
+        } else if self.proposal_only {
+            "PROPOSAL, not run"
+        } else {
+            "REAL COMMANDS — review carefully"
         }
     }
 
@@ -76,6 +93,8 @@ impl LockdownProposal {
     pub fn detail_block(&self) -> String {
         let flag = if self.local_simulation {
             "# RED TEAM = LOCAL SIMULATION ONLY\n"
+        } else if self.proposal_only {
+            "# PROPOSAL, not run — acknowledge only; commands are not executed\n"
         } else {
             "# REAL COMMANDS — review carefully\n"
         };
@@ -143,6 +162,9 @@ fn nonce64() -> u64 {
 /// Each command is `sh -c`. On success the token is marked consumed.
 /// Without a matching token this returns [`LockdownError::ConsentRequired`]
 /// and runs nothing.
+///
+/// [`LockdownProposal::proposal_only`] proposals consume the token and return
+/// an empty output list without spawning (acknowledge / log only).
 pub fn execute_with_token(
     proposal: &LockdownProposal,
     token: &mut ConsentToken,
@@ -152,6 +174,10 @@ pub fn execute_with_token(
     }
     if token.consumed {
         return Err(LockdownError::TokenConsumed);
+    }
+    if proposal.proposal_only {
+        token.consumed = true;
+        return Ok(Vec::new());
     }
     let mut outs = Vec::with_capacity(proposal.commands.len());
     for cmd in &proposal.commands {
@@ -199,5 +225,19 @@ mod tests {
         let d = p.detail_block();
         assert!(d.contains("LOCAL SIMULATION"));
         assert!(d.contains("$ echo"));
+    }
+
+    #[test]
+    fn proposal_only_skips_spawn() {
+        let mut p = LockdownProposal::new(
+            "Blue proposal",
+            vec!["false".into()], // would fail if spawned
+        );
+        p.proposal_only = true;
+        assert_eq!(p.seal_banner(), "PROPOSAL, not run");
+        let mut tok = ConsentToken::issue(&p.id);
+        let outs = execute_with_token(&p, &mut tok).unwrap();
+        assert!(outs.is_empty());
+        assert!(tok.consumed);
     }
 }

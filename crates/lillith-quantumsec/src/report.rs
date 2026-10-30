@@ -121,7 +121,7 @@ Fish helpers below are **shown only**. Running them requires the blood seal
         let body = self.to_markdown();
         std::fs::write(&dated, &body)?;
         std::fs::write(&latest, &body)?;
-        rotate_reports(&dir, 8)?;
+        rotate_reports(&dir, REPORT_KEEP)?;
         Ok(dated)
     }
 
@@ -142,6 +142,9 @@ Fish helpers below are **shown only**. Running them requires the blood seal
         p
     }
 }
+
+/// How many dated personalization-*.md files to retain (latest kept).
+pub const REPORT_KEEP: usize = 8;
 
 fn rotate_reports(dir: &Path, keep: usize) -> std::io::Result<()> {
     let mut files: Vec<_> = std::fs::read_dir(dir)?
