@@ -32175,14 +32175,14 @@ h = 400
 anchor = [200, 392]
 
 [clips.idle_flirt_foot_tap]
-page = "idle_flirt_foot_tap/idle_flirt_foot_tap_sheet.png"
+page = "idle_flirt_foot_tap_sheet.png"
 fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "allure", "idle_variant"]
 severity = 1
-video = "idle_flirt_foot_tap/idle_flirt_foot_tap.mp4"
+video = "idle_flirt_foot_tap_sheet.png/idle_flirt_foot_tap_sheet.png.mp4"
 
 [[clips.idle_flirt_foot_tap.frames]]
 x = 0
@@ -42045,14 +42045,14 @@ h = 400
 anchor = [200, 392]
 
 [clips.lonely_tier1_pout_glance]
-page = "lonely_tier1_pout_glance/lonely_tier1_pout_glance_sheet.png"
+page = "lonely_tier1_pout_glance_sheet.png"
 fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "lonely_idle", "allure"]
 severity = 4
-video = "lonely_tier1_pout_glance/lonely_tier1_pout_glance.mp4"
+video = "lonely_tier1_pout_glance_sheet.png/lonely_tier1_pout_glance_sheet.png.mp4"
 
 [[clips.lonely_tier1_pout_glance.frames]]
 x = 0
@@ -42636,14 +42636,14 @@ h = 400
 anchor = [200, 392]
 
 [clips.lonely_tier2_sway_beckon]
-page = "lonely_tier2_sway_beckon/lonely_tier2_sway_beckon_sheet.png"
+page = "lonely_tier2_sway_beckon_sheet.png"
 fps = 12.0
 mode = "loop"
 baseline_y = 392
 scale = 0.54
 tags = ["canonical", "facing:front", "baked_motion", "lonely_idle", "allure"]
 severity = 4
-video = "lonely_tier2_sway_beckon/lonely_tier2_sway_beckon.mp4"
+video = "lonely_tier2_sway_beckon_sheet.png/lonely_tier2_sway_beckon_sheet.png.mp4"
 
 [[clips.lonely_tier2_sway_beckon.frames]]
 x = 0
@@ -50178,8 +50178,8 @@ scale = 0.559
 tags = ["canonical", "facing:front", "baked_motion", "oops", "variant_of:perch_sit", "allure"]
 severity = 4
 seat_y = 240
-seat_x_range = [142, 238]
-feet_lowest_y = 388
+seat_x_range = [154, 246]
+feet_lowest_y = 395
 video = "oops_perch_slip/oops_perch_slip.mp4"
 
 [[clips.oops_perch_slip.frames]]
@@ -51127,7 +51127,7 @@ h = 400
 anchor = [200, 392]
 
 [clips.perch_bounce_kick]
-page = "perch_bounce_kick/perch_bounce_kick_sheet.png"
+page = "perch_bounce_kick_sheet.png"
 fps = 12.0
 mode = "loop"
 baseline_y = 392
@@ -51137,7 +51137,7 @@ severity = 4
 seat_y = 240
 seat_x_range = [159, 245]
 feet_lowest_y = 391
-video = "perch_bounce_kick/perch_bounce_kick.mp4"
+video = "perch_bounce_kick_sheet.png/perch_bounce_kick_sheet.png.mp4"
 
 [[clips.perch_bounce_kick.frames]]
 x = 0
@@ -53643,7 +53643,7 @@ h = 400
 anchor = [200, 392]
 
 [clips.perch_stretch_arch]
-page = "perch_stretch_arch/perch_stretch_arch_sheet.png"
+page = "perch_stretch_arch_sheet.png"
 fps = 12.0
 mode = "loop"
 baseline_y = 392
@@ -53653,7 +53653,7 @@ severity = 4
 seat_y = 240
 seat_x_range = [154, 241]
 feet_lowest_y = 391
-video = "perch_stretch_arch/perch_stretch_arch.mp4"
+video = "perch_stretch_arch_sheet.png/perch_stretch_arch_sheet.png.mp4"
 
 [[clips.perch_stretch_arch.frames]]
 x = 0

@@ -2492,7 +2492,7 @@
    "placeholder": false,
    "source": "grok-imagine-video",
    "dir": "idle_flirt_foot_tap/",
-   "sheet": "idle_flirt_foot_tap_sheet.png",
+   "sheet": "idle_flirt_foot_tap/idle_flirt_foot_tap_sheet.png",
    "manifest": "idle_flirt_foot_tap/idle_flirt_foot_tap.json",
    "preview": "idle_flirt_foot_tap/idle_flirt_foot_tap_preview.gif",
    "tags": [
@@ -2500,7 +2500,7 @@
    ],
    "allure": true,
    "idle_variant": true,
-   "video": "idle_flirt_foot_tap_sheet.png/idle_flirt_foot_tap_sheet.png.mp4",
+   "video": "idle_flirt_foot_tap/idle_flirt_foot_tap.mp4",
    "severity": 1,
    "source_files": [
     "../../source/video/idle_flirt_foot_tap/idle_flirt_foot_tap_v3_a.mp4"
