@@ -52,6 +52,18 @@ pub struct EventRow {
     pub weekday: u32,
 }
 
+/// How often Ko shows up in each 3-hour bucket (event counts, 0..8): the
+/// "usually around / usually away" profile the loneliness score is scaled
+/// by (`lillith_core::loneliness::habit_factor`). Pure: reads the rows it
+/// is given, never the database.
+pub fn presence_profile(events: &[EventRow]) -> [f32; 8] {
+    let mut out = [0.0f32; 8];
+    for e in events {
+        out[bucket(e.hour) as usize] += 1.0;
+    }
+    out
+}
+
 /// A guess at what Ko will want next.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Prediction {
@@ -160,6 +172,22 @@ mod tests {
         assert_eq!(bucket(23), 7);
         assert_eq!(bucket(0), 0);
         assert!(is_weekend(6) && !is_weekend(0));
+    }
+
+    #[test]
+    fn presence_profile_counts_per_bucket() {
+        let evs = [
+            ev("app", "steam", 20, 0),
+            ev("app", "steam", 21, 1),
+            ev("chat", "hi", 23, 2),
+            ev("app", "vscode", 10, 3),
+        ];
+        let p = presence_profile(&evs);
+        assert_eq!(p[6], 2.0);
+        assert_eq!(p[7], 1.0);
+        assert_eq!(p[3], 1.0);
+        assert_eq!(p.iter().sum::<f32>(), 4.0);
+        assert_eq!(presence_profile(&[]), [0.0; 8]);
     }
 
     #[test]

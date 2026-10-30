@@ -325,6 +325,42 @@ pub fn today() -> MonthDay {
     })
 }
 
+/// The local hour of day, 0..=23 (UTC if the local time can't be read).
+pub fn local_hour() -> u32 {
+    local_hour_now().unwrap_or_else(|| {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        ((secs / 3600) % 24) as u32
+    })
+}
+
+#[cfg(unix)]
+fn local_hour_now() -> Option<u32> {
+    // SAFETY: `time(NULL)` and `localtime_r` with valid pointers to locals.
+    unsafe {
+        let t = libc::time(std::ptr::null_mut());
+        let mut tm: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&t, &mut tm).is_null() {
+            return None;
+        }
+        u32::try_from(tm.tm_hour).ok().filter(|h| *h < 24)
+    }
+}
+
+#[cfg(windows)]
+fn local_hour_now() -> Option<u32> {
+    // SAFETY: GetLocalTime only writes the SYSTEMTIME we pass.
+    let mut st: windows_sys::Win32::Foundation::SYSTEMTIME = unsafe { std::mem::zeroed() };
+    unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime(&mut st) };
+    Some(u32::from(st.wHour)).filter(|h| *h < 24)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn local_hour_now() -> Option<u32> {
+    None
+}
+
 /// The UTC month-day of a unix time (civil-from-days, Howard Hinnant).
 pub fn month_day_of_unix(secs: i64) -> MonthDay {
     let z = secs.div_euclid(86_400) + 719_468;

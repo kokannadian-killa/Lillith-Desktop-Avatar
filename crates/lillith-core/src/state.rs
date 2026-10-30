@@ -86,6 +86,8 @@ pub struct BehaviorConfig {
     pub gravity: GravityConfig,
     /// "Come closer" tease every few minutes of idle (`[behavior.tease]`).
     pub tease: crate::tease::TeaseConfig,
+    /// Loneliness → attention poses (`[behavior.loneliness]`).
+    pub loneliness: crate::loneliness::LonelinessConfig,
 }
 
 /// `[behavior.gravity]`: after a drag-release she falls (holding the
@@ -145,6 +147,7 @@ impl Default for BehaviorConfig {
             floor_offset_px: 48,
             gravity: GravityConfig::default(),
             tease: crate::tease::TeaseConfig::default(),
+            loneliness: crate::loneliness::LonelinessConfig::default(),
         }
     }
 }
@@ -389,6 +392,8 @@ pub struct Brain {
     banter: crate::banter::Picker,
     /// When she last greeted Ko (`user.returned`).
     last_greet: Option<f32>,
+    /// Loneliness → attention poses ([`crate::loneliness`]).
+    lonely: crate::loneliness::Loneliness,
     out: Vec<Action>,
 }
 
@@ -404,6 +409,7 @@ impl Brain {
     ) -> Self {
         let mut rng = Rng::new(seed);
         let next_wander = rng.range(cfg.wander_every_s.0, cfg.wander_every_s.1);
+        let lonely = crate::loneliness::Loneliness::new(cfg.loneliness.clone(), seed);
         Self {
             gestures: Gestures::new(cfg.gestures),
             mood: MoodState::new(cfg.mood_tau_s),
@@ -431,6 +437,7 @@ impl Brain {
             last_pool_pick: BTreeMap::new(),
             banter: crate::banter::Picker::new(seed ^ 0xB4_7E5D_EA10),
             last_greet: None,
+            lonely,
             out: Vec::new(),
         }
     }
@@ -566,6 +573,62 @@ impl Brain {
         self.muted = muted;
     }
 
+    // ── Loneliness → attention ([`crate::loneliness`]) ───────────────────
+
+    /// Lonely poses on (`auto`) or off (right-click toggle).
+    pub fn loneliness_enabled(&self) -> bool {
+        self.lonely.enabled()
+    }
+
+    pub fn set_loneliness_enabled(&mut self, on: bool) {
+        self.lonely.set_enabled(on);
+    }
+
+    /// Live `[behavior.loneliness]` (settings saved); the score is kept.
+    pub fn set_loneliness_config(&mut self, cfg: crate::loneliness::LonelinessConfig) {
+        if cfg != *self.lonely.config() {
+            self.lonely.set_config(cfg);
+        }
+    }
+
+    /// The loneliness engine (score, level), read only.
+    pub fn loneliness(&self) -> &crate::loneliness::Loneliness {
+        &self.lonely
+    }
+
+    /// Poses with their manifest severity / system flag.
+    pub fn set_pose_tags(&mut self, tags: Vec<crate::loneliness::PoseTag>) {
+        self.lonely.set_pool(tags);
+    }
+
+    /// Ko's presence per 3-hour bucket (from memory habits): loneliness
+    /// rises slower when he's usually away, faster when he's usually around.
+    pub fn set_presence(&mut self, presence: [f32; 8]) {
+        self.lonely.set_presence(presence);
+    }
+
+    /// The local hour now (habits, quiet hours).
+    pub fn set_hour(&mut self, hour: u32) {
+        self.lonely.set_hour(hour);
+    }
+
+    /// A system interaction (card, settings, wizard, dialog, console,
+    /// install) is open: no lonely poses or bids, and no attention.
+    pub fn set_system_busy(&mut self, busy: bool) {
+        self.lonely.set_system_busy(busy);
+    }
+
+    /// The safeword: she stays calm for `hush_hold_min`.
+    pub fn note_hush(&mut self) {
+        self.lonely.note_hush();
+    }
+
+    /// Ko paid her real attention outside the overlay inputs (chat,
+    /// voice): loneliness resets.
+    pub fn note_attention(&mut self) {
+        self.lonely.attend();
+    }
+
     /// Feels `mood` at full strength (right-click menu, debug). It fades
     /// back to the baseline like any other feeling (`mood_tau_s`). Returns
     /// [`Action::MoodChanged`] if the mood changed.
@@ -579,6 +642,10 @@ impl Brain {
 
     /// Handles one overlay input; returns the actions to apply.
     pub fn input(&mut self, input: Input) -> Vec<Action> {
+        // Real attention (not a mere pointer pass): she's not lonely.
+        if matches!(input, Input::Click(_) | Input::DragStart | Input::Key(_)) {
+            self.lonely.attend();
+        }
         match input {
             Input::Click(b) => self.on_click(b),
             Input::Hover(inside) => {
@@ -708,8 +775,21 @@ impl Brain {
             self.start_wander();
         }
 
+        // Loneliness: rises while Ko ignores her; an attention bid poses
+        // right away (never during system interactions or the hush).
+        self.lonely.tick(dt);
+        let can_pose = self.phase == Phase::Idle && !busy && !hovering;
+        if can_pose
+            && t < self.next_cycle
+            && !self.lonely.pool().is_empty()
+            && self.lonely.want_bid()
+        {
+            tracing::debug!(level = self.lonely.level(), "lonely: attention bid");
+            self.cycle_pose();
+        }
+
         // Pose cycle.
-        if self.phase == Phase::Idle && !busy && !hovering && t >= self.next_cycle {
+        if can_pose && t >= self.next_cycle {
             self.cycle_pose();
         }
 
@@ -734,6 +814,8 @@ impl Brain {
             self.hidden_clips = hidden;
             // The pose-cycle bag is rebuilt from `has` on its next pick.
             self.cycle_mood = None;
+            let pool = self.lonely.pool().to_vec();
+            self.lonely.set_pool(pool);
         }
     }
 
@@ -1086,6 +1168,7 @@ impl Brain {
             }
             Gesture::HoverLong => {
                 self.last_activity = self.t;
+                self.lonely.attend();
                 if self.phase == Phase::Idle {
                     self.fire_rule("input.hover_long", None, false);
                 }
@@ -1250,9 +1333,21 @@ impl Brain {
 
     fn cycle_pose(&mut self) {
         self.next_cycle = self.t + self.cfg.pose_cycle_s;
-        self.sync_cycle_bag();
-        let Some(clip) = self.cycle_bag.next(&mut self.rng).map(str::to_string) else {
-            return;
+        // Lonely: a pose weighted toward her loneliness level (capped);
+        // `None` (calm, off, system interaction, hush) = the mood cycle.
+        let (clips, hidden) = (&self.clips, &self.hidden_clips);
+        let lonely = self
+            .lonely
+            .pick(|c| clips.contains(c) && !hidden.contains(c) && !is_base_clip(c));
+        let clip = match lonely {
+            Some(c) => c,
+            None => {
+                self.sync_cycle_bag();
+                let Some(clip) = self.cycle_bag.next(&mut self.rng).map(str::to_string) else {
+                    return;
+                };
+                clip
+            }
         };
         let paired = crate::banter::clip_pool(&clip);
         self.out.push(Action::React { clip, priority: 0 });
@@ -2033,5 +2128,97 @@ mod tests {
         }
         // Unknown events do nothing.
         assert!(b.event(&Event::new("no.such.event")).is_empty());
+    }
+
+    // ── Loneliness → attention ───────────────────────────────────────────
+
+    fn lonely_brain(max_severity: u8) -> Brain {
+        let mut c = cfg();
+        c.sleepy_after_s = 1e6;
+        c.asleep_after_s = 1e6;
+        // Only attention bids pose (no regular cycle in these tests).
+        c.pose_cycle_s = 1e6;
+        c.loneliness = crate::loneliness::LonelinessConfig {
+            minutes_to_max: 1.0,
+            bid_cooldown_min: 0.1,
+            hush_hold_min: 1.0,
+            max_severity,
+            ..Default::default()
+        };
+        let mut b = brain_with(c, MoveMode::Stay);
+        use crate::loneliness::PoseTag;
+        b.set_pose_tags(vec![
+            PoseTag::new("wave", 0, false),
+            PoseTag::new("hip_sway", 1, false),
+            PoseTag::new("lean_forward", 2, false),
+            PoseTag::new("shoulder_roll", 3, false),
+            PoseTag::new("event_wifi", 0, true),
+            PoseTag::new("not_loaded_pose", 3, false),
+        ]);
+        b
+    }
+
+    const LONELY: &[&str] = &["wave", "hip_sway", "lean_forward", "shoulder_roll"];
+
+    fn lonely_reacts(a: &[Action]) -> Vec<String> {
+        reacts(a)
+            .into_iter()
+            .filter(|c| LONELY.contains(c) || *c == "event_wifi" || *c == "not_loaded_pose")
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn neglect_brings_attention_bids_with_bolder_poses() {
+        let mut b = lonely_brain(3);
+        let early = run(&mut b, 10.0, false);
+        assert!(lonely_reacts(&early).is_empty(), "not lonely yet");
+        let a = run(&mut b, 120.0, false);
+        assert_eq!(b.loneliness().level(), 3);
+        let picks = lonely_reacts(&a);
+        assert!(picks.len() >= 5, "{picks:?}");
+        assert!(!picks
+            .iter()
+            .any(|c| c == "event_wifi" || c == "not_loaded_pose"));
+        assert!(picks.iter().any(|c| c == "shoulder_roll"), "{picks:?}");
+        // A click is real attention: calm again, no bids.
+        click(&mut b, Button::Middle);
+        assert_eq!(b.loneliness().level(), 0);
+        assert!(lonely_reacts(&run(&mut b, 10.0, false)).is_empty());
+        // Chat / voice attention resets it too; pointer events from the
+        // system (`user.activity`) do not.
+        run(&mut b, 60.0, false);
+        b.event(&Event::new("user.activity"));
+        assert_eq!(b.loneliness().level(), 3);
+        b.note_attention();
+        assert_eq!(b.loneliness().level(), 0);
+    }
+
+    #[test]
+    fn max_severity_cap_holds_in_the_brain() {
+        let mut b = lonely_brain(1);
+        let picks = lonely_reacts(&run(&mut b, 300.0, false));
+        assert!(picks.iter().any(|c| c == "hip_sway"), "{picks:?}");
+        assert!(
+            picks.iter().all(|c| c == "hip_sway" || c == "wave"),
+            "never above max_severity 1: {picks:?}"
+        );
+    }
+
+    #[test]
+    fn no_attention_bids_during_system_interactions_or_the_hush() {
+        let mut b = lonely_brain(3);
+        run(&mut b, 120.0, false);
+        b.set_system_busy(true);
+        assert!(lonely_reacts(&run(&mut b, 300.0, false)).is_empty());
+        b.set_system_busy(false);
+        b.note_hush();
+        assert!(lonely_reacts(&run(&mut b, 50.0, false)).is_empty());
+        // After the hold she may try again.
+        assert!(!lonely_reacts(&run(&mut b, 60.0, false)).is_empty());
+        // Off (right-click toggle): calm.
+        b.set_loneliness_enabled(false);
+        assert!(lonely_reacts(&run(&mut b, 300.0, false)).is_empty());
+        assert!(!b.loneliness_enabled());
     }
 }

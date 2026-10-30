@@ -1263,6 +1263,36 @@ pub fn save_seasonal_outfit(path: &Path, value: &str) -> Result<(), ConfigError>
     })
 }
 
+/// Persists the "Lonely poses" toggle: `[behavior.loneliness] mode =
+/// "auto"` (on) or `"off"`, keeping the other keys of both tables.
+pub fn save_loneliness_mode(path: &Path, on: bool) -> Result<(), ConfigError> {
+    let mode = if on {
+        crate::loneliness::LonelinessMode::Auto
+    } else {
+        crate::loneliness::LonelinessMode::Off
+    };
+    update_config(path, |t| {
+        let behavior = t
+            .entry("behavior")
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !behavior.is_table() {
+            *behavior = toml::Value::Table(toml::Table::new());
+        }
+        let Some(behavior) = behavior.as_table_mut() else {
+            return;
+        };
+        let lonely = behavior
+            .entry("loneliness")
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !lonely.is_table() {
+            *lonely = toml::Value::Table(toml::Table::new());
+        }
+        if let Some(lonely) = lonely.as_table_mut() {
+            lonely.insert("mode".into(), toml::Value::String(mode.key().into()));
+        }
+    })
+}
+
 /// Read-modify-write of the config file as a TOML table (atomic rename;
 /// creates the file and directory; comments are not kept).
 pub fn update_config(path: &Path, f: impl FnOnce(&mut toml::Table)) -> Result<(), ConfigError> {
@@ -1429,6 +1459,42 @@ mod tests {
         assert_eq!(back.icon, "classic");
         save_seasonal_outfit(&p, "off").unwrap();
         assert_eq!(Config::load(&p).unwrap().seasonal_outfit, "off");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn loneliness_config_parses_and_the_toggle_saves() {
+        use crate::loneliness::LonelinessMode;
+        let c = Config::default();
+        assert_eq!(c.behavior.loneliness.mode, LonelinessMode::Auto);
+        assert_eq!(c.behavior.loneliness.max_severity, 3);
+        let c = Config::from_toml_str(
+            "[behavior.loneliness]\nmode = \"off\"\nmax_severity = 1\nquiet_hours = [23, 7]\n",
+        )
+        .unwrap();
+        assert_eq!(c.behavior.loneliness.mode, LonelinessMode::Off);
+        assert_eq!(c.behavior.loneliness.max_severity, 1);
+        assert_eq!(c.behavior.loneliness.quiet_hours, [23, 7]);
+        assert!(Config::from_toml_str("[behavior.loneliness]\nmode = \"loud\"\n").is_err());
+        let dir = std::env::temp_dir().join(format!("lillith-cfg-lonely-{}", std::process::id()));
+        let p = dir.join("config.toml");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            &p,
+            "scale = 0.75\n[behavior]\npose_cycle_s = 30.0\n[behavior.loneliness]\nmax_severity = 2\n",
+        )
+        .unwrap();
+        save_loneliness_mode(&p, false).unwrap();
+        let back = Config::load(&p).unwrap();
+        assert_eq!(back.behavior.loneliness.mode, LonelinessMode::Off);
+        assert_eq!(back.behavior.loneliness.max_severity, 2);
+        assert_eq!(back.behavior.pose_cycle_s, 30.0);
+        assert_eq!(back.scale, 0.75);
+        save_loneliness_mode(&p, true).unwrap();
+        assert_eq!(
+            Config::load(&p).unwrap().behavior.loneliness.mode,
+            LonelinessMode::Auto
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

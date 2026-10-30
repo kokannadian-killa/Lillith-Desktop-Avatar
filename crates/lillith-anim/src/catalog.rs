@@ -127,6 +127,32 @@ pub fn is_pose(name: &str, m: &Manifest) -> bool {
         && name != "drag_held"
 }
 
+/// Base loops the pose cycle never picks (she returns to them).
+const NOT_IDLE_PICKS: &[&str] = &[
+    "idle",
+    "idle_a",
+    "idle_b",
+    "sleep",
+    "wake",
+    "sit_swing",
+    "perch_sit",
+];
+
+/// The loneliness picker's pool: every pose with its manifest
+/// [`severity`](crate::atlas::Clip::severity). System-interaction clips
+/// (`system = true`, `event_*`, talk loops) are kept but flagged so they are
+/// never picked; base loops and plumbing are left out.
+pub fn pose_tags(m: &Manifest) -> Vec<lillith_core::loneliness::PoseTag> {
+    m.clips
+        .iter()
+        .filter(|(name, _)| is_pose(name, m) && !NOT_IDLE_PICKS.contains(&name.as_str()))
+        .map(|(name, c)| {
+            let system = c.system || matches!(category_of(name), 4 | 5);
+            lillith_core::loneliness::PoseTag::new(name.clone(), c.severity, system)
+        })
+        .collect()
+}
+
 /// Category index (into [`CATEGORIES`]) for a clip name.
 pub fn category_of(name: &str) -> usize {
     if name.starts_with("talk") {
@@ -323,6 +349,75 @@ mod tests {
         assert_eq!(category_of("talk_loop_flirty"), 5);
         assert_eq!(label("idle_flirt_hip_lean"), "Hip lean");
         assert_eq!(label("event_battery_low"), "Battery low");
+    }
+
+    #[test]
+    fn pose_tags_carry_severity_and_flag_system_clips() {
+        let m = Manifest::from_toml_str(
+            r#"
+            [clips.idle]
+            page = "i.png"
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.walk_left]
+            page = "w.png"
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.wave]
+            page = "w.png"
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.cleavage_beckon]
+            page = "c.png"
+            severity = 3
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.soul_contract_sign]
+            page = "s.png"
+            system = true
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.event_wifi]
+            page = "e.png"
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            "#,
+        )
+        .unwrap();
+        let tags = pose_tags(&m);
+        let get = |n: &str| tags.iter().find(|t| t.name == n).cloned();
+        assert!(get("idle").is_none() && get("walk_left").is_none());
+        assert_eq!(get("wave").unwrap().severity, 0);
+        assert_eq!(get("cleavage_beckon").unwrap().severity, 3);
+        assert!(get("soul_contract_sign").unwrap().system);
+        assert!(get("event_wifi").unwrap().system);
+        assert!(!get("wave").unwrap().system);
+    }
+
+    /// The shipped manifest is tagged: every tier has clips and the
+    /// system-interaction clips are flagged.
+    #[test]
+    fn shipped_manifest_is_severity_tagged() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/generated/manifest.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        let m = Manifest::from_toml_str(&text).unwrap();
+        let tags = pose_tags(&m);
+        for sev in 0..=3u8 {
+            assert!(
+                tags.iter().any(|t| t.severity == sev && !t.system),
+                "no severity {sev} poses"
+            );
+        }
+        for n in [
+            "soul_contract_sign",
+            "pose_hacking",
+            "pose_wait_palm",
+            "event_wifi",
+        ] {
+            assert!(m.clips[n].system || n.starts_with("event_"), "{n}");
+            assert_eq!(m.clips[n].severity, 0, "{n}");
+        }
+        assert_eq!(m.clips["wave"].severity, 0);
+        assert_eq!(m.clips["blow_kiss"].severity, 1);
+        assert_eq!(m.clips["dom_beckon_finger"].severity, 2);
+        assert_eq!(m.clips["cleavage_beckon"].severity, 3);
     }
 
     fn seasonal_manifest() -> Manifest {

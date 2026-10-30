@@ -67,6 +67,9 @@ fn main() {
             path => opts.config_path = Some(PathBuf::from(path)),
         }
     }
+    // Settings, the setup wizard and their cards / file dialogs are system
+    // interactions: Lillith makes no lonely attention bids while this is open.
+    let _ui = lillith_core::system_ui::SystemUi::enter_shared("settings");
     if let Err(e) = run_with(opts, None) {
         die(&format!("{e}"));
     }
