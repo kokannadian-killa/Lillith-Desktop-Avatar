@@ -129,8 +129,8 @@ pub struct Clip {
     pub scale: Option<f64>,
     #[serde(default)]
     pub tags: Vec<String>,
-    /// How suggestive the pose is, 0 (neutral / fun) ..= 3 (most
-    /// explicit). Loneliness weights her idle picks toward her level and
+    /// How suggestive the pose is, 0 (neutral / fun) ..= 5 (most
+    /// explicit); see [`lillith_core::loneliness`] for the scale. Loneliness weights her idle picks toward her level and
     /// never past the configured cap ([`lillith_core::loneliness`]).
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub severity: u8,
@@ -303,7 +303,7 @@ fn is_zero_u8(n: &u8) -> bool {
 }
 
 /// Highest clip [`Clip::severity`].
-pub const MAX_SEVERITY: u8 = 3;
+pub const MAX_SEVERITY: u8 = lillith_core::loneliness::MAX_SEVERITY;
 
 fn default_fps() -> f32 {
     12.0
@@ -973,6 +973,10 @@ mod tests {
             page = "b.png"
             severity = 3
             frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.boldest]
+            page = "b.png"
+            severity = 5
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
             [clips.card]
             page = "s.png"
             system = true
@@ -983,16 +987,17 @@ mod tests {
         assert_eq!(m.clips["calm"].severity, 0);
         assert!(!m.clips["calm"].system);
         assert_eq!(m.clips["bold"].severity, 3);
+        assert_eq!(m.clips["boldest"].severity, 5);
         assert!(m.clips["card"].system);
         // Defaults are not written back out.
         let out = toml::to_string(&m).unwrap();
-        assert_eq!(out.matches("severity").count(), 1, "{out}");
+        assert_eq!(out.matches("severity").count(), 2, "{out}");
         assert_eq!(out.matches("system").count(), 1, "{out}");
         let err = Manifest::from_toml_str(
             r#"
             [clips.x]
             page = "x.png"
-            severity = 4
+            severity = 6
             frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
             "#,
         )

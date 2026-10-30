@@ -386,7 +386,7 @@ fn convert(
     if anim.extra.contains_key("retime") || side.is_some_and(|m| m.contains_key("retime")) {
         tags.push("retimed".into());
     }
-    // Loneliness tiers: `severity` 0..=3 and `system` (never an idle pick).
+    // Loneliness tiers: `severity` 0..=5 and `system` (never an idle pick).
     let severity: u8 = typed_field(&anim.name, &anim.extra, side, "severity")?.unwrap_or(0);
     ensure!(
         severity <= lillith_anim::atlas::MAX_SEVERITY,
@@ -1424,7 +1424,9 @@ mod tests {
               { "name": "event_card", "sheet": "b.png", "frame_count": 1, "fps": 6,
                 "loop": false, "system": true, "anchor": [200, 392] },
               { "name": "wave", "sheet": "c.png", "frame_count": 1, "fps": 6,
-                "loop": false, "anchor": [200, 392] } ] }"#,
+                "loop": false, "anchor": [200, 392] },
+              { "name": "top_tier", "sheet": "d.png", "frame_count": 1, "fps": 6,
+                "loop": false, "severity": 5, "anchor": [200, 392] } ] }"#,
         )
         .unwrap();
         let m = build(&json, Path::new("."), Path::new("."), &[]).unwrap();
@@ -1432,10 +1434,11 @@ mod tests {
         assert!(!m.clips["lean_tease"].system);
         assert!(m.clips["event_card"].system);
         assert_eq!(m.clips["wave"].severity, 0);
+        assert_eq!(m.clips["top_tier"].severity, 5, "5 is accepted");
         let back = Manifest::from_toml_str(&toml::to_string(&m).unwrap()).unwrap();
         assert_eq!(back.clips, m.clips);
         for bad in [
-            r#""severity": 4"#,
+            r#""severity": 6"#,
             r#""severity": "high""#,
             r#""system": "yes""#,
         ] {

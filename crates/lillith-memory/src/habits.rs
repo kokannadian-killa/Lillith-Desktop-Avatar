@@ -178,7 +178,7 @@ mod tests {
     fn presence_profile_counts_per_bucket() {
         let evs = [
             ev("app", "steam", 20, 0),
-            ev("app", "steam", 21, 1),
+            ev("app", "steam", 19, 1),
             ev("chat", "hi", 23, 2),
             ev("app", "vscode", 10, 3),
         ];

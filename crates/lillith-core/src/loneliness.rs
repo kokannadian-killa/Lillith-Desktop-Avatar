@@ -17,15 +17,22 @@
 //!   around it is up to 1.5× (rises faster); at hours he is usually away
 //!   down to 0.5× (rises slower); no data = 1×. A real interaction resets
 //!   neglect and score to 0. Quiet hours and system interactions hold it still.
-//! - **Level** `0..=3` ([`MAX_LEVEL`]): thresholds 0.25 / 0.5 / 0.75 with
-//!   hysteresis (a level drops only once the score is
-//!   `hysteresis` below its threshold, so it does not flicker), then capped
-//!   by `max_severity`.
+//! - **Level** (tier) `0..=3` ([`MAX_LEVEL`]): thresholds 0.25 / 0.5 /
+//!   0.75 with hysteresis (a level drops only once the score is
+//!   `hysteresis` below its threshold, so it does not flicker).
+//! - **Severity** `0..=5` ([`MAX_SEVERITY`]): 0 neutral / fun, 1 flirty,
+//!   2 sultry, 3 explicit, 4 more explicit, 5 most explicit. Each tier
+//!   reaches up to [`TIER_TOP`]`[level]` = 0 / 2 / 4 / 5, so a severity-5
+//!   pose only ever appears at the top tier. `max_severity` (0..=5) caps
+//!   it; the tier is capped to the lowest one that reaches the cap.
 //! - **Picker**: draws from every non-system tagged pose with
-//!   `severity <= min(level, max_severity)`, weighted toward the current
-//!   level (same level 6, one below 3, further below 1), so calmer poses
-//!   still sometimes appear and the cap always holds. No immediate repeats
-//!   ([`ShuffleBag`]).
+//!   `severity <= min(TIER_TOP[level], max_severity)`, weighted toward the
+//!   boldest severity actually available under that ceiling (same 6, one
+//!   below 3, further below 1), so calmer poses still sometimes appear
+//!   and the cap always holds. No immediate repeats ([`ShuffleBag`]).
+//!   Hard limit (every tier): adult content only. No clip may sexualize
+//!   minors or young-seeming characters; such a clip must never be tagged
+//!   or added to the pool.
 //! - **Never during system interactions** (Soul Contract / deletion cards,
 //!   settings and setup wizard, file dialogs, console, installs) or while
 //!   the safeword hush is active: no picks, no bids. System interactions
@@ -38,8 +45,29 @@ use crate::bag::ShuffleBag;
 use crate::rng::Rng;
 use serde::{Deserialize, Serialize};
 
-/// Highest loneliness level / pose severity.
+/// Highest loneliness level (tier).
 pub const MAX_LEVEL: u8 = 3;
+
+/// Highest pose severity (manifest `severity`, `max_severity`).
+pub const MAX_SEVERITY: u8 = 5;
+
+/// Highest severity each loneliness tier 0..=3 reaches.
+pub const TIER_TOP: [u8; MAX_LEVEL as usize + 1] = [0, 2, 4, MAX_SEVERITY];
+
+/// The severity ceiling at `level` under `cap` (0..=5).
+pub fn severity_top(level: u8, cap: u8) -> u8 {
+    TIER_TOP[level.min(MAX_LEVEL) as usize].min(cap.min(MAX_SEVERITY))
+}
+
+/// The lowest tier whose [`TIER_TOP`] reaches `cap`: higher tiers add
+/// nothing under that cap (0 → 0, 1..=2 → 1, 3..=4 → 2, 5 → 3).
+pub fn tier_for_cap(cap: u8) -> u8 {
+    let cap = cap.min(MAX_SEVERITY);
+    TIER_TOP
+        .iter()
+        .position(|t| *t >= cap)
+        .map_or(MAX_LEVEL, |i| i as u8)
+}
 
 /// Score at which each level 1..=3 starts.
 pub const THRESHOLDS: [f32; 3] = [0.25, 0.5, 0.75];
@@ -70,7 +98,7 @@ impl LonelinessMode {
 pub struct LonelinessConfig {
     /// `auto` (default) or `off`. Right-click ▸ "Lonely poses" flips it.
     pub mode: LonelinessMode,
-    /// Highest pose severity she may use, 0..=3 (3 = most explicit).
+    /// Highest pose severity she may use, 0..=5 (5 = most explicit).
     pub max_severity: u8,
     /// Minutes of neglect (at a 1× habit factor) from 0 to full loneliness.
     pub minutes_to_max: f32,
@@ -89,7 +117,7 @@ impl Default for LonelinessConfig {
     fn default() -> Self {
         Self {
             mode: LonelinessMode::Auto,
-            max_severity: MAX_LEVEL,
+            max_severity: MAX_SEVERITY,
             minutes_to_max: 120.0,
             bid_cooldown_min: 10.0,
             hush_hold_min: 10.0,
@@ -100,9 +128,9 @@ impl Default for LonelinessConfig {
 }
 
 impl LonelinessConfig {
-    /// `max_severity` clamped to 0..=[`MAX_LEVEL`].
+    /// `max_severity` clamped to 0..=[`MAX_SEVERITY`].
     pub fn cap(&self) -> u8 {
-        self.max_severity.min(MAX_LEVEL)
+        self.max_severity.min(MAX_SEVERITY)
     }
 }
 
@@ -111,7 +139,7 @@ impl LonelinessConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PoseTag {
     pub name: String,
-    /// 0 (calm) ..= 3 (most explicit).
+    /// 0 (calm) ..= 5 (most explicit).
     pub severity: u8,
     /// Used for system interactions (event reactions, contract signing):
     /// never drawn by the picker.
@@ -194,14 +222,15 @@ pub fn level_for(score: f32, prev: u8, hysteresis: f32) -> u8 {
     lvl
 }
 
-/// Shuffle weight of a pose of `severity` at `level` under `cap`:
-/// 0 = never (system, or above `min(level, cap)`).
-pub fn pick_weight(tag: &PoseTag, level: u8, cap: u8) -> u32 {
-    let top = level.min(cap).min(MAX_LEVEL);
+/// Shuffle weight of a pose under the severity ceiling `top` (see
+/// [`severity_top`]), aimed at `aim` (the boldest severity available,
+/// `<= top`): 0 = never (system, or above `top`).
+pub fn pick_weight(tag: &PoseTag, top: u8, aim: u8) -> u32 {
+    let top = top.min(MAX_SEVERITY);
     if tag.system || tag.severity > top {
         return 0;
     }
-    match top - tag.severity {
+    match aim.min(top).abs_diff(tag.severity) {
         0 => 6,
         1 => 3,
         _ => 1,
@@ -322,10 +351,11 @@ impl Loneliness {
         self.neglect
     }
 
-    /// Current level, capped by `max_severity`; 0 when off.
+    /// Current level (tier), capped to [`tier_for_cap`] of
+    /// `max_severity`; 0 when off.
     pub fn level(&self) -> u8 {
         if self.enabled {
-            self.level.min(self.cfg.cap())
+            self.level.min(tier_for_cap(self.cfg.cap()))
         } else {
             0
         }
@@ -395,11 +425,17 @@ impl Loneliness {
         let cap = self.cfg.cap();
         if self.bag_key != Some((level, cap)) {
             let last = self.bag.last().map(str::to_string);
+            let top = severity_top(level, cap);
+            let eligible: Vec<&PoseTag> = self
+                .pool
+                .iter()
+                .filter(|p| !p.system && p.severity <= top && has(&p.name))
+                .collect();
+            let aim = eligible.iter().map(|p| p.severity).max().unwrap_or(0);
             self.bag = ShuffleBag::new(
-                self.pool
-                    .iter()
-                    .filter(|p| has(&p.name))
-                    .map(|p| (p.name.clone(), pick_weight(p, level, cap))),
+                eligible
+                    .into_iter()
+                    .map(|p| (p.name.clone(), pick_weight(p, top, aim))),
             );
             if let Some(l) = last {
                 self.bag.set_last(&l);
@@ -416,7 +452,7 @@ mod tests {
 
     fn pool() -> Vec<PoseTag> {
         let mut v = Vec::new();
-        for s in 0..=3u8 {
+        for s in 0..=MAX_SEVERITY {
             for i in 0..3 {
                 v.push(PoseTag::new(format!("s{s}_{i}"), s, false));
             }
@@ -563,14 +599,14 @@ mod tests {
 
     #[test]
     fn cap_always_holds_and_lower_severities_still_appear() {
-        for cap in 0..=3u8 {
+        for cap in 0..=MAX_SEVERITY {
             let mut l = eng(LonelinessConfig {
                 max_severity: cap,
                 ..Default::default()
             });
             run_min(&mut l, 200.0);
-            assert_eq!(l.level(), cap);
-            let mut seen = [0u32; 4];
+            assert_eq!(l.level(), tier_for_cap(cap));
+            let mut seen = [0u32; 6];
             for _ in 0..600 {
                 match l.pick(|_| true) {
                     Some(c) => {
@@ -585,14 +621,19 @@ mod tests {
             if cap == 3 {
                 assert!(seen[3] > seen[2] && seen[2] > seen[0], "{seen:?}");
                 assert!(seen[0] > 0 && seen[1] > 0, "lower ones still: {seen:?}");
+                assert_eq!(seen[4] + seen[5], 0, "{seen:?}");
+            }
+            if cap == 5 {
+                assert!(seen[5] > seen[4] && seen[4] > seen[0], "{seen:?}");
+                assert!(seen[0] > 0 && seen[2] > 0, "lower ones still: {seen:?}");
             }
         }
-        // A config value above 3 is clamped.
+        // A config value above 5 is clamped.
         let c = LonelinessConfig {
             max_severity: 9,
             ..Default::default()
         };
-        assert_eq!(c.cap(), 3);
+        assert_eq!(c.cap(), 5);
     }
 
     #[test]
@@ -602,7 +643,7 @@ mod tests {
         run_min(&mut l, 42.0);
         assert_eq!(l.level(), 1);
         for _ in 0..200 {
-            assert!(sev(&l.pick(|_| true).unwrap()) <= 1);
+            assert!(sev(&l.pick(|_| true).unwrap()) <= TIER_TOP[1]);
         }
         // Clips the brain lacks / hides are never picked.
         let mut l2 = eng(LonelinessConfig::default());
@@ -611,6 +652,65 @@ mod tests {
             let c = l2.pick(|n| !n.starts_with("s3")).unwrap();
             assert!(!c.starts_with("s3"));
         }
+    }
+
+    #[test]
+    fn severity_five_is_picked_only_at_the_top_tier() {
+        assert_eq!(TIER_TOP, [0, 2, 4, 5]);
+        assert_eq!(
+            (0..=5).map(tier_for_cap).collect::<Vec<_>>(),
+            [0, 1, 1, 2, 2, 3]
+        );
+        let mut l = eng(LonelinessConfig::default());
+        let mut fives = [0u32; 4];
+        let mut picks = [0u32; 4];
+        // Walk calm -> top tier, picking a lot at every level on the way.
+        for _ in 0..200 {
+            run_min(&mut l, 1.0);
+            let lvl = l.level() as usize;
+            for _ in 0..30 {
+                if let Some(c) = l.pick(|_| true) {
+                    picks[lvl] += 1;
+                    let s = sev(&c);
+                    assert!(s <= TIER_TOP[lvl], "level {lvl}: {c}");
+                    if s == 5 {
+                        fives[lvl] += 1;
+                    }
+                }
+            }
+        }
+        assert!(picks[1] > 0 && picks[2] > 0 && picks[3] > 0, "{picks:?}");
+        assert_eq!(&fives[..3], &[0, 0, 0], "severity 5 below the top tier");
+        assert!(fives[3] > 0, "severity 5 at the top tier");
+        // Under a cap of 4 a severity-5 clip never shows, even at the top.
+        let mut c4 = eng(LonelinessConfig {
+            max_severity: 4,
+            ..Default::default()
+        });
+        run_min(&mut c4, 200.0);
+        for _ in 0..500 {
+            assert!(sev(&c4.pick(|_| true).unwrap()) <= 4);
+        }
+    }
+
+    #[test]
+    fn weights_aim_at_the_boldest_available_pose() {
+        // Only 0..=3 clips loaded: at the top tier severity 3 leads.
+        let mut l = eng(LonelinessConfig::default());
+        run_min(&mut l, 200.0);
+        let mut seen = [0u32; 6];
+        for _ in 0..600 {
+            seen[sev(&l.pick(|n| sev(n) <= 3).unwrap()) as usize] += 1;
+        }
+        assert!(
+            seen[3] > seen[2] && seen[2] > seen[0] && seen[0] > 0,
+            "{seen:?}"
+        );
+        assert_eq!(seen[4] + seen[5], 0);
+        let t = PoseTag::new("x", 5, false);
+        assert_eq!(pick_weight(&t, 4, 4), 0, "above the ceiling");
+        assert_eq!(pick_weight(&t, 5, 5), 6);
+        assert_eq!(pick_weight(&PoseTag::new("y", 0, true), 5, 5), 0, "system");
     }
 
     #[test]
@@ -667,7 +767,9 @@ mod tests {
         assert_eq!(c.minutes_to_max, 120.0);
         let d = LonelinessConfig::default();
         assert_eq!(d.mode, LonelinessMode::Auto);
-        assert_eq!(d.cap(), 3);
+        assert_eq!(d.cap(), 5);
+        let c: LonelinessConfig = toml::from_str("max_severity = 5").unwrap();
+        assert_eq!(c.cap(), 5);
     }
 
     /// The idle / attention path is pure state: no storage at all, so it

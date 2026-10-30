@@ -1467,7 +1467,7 @@ mod tests {
         use crate::loneliness::LonelinessMode;
         let c = Config::default();
         assert_eq!(c.behavior.loneliness.mode, LonelinessMode::Auto);
-        assert_eq!(c.behavior.loneliness.max_severity, 3);
+        assert_eq!(c.behavior.loneliness.max_severity, 5);
         let c = Config::from_toml_str(
             "[behavior.loneliness]\nmode = \"off\"\nmax_severity = 1\nquiet_hours = [23, 7]\n",
         )

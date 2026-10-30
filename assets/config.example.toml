@@ -129,7 +129,8 @@
 # pause_clips = ["blink_wink"]
 # [behavior.loneliness]        # left alone, she bids for attention with bolder poses (adult content)
 # mode = "auto"                # "auto" | "off" (right-click ▸ Lonely poses)
-# max_severity = 3             # cap: 0 neutral/fun, 1 flirty, 2 suggestive, 3 most explicit
+# max_severity = 5             # cap 0..=5: 0 neutral/fun, 1 flirty, 2 sultry, 3 explicit, 4 more explicit, 5 most explicit
+#                              # (tiers reach 2 / 4 / 5 as she gets lonelier; 5 only at the top tier; adults only)
 # minutes_to_max = 120.0       # neglect (at a usual-habits pace) from calm to the top level
 # bid_cooldown_min = 10.0      # least time between attention bids
 # hush_hold_min = 10.0         # no bids this long after the safeword
