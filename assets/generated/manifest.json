@@ -7608,6 +7608,41 @@
    "video": "thirsty_heart_lollipop/thirsty_heart_lollipop.mp4",
    "severity": 3,
    "system": false
+  },
+  {
+   "name": "oops_bikini_tie_catch",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "oops_bikini_tie_catch/",
+   "sheet": "oops_bikini_tie_catch/oops_bikini_tie_catch_sheet.png",
+   "manifest": "oops_bikini_tie_catch/oops_bikini_tie_catch.json",
+   "preview": "oops_bikini_tie_catch/oops_bikini_tie_catch_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "oops",
+    "severity:4",
+    "thirsty"
+   ],
+   "allure": true,
+   "video": "oops_bikini_tie_catch/oops_bikini_tie_catch.mp4",
+   "severity": 4,
+   "system": false
   }
  ]
 }
