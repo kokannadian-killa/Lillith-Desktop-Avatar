@@ -135,12 +135,39 @@ rc, t = run("live session: no blanking / no lock", f"{U} kreadconfig6 --file pow
             f"{U} kreadconfig6 --file powerdevilrc --group AC --group Display --key DimDisplayWhenIdle; "
             f"{U} kreadconfig6 --file kscreenlockerrc --group Daemon --key Autolock")
 R["powerdevil DPMS/dim off, autolock off"] = t.split().count("false") >= 3
-rc, t = run("LLMNR off", "resolvectl status 2>/dev/null | grep -iE 'LLMNR|mDNS' | head -4; ss -Hlntup | grep -E ':5355' || echo NO_LLMNR_LISTENER; "
+rc, t = run("LLMNR + mDNS off", "resolvectl status 2>/dev/null | grep -iE 'LLMNR|mDNS' | head -4; ss -Hlntup | grep -E ':5355' || echo NO_LLMNR_LISTENER; "
             "ss -Hlntup | grep -E ':5353' || echo NO_MDNS_LISTENER")
 R["LLMNR off (no :5355 listener)"] = "NO_LLMNR_LISTENER" in t
-# Informational only: releng's resolved.conf.d/archiso.conf (MulticastDNS=yes) sorts after
-# 10-demonos-local-only.conf, so mDNS on :5353 stays on in this build.
-print("INFO mDNS listener on :5353:", "no" if "NO_MDNS_LISTENER" in t else "yes (archiso.conf wins)", flush=True)
+R["mDNS off (no :5353 listener)"] = "NO_MDNS_LISTENER" in t
+
+# main's newer features (Dream learning, Bots tab) are in the installed build:
+# strings in the binaries + `--tab bots` opens the Bots tab (screendump below).
+rc, t = run("Bots tab + Dream learning present",
+            "grep -a -c 'Dream learning' /usr/bin/lillith; grep -a -c 'End dream early' /usr/bin/lillith; "
+            "lillith-settings --help 2>&1 | grep -E -- '--tab|bots' | head -3; "
+            f"{U} WAYLAND_DISPLAY=wayland-0 QT_QPA_PLATFORM=wayland setsid -f lillith-settings --tab bots >/tmp/bots-tab.log 2>&1; "
+            "sleep 40; pgrep -au demon -f 'lillith-settings --tab bots' | head -2; tail -3 /tmp/bots-tab.log", 200)
+lines = t.splitlines()
+nums = [int(x) for x in lines if x.strip().isdigit()]
+R["Dream learning strings in /usr/bin/lillith"] = len(nums) >= 2 and all(n > 0 for n in nums[:2])
+R["lillith-settings --tab bots running"] = "lillith-settings --tab bots" in t and "bots" in t
+def screendump(name):
+    import os
+    mon = os.path.join(os.path.dirname(sock_path), "mon.sock")
+    out = os.path.join(os.path.dirname(sock_path), name)
+    for _ in range(5):
+        try:
+            m = socket.socket(socket.AF_UNIX); m.settimeout(20); m.connect(mon); time.sleep(0.3)
+            try: m.recv(65536)
+            except Exception: pass
+            m.sendall(f"screendump {out} -f png\n".encode()); time.sleep(2); m.close()
+            if os.path.exists(out): return out
+        except Exception as e:
+            time.sleep(3)
+    return None
+shot = screendump("shot-bots-tab.png")
+print("BOTS-TAB SCREENSHOT:", shot, flush=True)
+R["Bots tab screenshot taken"] = shot is not None
 run("listening sockets before model", "ss -Hltnp")
 run("start llama-server on 127.0.0.1", f"{U} sh -c 'nohup /opt/llama/llama-server -m {MODEL} --host 127.0.0.1 --port 8080 -c 512 -t 2 --jinja >/tmp/llama.log 2>&1 &'; sleep 2; pgrep -a llama-server")
 rc, t = run("wait for /health", "for i in $(seq 1 120); do curl -sf http://127.0.0.1:8080/health && break; sleep 10; done; echo; tail -5 /tmp/llama.log", 1500)

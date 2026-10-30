@@ -217,7 +217,7 @@ Under TCG a Plasma boot takes many minutes, so give it a generous run time.
 ## Live-session settings
 
 * **No blanking, no lock.** `/etc/xdg/powerdevilrc` and `/etc/skel/.config/powerdevilrc` set `DimDisplayWhenIdle=false`, `TurnOffDisplayWhenIdle=false` and `AutoSuspendAction=0` for AC, Battery and LowBattery. `kscreenlockerrc` sets `Autolock=false` and `LockOnResume=false`. Before this, Plasma turned the display off ("Display output is not active") about 10 minutes into the first boot test.
-* **Local-only resolver.** `/etc/systemd/resolved.conf.d/10-demonos-local-only.conf` sets `LLMNR=no` and `MulticastDNS=no`. releng's default left an LLMNR responder on `0.0.0.0:5355`.
+* **Local-only resolver.** `/etc/systemd/resolved.conf.d/zz-demonos-local-only.conf` sets `LLMNR=no` and `MulticastDNS=no`. It is named `zz-` so it sorts after releng's `archiso.conf` (`MulticastDNS=yes`). releng's defaults left LLMNR on `0.0.0.0:5355` and mDNS on `:5353`.
 * **User units.** The package installs `lillith.service` and `lillith-quantumsec.service` unchanged, plus drop-ins (`linux/systemd/package/*.service.d/10-package-path.conf`) that point `ExecStart` at `/usr/bin/lillith`. Neither unit is enabled. To turn the shield on: `systemctl --user enable --now lillith-quantumsec.service`. The boot test does exactly that and checks the unit is active and that `status.json` keeps updating.
 
 ## QuantumSec status under TCG (documented, not changed)
@@ -237,7 +237,7 @@ Any Alert makes the overall status **CRITICAL**. In a QEMU/TCG guest the emulate
 
 ## Known limits
 
-* mDNS is still on: systemd-resolved listens on `0.0.0.0:5353`. releng's `resolved.conf.d/archiso.conf` (`MulticastDNS=yes`) sorts after `10-demonos-local-only.conf`, so its `MulticastDNS=no` loses. LLMNR is off. To turn mDNS off as well in the next build, rename the drop-in so it sorts last (e.g. `zz-demonos-local-only.conf`). The guest check reports this as `INFO`.
+* Fixed in the 2026-10-30 second rebuild: the first drop-in (`10-…`) lost to `archiso.conf`, which left mDNS on `:5353`. It is now named `zz-…`.
 
 * Lillith starts from `~/.config/autostart/lillith.desktop`, not from
   `lillith.service`, so the two never run together. The unit is there for users
