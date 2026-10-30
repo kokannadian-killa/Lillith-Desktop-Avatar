@@ -8,7 +8,7 @@ nothing deleted, legacy names kept as read fallbacks / deprecated aliases.
 
 | Source | What it shows |
 |---|---|
-| GitHub `kokannadian-killa/BoiTekEngine` (public, Rust, last push 2026-07-07; note the repo name is spelled **BoiTek**) | The existing Biotek Engine project. Crate/binary `biotekengine`, brand `BIOTEKENGINE`, config `config/biotekengine.toml`, systemd `biotekengine.service` + `biotekengine-backup.{service,timer}`, env `BIOTEKENGINE_DATA_DIR` / `BIOTEKENGINE_CONFIG` / `BIOTEKENGINE_LOG_LEVEL` / `BIOTEKENGINE_GUI_DIR`, metrics prefix `biotekengine_*`, GUI `gui/biotekengine.html` (+ legacy `gui/aethermind.html`), ports 8080 (static GUI) / 8765 (WebSocket) / 9090 (Prometheus). Its message bus module is still called `aether_core` / `AetherCore` ("Nervous System"). |
+| GitHub `kokannadian-killa/BoiTekEngine` (public, Rust, last push 2026-07-07; note the repo name is spelled **BoiTek**) | The existing Biotek Engine project. Crate/binary `biotekengine`, brand `BIOTEKENGINE`, config `config/biotekengine.toml`, systemd `biotekengine.service` + `biotekengine-backup.{service,timer}`, env prefix `BIOTEKENGINE_` (see §4), user dot-dir `~/.biotekengine/` / CWD `.biotekengine/`, metrics prefix `biotekengine_*`, GUI `gui/biotekengine.html` (+ legacy `gui/aethermind.html`), ports 8080 (static GUI) / 8765 (WebSocket) / 9090 (Prometheus). Its message bus module is still called `aether_core` / `AetherCore` ("Nervous System"). |
 | `docs/PRESERVATION_MANIFEST.md` §12 (this repo) | Phase 0 data-home spec, renamed by Ko from `~/.aether/` to `~/.biotek/`. |
 | `~/.biotek/README.md` on the dev box (Phase 0) | Same layout as §12. `~/.aether/` also exists there (Phase 0 original, same layout, left in place). |
 | `lillith/grok_history*.md` (dev box notes) | "BIOTEKENGINE, a mycelial organism desktop icon (Rust core, quantum branches, self-edits KEEP/REVERT logged)". |
@@ -75,10 +75,22 @@ The upstream engine has **no** `~/.biotek` concept. It uses:
 | `/var/lib/biotekengine/{data,logs,backups}` | systemd units (system service, user `biotekengine`) |
 | `/etc/biotekengine/biotekengine.toml`, `/etc/biotekengine/environment` | systemd units |
 | `/data/{vault,cortex,search,backups,snapshots,logs}` | Docker image |
+| `~/.biotekengine/models/` (`$HOME`-relative) | `src/model_registry.rs` (GGUF model registry) |
+| `.biotekengine/{reports,probability,probability/registry,lab/registry}` (CWD-relative) | `report_generator.rs`, `probability_store.rs`, `lab_forge.rs`, `swarm/scribe.rs` |
 
-`src/main.rs` hard-codes `Config::load("config/biotekengine.toml")`; the
-`BIOTEKENGINE_*` env vars set by its units/Dockerfile are not read by the code
-we saw (only `RUST_LOG` matters). If the engine is bundled into the ISO, run it
+So the upstream user-level dot-dir is **`.biotekengine`**, not `.biotek`.
+Lillith keeps `~/.biotek` (Ko's Phase 0 decision); the two must not be merged
+silently. Options for the Architect: (a) keep both and point Lillith's model
+scanner at `~/.biotekengine/models` as an extra scan path, or (b) run the engine
+with CWD `~/.biotek/engine` so its relative `.biotekengine/…` lands under
+`~/.biotek/engine/.biotekengine/…`.
+
+`src/main.rs` hard-codes `Config::load("config/biotekengine.toml")`.
+`BIOTEKENGINE_DATA_DIR` / `BIOTEKENGINE_CONFIG` are set by its units, Dockerfile,
+compose and k8s but no source file reads them. Env vars the code does read:
+`BIOTEKENGINE_HARDWARE_EMULATOR` (`hardware_interface.rs`),
+`BIOTEKENGINE_WS_RATE_LIMIT_PER_SEC` / `BIOTEKENGINE_WS_RATE_BURST`
+(`rate_limiter.rs`), plus `RUST_LOG`, `HOME` / `USERPROFILE`. If the engine is bundled into the ISO, run it
 with `WorkingDirectory` set so `./config` and `./data` resolve, e.g. a user unit
 with `WorkingDirectory=%h/.biotek/engine` (proposal, not implemented here).
 
