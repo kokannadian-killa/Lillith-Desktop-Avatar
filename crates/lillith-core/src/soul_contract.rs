@@ -182,6 +182,13 @@ pub enum PendingAction {
     },
 }
 
+/// A dream card's end time as Ko reads it: the UTC `deadline` stamp in the
+/// system's local time zone with its zone label (`7:30 PM MDT`); the stamp
+/// itself if it isn't one. The `deadline` field and audit stay UTC.
+fn dream_end_local(deadline: &str) -> String {
+    crate::localtime::label_for_utc_stamp(deadline).unwrap_or_else(|| deadline.to_string())
+}
+
 /// The `kind` column of an online research trip in the audit log.
 pub const ONLINE_RESEARCH_KIND: &str = "online_research";
 
@@ -414,7 +421,7 @@ impl PendingAction {
             } => format!(
                 "Dream / research session for {} min (Tor only, read-only), ends {}",
                 minutes,
-                one_line_cap(deadline, 40)
+                one_line_cap(&dream_end_local(deadline), 40)
             ),
         }
     }
@@ -504,7 +511,7 @@ impl PendingAction {
                 external_offered,
                 ..
             } => Some(format!(
-                "session: {}\nduration: {} min\nends: {}\nbudgets: {}\n\n\
+                "session: {}\nduration: {} min\nends: {} ({})\nbudgets: {}\n\n\
                  Read-only GETs over Tor only, one at a time; no logins, cookies, \
                  uploads, installs or program runs. Helper workers have no network \
                  of their own. End early, the safeword (red / OOC: stop), the kill \
@@ -513,6 +520,7 @@ impl PendingAction {
                  Only a click on Yes starts it; typing or saying yes doesn't.",
                 one_line_cap(id, 60),
                 minutes,
+                one_line_cap(&dream_end_local(deadline), 40),
                 one_line_cap(deadline, 40),
                 one_line_cap(budgets, 200),
                 if *external_offered {
@@ -2035,10 +2043,25 @@ mod tests {
         assert_eq!(a.target_path(), None);
         assert_eq!(a.title(), "START DREAM SESSION");
         let d = a.prompt().detail.unwrap_or_default();
+        // The end time in local time with a zone label, the UTC stamp
+        // after it for reference; the field itself stays UTC.
+        let local = crate::localtime::label_for_utc_stamp("2026-10-24T20:00:00Z").unwrap();
         assert!(
-            d.contains("30 min") && d.contains("2026-10-24T20:00:00Z"),
+            d.contains("30 min") && d.contains(&format!("ends: {local} (2026-10-24T20:00:00Z)")),
             "{d}"
         );
+        assert!(local.contains("AM") || local.contains("PM"), "{local}");
+        assert!(
+            a.summary().ends_with(&format!("ends {local}")),
+            "{}",
+            a.summary()
+        );
+        assert!(matches!(
+            &a,
+            PendingAction::DreamSession { deadline, .. } if deadline == "2026-10-24T20:00:00Z"
+        ));
+        // Not a stamp: shown as is.
+        assert_eq!(dream_end_local("soon"), "soon");
         assert!(
             d.contains("TaskCompletion") && d.contains("Unticked"),
             "{d}"
