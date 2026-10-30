@@ -324,18 +324,18 @@
     "height": 400,
     "frame_count": 17,
     "fps": 12.0,
-    "bytes": 216945,
+    "bytes": 216599,
     "quality": {
-      "edge_mae": 2.142,
-      "edge_p99": 15.26,
-      "halo_dark": 0.024,
-      "halo_light": -0.083,
-      "alpha_mae": 0.0734
+      "edge_mae": 2.144,
+      "edge_p99": 16.0,
+      "halo_dark": 0.027,
+      "halo_light": -0.077,
+      "alpha_mae": 0.0735
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "wave_rim_fix": {
-    "note": "light edge rim on the claw highlights (fringeqa rim, <=3 px from clear, as seen after MP4 decode) darkened to the nearest solid interior colour; alpha, frame count, fps, anchor and interior highlight art untouched",
+    "note": "light edge rim on the claw highlights (fringeqa rim, <=3 px from clear, as seen after MP4 decode) darkened to the nearest solid interior colour; alpha, frame count, fps, anchor and interior highlight art untouched; second pass also darkened the near-clear (low-alpha) claw-tip edge pixels that the MP4 decode turned neutral-light (qa_all white-edge)",
     "mp4_rim_px_before": {
       "0": 2,
       "1": 8,
@@ -358,20 +358,20 @@
     "mp4_rim_px_after": {
       "0": 0,
       "1": 0,
-      "2": 1,
+      "2": 0,
       "3": 0,
-      "4": 3,
-      "5": 2,
-      "6": 1,
-      "7": 1,
-      "8": 0,
-      "9": 1,
-      "10": 4,
+      "4": 0,
+      "5": 1,
+      "6": 2,
+      "7": 0,
+      "8": 1,
+      "9": 0,
+      "10": 0,
       "11": 0,
-      "12": 2,
-      "13": 1,
-      "14": 2,
-      "15": 3,
+      "12": 0,
+      "13": 4,
+      "14": 1,
+      "15": 0,
       "16": 1
     }
   }
