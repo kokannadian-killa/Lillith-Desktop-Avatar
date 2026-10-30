@@ -105,7 +105,9 @@ impl TabRegistry {
         r.register(Box::new(icon::IconTab::new()));
         r.register(Box::new(knobs::KnobTab::voice()));
         r.register(Box::new(build::BuildTab::new(shared)));
-        r.register(Box::new(bots::BotsTab::new(shared)));
+        let mut bots_tab = bots::BotsTab::new(shared);
+        bots_tab.set_dream_source(Box::new(crate::bots::LiveDream::new(&shared.config_path)));
+        r.register(Box::new(bots_tab));
         r.register(Box::new(about::AboutTab));
         for n in 1..=2 {
             r.register(Box::new(sealed::SealedTab::new(n)));

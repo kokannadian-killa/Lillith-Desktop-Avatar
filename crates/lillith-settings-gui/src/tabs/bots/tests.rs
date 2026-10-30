@@ -235,6 +235,7 @@ impl DreamStatusSource for FakeDream {
             jobs_done: 3,
             jobs_total: 5,
             note: String::new(),
+            ..Default::default()
         })
     }
 }
@@ -266,4 +267,125 @@ fn draws_every_view_headless() {
         }
     }
     let _ = std::fs::remove_dir_all(&d);
+}
+
+struct ItemsDream(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+impl DreamStatusSource for ItemsDream {
+    fn status(&self) -> Option<DreamStatus> {
+        let gone = self.0.lock().unwrap().clone();
+        Some(DreamStatus {
+            session: "s-9".into(),
+            state: "running".into(),
+            minutes_left: 12,
+            note: "3 pages visited, 2 saved".into(),
+            deadline_local: Some("7:30 PM MDT".into()),
+            digest: Some("Rust lifetimes, in short.".into()),
+            items: ["a1", "b2"]
+                .into_iter()
+                .filter(|i| !gone.iter().any(|g| g == i))
+                .map(|i| crate::bots::DreamItem {
+                    id: i.into(),
+                    title: format!("note {i}"),
+                    host: "doc.rust-lang.org".into(),
+                })
+                .collect(),
+            ..Default::default()
+        })
+    }
+    fn forget(&mut self, id: &str) -> Result<String, String> {
+        self.0.lock().unwrap().push(id.into());
+        Ok(format!("note {id}"))
+    }
+}
+
+fn click(at: egui::Pos2) -> Vec<egui::Event> {
+    let b = |pressed| egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    vec![egui::Event::PointerMoved(at), b(true), b(false)]
+}
+
+fn key(k: egui::Key) -> Vec<egui::Event> {
+    let e = |pressed| egui::Event::Key {
+        key: k,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    };
+    vec![e(true), e(false)]
+}
+
+#[test]
+fn dream_items_show_and_forget_is_mouse_only() {
+    let d = tmp("dreamitems");
+    let mut t = tab_in(&d);
+    let gone = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    t.set_dream_source(Box::new(ItemsDream(gone.clone())));
+    assert_eq!(
+        t.dream_line(),
+        "Session s-9: running · 12 min left · 3 pages visited, 2 saved"
+    );
+    let mut s = shared();
+    let ctx = egui::Context::default();
+    lillith_theme::egui_theme::install(&ctx);
+    for _ in 0..2 {
+        frame(&ctx, &mut t, &mut s, vec![]);
+    }
+    assert_eq!(t.dream_hits.len(), 2, "both saved items are listed");
+    // Keyboard never forgets: Tab around and press Enter / Space.
+    for _ in 0..40 {
+        frame(&ctx, &mut t, &mut s, key(egui::Key::Tab));
+        frame(&ctx, &mut t, &mut s, key(egui::Key::Enter));
+        frame(&ctx, &mut t, &mut s, key(egui::Key::Space));
+    }
+    assert!(gone.lock().unwrap().is_empty(), "a key forgot a note");
+    // A mouse click on the newest item's Forget does (newest is listed first).
+    let (id, r) = t.dream_hits[0].clone();
+    assert_eq!(id, "b2");
+    frame(&ctx, &mut t, &mut s, click(r.center()));
+    frame(&ctx, &mut t, &mut s, vec![]);
+    assert_eq!(*gone.lock().unwrap(), ["b2"]);
+    assert_eq!(t.dream_hits.len(), 1, "the forgotten item drops out");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn live_status_maps_the_learn_status() {
+    use lillith_learn::workers::orchestrator as o;
+    let mut st = o::DreamStatus {
+        state: o::DreamState::Running,
+        session: Some("s-1".into()),
+        deadline: Some("2026-10-30T22:00:00Z".into()),
+        deadline_local: Some("4:00 PM MDT".into()),
+        where_now: Some("lifetimes — doc.rust-lang.org".into()),
+        visited: vec!["https://doc.rust-lang.org/a".into()],
+        saved_count: 1,
+        items: vec![o::DreamItem {
+            id: "n1".into(),
+            title: "Lifetimes".into(),
+            host: "doc.rust-lang.org".into(),
+            path: String::new(),
+        }],
+        digest: Some("short digest".into()),
+        ..Default::default()
+    };
+    // 2026-10-30T21:30:00Z = 1793395800.
+    let v = crate::bots::from_learn(&st, 1_793_395_800).unwrap();
+    assert_eq!(v.minutes_left, 30);
+    assert_eq!(v.deadline_local.as_deref(), Some("4:00 PM MDT"));
+    assert_eq!(v.items.len(), 1);
+    assert_eq!(v.items[0].id, "n1");
+    assert_eq!(v.digest.as_deref(), Some("short digest"));
+    assert_eq!(
+        dream_text(Some(v)),
+        "Session s-1: running · 30 min left · 1 page visited, 1 saved, now: lifetimes — doc.rust-lang.org"
+    );
+    st.state = o::DreamState::Idle;
+    assert!(crate::bots::from_learn(&st, 0).is_none());
+    assert_eq!(crate::bots::minutes_until("garbage", 0), 0);
+    assert_eq!(crate::bots::minutes_until("1970-01-01T01:00:00Z", 0), 60);
 }

@@ -23,6 +23,8 @@ file-dialog = ["dep:rfd"]
 lillith-core.workspace = true
 lillith-anim.workspace = true
 lillith-setup.workspace = true
+# Bots tab: the live dream-learning status and its per-item Forget.
+lillith-learn.workspace = true
 lillith-theme = { workspace = true, features = ["egui"] }
 eframe.workspace = true
 egui = { version = "0.31", default-features = false }
