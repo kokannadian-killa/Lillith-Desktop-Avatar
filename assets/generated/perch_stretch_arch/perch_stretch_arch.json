@@ -652,13 +652,13 @@
   "height": 400,
   "frame_count": 83,
   "fps": 12.0,
-  "bytes": 785889,
+  "bytes": 790699,
   "quality": {
-   "edge_mae": 2.207,
-   "edge_p99": 19.16,
-   "halo_dark": 0.01,
-   "halo_light": -0.101,
-   "alpha_mae": 0.0493
+   "edge_mae": 2.194,
+   "edge_p99": 19.0,
+   "halo_dark": 0.009,
+   "halo_light": -0.102,
+   "alpha_mae": 0.0486
   },
   "tool": "tools/video-pipeline/pack_mp4.py"
  },
@@ -1057,16 +1057,16 @@
    390
   ],
   [
-   132,
-   271,
-   37,
-   391
+   101,
+   241,
+   32,
+   386
   ],
   [
-   134,
-   274,
-   35,
-   391
+   102,
+   244,
+   30,
+   386
   ],
   [
    110,
@@ -1410,5 +1410,16 @@
    47,
    389
   ]
- ]
+ ],
+ "placement_fix": {
+  "frames": [
+   24,
+   25
+  ],
+  "shift_px": [
+   -31,
+   -5
+  ],
+  "note": "frames 24-25 had a matte_v2 registration failure (per_frame_offset_xy_regerr [-123,30] regerr ~1.18 vs [-154,24] ~0.02 for every other frame), so the body jumped ~33 px right for 2 frames. Re-registered by alpha-IoU search against frames 23/26 (best -31,-5; IoU 0.27 -> 0.78). Pixels only moved, none redrawn."
+ }
 }
