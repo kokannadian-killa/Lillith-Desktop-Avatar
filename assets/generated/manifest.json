@@ -15610,11 +15610,11 @@
    "scale": 0.559,
    "body_anchor_x": 200,
    "facing": "front",
-   "canvas_compliant": false,
+   "canvas_compliant": true,
    "placeholder": false,
    "source": "grok-imagine-video",
    "dir": "oops_perch_slip/",
-   "sheet": "oops_perch_slip_sheet.png",
+   "sheet": "oops_perch_slip/oops_perch_slip_sheet.png",
    "manifest": "oops_perch_slip/oops_perch_slip.json",
    "preview": "oops_perch_slip/oops_perch_slip_preview.gif",
    "tags": [
@@ -15623,26 +15623,7 @@
     "variant_of:perch_sit"
    ],
    "allure": true,
-   "video": {
-    "file": "oops_perch_slip.mp4",
-    "layout": "alpha_side_by_side",
-    "codec": "h264 high yuv420p full-range bt709",
-    "crf": 16,
-    "edge_bleed_px": 0,
-    "width": 800,
-    "height": 400,
-    "frame_count": 83,
-    "fps": 12.0,
-    "bytes": 924489,
-    "quality": {
-     "edge_mae": 2.207,
-     "edge_p99": 19.92,
-     "halo_dark": 0.023,
-     "halo_light": -0.079,
-     "alpha_mae": 0.0536
-    },
-    "tool": "tools/video-pipeline/pack_mp4.py"
-   },
+   "video": "oops_perch_slip/oops_perch_slip.mp4",
    "severity": 4,
    "canvas_w": 400,
    "canvas_h": 400,
@@ -15650,7 +15631,7 @@
    "frames_dir": "frames/",
    "style": "canonical_ko (thigh-highs + shorts)",
    "source_files": [
-    "../../source/video/oops_perch_slip/oops_perch_slip_v3_c.mp4"
+    "../../source/video/oops_perch_slip/oops_perch_slip_v3_d.mp4"
    ],
    "source_frame_range": {
     "first": 1,
@@ -16272,10 +16253,10 @@
    },
    "seat_y": 240,
    "seat_x_range": [
-    157,
-    260
+    154,
+    246
    ],
-   "feet_lowest_y": 397,
+   "feet_lowest_y": 395,
    "seat_align": {
     "dx_px": -2,
     "dy_px": 6,
