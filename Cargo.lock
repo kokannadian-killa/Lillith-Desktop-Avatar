@@ -2543,6 +2543,7 @@ dependencies = [
 name = "lillith-quantumsec"
 version = "0.0.1"
 dependencies = [
+ "lillith-core",
  "lillith-setup",
  "serde",
  "serde_json",

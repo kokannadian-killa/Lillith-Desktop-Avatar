@@ -1,16 +1,20 @@
-//! QuantumSec tab: shield status, awakening dialog, blood-seal lockdown.
+//! QuantumSec tab: shield, teams, bots, personalization, awakening, blood seal.
 
 use super::{SettingsTab, Shared};
 use crate::chrome;
 use egui::{RichText, Ui};
 use lillith_quantumsec::consent::{AwakeningState, ConsentLog};
 use lillith_quantumsec::lockdown::LockdownProposal;
+use lillith_quantumsec::registry::{self, BotEntry, BotLane};
+use lillith_quantumsec::report::DeviceProfile;
 use lillith_quantumsec::shield::QuantumSecShield;
 use lillith_quantumsec::status::{ShieldStatus, StatusLevel};
+use lillith_quantumsec::teams::{self, TeamColor, TeamItem};
 use lillith_theme::egui_awakening::{quantumsec_awakening_popup, AwakeningChoice};
 use lillith_theme::egui_blood_seal::lockdown_blood_seal;
 use lillith_theme::egui_contract::ContractChoice;
 use lillith_theme::egui_theme::{self as th, c32};
+use lillith_theme::egui_whisper::{info_rune, whisper_from_the_core};
 use lillith_theme::palette as pal;
 use std::path::PathBuf;
 
@@ -20,16 +24,33 @@ pub struct QuantumSecTab {
     pending: Option<LockdownProposal>,
     last_status: Option<ShieldStatus>,
     biotek: Option<PathBuf>,
+    catalog: Vec<TeamItem>,
+    bots: Vec<BotEntry>,
+    whisper: Option<(String, String)>,
+    last_report: Option<PathBuf>,
 }
 
 impl QuantumSecTab {
     pub fn new() -> Self {
+        let biotek = lillith_setup::biotek::biotek_home();
+        let catalog = biotek
+            .as_ref()
+            .map(|h| teams::load_catalog(h))
+            .unwrap_or_else(teams::default_catalog);
+        let bots = biotek
+            .as_ref()
+            .map(|h| registry::load_registry(h))
+            .unwrap_or_else(registry::default_registry);
         Self {
             show_awakening: false,
             awakening_checked: false,
             pending: None,
             last_status: None,
-            biotek: lillith_setup::biotek::biotek_home(),
+            biotek,
+            catalog,
+            bots,
+            whisper: None,
+            last_report: None,
         }
     }
 
@@ -70,6 +91,10 @@ impl QuantumSecTab {
         state.mark_shown();
         let _ = state.save(&path);
     }
+
+    fn open_whisper(&mut self, title: impl Into<String>, body: impl Into<String>) {
+        self.whisper = Some((title.into(), body.into()));
+    }
 }
 
 impl Default for QuantumSecTab {
@@ -93,7 +118,7 @@ impl SettingsTab for QuantumSecTab {
         match arg {
             "awakening" | "awaken" => {
                 self.show_awakening = true;
-                self.awakening_checked = true; // skip auto-flag so we stay open for screenshots
+                self.awakening_checked = true;
             }
             "blood-seal" | "blood_seal" | "lockdown" => {
                 self.pending = Some(LockdownProposal::local_simulation_default());
@@ -101,6 +126,18 @@ impl SettingsTab for QuantumSecTab {
                 self.show_awakening = false;
             }
             "tab" | "" => {
+                self.awakening_checked = true;
+                self.show_awakening = false;
+            }
+            "whisper" => {
+                self.awakening_checked = true;
+                self.show_awakening = false;
+                self.open_whisper(
+                    "WHISPER FROM THE CORE",
+                    "Info popups sit beside every QuantumSec control. Tooltips stay; this modal goes deeper. Esc or DISMISS closes.",
+                );
+            }
+            "teams" => {
                 self.awakening_checked = true;
                 self.show_awakening = false;
             }
@@ -112,14 +149,18 @@ impl SettingsTab for QuantumSecTab {
         self.ensure_awakening_flag();
         self.refresh_status();
         if self.show_awakening {
-            if let Some(c) =
-                quantumsec_awakening_popup(ctx, egui::Id::new("qsec-awakening"))
-            {
+            if let Some(c) = quantumsec_awakening_popup(ctx, egui::Id::new("qsec-awakening")) {
                 match c {
                     AwakeningChoice::Continue | AwakeningChoice::Dismiss => {
                         self.mark_awakening_shown();
                     }
                 }
+            }
+            ctx.request_repaint();
+        }
+        if let Some((title, body)) = self.whisper.clone() {
+            if whisper_from_the_core(ctx, egui::Id::new("qsec-whisper"), &title, &body) {
+                self.whisper = None;
             }
             ctx.request_repaint();
         }
@@ -137,7 +178,6 @@ impl SettingsTab for QuantumSecTab {
                         if let Some(h) = home {
                             if let Ok(log) = ConsentLog::open_in(h.join("consent")) {
                                 if let Ok(mut tok) = log.approve(&p) {
-                                    // Execute only the local-simulation proposal from the UI.
                                     let _ = lillith_quantumsec::lockdown::execute_with_token(
                                         &p, &mut tok,
                                     );
@@ -162,13 +202,23 @@ impl SettingsTab for QuantumSecTab {
 
     fn ui(&mut self, ui: &mut Ui, shared: &mut Shared) {
         self.refresh_status();
+        let catalog = self.catalog.clone();
+        let bots = self.bots.clone();
 
         chrome::section(ui, "QUANTUMSEC_SHIELD", Some("local protons"), |ui| {
-            ui.label(
-                RichText::new("QuantumSec")
-                    .font(th::carved_font(22.0))
-                    .color(c32(pal::CYBER_CRIMSON)),
-            );
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new("QuantumSec")
+                        .font(th::carved_font(22.0))
+                        .color(c32(pal::CYBER_CRIMSON)),
+                );
+                if info_rune(ui, ui.id().with("shield-i")) {
+                    self.open_whisper(
+                        "Shield",
+                        "WHISPER FROM THE CORE — Protons watch this machine only. Idle polling stays light. Red team = local simulation.",
+                    );
+                }
+            });
             ui.label(
                 RichText::new("Protons watch this machine only. Red team = local simulation.")
                     .color(c32(pal::CYBER_TEXT_DIM)),
@@ -189,19 +239,33 @@ impl SettingsTab for QuantumSecTab {
                     );
                     ui.monospace(&st.summary);
                     ui.add_space(4.0);
-                    for p in &st.protons {
-                        let line = match &p.last {
-                            Some(r) => format!("† {} — {}", p.id.label(), r.summary),
-                            None => format!("† {} — (no reading)", p.id.label()),
-                        };
-                        let resp = ui.label(RichText::new(line).color(c32(pal::CYBER_TEXT)));
-                        resp.on_hover_text(p.id.whisper());
+                    let proton_rows: Vec<_> = st
+                        .protons
+                        .iter()
+                        .map(|p| {
+                            let line = match &p.last {
+                                Some(r) => format!("† {} — {}", p.id.label(), r.summary),
+                                None => format!("† {} — (no reading)", p.id.label()),
+                            };
+                            (p.id.label(), p.id.whisper(), line)
+                        })
+                        .collect();
+                    for (label, whisper, line) in proton_rows {
+                        ui.horizontal(|ui| {
+                            let resp = ui.label(RichText::new(line).color(c32(pal::CYBER_TEXT)));
+                            resp.on_hover_text(whisper);
+                            if info_rune(ui, ui.id().with(("proton-i", label))) {
+                                self.open_whisper(label, whisper);
+                            }
+                        });
                     }
                 }
                 None => {
                     ui.label(
-                        RichText::new("No status yet. Start Lillith (or `lillith quantumsec`) to tick the shield.")
-                            .color(c32(pal::TEXT_MUTE)),
+                        RichText::new(
+                            "No status yet. Start Lillith (or `lillith quantumsec`) to tick the shield.",
+                        )
+                        .color(c32(pal::TEXT_MUTE)),
                     );
                 }
             }
@@ -209,6 +273,131 @@ impl SettingsTab for QuantumSecTab {
                 chrome::row(ui, "status.json", |ui| {
                     ui.monospace(p.display().to_string())
                 });
+            }
+        });
+
+        chrome::section(ui, "TEAMS", Some("red · blue · purple"), |ui| {
+            ui.label(
+                RichText::new("Every exercise shows exact commands. Red = LOCAL SIMULATION ONLY.")
+                    .color(c32(pal::TEXT_DIM)),
+            );
+            for color in TeamColor::ALL {
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(color.label())
+                            .font(th::display_font(13.0))
+                            .color(c32(match color {
+                                TeamColor::Red => pal::CYBER_CRIMSON,
+                                TeamColor::Blue => pal::CYBER_CYAN,
+                                TeamColor::Purple => pal::CYBER_PURPLE,
+                            })),
+                    );
+                    let tip = ui.label(RichText::new("·").color(c32(pal::TEXT_MUTE)));
+                    tip.on_hover_text(color.tooltip());
+                    if info_rune(ui, ui.id().with(("team-i", color.label()))) {
+                        self.open_whisper(color.label(), color.whisper());
+                    }
+                });
+                for item in catalog.iter().filter(|i| i.team == color) {
+                    ui.horizontal(|ui| {
+                        let resp = ui.label(
+                            RichText::new(format!("  ▸ {}", item.title)).color(c32(pal::CYBER_TEXT)),
+                        );
+                        resp.on_hover_text(&item.tooltip);
+                        if info_rune(ui, ui.id().with(("item-i", item.id.as_str()))) {
+                            self.open_whisper(&item.title, &item.whisper);
+                        }
+                        if chrome::blade_button(ui, "Propose…", true).clicked() {
+                            self.pending = Some(item.as_proposal());
+                            shared.toast(
+                                format!("Blood seal: {}", item.title),
+                                pal::CYBER_CRIMSON,
+                            );
+                        }
+                    });
+                }
+            }
+        });
+
+        chrome::section(ui, "BOT_REGISTRY", Some("main + anon swarm"), |ui| {
+            ui.label(
+                RichText::new(
+                    "Deploy proposes exact commands (Python BotStore / Tor socks5h). Blood seal required.",
+                )
+                .color(c32(pal::TEXT_DIM)),
+            );
+            for lane in [BotLane::Main, BotLane::AnonSwarm] {
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(lane.label())
+                            .font(th::display_font(12.0))
+                            .color(c32(if lane == BotLane::AnonSwarm {
+                                pal::CYBER_PURPLE
+                            } else {
+                                pal::CYBER_CYAN
+                            })),
+                    );
+                    ui.label(RichText::new(lane.tooltip()).small().color(c32(pal::TEXT_MUTE)));
+                    if info_rune(ui, ui.id().with(("lane-i", lane.label()))) {
+                        self.open_whisper(lane.label(), lane.whisper());
+                    }
+                });
+                for bot in bots.iter().filter(|b| b.lane == lane) {
+                    ui.horizontal(|ui| {
+                        let resp = ui.label(
+                            RichText::new(format!("  ▸ {} ({})", bot.title, bot.role))
+                                .color(c32(pal::CYBER_TEXT)),
+                        );
+                        resp.on_hover_text(&bot.tooltip);
+                        if info_rune(ui, ui.id().with(("bot-i", bot.id.as_str()))) {
+                            self.open_whisper(&bot.title, &bot.whisper);
+                        }
+                        if chrome::blade_button(ui, "Deploy…", true).clicked() {
+                            if let Some(h) = &self.biotek {
+                                self.pending = Some(bot.deploy_proposal(h));
+                                shared.toast(
+                                    format!("Blood seal: deploy {}", bot.id),
+                                    pal::CYBER_PURPLE,
+                                );
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
+        chrome::section(ui, "PERSONALIZATION", Some("reports"), |ui| {
+            ui.label(
+                RichText::new(
+                    "Device profile → Markdown in ~/.biotek/reports. Fish helpers shown; seal to acknowledge.",
+                )
+                .color(c32(pal::TEXT_DIM)),
+            );
+            if chrome::blade_button(ui, "Generate personalization report", true).clicked() {
+                if let Some(h) = &self.biotek {
+                    let profile = DeviceProfile::collect(h);
+                    match profile.save_markdown(h) {
+                        Ok(path) => {
+                            self.last_report = Some(path.clone());
+                            shared.toast(
+                                format!("Report → {}", path.display()),
+                                pal::CYBER_CYAN,
+                            );
+                        }
+                        Err(e) => shared.toast(format!("Report failed: {e}"), pal::CYBER_CRIMSON),
+                    }
+                }
+            }
+            if chrome::stone_button(ui, "Propose Fish helpers (blood seal)").clicked() {
+                if let Some(h) = &self.biotek {
+                    let profile = DeviceProfile::collect(h);
+                    self.pending = Some(profile.fish_apply_proposal());
+                }
+            }
+            if let Some(p) = &self.last_report {
+                ui.monospace(p.display().to_string());
             }
         });
 
@@ -233,18 +422,23 @@ impl SettingsTab for QuantumSecTab {
                 if let Some(home) = &self.biotek {
                     let path = home.join("config").join("awakening.json");
                     let s = AwakeningState::default();
-                    let _ = s.save(&path); // reset so next dismiss re-marks
+                    let _ = s.save(&path);
                 }
             }
         });
 
         chrome::section(ui, "WHISPER_FROM_THE_CORE", Some("info"), |ui| {
             for id in lillith_quantumsec::ProtonId::ALL {
-                ui.label(
-                    RichText::new(format!("⚠ {} — {}", id.label(), id.whisper()))
-                        .small()
-                        .color(c32(pal::CYBER_TEXT_DIM)),
-                );
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(format!("⚠ {} — {}", id.label(), id.whisper()))
+                            .small()
+                            .color(c32(pal::CYBER_TEXT_DIM)),
+                    );
+                    if info_rune(ui, ui.id().with(("wlist", id.label()))) {
+                        self.open_whisper(id.label(), id.whisper());
+                    }
+                });
             }
         });
     }
