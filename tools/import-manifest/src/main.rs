@@ -24,6 +24,8 @@
 //! `feet_off_ground_px` becomes a `feet_off_ground_px:<n>` tag; the feet
 //! anchor itself stays on the shared baseline.
 //!
+//! `severity` (0..=4, attention level for the loneliness picker) is copied
+//! as is; `Clip::validate` rejects values above 4.
 //! Seat metadata (`seat_y`, `seat_x_range`, `feet_lowest_y`) and event
 //! reaction metadata (`event`, `base_clip`, `base_frames`) are carried into
 //! the clip fields of the same names. The engine validates that `base_clip`
@@ -420,6 +422,8 @@ fn convert(
         seat_y: typed_field(&anim.name, &anim.extra, side, "seat_y")?,
         seat_x_range: typed_field(&anim.name, &anim.extra, side, "seat_x_range")?,
         feet_lowest_y: typed_field(&anim.name, &anim.extra, side, "feet_lowest_y")?,
+        // Attention severity (0..=4) for the loneliness picker.
+        severity: typed_field(&anim.name, &anim.extra, side, "severity")?,
         // Locomotion: per-frame root motion and footfall frames (in-place cycles).
         root_motion: typed_field(&anim.name, &anim.extra, side, "root_motion")?,
         contact_frames: typed_field(&anim.name, &anim.extra, side, "contact_frames")?,
@@ -893,6 +897,9 @@ fn check(path: &Path, videos: bool) -> Result<()> {
                 "   seat_y {:?}  seat_x_range {:?}  feet_lowest_y {:?}",
                 clip.seat_y, clip.seat_x_range, clip.feet_lowest_y
             );
+        }
+        if let Some(sev) = clip.severity {
+            println!("   severity {sev}");
         }
         if let Some(v) = clip.video_path(&dir) {
             ensure!(v.is_file(), "{name}: video {v:?} missing");

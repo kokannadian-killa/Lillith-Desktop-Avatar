@@ -145,6 +145,11 @@ pub struct Clip {
     /// `baseline_y`, e.g. legs dangling below a seat).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feet_lowest_y: Option<i32>,
+    /// Optional attention severity (0..=4) for mood-driven pickers, e.g. the
+    /// loneliness picker: higher means a more insistent attention pose.
+    /// `None` = not an attention pose.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<u8>,
     /// Optional root motion of an in-place (treadmill) locomotion cycle, one
     /// entry per frame: cell px the character advances along +x when frame
     /// `i` gives way to frame `i + 1` (the last entry wraps to frame 0).
@@ -260,6 +265,7 @@ impl Default for Clip {
             seat_y: None,
             seat_x_range: None,
             feet_lowest_y: None,
+            severity: None,
             root_motion: None,
             contact_frames: None,
             event: None,
@@ -286,6 +292,9 @@ impl Default for Clip {
 fn is_false(b: &bool) -> bool {
     !*b
 }
+
+/// Highest allowed [`Clip::severity`].
+pub const MAX_SEVERITY: u8 = 4;
 
 fn default_fps() -> f32 {
     12.0
@@ -397,6 +406,11 @@ impl Clip {
         };
         if self.frames.is_empty() {
             return Err(bad("no frames".into()));
+        }
+        if let Some(sev) = self.severity {
+            if sev > MAX_SEVERITY {
+                return Err(bad(format!("severity {sev} is above {MAX_SEVERITY}")));
+            }
         }
         if let Some(ms) = &self.frame_durations_ms {
             if ms.len() != self.frames.len() {
@@ -892,6 +906,10 @@ mod tests {
             seat_x_range = [136, 279]
             feet_lowest_y = 364
             frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
+            [clips.lonely_tier2_sway_beckon]
+            page = "l.png"
+            severity = 2
+            frames = [ { x = 0, y = 0, w = 4, h = 4 } ]
             "#,
         )
         .unwrap();
@@ -905,6 +923,27 @@ mod tests {
         assert_eq!(s.feet_lowest_y, Some(364));
         assert!(s.points.is_empty());
         assert_eq!(m.clips["facepalm"].event, None);
+        assert_eq!(m.clips["lonely_tier2_sway_beckon"].severity, Some(2));
+        assert_eq!(s.severity, None);
+    }
+
+    #[test]
+    fn severity_above_max_is_invalid() {
+        let mut c = Clip {
+            page: "p.png".into(),
+            severity: Some(MAX_SEVERITY),
+            frames: vec![FrameRect {
+                x: 0,
+                y: 0,
+                w: 4,
+                h: 4,
+                anchor: (2, 4),
+            }],
+            ..Clip::default()
+        };
+        assert!(c.validate("c").is_ok());
+        c.severity = Some(MAX_SEVERITY + 1);
+        assert!(c.validate("c").is_err());
     }
 
     #[test]
