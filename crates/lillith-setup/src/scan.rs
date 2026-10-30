@@ -232,7 +232,6 @@ pub fn default_scan_dirs_with(bundled: &[PathBuf]) -> Vec<PathBuf> {
     v.push(PathBuf::from("/var/lib/ollama/blobs"));
     v.push(PathBuf::from("/var/lib/ollama/.ollama/models/blobs"));
     v.push(PathBuf::from("/usr/share/ollama/.ollama/models/blobs"));
-    v.push(PathBuf::from("/workspace/models"));
     dedup_paths(v)
 }
 
@@ -1055,6 +1054,17 @@ mod tests {
         assert_eq!(f.chat_template, ChatTemplate::ChatMl);
         assert!(r.models.iter().any(|m| m.source == ModelSource::OllamaBlob));
         assert!(!r.dirs[1].exists);
+    }
+
+    #[test]
+    fn default_dirs_have_no_build_box_paths() {
+        // Only the user's own folders (and the system Ollama stores); no
+        // leftover build-machine path such as /workspace/models.
+        let dirs = default_scan_dirs_with(&[]);
+        assert!(
+            dirs.iter().all(|d| !d.starts_with("/workspace")),
+            "{dirs:?}"
+        );
     }
 
     #[test]

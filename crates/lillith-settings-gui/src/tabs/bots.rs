@@ -14,7 +14,7 @@
 use super::{SettingsTab, Shared};
 use crate::bots::worker::{self, BotEvent, Exec, ModelAccess, Thinking};
 use crate::bots::{
-    self, BotDef, BotKind, BotStatus, DreamStatus, DreamStatusSource, NoDream, Step,
+    self, BotDef, BotKind, BotStatus, DreamItem, DreamStatus, DreamStatusSource, NoDream, Step,
 };
 use crate::chrome;
 use egui::{pos2, vec2, Align, Align2, FontId, Layout, RichText, Sense, Stroke};
@@ -33,6 +33,34 @@ pub const CARD_ID: &str = "bots-soul-contract";
 const MAX_CHAT: usize = 400;
 /// Width of the roster column.
 const ROSTER_W: f32 = 260.0;
+/// Saved dream items listed (newest first).
+const MAX_DREAM_ITEMS: usize = 30;
+
+/// A small Forget button: senses clicks but is not focusable, so only a
+/// real mouse click (`clicked_by(Primary)`) forgets, never Tab + Enter.
+fn forget_button(ui: &mut egui::Ui, id: &str) -> egui::Response {
+    let font = FontId::proportional(11.0);
+    let galley = ui
+        .painter()
+        .layout_no_wrap("Forget".into(), font, c32(pal::TEXT));
+    let size = galley.size() + vec2(10.0, 4.0);
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    let r = ui.interact(rect, ui.id().with(("dream-forget", id)), Sense::CLICK);
+    let col = if r.hovered() {
+        pal::BLOOD
+    } else {
+        pal::TEXT_MUTE
+    };
+    ui.painter().rect_stroke(
+        rect,
+        3.0,
+        Stroke::new(1.0, c32(col)),
+        egui::StrokeKind::Inside,
+    );
+    ui.painter()
+        .galley(rect.center() - galley.size() / 2.0, galley, c32(col));
+    r.on_hover_text("Delete this saved note and its memory (audited)")
+}
 
 /// Who said a chat line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +118,8 @@ pub struct BotsTab {
     journal: PathBuf,
     model: Option<ModelAccess>,
     dream: Box<dyn DreamStatusSource>,
+    /// Where each saved dream item's Forget button was drawn last frame.
+    dream_hits: Vec<(String, egui::Rect)>,
     new_kind: BotKind,
     new_name: String,
     folder_buf: String,
@@ -126,6 +156,7 @@ impl BotsTab {
                 .unwrap_or_else(|| std::env::temp_dir().join("lillith-organize-journal")),
             model,
             dream: Box::new(NoDream),
+            dream_hits: Vec::new(),
             new_kind: BotKind::FileOrganizer,
             new_name: String::new(),
             folder_buf: String::new(),
@@ -411,7 +442,7 @@ impl BotsTab {
         Some((action, detail))
     }
 
-    fn roster_ui(&mut self, ui: &mut egui::Ui) {
+    fn roster_ui(&mut self, ui: &mut egui::Ui, shared: &mut Shared) {
         for i in 0..self.roster.len() {
             let w = ui.available_width();
             let (rect, resp) = ui.allocate_exact_size(vec2(w, 56.0), Sense::click());
@@ -478,9 +509,62 @@ impl BotsTab {
         chrome::hint(ui, "Stop all = the kill switch (Ctrl-C does the same).");
         ui.add_space(6.0);
         let line = self.dream_line();
+        let status = self.dream.status();
+        let mut forget: Option<DreamItem> = None;
+        let mut hits = Vec::new();
         chrome::section(ui, "DREAM LEARNING", None, |ui| {
             ui.label(RichText::new(line).small().color(c32(pal::TEXT_DIM)));
+            let Some(st) = &status else {
+                return;
+            };
+            if let Some(d) = &st.deadline_local {
+                ui.label(
+                    RichText::new(format!("Ends by {d}"))
+                        .small()
+                        .color(c32(pal::TEXT_DIM)),
+                );
+            }
+            if let Some(d) = &st.digest {
+                ui.add_space(4.0);
+                ui.label(RichText::new("Digest").small().color(c32(pal::VIOLET)));
+                ui.label(RichText::new(d).small().color(c32(pal::TEXT)));
+            }
+            if !st.items.is_empty() {
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!("Saved ({})", st.items.len()))
+                        .small()
+                        .color(c32(pal::VIOLET)),
+                );
+                for it in st.items.iter().rev().take(MAX_DREAM_ITEMS) {
+                    ui.horizontal(|ui| {
+                        let b = forget_button(ui, &it.id);
+                        hits.push((it.id.clone(), b.rect));
+                        if b.clicked_by(egui::PointerButton::Primary) {
+                            forget = Some(it.clone());
+                        }
+                        let t = if it.host.is_empty() {
+                            it.title.clone()
+                        } else {
+                            format!("{} — {}", it.title, it.host)
+                        };
+                        ui.label(RichText::new(t).small().color(c32(pal::TEXT_DIM)));
+                    });
+                }
+            }
         });
+        self.dream_hits = hits;
+        if let Some(it) = forget {
+            self.forget_dream(&it, shared);
+        }
+    }
+
+    /// The live log's Forget (a mouse click on that item's button).
+    fn forget_dream(&mut self, it: &DreamItem, shared: &mut Shared) {
+        match self.dream.forget(&it.id) {
+            Ok(title) => shared.toast(format!("Forgot “{title}”"), pal::VIOLET),
+            Err(e) => shared.toast(format!("Could not forget “{}”: {e}", it.title), pal::BLOOD),
+        }
     }
 
     fn chat_ui(&mut self, ui: &mut egui::Ui) {
@@ -731,19 +815,19 @@ fn off_run(b: &BotDef) -> Run {
 pub fn dream_text(s: Option<DreamStatus>) -> String {
     match s {
         None => "No dream session. Online research only happens in a dream session you approve (Tor, mouse Yes); bots never go online.".into(),
-        Some(d) => format!(
-            "Session {}: {} · {} min left · {}/{} jobs{}",
-            d.session,
-            d.state,
-            d.minutes_left,
-            d.jobs_done,
-            d.jobs_total,
-            if d.note.is_empty() {
-                String::new()
-            } else {
-                format!(" · {}", d.note)
+        Some(d) => {
+            let mut t = format!("Session {}: {}", d.session, d.state);
+            if d.minutes_left > 0 {
+                t.push_str(&format!(" · {} min left", d.minutes_left));
             }
-        ),
+            if d.jobs_total > 0 {
+                t.push_str(&format!(" · {}/{} jobs", d.jobs_done, d.jobs_total));
+            }
+            if !d.note.is_empty() {
+                t.push_str(&format!(" · {}", d.note));
+            }
+            t
+        }
     }
 }
 
@@ -857,7 +941,7 @@ impl SettingsTab for BotsTab {
                 egui::ScrollArea::vertical()
                     .id_salt("bots-roster")
                     .max_height(h)
-                    .show(ui, |ui| self.roster_ui(ui));
+                    .show(ui, |ui| self.roster_ui(ui, shared));
             });
             ui.add_space(10.0);
             let w = ui.available_width();

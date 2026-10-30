@@ -2448,6 +2448,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.21",
  "toml",
+ "toml_edit 0.22.27",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -2568,6 +2569,7 @@ dependencies = [
  "libc",
  "lillith-anim",
  "lillith-core",
+ "lillith-learn",
  "lillith-setup",
  "lillith-theme",
  "rfd",

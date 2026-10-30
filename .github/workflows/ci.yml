@@ -58,6 +58,12 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: cargo build
         run: cargo build --workspace --locked
+      # The committed manifest.toml must be exactly what this commit's
+      # import-manifest renders (severity, system, tags...). --check never
+      # writes. A stale import-manifest binary once rewrote it without the
+      # severity/system fields; this catches any such drift.
+      - name: import-manifest --check
+        run: cargo run -q --locked -p import-manifest -- --input assets/generated/manifest.json --tag canonical --check --no-video-check
       # Headless end-to-end check of the binary just built: under Xvfb with a
       # stub llama-server on 127.0.0.1, she maps a non-black first frame, the
       # right-click menu opens and draws, and `lillith chat` round-trips.
@@ -72,6 +78,14 @@ jobs:
           if-no-files-found: ignore
       - name: cargo test
         run: cargo test --workspace --locked --no-fail-fast
+      # Building, the smoke test and the tests must never rewrite a
+      # committed file (e.g. assets/generated/manifest.toml): installers
+      # are built from this tree.
+      - name: build + smoke + tests leave git clean
+        if: always()
+        run: |
+          git status --short --untracked-files=no
+          git diff --exit-code --stat
 
   full-features:
     name: clippy (all features, system libs)

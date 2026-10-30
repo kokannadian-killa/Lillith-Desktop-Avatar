@@ -821,23 +821,45 @@ impl BotStatus {
 
 // ---------------------------------------------------------------- dream hook
 
-/// A dream-learning session as the Bots tab shows it (read-only).
+/// A dream-learning session as the Bots tab shows it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DreamStatus {
     pub session: String,
-    /// `running`, `ending`, `done`, `stopped`...
+    /// `running`, `ending`, `ended`, `proposed`...
     pub state: String,
     pub minutes_left: u64,
     pub jobs_done: u32,
     pub jobs_total: u32,
     pub note: String,
+    /// The hard deadline as she says it (`7:30 PM MDT`).
+    pub deadline_local: Option<String>,
+    /// What the session saved (newest last).
+    pub items: Vec<DreamItem>,
+    /// The local-model digest of the saved notes, when there is one.
+    pub digest: Option<String>,
 }
 
-/// Hook for Memory Engine's session-status API. The Bots tab only reads
-/// it; dream sessions are started (Ko-gated, Tor-only) elsewhere.
+/// One note a dream saved (the live log: title, where from, Forget).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DreamItem {
+    /// The note id [`DreamStatusSource::forget`] takes.
+    pub id: String,
+    pub title: String,
+    /// The source host (`doc.rust-lang.org`).
+    pub host: String,
+}
+
+/// Hook for Memory Engine's session-status API. The Bots tab reads it and
+/// can forget one saved item; dream sessions are started (Ko-gated,
+/// Tor-only) elsewhere, never from here.
 pub trait DreamStatusSource: Send {
     /// The current or last session, `None` when there was none.
     fn status(&self) -> Option<DreamStatus>;
+    /// Forgets one dream-saved note (its file and memory row); the note's
+    /// title on success.
+    fn forget(&mut self, _id: &str) -> Result<String, String> {
+        Err("forgetting is not available here".into())
+    }
 }
 
 /// The default source until Memory Engine plugs in: no session.
@@ -846,6 +868,137 @@ pub struct NoDream;
 impl DreamStatusSource for NoDream {
     fn status(&self) -> Option<DreamStatus> {
         None
+    }
+}
+
+/// The real source: the status file the app running the dream writes
+/// (`<runtime dir>/dream-status.json`, re-read at most once a second) and
+/// [`lillith_learn::workers::orchestrator::forget_dream_item`] (audited).
+pub struct LiveDream {
+    config_path: PathBuf,
+    cache: std::sync::Mutex<(Option<std::time::Instant>, Option<DreamStatus>)>,
+}
+
+impl LiveDream {
+    pub fn new(config_path: &Path) -> Self {
+        Self {
+            config_path: config_path.to_path_buf(),
+            cache: std::sync::Mutex::new((None, None)),
+        }
+    }
+}
+
+/// Minutes from `now` (unix seconds) until a `YYYY-MM-DDTHH:MM:SSZ` time
+/// (0 when past or unreadable).
+pub fn minutes_until(deadline_utc: &str, now: i64) -> u64 {
+    let b = deadline_utc.as_bytes();
+    let num = |r: std::ops::Range<usize>| -> Option<i64> { deadline_utc.get(r)?.parse().ok() };
+    if b.len() < 19 {
+        return 0;
+    }
+    let (Some(y), Some(mo), Some(d), Some(h), Some(mi), Some(s)) = (
+        num(0..4),
+        num(5..7),
+        num(8..10),
+        num(11..13),
+        num(14..16),
+        num(17..19),
+    ) else {
+        return 0;
+    };
+    // Days from the civil date (Howard Hinnant's algorithm).
+    let y2 = if mo <= 2 { y - 1 } else { y };
+    let era = y2.div_euclid(400);
+    let yoe = y2 - era * 400;
+    let mp = (mo + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    let t = days * 86_400 + h * 3600 + mi * 60 + s;
+    u64::try_from((t - now + 59) / 60).unwrap_or(0)
+}
+
+/// The Bots tab's view of the learn crate's status (`None` when idle).
+pub fn from_learn(
+    s: &lillith_learn::workers::orchestrator::DreamStatus,
+    now: i64,
+) -> Option<DreamStatus> {
+    use lillith_learn::workers::orchestrator::DreamState;
+    if s.state == DreamState::Idle {
+        return None;
+    }
+    let live = matches!(s.state, DreamState::Running | DreamState::Ending);
+    let mut note = format!(
+        "{} page{} visited, {} saved",
+        s.visited.len(),
+        if s.visited.len() == 1 { "" } else { "s" },
+        s.saved_count
+    );
+    if s.quarantined_count > 0 {
+        note.push_str(&format!(", {} quarantined", s.quarantined_count));
+    }
+    if live {
+        if let Some(w) = &s.where_now {
+            note.push_str(&format!(", now: {w}"));
+        }
+    } else if let Some(r) = s.stop_reason {
+        note.push_str(&format!(", ended: {}", r.word()));
+    }
+    Some(DreamStatus {
+        session: s.session.clone().unwrap_or_else(|| "-".into()),
+        state: s.state.word().into(),
+        minutes_left: if live {
+            s.deadline
+                .as_deref()
+                .map(|d| minutes_until(d, now))
+                .unwrap_or(0)
+        } else {
+            0
+        },
+        jobs_done: 0,
+        jobs_total: 0,
+        note,
+        deadline_local: s.deadline_local.clone(),
+        items: s
+            .items
+            .iter()
+            .map(|i| DreamItem {
+                id: i.id.clone(),
+                title: i.title.clone(),
+                host: i.host.clone(),
+            })
+            .collect(),
+        digest: s.digest.clone().filter(|d| !d.trim().is_empty()),
+    })
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+impl DreamStatusSource for LiveDream {
+    fn status(&self) -> Option<DreamStatus> {
+        let mut c = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+        let fresh =
+            c.0.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(1));
+        if !fresh {
+            let st = lillith_learn::workers::orchestrator::read_status_file();
+            c.1 = st.and_then(|s| from_learn(&s, unix_now()));
+            c.0 = Some(std::time::Instant::now());
+        }
+        c.1.clone()
+    }
+
+    fn forget(&mut self, id: &str) -> Result<String, String> {
+        let cfg =
+            lillith_core::config::Config::load(&self.config_path).map_err(|e| e.to_string())?;
+        let r = lillith_learn::workers::orchestrator::forget_dream_item(&cfg, id);
+        // Re-read the status on the next frame (the item drops out).
+        self.cache.lock().unwrap_or_else(|e| e.into_inner()).0 = None;
+        r
     }
 }
 
