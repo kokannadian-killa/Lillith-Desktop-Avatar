@@ -7,6 +7,7 @@
 #     then the smallest that fits in RAM; warns if too big) and writes ~/.config/lillith/config.toml;
 #     llama-server = the bundled one, loopback 127.0.0.1:8080 only
 #   - menu entry + desktop shortcut (trusted), her icon; KWin bridge (Plasma 6), no force-blur
+#   - checks Pose Builder's AI cut-out: the bundled isnet-anime.onnx (checksum) + its Python packages
 # Options: --gguf FILE   --no-voice   --no-desktop   -y/--yes (take defaults)
 # Safe to re-run any time. Never downloads anything, never touches your .gguf files.
 set -euo pipefail
@@ -27,7 +28,7 @@ HELPER="$OPT/launch/lillith-shadows.sh"; [[ -f $HELPER ]] || HELPER="$(dirname "
 # shellcheck source=lillith-shadows.sh
 . "$HELPER"
 
-step "1/5 Older installs that would run instead of the package"
+step "1/6 Older installs that would run instead of the package"
 lillith_move_shadows
 OLD=0
 for f in "$DATA/applications/lillith.desktop"; do       # an old per-user menu entry hides the package's
@@ -40,7 +41,7 @@ if [[ -f $DATA/lillith/generated/manifest.toml ]]; then
   warn "  free ~1.5 GB later if you like: rm -r '$DATA/lillith/generated'"
 fi
 
-step "2/5 Her offline voice (bundled kit, nothing downloaded)"
+step "2/6 Her offline voice (bundled kit, nothing downloaded)"
 if [[ $VOICE == 1 ]]; then
   if bash "$OPT/tools/lillith-voice/install.sh" --wheels "$OPT/tools/lillith-voice/wheels" --systemd; then
     ok "voice kit installed (lillith-say \"hi\")"
@@ -60,7 +61,7 @@ if [[ $VOICE == 1 ]]; then
   fi
 else ok "skipped (--no-voice)"; fi
 
-step "3/5 Your local model (loopback 127.0.0.1:8080 only, no model is ever downloaded)"
+step "3/6 Your local model (loopback 127.0.0.1:8080 only, no model is ever downloaded)"
 if [[ -n $GGUF ]]; then
   "$SYSBIN/lillith" setup --gguf "$GGUF" && ok "model: $GGUF"
 else
@@ -68,14 +69,14 @@ else
 fi
 ok "llama-server: the bundled one in $OPT/bundle/llama (127.0.0.1:8080)"
 
-step "4/5 App menu, desktop shortcut and icon"
+step "4/6 App menu, desktop shortcut and icon"
 "$SYSBIN/lillith" icon --reapply >/dev/null 2>&1 && ok "icon: $("$SYSBIN/lillith" icon 2>/dev/null | head -1)" || true
 if [[ $DESK == 1 ]]; then lillith_desktop_shortcut "${LILLITH_DESKTOP_FILE:-/usr/share/applications/lillith.desktop}" || true
 else ok "desktop shortcut skipped (--no-desktop)"; fi
 have update-desktop-database && update-desktop-database -q "$DATA/applications" 2>/dev/null || true
 have kbuildsycoca6 && kbuildsycoca6 >/dev/null 2>&1 || true
 
-step "5/5 Plasma: KWin bridge + blur"
+step "5/6 Plasma: KWin bridge + blur"
 if have kwriteconfig6; then
   kwriteconfig6 --file kwinrc --group Plugins --key lillith-bridgeEnabled true
   have qdbus6 && qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
@@ -88,4 +89,9 @@ if have kwriteconfig6; then
 else
   warn "not Plasma 6 (no kwriteconfig6): skipped; she sits on the screen bottom instead of windows"
 fi
+step "6/6 Pose Builder's AI cut-out (bundled isnet-anime.onnx, nothing downloaded)"
+MM="$OPT/tools/video-pipeline/matte_model.py"
+if [[ ! -f $MM ]]; then warn "$MM is missing: reinstall lillith-bin"
+elif out=$(U2NET_HOME="${U2NET_HOME:-$OPT/models/rembg}" python3 "$MM" --verify 2>&1); then ok "$out"
+else warn "Pose Builder will use the plain-backdrop cut-out only:"; printf '%s\n' "$out" | sed 's/^/    /'; fi
 printf '\n%sDone.%s Start her from the desktop or app menu (Lillith), or run: lillith    Settings: lillith-settings\n' "$G" "$N"

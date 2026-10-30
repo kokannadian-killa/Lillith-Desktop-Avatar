@@ -4,4 +4,9 @@
 # you set LILLITH_MANIFEST yourself; your own imported clips are added on top.
 : "${LILLITH_MANIFEST:=/opt/lillith/assets/generated/manifest.toml}"
 export LILLITH_MANIFEST
+# Pose Builder's AI cut-out model (isnet-anime.onnx) ships in /opt/lillith/models/rembg: one U2NET_HOME for
+# every Python tool she starts (matte_model.py resolves the same folder on its own too). Nothing is downloaded.
+if [ -z "${U2NET_HOME:-}" ] && [ -f /opt/lillith/models/rembg/isnet-anime.onnx ]; then
+  U2NET_HOME=/opt/lillith/models/rembg; export U2NET_HOME
+fi
 exec "/opt/lillith/bin/$(basename "$0")" "$@"

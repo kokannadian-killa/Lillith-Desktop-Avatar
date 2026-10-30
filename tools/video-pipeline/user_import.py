@@ -561,36 +561,25 @@ def split(job, info, path, total_est):
 
 
 # ------------------------------------------------------------------ matte
-MODEL_NAME = 'isnet-anime.onnx'
+sys.path.insert(0, str(HERE))
+import matte_model  # noqa: E402  (the one place that knows where isnet-anime.onnx lives)
+MODEL_NAME = matte_model.MODEL_NAME
 
 
-def model_candidates(flag=None, env=None, home=None):
-    """isnet-anime lookup order (never downloaded):
+def model_candidates(flag=None, env=None, home=None, **kw):
+    """isnet-anime lookup order (never downloaded; see matte_model.py):
       1. --model (a file, or a folder holding isnet-anime.onnx)
       2. $U2NET_HOME/isnet-anime.onnx
-      3. <home>/.rembg/models/isnet-anime/isnet-anime.onnx   (home = pathlib home: ~ on Linux/macOS,
+      3. <install>/models/rembg/isnet-anime.onnx (Arch /opt/lillith/models/rembg, Windows <install>\\models\\rembg)
+      4. <home>/.u2net/isnet-anime.onnx          (rembg's own folder)
+      5. <home>/.rembg/models/isnet-anime/isnet-anime.onnx   (home = pathlib home: ~ on Linux/macOS,
          %USERPROFILE% on Windows)"""
-    env = os.environ if env is None else env
-    home = Path.home() if home is None else home
-    out = []
-    for c in (flag, env.get('U2NET_HOME')):
-        if c:
-            c = Path(c)
-            out.append(c if c.suffix.lower() == '.onnx' else c / MODEL_NAME)
-    out.append(home / '.rembg' / 'models' / 'isnet-anime' / MODEL_NAME)
-    return out
+    return matte_model.model_candidates(flag, env, home, **kw)
 
 
-def find_model(flag=None, env=None, home=None):
-    """(path or None, [every path tried])"""
-    tried = model_candidates(flag, env, home)
-    for c in tried:
-        try:
-            if Path(c).is_file():
-                return Path(c).resolve(), tried
-        except OSError:
-            pass
-    return None, tried
+def find_model(flag=None, env=None, home=None, **kw):
+    """(path or None, [every path tried]); strict=True skips files that are not the whole model"""
+    return matte_model.find_model(flag, env, home, **kw)
 
 
 class Matter:
@@ -598,7 +587,7 @@ class Matter:
         self.job = job; self.mode = job.a.matte; self.threads = job.a.threads
         import matte_v2 as mv
         self.mv = mv
-        model, tried = find_model(getattr(job.a, 'model', None))
+        model, tried = find_model(getattr(job.a, 'model', None), strict=True)   # a half-finished download is not a model
         self.tried = tried
         self.found = model is not None
         if model:
@@ -611,9 +600,11 @@ class Matter:
             if model is None:
                 raise Fail('--matte isnet: the isnet-anime model was not found (nothing is downloaded). Tried: '
                            + '; '.join(str(t) for t in tried)
-                           + '. Copy isnet-anime.onnx to one of those paths, or pass --model <file>.')
+                           + '. ' + matte_model.fix_hint() + ' Or pass --model <file>.')
             if not _has_ort():
-                raise Fail('--matte isnet needs the onnxruntime Python package (pip install onnxruntime)')
+                raise Fail("--matte isnet needs the onnxruntime Python package. "
+                           + ('Fix: sudo pacman -S --needed python-onnxruntime-cpu (or run the Lillith installer again).' if os.name != 'nt'
+                              else 'Fix: run Lillith-Setup.exe again.'))
 
     def describe(self):
         return {'alpha': "the file's own alpha channel", 'isnet': f'local isnet-anime model ({Path(self.mv.MODEL).name}) + matte_v2 edge alpha',
@@ -1140,15 +1131,36 @@ def pipeline(job):
     return names
 
 
+def preflight(argv):
+    """`user_import.py --preflight [--matte M] [--model F]`: one JSON line on stdout, exit 0. For a front end
+    (or a support check) to ask, before a job, what is missing and how to fix it; a run itself never crashes on a
+    missing model either (isnet -> `error` event with the fix, auto -> backdrop key)."""
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--preflight', action='store_true')
+    ap.add_argument('--matte', choices=('auto', 'isnet', 'key', 'alpha'), default='auto')
+    ap.add_argument('--model')
+    a = ap.parse_args(argv)
+    uses_model = a.matte in ('auto', 'isnet')
+    mods = matte_model.REQUIRED_MODULES if uses_model else tuple(m for m in matte_model.REQUIRED_MODULES if m != 'onnxruntime')
+    r = matte_model.check(need_model=uses_model, flag=a.model, modules=mods)
+    r['matte'] = a.matte
+    r['fatal'] = a.matte == 'isnet'      # auto degrades to the backdrop key; isnet cannot
+    print(json.dumps(r), flush=True)
+    return 0
+
+
 def main(argv=None):
+    if '--preflight' in (sys.argv[1:] if argv is None else argv):
+        return preflight(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--input', required=True, help='MP4, GIF, WebM or MOV')
     ap.add_argument('--out', required=True, help='staging dir; created if missing; nothing is written elsewhere')
     ap.add_argument('--json-progress', action='store_true', help='JSON lines on stdout (the GUI contract)')
     ap.add_argument('--max-ram-mb', type=int, default=1500, help='RAM cap for the importer + its ffmpeg (default 1500)')
     ap.add_argument('--matte', choices=('auto', 'isnet', 'key', 'alpha'), default='auto')
-    ap.add_argument('--model', help='isnet-anime.onnx file or folder. Lookup: --model, then $U2NET_HOME/isnet-anime.onnx, then '
-                         '~/.rembg/models/isnet-anime/isnet-anime.onnx (%%USERPROFILE%% on Windows); never downloaded')
+    ap.add_argument('--model', help='isnet-anime.onnx file or folder. Lookup: --model, $U2NET_HOME, the installer copy '
+                         '(<install>/models/rembg), ~/.u2net, ~/.rembg/models/isnet-anime (%%USERPROFILE%% on Windows); '
+                         'never downloaded (see matte_model.py)')
     ap.add_argument('--zmax', type=float, default=ZMAX, help='peak cleavage zoom (1 = no zoom; default 1.8)')
     ap.add_argument('--min-seconds', type=float, default=1.5)
     ap.add_argument('--max-seconds', type=float, default=8.0)

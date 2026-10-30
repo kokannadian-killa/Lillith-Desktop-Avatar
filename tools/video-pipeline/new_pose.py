@@ -87,6 +87,8 @@ def main():
     a = ap.parse_args()
     c, dry = a.clip, a.dry_run
     steps = STEPS[STEPS.index(a.start_step):STEPS.index(a.stop_step) + 1]
+    if not dry and ('build' in steps or 'matte' in steps):
+        import matte_model; matte_model.preflight_or_exit()   # clear message + exit 2 before any work, not a traceback mid-build
     src = os.path.join(paths.SRC_VIDEO, c, f'{c}_v3_{a.take}.mp4')
     v2 = os.path.join(paths.V2, c)
     gen = os.path.join(a.repo, 'assets', 'generated')

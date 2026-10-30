@@ -131,6 +131,7 @@ def main():
     ap.add_argument('--snap-thresh', type=float, default=0, help='snap only frames whose lowest pixel is within this many canvas px of the ground (keeps real flight frames)')
     ap.add_argument('--snap', action='store_true', help='per-frame: lowest pixel -> y=392 (clips with constant ground contact, e.g. walk)')
     a = ap.parse_args()
+    import matte_model; matte_model.preflight_or_exit()   # onnxruntime + the bundled isnet-anime.onnx, else a clear message (exit 2)
     name = a.out_name or a.clip
     video = os.path.abspath(a.video); fd = extract(video)
     idx = list(range(a.start, a.stop, a.step))

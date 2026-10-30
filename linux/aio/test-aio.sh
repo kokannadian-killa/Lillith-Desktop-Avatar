@@ -96,4 +96,14 @@ P="$HOME/AI/models/dolphin3.0-llama3.2-3b-q4_k_m.gguf"; mkg "$P" $((2 * G))
 first=$(printf '%s\n' "$M"/*.gguf "$P" | LILLITH_RAM_BYTES=$ko gguf_rank | head -1)
 [[ $first == "$P" ]] || fail "the preferred file must win, got $first"
 ok "install.sh model list: preferred, Dolphin that fits, smallest that fits; too big is flagged"
+# the AI cut-out model: one folder (U2NET_HOME) for every tool, checked by firstrun
+grep -q 'U2NET_HOME=/opt/lillith/models/rembg; export U2NET_HOME' "$HERE/lillith-wrapper" || fail "wrapper: U2NET_HOME"
+grep -q 'tools/video-pipeline/matte_model.py' "$HERE/lillith-firstrun" && grep -q -- '--verify' "$HERE/lillith-firstrun" || fail "firstrun: matte model check"
+W="$T/wrap"; mkdir -p "$W/opt/lillith/bin"; printf '#!/bin/sh\necho "U2=$U2NET_HOME"\n' > "$W/opt/lillith/bin/lillith"; chmod +x "$W/opt/lillith/bin/lillith"
+sed "s#/opt/lillith#$W/opt/lillith#g" "$HERE/lillith-wrapper" > "$W/lillith"; chmod +x "$W/lillith"
+[[ $(env -u U2NET_HOME "$W/lillith") == "U2=" ]] || fail "wrapper set U2NET_HOME without a model"
+mkdir -p "$W/opt/lillith/models/rembg"; : > "$W/opt/lillith/models/rembg/isnet-anime.onnx"
+[[ $(env -u U2NET_HOME "$W/lillith") == "U2=$W/opt/lillith/models/rembg" ]] || fail "wrapper: U2NET_HOME not the bundled folder"
+[[ $(U2NET_HOME=/mine "$W/lillith") == "U2=/mine" ]] || fail "wrapper overrode the user's U2NET_HOME"
+ok "wrapper: U2NET_HOME = the bundled models/rembg (yours wins); firstrun verifies the model"
 echo "# $pass passed"
