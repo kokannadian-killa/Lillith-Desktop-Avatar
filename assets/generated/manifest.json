@@ -7678,6 +7678,42 @@
    "video": "oops_strap_snap_lean/oops_strap_snap_lean.mp4",
    "severity": 4,
    "system": false
+  },
+  {
+   "name": "thirsty_pant_lip_bite_lean",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "thirsty_pant_lip_bite_lean/",
+   "sheet": "thirsty_pant_lip_bite_lean/thirsty_pant_lip_bite_lean_sheet.png",
+   "manifest": "thirsty_pant_lip_bite_lean/thirsty_pant_lip_bite_lean.json",
+   "preview": "thirsty_pant_lip_bite_lean/thirsty_pant_lip_bite_lean_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "idle_variant",
+    "severity:3",
+    "thirsty",
+    "variant_of:idle"
+   ],
+   "allure": true,
+   "video": "thirsty_pant_lip_bite_lean/thirsty_pant_lip_bite_lean.mp4",
+   "severity": 3,
+   "system": false
   }
  ]
 }
