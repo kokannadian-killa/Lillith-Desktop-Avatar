@@ -16,7 +16,7 @@ Everything Android-specific lives in this `android/` folder:
 | `app/src/…/MenuActivity.java` | Long-press menu (chat, kiss, wave, dance, settings, hide) |
 | `rust/` (`lillith-android` crate) | The desktop brain (`lillith-core`), animator and clips (`lillith-anim`) driven over JNI; gravity, drag, tap/long-press, LRU page cache. The JNI glue is behind `cfg(target_os = "android")`; the rest builds and is tested on Linux as part of the workspace |
 | `llm/` | `liblillith_llm.so`: a ~200-line C JNI shim over llama.cpp (pinned tag `b11829`), CPU-only |
-| `app/src/…/ClipPack.java`, `clip-pack.py` | The clip pack: clips that don't fit in an uploadable (<1 GB) APK ship as one zip on the same release; setup downloads it once (token-gated, resumable, SHA-256-checked) |
+| `app/src/…/ClipPack.java`, `clip-pack.py`, `clippack-tests.sh` | The clip pack: clips that don't fit in an uploadable (<1 GB) APK ship on the same release as ~50 MiB pieces (`<zip>.partN`, same layout as Arch / `check-release-zip.py`); setup downloads each piece once (token-gated, resumable, per-piece SHA-256), joins, unpacks. A pack that still fits in one file stays a single zip. |
 | `build-apk.sh` | One-shot build of the debug APK (no Gradle needed); bundles the voice models from the voice kit |
 
 ## Install (Ko)
@@ -37,11 +37,13 @@ Everything Android-specific lives in this `android/` folder:
       for a moment while the launcher picks it up; some launchers only update after a restart of the launcher.
    6. **The rest of her clips (once)**: only shown when the APK was built with a clip pack
       (`LILLITH_CLIP_PACK_MB`). Paste a GitHub token that can read the repo (the repo is private) and tap
-      **Download the rest of her clips**. It downloads one zip from the same release, resumes after a dropped
-      connection, retries, checks the zip's and every file's SHA-256 and unpacks it. The token is held in
-      memory for that download only, never saved. No token? Download the pack zip from the release page in the
-      phone's browser and tap **Or pick … you downloaded**: same checks, no network use by the app. She plays without those clips meanwhile, and restarts with
-      them when it finishes.
+      **Download the rest of her clips**. It downloads the pack from the same release in ~50 MB pieces
+      (`*.part1`, `*.part2`, … — under 1 GB each so GitHub accepts them), resumes each piece after a dropped
+      connection, retries, checks every piece's SHA-256, joins them, checks the joined zip and every file's
+      SHA-256, and unpacks. The token is held in memory for that download only, never saved. No token?
+      Join the pieces on a computer into the zip named in setup (or download a single-file pack, if that
+      release still has one) and tap **Or pick … you downloaded**: same checks, no network use by the app.
+      She plays without those clips meanwhile, and restarts with them when it finishes.
    7. **Start Lillith**. The first start unpacks her clips (~450 MB) and her voice models (~400 MB), checking
       each voice file's SHA-256; it needs about 0.9 GB free and takes a little while. If a voice file is missing
       or corrupt, setup says which one and stops.
@@ -61,7 +63,7 @@ Arm64 phones only (nearly every phone from 2017 on). Android 8.0+.
   `aapt2 dump permissions lillith-debug-arm64.apk`.
 - A clip-pack APK (the published ones, because 232 clips + voice are ~1.8 GB and an upload must stay under
   ~1 GB) has `INTERNET` for exactly one thing: the clip-pack download you start in setup
-  (`ClipPack.java`: HTTPS to `api.github.com`, then GitHub's signed release-asset link, without the token).
+  (`ClipPack.java`: HTTPS to `api.github.com`, then GitHub's signed release-asset links for each ~50 MiB piece, without the token).
   Chat, voice and everything else never open a socket.
 - The chat model is llama.cpp **inside the app process** (JNI). There is no server, not even on loopback,
   which is why INTERNET isn't needed.

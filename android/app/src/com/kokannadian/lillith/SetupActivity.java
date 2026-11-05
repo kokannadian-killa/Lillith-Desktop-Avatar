@@ -138,12 +138,17 @@ public final class SetupActivity extends Activity {
         ClipPack.Info pack = ClipPack.info(this);
         if (pack != null) {
             col.addView(title("6. The rest of her clips (once)", 18));
+            String how = pack.pieces > 0
+                    ? ("Download them once (" + (pack.size / 1_000_000) + " MB in " + pack.pieces
+                        + " ~50 MB pieces) from your GitHub release " + pack.tag
+                        + ". Each piece resumes and is SHA-256-checked, then joined.")
+                    : ("Download them once (" + (pack.size / 1_000_000) + " MB) from your GitHub release "
+                        + pack.tag + ". A dropped connection resumes.");
             col.addView(text(pack.clips + " of her " + pack.totalClips + " clips didn't fit inside the app. "
-                    + "Download them once (" + (pack.size / 1_000_000) + " MB) from your GitHub release "
-                    + pack.tag + ". The repo is private, so paste a GitHub token that can read "
+                    + how + " The repo is private, so paste a GitHub token that can read "
                     + pack.repo + ". It's used for this download only and never saved. "
-                    + "Or download " + pack.asset + " from that release in your browser and pick it. "
-                    + "She works without them meanwhile, and a dropped connection resumes."));
+                    + "Or join/download " + pack.asset + " and pick it here. "
+                    + "She works without them meanwhile."));
             packStatus = text("");
             col.addView(packStatus);
             packToken = new EditText(this);

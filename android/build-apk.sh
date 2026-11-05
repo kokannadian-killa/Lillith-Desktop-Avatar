@@ -41,6 +41,8 @@
 #                         GitHub release (Setup > "Rest of her clips"), checks and unpacks  [0]
 #   LILLITH_CLIP_PACK_REPO / LILLITH_CLIP_PACK_TAG  release it is published on (required with MB)
 #   LILLITH_CLIP_PACK_NAME  release asset name   [lillith-clip-pack.zip]
+#   LILLITH_CLIP_PACK_PIECE_MB  split the pack into ~N MiB pieces when larger [50]; 0 = never
+#                         split. Pieces are $NAME.part1, .part2, ... (check-release-zip layout).
 #   STAGE_ONLY=1          only stage assets (clips + voice) into $OUT/stage and list
 #                         them; needs no SDK/NDK/cargo
 set -euo pipefail
@@ -128,23 +130,62 @@ if [ "${LILLITH_CLIP_PACK_MB:-0}" != 0 ]; then
   : "${LILLITH_CLIP_PACK_REPO:?set LILLITH_CLIP_PACK_REPO (owner/repo of the release)}"
   : "${LILLITH_CLIP_PACK_TAG:?set LILLITH_CLIP_PACK_TAG (release tag)}"
   local pname="${LILLITH_CLIP_PACK_NAME:-lillith-clip-pack.zip}"
+  # ~50 MiB pieces (Arch installer size). 0 = never split (legacy single zip only).
+  local piece_bytes=$(( ${LILLITH_CLIP_PACK_PIECE_MB:-50} * 1024 * 1024 ))
   python3 "$HERE/clip-pack.py" select "$REPO/assets/generated" "$LILLITH_CLIP_PACK_MB" > "$OUT/clippack-clips.txt"
   mkdir -p "$STAGE/assets/clippack"
   python3 "$HERE/clip-pack.py" pack "$REPO/assets/generated" "$OUT/clippack-clips.txt" \
     "$OUT/$pname" "$STAGE/assets/clippack/files.list"
   sed 's/^[0-9a-f]*  /.\//' "$STAGE/assets/clippack/files.list" > "$skip"
+  local pack_size pack_sha pieces_n=0
+  pack_size=$(stat -c %s "$OUT/$pname")
+  pack_sha=$(sha256sum "$OUT/$pname" | cut -d' ' -f1)
+  if [ "$piece_bytes" -gt 0 ] && [ "$pack_size" -gt "$piece_bytes" ]; then
+    python3 "$HERE/clip-pack.py" split "$OUT/$pname" "$piece_bytes" "$STAGE/assets/clippack/pieces.list"
+    local joined
+    joined=$(python3 - "$STAGE/assets/clippack/pieces.list" "$OUT" <<'PY'
+import hashlib, os, sys
+lst, out = sys.argv[1], sys.argv[2]
+h = hashlib.sha256()
+for line in open(lst):
+    line = line.strip()
+    if not line or line.startswith("#"):
+        continue
+    _sha, _size, name = line.split()
+    with open(os.path.join(out, name), "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+print(h.hexdigest())
+PY
+)
+    [ "$joined" = "$pack_sha" ] || { echo "clip pack pieces don't join to $pname" >&2; exit 1; }
+    python3 "$REPO/tools/check-release-zip.py" "$OUT/$pname.part1"
+    pieces_n=$(grep -c . "$STAGE/assets/clippack/pieces.list" || true)
+    local f sz
+    for f in "$OUT/$pname".part[0-9]*; do
+      sz=$(stat -c %s "$f")
+      [ "$sz" -lt $((1024*1024*1024)) ] || { echo "release asset too big: $f ($sz)" >&2; exit 1; }
+    done
+    echo "    clip pack: $(wc -l < "$OUT/clippack-clips.txt") clips, $pack_size bytes -> $pieces_n x ~$((piece_bytes/1024/1024)) MiB pieces under $OUT/"
+  else
+    : > "$STAGE/assets/clippack/pieces.list"
+    [ "$pack_size" -lt $((1024*1024*1024)) ] || { echo "clip pack $pname is >= 1 GiB; raise LILLITH_CLIP_PACK_MB or set LILLITH_CLIP_PACK_PIECE_MB" >&2; exit 1; }
+    python3 "$REPO/tools/check-release-zip.py" "$OUT/$pname"
+    echo "    clip pack: $(wc -l < "$OUT/clippack-clips.txt") clips, $(du -h "$OUT/$pname" | cut -f1) -> $OUT/$pname (single file)"
+  fi
   {
     echo "# written by android/build-apk.sh: the clips that are not inside this APK"
     echo "repo=$LILLITH_CLIP_PACK_REPO"
     echo "tag=$LILLITH_CLIP_PACK_TAG"
     echo "asset=$pname"
-    echo "size=$(stat -c %s "$OUT/$pname")"
-    echo "sha256=$(sha256sum "$OUT/$pname" | cut -d' ' -f1)"
+    echo "size=$pack_size"
+    echo "sha256=$pack_sha"
     echo "clips=$(wc -l < "$OUT/clippack-clips.txt")"
     echo "total_clips=$(grep -c '^\[clips\.[^].]*\]$' "$REPO/assets/generated/manifest.toml")"
+    echo "pieces=$pieces_n"
   } > "$STAGE/assets/clippack/clippack.properties"
-  echo "    clip pack: $(wc -l < "$OUT/clippack-clips.txt") clips, $(du -h "$OUT/$pname" | cut -f1) -> $OUT/$pname"
 fi
+
 ( cd "$REPO/assets/generated" && find . -path '*/frames' -prune -o -type f -name '*.png' -print ) |
   { grep -vxF -f "$skip" || true; } |
   while read -r f; do
