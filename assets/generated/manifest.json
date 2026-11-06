@@ -4748,14 +4748,14 @@
     200,
     392
    ],
-   "scale": 0.559,
+   "scale": 0.5,
    "body_anchor_x": 200,
    "facing": "front",
    "severity": 5,
    "seat_y": 240,
    "seat_x_range": [
-    25,
-    345
+    20,
+    254
    ],
    "feet_lowest_y": 392,
    "tags": [
