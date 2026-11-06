@@ -17771,6 +17771,150 @@
    "video": "thirsty_pant_drool_lean/thirsty_pant_drool_lean.mp4",
    "severity": 4,
    "system": false
+  },
+  {
+    "name": "lonely_perch_kick_feet_tease",
+    "frame_count": 94,
+    "frame_width": 400,
+    "frame_height": 400,
+    "fps": 12.0,
+    "loop": true,
+    "baseline_y": 392,
+    "anchor": [
+      200,
+      392
+    ],
+    "scale": 0.559,
+    "body_anchor_x": 200,
+    "facing": "front",
+    "severity": 5,
+    "seat_y": 240,
+    "seat_x_range": [
+      117,
+      281
+    ],
+    "feet_lowest_y": 392,
+    "tags": [
+      "baked_motion",
+      "lonely_idle",
+      "variant_of:perch_sit"
+    ],
+    "canvas_compliant": true,
+    "placeholder": false,
+    "source": "grok-imagine-video",
+    "dir": "lonely_perch_kick_feet_tease/",
+    "sheet": "lonely_perch_kick_feet_tease/lonely_perch_kick_feet_tease_sheet.png",
+    "manifest": "lonely_perch_kick_feet_tease/lonely_perch_kick_feet_tease.json",
+    "preview": "lonely_perch_kick_feet_tease/lonely_perch_kick_feet_tease_preview.gif",
+    "video": "lonely_perch_kick_feet_tease/lonely_perch_kick_feet_tease.mp4"
+  },
+  {
+    "name": "lonely_perch_leg_cross_tease",
+    "frame_count": 94,
+    "frame_width": 400,
+    "frame_height": 400,
+    "fps": 12.0,
+    "loop": true,
+    "baseline_y": 392,
+    "anchor": [
+      200,
+      392
+    ],
+    "scale": 0.559,
+    "body_anchor_x": 200,
+    "facing": "front",
+    "severity": 5,
+    "seat_y": 240,
+    "seat_x_range": [
+      120,
+      284
+    ],
+    "feet_lowest_y": 392,
+    "tags": [
+      "baked_motion",
+      "lonely_idle",
+      "variant_of:perch_sit"
+    ],
+    "canvas_compliant": true,
+    "placeholder": false,
+    "source": "grok-imagine-video",
+    "dir": "lonely_perch_leg_cross_tease/",
+    "sheet": "lonely_perch_leg_cross_tease/lonely_perch_leg_cross_tease_sheet.png",
+    "manifest": "lonely_perch_leg_cross_tease/lonely_perch_leg_cross_tease.json",
+    "preview": "lonely_perch_leg_cross_tease/lonely_perch_leg_cross_tease_preview.gif",
+    "video": "lonely_perch_leg_cross_tease/lonely_perch_leg_cross_tease.mp4"
+  },
+  {
+    "name": "lonely_perch_over_shoulder",
+    "frame_count": 94,
+    "frame_width": 400,
+    "frame_height": 400,
+    "fps": 12.0,
+    "loop": true,
+    "baseline_y": 392,
+    "anchor": [
+      200,
+      392
+    ],
+    "scale": 0.559,
+    "body_anchor_x": 200,
+    "facing": "front",
+    "severity": 5,
+    "seat_y": 240,
+    "seat_x_range": [
+      101,
+      258
+    ],
+    "feet_lowest_y": 392,
+    "tags": [
+      "baked_motion",
+      "lonely_idle",
+      "variant_of:perch_sit"
+    ],
+    "canvas_compliant": true,
+    "placeholder": false,
+    "source": "grok-imagine-video",
+    "dir": "lonely_perch_over_shoulder/",
+    "sheet": "lonely_perch_over_shoulder/lonely_perch_over_shoulder_sheet.png",
+    "manifest": "lonely_perch_over_shoulder/lonely_perch_over_shoulder.json",
+    "preview": "lonely_perch_over_shoulder/lonely_perch_over_shoulder_preview.gif",
+    "video": "lonely_perch_over_shoulder/lonely_perch_over_shoulder.mp4"
+  },
+  {
+    "name": "lonely_sit_edge_lean_attention",
+    "frame_count": 94,
+    "frame_width": 400,
+    "frame_height": 400,
+    "fps": 12.0,
+    "loop": true,
+    "baseline_y": 392,
+    "anchor": [
+      200,
+      392
+    ],
+    "scale": 0.559,
+    "body_anchor_x": 200,
+    "facing": "front",
+    "severity": 5,
+    "seat_y": 240,
+    "seat_x_range": [
+      158,
+      246
+    ],
+    "feet_lowest_y": 392,
+    "tags": [
+      "baked_motion",
+      "lonely_idle",
+      "variant_of:perch_sit"
+    ],
+    "canvas_compliant": true,
+    "placeholder": false,
+    "source": "grok-imagine-video",
+    "dir": "lonely_sit_edge_lean_attention/",
+    "sheet": "lonely_sit_edge_lean_attention/lonely_sit_edge_lean_attention_sheet.png",
+    "manifest": "lonely_sit_edge_lean_attention/lonely_sit_edge_lean_attention.json",
+    "preview": "lonely_sit_edge_lean_attention/lonely_sit_edge_lean_attention_preview.gif",
+    "video": "lonely_sit_edge_lean_attention/lonely_sit_edge_lean_attention.mp4"
   }
- ]
+  ]
 }
