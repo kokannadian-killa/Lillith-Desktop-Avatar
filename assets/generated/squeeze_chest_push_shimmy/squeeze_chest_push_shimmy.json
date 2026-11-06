@@ -1354,13 +1354,13 @@
     "height": 400,
     "frame_count": 180,
     "fps": 12.0,
-    "bytes": 3296133,
+    "bytes": 3289877,
     "quality": {
-      "edge_mae": 2.123,
-      "edge_p99": 17.0,
+      "edge_mae": 2.117,
+      "edge_p99": 17.99,
       "halo_dark": 0.026,
-      "halo_light": -0.068,
-      "alpha_mae": 0.0786
+      "halo_light": -0.07,
+      "alpha_mae": 0.0785
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -1370,5 +1370,11 @@
     "sheet_sha256": "adeceadd95119a773d6d6307321676da963e5fa58c1c312832fad95ce6ca5691",
     "source_sha256": "3d46ad341ccda5680157840d1aa40d37af3520fc3ee9e2a8bfe970050c0df359"
   },
-  "allure": true
+  "allure": true,
+  "tease_holes_fix": {
+    "tool": "scratch-bounce2/holefill3.py",
+    "batch": "art/chest-bounce-2",
+    "result": "fixed: holefill3 {\"frames_filled\": 59, \"px\": 3616, \"max_px_frame\": 125} (pre-bake, QA no-regression vs main)",
+    "chest_bounce": "skipped (coverage gate or bake raised white-edge pockets vs main)"
+  }
 }
