@@ -923,13 +923,13 @@
     "height": 400,
     "frame_count": 60,
     "fps": 12.0,
-    "bytes": 543519,
+    "bytes": 551227,
     "quality": {
-      "edge_mae": 2.206,
+      "edge_mae": 2.225,
       "edge_p99": 18.0,
-      "halo_dark": 0.014,
-      "halo_light": -0.081,
-      "alpha_mae": 0.0548
+      "halo_dark": 0.019,
+      "halo_light": -0.083,
+      "alpha_mae": 0.0561
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -940,5 +940,274 @@
     "source_sha256": "77a15c296027fda5babf61a2666520489f4be89b6952c48c6ee300631454d501"
   },
   "allure": true,
-  "idle_variant": true
+  "idle_variant": true,
+  "chest_bounce_bake": {
+    "tool": "scratch-bounce3/bake_chest2.py (chest-only adaptation of generated_v2/_tools/bake_jiggle_v2.py; v1 bake_jiggle.py springs; cleavage_zoom-aware)",
+    "batch": "art/chest-bounce-3",
+    "chest": {
+      "k": 110,
+      "c": 3.2,
+      "cap_px": 6.5,
+      "body_gain": 0.9,
+      "kick_scale": 1.6
+    },
+    "breath_kicks": {
+      "every_s": 1.4,
+      "strength": 0.55
+    },
+    "pigtails_hip_tail": "not touched (no field rendered; owned by jiggle bot)",
+    "cleavage_zoom_aware": false,
+    "ease_frames": 8,
+    "frame0_identical_to_source": true,
+    "tease_holes": "fixed: holefill3 {\"frames_filled\": 7, \"px\": 239, \"max_px_frame\": 42} (pre-bake, QA no-regression vs main)",
+    "max_chest_offset_px_normal_framing": 6.38,
+    "chest_track_ncc_min": 0.773,
+    "bounce_hp_rms_px_before_after": [
+      0.98,
+      1.404
+    ],
+    "baked_chest_offsets_px": [
+      [
+        0.0,
+        -0.0
+      ],
+      [
+        0.01,
+        -0.09
+      ],
+      [
+        0.0,
+        -0.03
+      ],
+      [
+        -0.01,
+        0.67
+      ],
+      [
+        -0.01,
+        1.37
+      ],
+      [
+        -0.01,
+        1.42
+      ],
+      [
+        0.01,
+        0.05
+      ],
+      [
+        0.02,
+        -1.66
+      ],
+      [
+        0.02,
+        -2.34
+      ],
+      [
+        0.05,
+        -1.98
+      ],
+      [
+        0.15,
+        -1.27
+      ],
+      [
+        0.12,
+        -0.56
+      ],
+      [
+        0.03,
+        1.89
+      ],
+      [
+        -0.06,
+        4.51
+      ],
+      [
+        -0.09,
+        3.89
+      ],
+      [
+        -0.06,
+        1.11
+      ],
+      [
+        0.01,
+        -1.21
+      ],
+      [
+        0.0,
+        0.7
+      ],
+      [
+        -0.1,
+        5.08
+      ],
+      [
+        -0.17,
+        6.17
+      ],
+      [
+        -0.21,
+        6.38
+      ],
+      [
+        -0.11,
+        6.09
+      ],
+      [
+        0.09,
+        4.26
+      ],
+      [
+        0.28,
+        -2.51
+      ],
+      [
+        0.25,
+        -4.95
+      ],
+      [
+        0.07,
+        -3.97
+      ],
+      [
+        -0.12,
+        0.12
+      ],
+      [
+        -0.18,
+        3.8
+      ],
+      [
+        -0.11,
+        4.09
+      ],
+      [
+        0.01,
+        2.35
+      ],
+      [
+        0.1,
+        -0.2
+      ],
+      [
+        0.1,
+        -2.04
+      ],
+      [
+        0.04,
+        -2.14
+      ],
+      [
+        -0.03,
+        -0.53
+      ],
+      [
+        -0.02,
+        1.75
+      ],
+      [
+        0.1,
+        2.63
+      ],
+      [
+        0.13,
+        3.17
+      ],
+      [
+        0.07,
+        3.34
+      ],
+      [
+        -0.02,
+        1.49
+      ],
+      [
+        -0.18,
+        -1.09
+      ],
+      [
+        -0.38,
+        -1.98
+      ],
+      [
+        -0.29,
+        -0.76
+      ],
+      [
+        -0.04,
+        0.7
+      ],
+      [
+        0.18,
+        1.69
+      ],
+      [
+        0.28,
+        2.04
+      ],
+      [
+        0.28,
+        1.05
+      ],
+      [
+        0.1,
+        -0.42
+      ],
+      [
+        -0.1,
+        -1.22
+      ],
+      [
+        -0.14,
+        -0.51
+      ],
+      [
+        0.02,
+        1.49
+      ],
+      [
+        0.08,
+        2.79
+      ],
+      [
+        -0.03,
+        3.43
+      ],
+      [
+        -0.09,
+        3.81
+      ],
+      [
+        -0.12,
+        3.3
+      ],
+      [
+        -0.15,
+        1.39
+      ],
+      [
+        -0.07,
+        -0.8
+      ],
+      [
+        0.01,
+        -0.85
+      ],
+      [
+        0.03,
+        0.27
+      ],
+      [
+        0.02,
+        0.16
+      ],
+      [
+        0.0,
+        -0.03
+      ]
+    ],
+    "engine_note": "extra chest bounce is baked into pixels; engine chest spring should stay off/low for this clip"
+  }
 }
