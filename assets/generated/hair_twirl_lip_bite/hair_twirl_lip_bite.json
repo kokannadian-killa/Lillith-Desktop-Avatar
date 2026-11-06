@@ -923,21 +923,22 @@
     "height": 400,
     "frame_count": 60,
     "fps": 12.0,
-    "bytes": 651425,
+    "bytes": 651516,
     "quality": {
-      "edge_mae": 2.058,
-      "edge_p99": 17.64,
-      "halo_dark": 0.045,
-      "halo_light": -0.101,
-      "alpha_mae": 0.0695
+      "edge_mae": 2.052,
+      "edge_p99": 18.0,
+      "halo_dark": 0.046,
+      "halo_light": -0.1,
+      "alpha_mae": 0.0693
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "49ace512e3452ccab631f49359ca91946939766c1122512f01ce30060db3ca15",
-    "source_sha256": "74c8632e7d046a6fad4effd88c9e2f66d5c82b5d2e1496604c290a0f99711130"
+    "sheet_sha256": "75d0988cfce112f37aa8d1c161258cf06f1ea4384f85f4931ddff644bcc07572",
+    "source_sha256": "74c8632e7d046a6fad4effd88c9e2f66d5c82b5d2e1496604c290a0f99711130",
+    "polish": "polish/chest-bounce-3: dropout fill + mfix/edge2 (keep bounce; no retime; gentle on look_away; keep holefill on lean_doorframe_smolder; pig/hip/tail untouched on pigtail_twirl)"
   },
   "allure": true,
   "idle_variant": true,
