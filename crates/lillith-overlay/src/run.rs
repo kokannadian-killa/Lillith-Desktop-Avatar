@@ -411,6 +411,10 @@ pub struct Controller {
     outfit_active: Option<String>,
     /// The local date [`Controller::outfit_active`] was picked for.
     outfit_date: Option<MonthDay>,
+    /// Tests pin "today" here so Show Off / the date check don't jump to
+    /// the real calendar (which broke this suite once Halloween ended).
+    #[cfg(test)]
+    test_today: Option<MonthDay>,
     /// Seconds since the date was last checked (auto mode rolls over).
     outfit_check_s: f32,
     /// The last opened menu is the Avatar ▸ Outfit page.
@@ -545,6 +549,8 @@ impl Controller {
             outfit_setting: opts.seasonal_outfit.clone(),
             outfit_active: None,
             outfit_date: None,
+            #[cfg(test)]
+            test_today: None,
             outfit_check_s: 0.0,
             menu_outfit_page: false,
             lonely_poll_s: LONELY_POLL_S,
@@ -579,6 +585,10 @@ impl Controller {
         }
         self.outfit_active = id;
         self.outfit_date = Some(date);
+        #[cfg(test)]
+        {
+            self.test_today = Some(date);
+        }
         self.outfit_check_s = 0.0;
     }
 
@@ -602,9 +612,19 @@ impl Controller {
         // factor is neutral (1.0).
     }
 
+    /// Calendar day used for auto outfits. Tests pin this through
+    /// [`Self::refresh_outfit`] so Show Off can't snap back to the real date.
+    fn today_for_outfit(&self) -> MonthDay {
+        #[cfg(test)]
+        if let Some(d) = self.test_today {
+            return d;
+        }
+        lillith_core::seasons::today()
+    }
+
     /// Re-picks the outfit if the local date changed (auto mode).
     fn check_outfit_date(&mut self) {
-        let today = lillith_core::seasons::today();
+        let today = self.today_for_outfit();
         if self.outfit_date != Some(today) {
             self.refresh_outfit(today);
         }
