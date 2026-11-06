@@ -353,22 +353,23 @@
     "height": 400,
     "frame_count": 36,
     "fps": 9.0,
-    "bytes": 521835,
+    "bytes": 521393,
     "quality": {
-      "edge_mae": 2.397,
+      "edge_mae": 2.396,
       "edge_p99": 19.0,
-      "halo_dark": 0.062,
-      "halo_light": -0.154,
-      "alpha_mae": 0.0709
+      "halo_dark": 0.064,
+      "halo_light": -0.15,
+      "alpha_mae": 0.071
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 1,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "b7876ec1e6ae1bcae2b07a9fb4d6889f520ffe9662e5f0c5a73d44ff55185406",
+    "sheet_sha256": "15153a95ba89162e3102df897221c74db4717c801a9fd144b765b65244d8300f",
     "hand_pass": "white background pockets cleared (newbot handfix.py)",
-    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior"
+    "strict_pass": "app-decode strict fringe QA fixes (newbot strictfix.py): pockets cleared, low-alpha light rim cleared, light rim recoloured to interior",
+    "polish": "polish/chest-bounce-3: dropout fill + mfix/edge2 (keep bounce; no retime; gentle on look_away; keep holefill on lean_doorframe_smolder; pig/hip/tail untouched on pigtail_twirl)"
   },
   "matte_protect": {
     "tool": "tools/matte-clean/regress.py",

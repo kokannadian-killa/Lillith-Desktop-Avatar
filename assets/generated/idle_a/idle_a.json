@@ -641,13 +641,13 @@
     "height": 400,
     "frame_count": 72,
     "fps": 11.0,
-    "bytes": 1029341,
+    "bytes": 1030650,
     "quality": {
-      "edge_mae": 2.504,
+      "edge_mae": 2.5,
       "edge_p99": 20.0,
-      "halo_dark": 0.062,
-      "halo_light": -0.16,
-      "alpha_mae": 0.0812
+      "halo_dark": 0.063,
+      "halo_light": -0.159,
+      "alpha_mae": 0.0806
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -666,8 +666,9 @@
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "caf1fbeb6ae41f87cafabe2467207b509a140ef6804ab793e221fee60452983d",
-    "source_sha256": "50129187b2b1c553714a5acd69c7ecf5f4fa694fa872dbbfd46584a44873fa0a"
+    "sheet_sha256": "d4720ba05afa41829a99a2ba131bfa4a2ecd462166fb7561d270c6270a547ca4",
+    "source_sha256": "50129187b2b1c553714a5acd69c7ecf5f4fa694fa872dbbfd46584a44873fa0a",
+    "polish": "polish/chest-bounce-3: dropout fill + mfix/edge2 (keep bounce; no retime; gentle on look_away; keep holefill on lean_doorframe_smolder; pig/hip/tail untouched on pigtail_twirl)"
   },
   "fringe_polish2": {
     "tool": "/workspace/verify/polish2/fix_blobs.py (enclosed opaque backdrop blobs cleared)",
