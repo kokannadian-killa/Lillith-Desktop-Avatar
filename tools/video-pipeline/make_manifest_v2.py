@@ -32,7 +32,7 @@ VARIANT_OF.update({'idle_tease_fan_flustered': 'idle', 'idle_tease_self_hug_tail
 # idle-tease batch 2 (art/idle-tease-2): idle/waiting rotation variants
 VARIANT_OF.update({'idle_tease_ear_cup_bop': 'idle', 'idle_tease_hips_huff_stomp': 'idle', 'idle_tease_jog_in_place': 'idle', })
 # idle-tease batch 3 (art/idle-tease-3): idle/waiting rotation variants
-VARIANT_OF.update({'idle_tease_collar_tug_smirk': 'idle', 'idle_tease_deep_breath_hold': 'idle', })
+VARIANT_OF.update({'idle_tease_knee_sway_lip_trace': 'idle', 'idle_tease_collar_tug_smirk': 'idle', 'idle_tease_deep_breath_hold': 'idle', })
 VARIANT_OF.update({'stalk_prowl_right': 'walk_right', 'stalk_prowl_left': 'walk_left'})
 # idle rotation picks (lillithTaskCompletionBot / parent, 2026-10-23): short gesture loops played once per pick (variant_play_once)
 VARIANT_OF.update({c: 'idle' for c in ('smug_smirk', 'hungry_lip_lick', 'tail_wrap_pull', 'hair_lift_stretch', 'body_roll_slow')})
