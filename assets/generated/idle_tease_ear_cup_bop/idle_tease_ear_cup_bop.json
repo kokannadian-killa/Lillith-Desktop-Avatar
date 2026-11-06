@@ -1441,11 +1441,11 @@
     "height": 400,
     "frame_count": 192,
     "fps": 12.0,
-    "bytes": 2927786,
+    "bytes": 2929200,
     "quality": {
-      "edge_mae": 1.872,
-      "edge_p99": 15.0,
-      "halo_dark": 0.035,
+      "edge_mae": 1.874,
+      "edge_p99": 14.88,
+      "halo_dark": 0.036,
       "halo_light": -0.087,
       "alpha_mae": 0.0894
     },
