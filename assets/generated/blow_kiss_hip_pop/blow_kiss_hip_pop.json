@@ -584,21 +584,22 @@
     "height": 400,
     "frame_count": 36,
     "fps": 12.0,
-    "bytes": 378021,
+    "bytes": 378925,
     "quality": {
-      "edge_mae": 1.898,
-      "edge_p99": 15.53,
-      "halo_dark": 0.036,
-      "halo_light": -0.093,
-      "alpha_mae": 0.0703
+      "edge_mae": 1.897,
+      "edge_p99": 15.24,
+      "halo_dark": 0.041,
+      "halo_light": -0.092,
+      "alpha_mae": 0.0699
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 5,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "b5dc0e09cb80d5358f1691355cf9d4a7e0b7c4c37f965c2b5653c2f5f8f54e02",
-    "source_sha256": "a956c98e2934e53854a80ce4e08ae25b19b4ff9d8eae137dc66d1e61672a3b8e"
+    "sheet_sha256": "e190eba373fa56cba36757f7e23c7e791d295569d0d49d925f5a232b98b666f7",
+    "source_sha256": "a956c98e2934e53854a80ce4e08ae25b19b4ff9d8eae137dc66d1e61672a3b8e",
+    "polish": "polish/chest-bounce-1: dropout fill + mfix/edge2 (keep bounce; no retime)"
   },
   "matte_protect": {
     "tool": "tools/matte-clean/regress.py",

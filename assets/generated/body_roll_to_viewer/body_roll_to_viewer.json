@@ -921,21 +921,22 @@
     "height": 400,
     "frame_count": 60,
     "fps": 12.0,
-    "bytes": 745831,
+    "bytes": 745880,
     "quality": {
-      "edge_mae": 2.115,
-      "edge_p99": 17.37,
-      "halo_dark": 0.04,
-      "halo_light": -0.092,
-      "alpha_mae": 0.0697
+      "edge_mae": 2.114,
+      "edge_p99": 18.0,
+      "halo_dark": 0.039,
+      "halo_light": -0.097,
+      "alpha_mae": 0.0698
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "34c578f155b2153e8eb2f8f8955ca8e27d52535b4dfaf22042afa0ab199ebac4",
-    "source_sha256": "934379303859e641c547e2446a2de0564e5a482dcc8ac17377b40b99b97b793a"
+    "sheet_sha256": "8d57e3aaf006b36d8d5afcec520fa4a66b3df7ba881b712f3780ed3d56f2bfbc",
+    "source_sha256": "934379303859e641c547e2446a2de0564e5a482dcc8ac17377b40b99b97b793a",
+    "polish": "polish/chest-bounce-1: dropout fill + mfix/edge2 (keep bounce; no retime)"
   },
   "allure": true,
   "chest_bounce_bake": {
