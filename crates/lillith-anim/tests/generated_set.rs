@@ -201,7 +201,11 @@ fn perch_sit_is_a_seated_base_with_its_variants() {
             "oops_perch_slip",
             "perch_bounce_kick",
             "perch_lean_cleavage_bounce",
-            "perch_stretch_arch"
+            "perch_stretch_arch",
+            "lonely_perch_kick_feet_tease",
+            "lonely_perch_leg_cross_tease",
+            "lonely_perch_over_shoulder",
+            "lonely_sit_edge_lean_attention"
         ]
     );
     for v in &variants["perch_sit"] {

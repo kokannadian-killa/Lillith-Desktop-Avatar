@@ -38,7 +38,9 @@ VARIANT_OF.update({c: 'idle' for c in ('smug_smirk', 'hungry_lip_lick', 'tail_wr
 # registered unchanged (lead, 2026-10-23) until a keep/remove decision; list folder names here to exclude them.
 # perch variants (Sit & Perch, 2026-10-30): start/end on perch_sit f0, seat fields in the per-clip JSON
 VARIANT_OF.update({c: 'perch_sit' for c in ('cleavage_beckon', 'chest_press_tease', 'arch_trace', 'perch_bounce_kick',
-                                            'perch_lean_cleavage_bounce', 'perch_stretch_arch', 'oops_perch_slip')})
+                                            'perch_lean_cleavage_bounce', 'perch_stretch_arch', 'oops_perch_slip',
+                                            'lonely_perch_kick_feet_tease', 'lonely_perch_leg_cross_tease',
+                                            'lonely_perch_over_shoulder', 'lonely_sit_edge_lean_attention')})
 # 'severity' (0..=4, loneliness picker) is copied from the per-clip JSON when present (see entry()).
 # picker tags carried over from the per-clip JSON (loneliness picker / oops pool)
 PICKER_TAGS = ('oops', 'lonely_idle')
