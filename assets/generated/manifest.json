@@ -17734,6 +17734,43 @@
     "sheet_sha256": "d0498ac4a9bb6ddae843cad6de7ad73984824cb7c095fa140cc9d486b3809dfc",
     "source_sha256": "9a2e53f3fabb1017f806e343d3c7bb17c4760322c636bc97b0d59c317c512773"
    }
+  },
+  {
+   "name": "thirsty_pant_drool_lean",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "thirsty_pant_drool_lean/",
+   "sheet": "thirsty_pant_drool_lean/thirsty_pant_drool_lean_sheet.png",
+   "manifest": "thirsty_pant_drool_lean/thirsty_pant_drool_lean.json",
+   "preview": "thirsty_pant_drool_lean/thirsty_pant_drool_lean_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "drool",
+    "idle_variant",
+    "severity:4",
+    "thirsty",
+    "variant_of:idle"
+   ],
+   "allure": true,
+   "video": "thirsty_pant_drool_lean/thirsty_pant_drool_lean.mp4",
+   "severity": 4,
+   "system": false
   }
  ]
 }
