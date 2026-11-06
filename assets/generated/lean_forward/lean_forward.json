@@ -249,13 +249,13 @@
     "height": 400,
     "frame_count": 23,
     "fps": 12.0,
-    "bytes": 284679,
+    "bytes": 284488,
     "quality": {
       "edge_mae": 2.447,
       "edge_p99": 20.0,
-      "halo_dark": 0.054,
-      "halo_light": -0.15,
-      "alpha_mae": 0.0726
+      "halo_dark": 0.052,
+      "halo_light": -0.153,
+      "alpha_mae": 0.0721
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -273,8 +273,13 @@
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "e3fc46de324668d75b89b4d73aa70f50a70005690b874175f5faa7196b2050a3",
-    "source_sha256": "95c6d8d16607c8bcceac79901a80170942b36ead39c38a16ca5fc81f48ddc34c"
+    "sheet_sha256": "193f7e80ac7fe245f9c22aa3f6398dbd031d974f7ed4a16f450aef94ae8c87c4",
+    "source_sha256": "95c6d8d16607c8bcceac79901a80170942b36ead39c38a16ca5fc81f48ddc34c",
+    "polish": "polish/chest-bounce-2: pocket_despill + drool_protect + dropout/mfix (keep bounce)",
+    "pocket_despill_px": 0,
+    "pocket_clear_px": 0,
+    "drool_px_restored": 0,
+    "drool_nw_tint_px": 0
   },
   "chest_bounce_bake": {
     "tool": "scratch-bounce2/bake_chest2.py (chest-only adaptation of generated_v2/_tools/bake_jiggle_v2.py; v1 bake_jiggle.py springs; cleavage_zoom-aware)",

@@ -1528,21 +1528,26 @@
     "height": 400,
     "frame_count": 204,
     "fps": 12.0,
-    "bytes": 4003970,
+    "bytes": 4002380,
     "quality": {
-      "edge_mae": 2.058,
-      "edge_p99": 17.41,
-      "halo_dark": 0.028,
-      "halo_light": -0.074,
-      "alpha_mae": 0.0839
+      "edge_mae": 2.059,
+      "edge_p99": 17.55,
+      "halo_dark": 0.03,
+      "halo_light": -0.076,
+      "alpha_mae": 0.0838
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "1de542a3f47182e69fe53bdb28d50b3ce20d982e8da02d091265d6d9c508f63a",
-    "source_sha256": "e7f865f374deed19fa0a6dd166ed1cfaf3f41a6a58c2d5d48907a8546cfd9dec"
+    "sheet_sha256": "fd477458b595865c8209130dd9260137186ec7044b8bcdb6d08940fbd0238459",
+    "source_sha256": "e7f865f374deed19fa0a6dd166ed1cfaf3f41a6a58c2d5d48907a8546cfd9dec",
+    "polish": "polish/chest-bounce-2: pocket_despill + drool_protect + dropout/mfix (keep bounce)",
+    "pocket_despill_px": 0,
+    "pocket_clear_px": 0,
+    "drool_px_restored": 0,
+    "drool_nw_tint_px": 0
   },
   "allure": true,
   "tease_holes_fix": {

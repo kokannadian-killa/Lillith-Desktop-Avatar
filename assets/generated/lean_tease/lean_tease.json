@@ -284,12 +284,12 @@
     "height": 400,
     "frame_count": 24,
     "fps": 9.92,
-    "bytes": 347736,
+    "bytes": 347045,
     "quality": {
-      "edge_mae": 2.441,
+      "edge_mae": 2.443,
       "edge_p99": 21.0,
-      "halo_dark": 0.059,
-      "halo_light": -0.169,
+      "halo_dark": 0.06,
+      "halo_light": -0.17,
       "alpha_mae": 0.0737
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
@@ -309,8 +309,13 @@
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "e9df966d1cb388edb185d1bf468d31018ace6526ee9c28940ccbacb5ae001ada",
-    "source_sha256": "538fa1c74cedd0dcb173af1a22d863144368377d7a06116ced1da6bd3e8a09ec"
+    "sheet_sha256": "739c37f260cb38f742482fe5fad4349991b260cc8442026f30821ed99171c94b",
+    "source_sha256": "538fa1c74cedd0dcb173af1a22d863144368377d7a06116ced1da6bd3e8a09ec",
+    "polish": "polish/chest-bounce-2: pocket_despill + drool_protect + dropout/mfix (keep bounce)",
+    "pocket_despill_px": 0,
+    "pocket_clear_px": 0,
+    "drool_px_restored": 0,
+    "drool_nw_tint_px": 0
   },
   "fringe_polish2": {
     "tool": "/workspace/verify/polish2/fix_blobs.py (enclosed opaque backdrop blobs cleared)",

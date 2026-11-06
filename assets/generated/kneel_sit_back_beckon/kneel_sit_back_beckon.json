@@ -1088,12 +1088,12 @@
     "height": 400,
     "frame_count": 72,
     "fps": 12.0,
-    "bytes": 362005,
+    "bytes": 361134,
     "quality": {
-      "edge_mae": 2.009,
+      "edge_mae": 2.013,
       "edge_p99": 18.0,
       "halo_dark": 0.028,
-      "halo_light": -0.079,
+      "halo_light": -0.084,
       "alpha_mae": 0.0331
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
@@ -1101,9 +1101,14 @@
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "db98f9b82ae84410f1fe6eeebc1023e4fd033eb9d709383f8ace8512d3f03533",
+    "sheet_sha256": "6ca2782212e0b2fa17bb5f8708d00ade39302970cb1576fbd021e6bfeb6ddbcb",
     "source_sha256": "0af82e208d7ade646e56206fe12feccee37e5e9774867fed85e1c69cca59798f",
-    "main_d93ae0c_post_fix": "b7fix: backdrop grey/white cleared from hair-neck gaps (f68-70 panels + enclosed white holes, checked against per-pixel clear frequency over all frames) + gate-targeted despill of exposed edge | b9fix: removed pale-grey specks/dust in hair-neck gaps (detached islands <=20px; alpha<40 >1.5px from body; y150-262 x140-270); neck design untouched"
+    "main_d93ae0c_post_fix": "b7fix: backdrop grey/white cleared from hair-neck gaps (f68-70 panels + enclosed white holes, checked against per-pixel clear frequency over all frames) + gate-targeted despill of exposed edge | b9fix: removed pale-grey specks/dust in hair-neck gaps (detached islands <=20px; alpha<40 >1.5px from body; y150-262 x140-270); neck design untouched",
+    "polish": "polish/chest-bounce-2: pocket_despill + drool_protect + dropout/mfix (keep bounce)",
+    "pocket_despill_px": 0,
+    "pocket_clear_px": 0,
+    "drool_px_restored": 0,
+    "drool_nw_tint_px": 0
   },
   "chest_bounce_bake": {
     "tool": "scratch-bounce2/bake_chest2.py (chest-only adaptation of generated_v2/_tools/bake_jiggle_v2.py; v1 bake_jiggle.py springs; cleavage_zoom-aware)",
