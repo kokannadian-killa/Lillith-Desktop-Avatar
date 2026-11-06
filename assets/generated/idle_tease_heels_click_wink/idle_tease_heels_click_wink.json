@@ -1441,21 +1441,36 @@
     "height": 400,
     "frame_count": 192,
     "fps": 12.0,
-    "bytes": 3009808,
+    "bytes": 3009100,
     "quality": {
-      "edge_mae": 1.886,
+      "edge_mae": 1.887,
       "edge_p99": 15.0,
-      "halo_dark": 0.035,
-      "halo_light": -0.073,
-      "alpha_mae": 0.0823
+      "halo_dark": 0.034,
+      "halo_light": -0.077,
+      "alpha_mae": 0.0821
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "f9c8d22555120e5cc2786d90c410dafb0d36b0267b2c2fa646d5e145dfe1000e",
-    "source_sha256": "fdf545d77ce94fc14023f319687218feb7cf9c266275efa347f0b34a8c2b7ddf"
+    "sheet_sha256": "51f0aa65b189dc3ad6c022803935f4b707ff68380e718772b7347506c4a58591",
+    "source_sha256": "fdf545d77ce94fc14023f319687218feb7cf9c266275efa347f0b34a8c2b7ddf",
+    "edge_restore": {
+      "frames": [
+        {
+          "i": 61,
+          "from": 60,
+          "px": 649
+        },
+        {
+          "i": 156,
+          "from": 155,
+          "px": 27
+        }
+      ],
+      "tool": "polish/idle-tease-3 edge_restore.py (gap<=2)"
+    }
   },
   "severity": 3,
   "system": false,
