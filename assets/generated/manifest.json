@@ -4737,6 +4737,42 @@
    "video": "lonely_perch_leg_cross_tease/lonely_perch_leg_cross_tease.mp4"
   },
   {
+   "name": "lonely_perch_lie_along",
+   "frame_count": 94,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "severity": 5,
+   "seat_y": 240,
+   "seat_x_range": [
+    25,
+    345
+   ],
+   "feet_lowest_y": 392,
+   "tags": [
+    "baked_motion",
+    "lonely_idle",
+    "variant_of:perch_sit"
+   ],
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "lonely_perch_lie_along/",
+   "sheet": "lonely_perch_lie_along/lonely_perch_lie_along_sheet.png",
+   "manifest": "lonely_perch_lie_along/lonely_perch_lie_along.json",
+   "preview": "lonely_perch_lie_along/lonely_perch_lie_along_preview.gif",
+   "video": "lonely_perch_lie_along/lonely_perch_lie_along.mp4"
+  },
+  {
    "name": "lonely_perch_over_shoulder",
    "frame_count": 94,
    "frame_width": 400,
@@ -4790,7 +4826,7 @@
    "severity": 5,
    "seat_y": 240,
    "seat_x_range": [
-    167,
+    166,
     237
    ],
    "feet_lowest_y": 392,
