@@ -40,7 +40,9 @@ VARIANT_OF.update({c: 'idle' for c in ('smug_smirk', 'hungry_lip_lick', 'tail_wr
 VARIANT_OF.update({c: 'perch_sit' for c in ('cleavage_beckon', 'chest_press_tease', 'arch_trace', 'perch_bounce_kick',
                                             'perch_lean_cleavage_bounce', 'perch_stretch_arch', 'oops_perch_slip',
                                             'lonely_perch_kick_feet_tease', 'lonely_perch_leg_cross_tease',
-                                            'lonely_perch_over_shoulder', 'lonely_sit_edge_lean_attention')})
+                                            'lonely_perch_over_shoulder', 'lonely_sit_edge_lean_attention',
+                                            'lonely_perch_lie_along', 'lonely_perch_window_lean',
+                                            'lonely_perch_window_peek')})
 # 'severity' (0..=4, loneliness picker) is copied from the per-clip JSON when present (see entry()).
 # picker tags carried over from the per-clip JSON (loneliness picker / oops pool)
 PICKER_TAGS = ('oops', 'lonely_idle')
