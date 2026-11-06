@@ -920,22 +920,23 @@
     "height": 400,
     "frame_count": 60,
     "fps": 12.0,
-    "bytes": 694471,
+    "bytes": 694174,
     "quality": {
-      "edge_mae": 2.025,
+      "edge_mae": 2.028,
       "edge_p99": 15.56,
-      "halo_dark": 0.032,
-      "halo_light": -0.093,
-      "alpha_mae": 0.0644
+      "halo_dark": 0.035,
+      "halo_light": -0.092,
+      "alpha_mae": 0.0643
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
     "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "2cde27d2e70dca3081c26b287c789f373f0aa439a67fc786471bd18cf59cea8c",
+    "sheet_sha256": "cd1d49c2e3e3ddf250108e6787cc2617c35e641654305a12bc5bb08769dc5189",
     "source_sha256": "8759b1f0abb143eca05645d32d8acdbce21e720a17543caf07f87fbaa145cba8",
-    "main_d93ae0c_post_fix": "b7fix: gate-targeted despill of light hair-edge px f54-57"
+    "main_d93ae0c_post_fix": "b7fix: gate-targeted despill of light hair-edge px f54-57",
+    "polish": "polish/chest-bounce-1: dropout fill + mfix/edge2 (keep bounce; no retime)"
   },
   "chest_bounce_bake": {
     "tool": "scratch-bounce1/bake_chest.py (chest-only adaptation of generated_v2/_tools/bake_jiggle_v2.py; v1 bake_jiggle.py springs/render)",
