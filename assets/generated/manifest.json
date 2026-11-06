@@ -4790,7 +4790,7 @@
    "severity": 5,
    "seat_y": 240,
    "seat_x_range": [
-    166,
+    167,
     237
    ],
    "feet_lowest_y": 392,
@@ -4807,6 +4807,42 @@
    "manifest": "lonely_perch_window_lean/lonely_perch_window_lean.json",
    "preview": "lonely_perch_window_lean/lonely_perch_window_lean_preview.gif",
    "video": "lonely_perch_window_lean/lonely_perch_window_lean.mp4"
+  },
+  {
+   "name": "lonely_perch_window_peek",
+   "frame_count": 94,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12.0,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.559,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "severity": 5,
+   "seat_y": 240,
+   "seat_x_range": [
+    165,
+    239
+   ],
+   "feet_lowest_y": 392,
+   "tags": [
+    "baked_motion",
+    "lonely_idle",
+    "variant_of:perch_sit"
+   ],
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "lonely_perch_window_peek/",
+   "sheet": "lonely_perch_window_peek/lonely_perch_window_peek_sheet.png",
+   "manifest": "lonely_perch_window_peek/lonely_perch_window_peek.json",
+   "preview": "lonely_perch_window_peek/lonely_perch_window_peek_preview.gif",
+   "video": "lonely_perch_window_peek/lonely_perch_window_peek.mp4"
   },
   {
    "name": "lonely_sit_edge_lean_attention",
