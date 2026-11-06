@@ -17879,6 +17879,42 @@
    "video": "idle_tease_knee_sway_lip_trace/idle_tease_knee_sway_lip_trace.mp4",
    "severity": 3,
    "system": false
+  },
+  {
+   "name": "idle_tease_heels_click_wink",
+   "frame_count": 192,
+   "frame_width": 400,
+   "frame_height": 400,
+   "fps": 12,
+   "loop": true,
+   "baseline_y": 392,
+   "anchor": [
+    200,
+    392
+   ],
+   "scale": 0.54,
+   "body_anchor_x": 200,
+   "facing": "front",
+   "canvas_compliant": true,
+   "placeholder": false,
+   "source": "grok-imagine-video",
+   "dir": "idle_tease_heels_click_wink/",
+   "sheet": "idle_tease_heels_click_wink/idle_tease_heels_click_wink_sheet.png",
+   "manifest": "idle_tease_heels_click_wink/idle_tease_heels_click_wink.json",
+   "preview": "idle_tease_heels_click_wink/idle_tease_heels_click_wink_preview.gif",
+   "tags": [
+    "allure",
+    "baked_motion",
+    "cleavage_zoom",
+    "idle_tease",
+    "idle_variant",
+    "severity:3",
+    "variant_of:idle"
+   ],
+   "allure": true,
+   "video": "idle_tease_heels_click_wink/idle_tease_heels_click_wink.mp4",
+   "severity": 3,
+   "system": false
   }
  ]
 }
