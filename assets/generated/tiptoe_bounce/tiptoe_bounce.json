@@ -137,13 +137,13 @@
     "height": 400,
     "frame_count": 9,
     "fps": 8.0,
-    "bytes": 142906,
+    "bytes": 142421,
     "quality": {
-      "edge_mae": 2.218,
+      "edge_mae": 2.236,
       "edge_p99": 17.0,
-      "halo_dark": 0.046,
-      "halo_light": -0.146,
-      "alpha_mae": 0.0574
+      "halo_dark": 0.068,
+      "halo_light": -0.16,
+      "alpha_mae": 0.0606
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -159,5 +159,68 @@
     "tool": "tools/matte-clean/matte_clean.py",
     "sheet_sha256": "9ab7e16632c471f92a2f07df56ed0c1a5256845451dc0c8a9b9ca861d66aaf63",
     "source_sha256": "fd0e8a0893eb1ed5646a1ac8bbfcaff936d6b646e04c60473a4f5ae9890e1a3f"
+  },
+  "chest_bounce_bake": {
+    "tool": "scratch-bounce1/bake_chest.py (chest-only adaptation of generated_v2/_tools/bake_jiggle_v2.py; v1 bake_jiggle.py springs/render)",
+    "batch": "art/chest-bounce-1",
+    "chest": {
+      "k": 110,
+      "c": 3.2,
+      "cap_px": 6.5,
+      "body_gain": 0.9,
+      "kick_scale": 1.6
+    },
+    "breath_kicks": {
+      "every_s": 1.4,
+      "strength": 0.55
+    },
+    "pigtails_hip_tail": "not touched (offsets 0; owned by jiggle bot)",
+    "ease_frames": 2,
+    "frame0_identical": true,
+    "max_chest_offset_px": 5.1,
+    "chest_track_ncc_min": 0.954,
+    "bounce_hp_rms_px_before_after": [
+      5.793,
+      6.169
+    ],
+    "baked_chest_offsets_px": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.02,
+        -1.39
+      ],
+      [
+        -0.07,
+        -5.1
+      ],
+      [
+        0.02,
+        -3.54
+      ],
+      [
+        0.05,
+        -0.18
+      ],
+      [
+        0.01,
+        -0.44
+      ],
+      [
+        -0.03,
+        -1.31
+      ],
+      [
+        -0.02,
+        3.33
+      ],
+      [
+        0.01,
+        3.11
+      ]
+    ],
+    "engine_note": "extra chest bounce is baked into pixels; engine chest spring should stay off/low for this clip"
   }
 }

@@ -249,13 +249,13 @@
     "height": 400,
     "frame_count": 23,
     "fps": 9.5,
-    "bytes": 341839,
+    "bytes": 341246,
     "quality": {
-      "edge_mae": 2.477,
-      "edge_p99": 19.68,
-      "halo_dark": 0.042,
-      "halo_light": -0.147,
-      "alpha_mae": 0.0719
+      "edge_mae": 2.456,
+      "edge_p99": 20.0,
+      "halo_dark": 0.053,
+      "halo_light": -0.159,
+      "alpha_mae": 0.0766
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
@@ -276,5 +276,124 @@
     "tool": "tools/matte-clean/matte_clean.py",
     "sheet_sha256": "9eec66c0aa9487d4b71b3cebb0106539d8a970dd92129fa98793f4432f4fb33d",
     "source_sha256": "f54b8d7b4d4eef48661f0cde3afe0abc74d69e99cef47245de5ea49ed99dcf37"
+  },
+  "chest_bounce_bake": {
+    "tool": "scratch-bounce1/bake_chest.py (chest-only adaptation of generated_v2/_tools/bake_jiggle_v2.py; v1 bake_jiggle.py springs/render)",
+    "batch": "art/chest-bounce-1",
+    "chest": {
+      "k": 110,
+      "c": 3.2,
+      "cap_px": 6.5,
+      "body_gain": 0.9,
+      "kick_scale": 1.6
+    },
+    "breath_kicks": {
+      "every_s": 1.4,
+      "strength": 0.55
+    },
+    "pigtails_hip_tail": "not touched (offsets 0; owned by jiggle bot)",
+    "ease_frames": 5,
+    "frame0_identical": true,
+    "max_chest_offset_px": 6.37,
+    "chest_track_ncc_min": 0.643,
+    "bounce_hp_rms_px_before_after": [
+      1.785,
+      3.227
+    ],
+    "baked_chest_offsets_px": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.05,
+        -0.38
+      ],
+      [
+        -0.34,
+        -1.38
+      ],
+      [
+        -0.08,
+        -0.39
+      ],
+      [
+        0.92,
+        4.71
+      ],
+      [
+        1.51,
+        6.08
+      ],
+      [
+        1.07,
+        3.07
+      ],
+      [
+        -0.13,
+        -3.02
+      ],
+      [
+        -1.0,
+        -1.23
+      ],
+      [
+        -1.19,
+        4.72
+      ],
+      [
+        -1.11,
+        6.27
+      ],
+      [
+        -0.74,
+        5.47
+      ],
+      [
+        -0.02,
+        -2.65
+      ],
+      [
+        0.6,
+        -4.96
+      ],
+      [
+        0.75,
+        -0.76
+      ],
+      [
+        0.63,
+        3.58
+      ],
+      [
+        0.69,
+        5.35
+      ],
+      [
+        0.65,
+        5.64
+      ],
+      [
+        0.22,
+        3.07
+      ],
+      [
+        -0.27,
+        -2.8
+      ],
+      [
+        -0.33,
+        -1.67
+      ],
+      [
+        -0.14,
+        1.69
+      ],
+      [
+        -0.02,
+        0.62
+      ]
+    ],
+    "engine_note": "extra chest bounce is baked into pixels; engine chest spring should stay off/low for this clip"
   }
 }
