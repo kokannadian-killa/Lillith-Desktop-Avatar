@@ -247,7 +247,8 @@ class SameMaskAsRembg(unittest.TestCase):
             from rembg import new_session, remove
             ref = np.asarray(remove(Image.fromarray(rgb), session=new_session('isnet-anime'), only_mask=True))
         finally:
-            mm.Path.home, mm.HERE, mm.LINUX_MODELS = old_home, old_here, old_opt
+            # Only U2NET_HOME was mutated above (unlike test_configure_env_* which also
+            # patches mm.Path.home / HERE / LINUX_MODELS).
             if old is None: os.environ.pop('U2NET_HOME', None)
             else: os.environ['U2NET_HOME'] = old
         got = mm.isnet_mask(rgb)
