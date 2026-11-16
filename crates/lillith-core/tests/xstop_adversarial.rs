@@ -106,11 +106,23 @@ fn qa_xadv_role_entry() {
                 kill_switch::disarmed(),
                 stop_session::generation()
             );
-            s.push_str(&format!("dispatch1={}\n", dispatch(&dir, &format!("{tag}-1"))));
+            s.push_str(&format!(
+                "dispatch1={}\n",
+                dispatch(&dir, &format!("{tag}-1"))
+            ));
             if std::env::var("QA_REARM").is_ok() {
-                s.push_str(&format!("rearm={:?}\n", kill_switch::rearm().map_err(|e| e.to_string())));
-                s.push_str(&format!("disarmed_after_rearm={}\n", kill_switch::disarmed()));
-                s.push_str(&format!("dispatch2={}\n", dispatch(&dir, &format!("{tag}-2"))));
+                s.push_str(&format!(
+                    "rearm={:?}\n",
+                    kill_switch::rearm().map_err(|e| e.to_string())
+                ));
+                s.push_str(&format!(
+                    "disarmed_after_rearm={}\n",
+                    kill_switch::disarmed()
+                ));
+                s.push_str(&format!(
+                    "dispatch2={}\n",
+                    dispatch(&dir, &format!("{tag}-2"))
+                ));
             }
             fs::write(dir.join(format!("{tag}.out")), s).unwrap();
         }
@@ -123,7 +135,8 @@ fn qa_xadv_role_entry() {
 fn dispatch(dir: &Path, tag: &str) -> String {
     let marker = dir.join(format!("ran-{tag}"));
     let mut c = Command::new("sh");
-    c.arg("-c").arg(format!("echo RAN > '{}'", marker.display()));
+    c.arg("-c")
+        .arg(format!("echo RAN > '{}'", marker.display()));
     let out = match commands::run_child(c, Duration::from_secs(5), 4096) {
         Ok(t) => format!("ok:{}", t.trim().replace('\n', " | ")),
         Err(e) => format!("err:{e}"),
@@ -317,12 +330,23 @@ fn role_reaper(dir: &Path) {
     };
     let orphan = rd("orphan.pid");
     let orphan_after = fs::read_to_string(format!("/proc/{orphan}/stat"))
-        .map(|s| s.rsplit_once(')').map(|(_, r)| r.trim().chars().next().unwrap_or('?')).unwrap_or('?').to_string())
+        .map(|s| {
+            s.rsplit_once(')')
+                .map(|(_, r)| r.trim().chars().next().unwrap_or('?'))
+                .unwrap_or('?')
+                .to_string()
+        })
         .unwrap_or_else(|_| "gone".into());
     // SAFETY: PR_GET_CHILD_SUBREAPER writes one c_int to the pointer.
     let mut sr: libc::c_int = -1;
     unsafe {
-        libc::prctl(libc::PR_GET_CHILD_SUBREAPER, &mut sr as *mut libc::c_int, 0, 0, 0);
+        libc::prctl(
+            libc::PR_GET_CHILD_SUBREAPER,
+            &mut sr as *mut libc::c_int,
+            0,
+            0,
+            0,
+        );
     }
     fs::write(
         dir.join("reaper.out"),
@@ -467,10 +491,7 @@ impl Run {
         names
             .iter()
             .map(|n| match self.pid(&format!("{n}.pid")) {
-                Some(p) => format!(
-                    "{n}={p}({})",
-                    if Self::alive(p) { "ALIVE" } else { "dead" }
-                ),
+                Some(p) => format!("{n}={p}({})", if Self::alive(p) { "ALIVE" } else { "dead" }),
                 None => format!("{n}=none"),
             })
             .collect::<Vec<_>>()
@@ -480,9 +501,10 @@ impl Run {
     fn wait_dead(&self, names: &[&str], d: Duration) -> (bool, bool) {
         let t = Instant::now();
         loop {
-            let dead = names
-                .iter()
-                .all(|n| self.pid(&format!("{n}.pid")).is_none_or(|p| !Self::alive(p)));
+            let dead = names.iter().all(|n| {
+                self.pid(&format!("{n}.pid"))
+                    .is_none_or(|p| !Self::alive(p))
+            });
             if dead || t.elapsed() >= d {
                 let quiet = names
                     .iter()
@@ -600,11 +622,17 @@ fn adv1_double_fork_orphan_between_snapshots() {
     for delay in ["0", "0.05", "0.15", "0.35", "0.8"] {
         let mut r = Run::new("dfork");
         let variant = format!("dfork:{delay}:0");
-        r.start_worker(&[(VARIANT, &variant)], &["child.pid", "orphan.pid", "hb.orphan"]);
+        r.start_worker(
+            &[(VARIANT, &variant)],
+            &["child.pid", "orphan.pid", "hb.orphan"],
+        );
         let orphan = r.pid("orphan.pid").unwrap();
         let child = r.pid("child.pid").unwrap();
         let ppid = Run::ppid(orphan);
-        assert!(r.beating("orphan", Duration::from_millis(400)), "orphan not beating");
+        assert!(
+            r.beating("orphan", Duration::from_millis(400)),
+            "orphan not beating"
+        );
         r.run_role("stopper", &[("QA_DEADLINE_MS", "3000")]);
         let so = r.read("stop.out");
         let (dead, quiet) = r.wait_dead(&["child", "orphan"], DEADLINE);
@@ -623,7 +651,9 @@ fn adv1_double_fork_orphan_between_snapshots() {
             fails.push(format!("orphan survived the stop: {line}"));
         }
         if confirmed && (orphan_alive || orphan_beats) {
-            fails.push(format!("reported confirmed (Quiescent) while orphan alive: {line}"));
+            fails.push(format!(
+                "reported confirmed (Quiescent) while orphan alive: {line}"
+            ));
         }
         ev_all.push_str(&format!("=== {variant}\n{}\n", r.evidence()));
     }
@@ -637,7 +667,10 @@ fn adv1_double_fork_orphan_between_snapshots() {
 #[test]
 fn adv1b_control_double_fork_seen_by_snapshot_is_killed() {
     let mut r = Run::new("dfctl");
-    r.start_worker(&[(VARIANT, "dfork:0.3:0.6")], &["child.pid", "orphan.pid", "hb.orphan"]);
+    r.start_worker(
+        &[(VARIANT, "dfork:0.3:0.6")],
+        &["child.pid", "orphan.pid", "hb.orphan"],
+    );
     // Let the intermediate exit so the orphan is reparented before the stop.
     std::thread::sleep(Duration::from_millis(900));
     let orphan = r.pid("orphan.pid").unwrap();
@@ -652,8 +685,14 @@ fn adv1b_control_double_fork_seen_by_snapshot_is_killed() {
         kv(&so, "outcome")
     );
     drop(r);
-    assert!(dead && quiet, "lingering-intermediate orphan survived: {st}\n{ev}");
-    assert!(so.contains("confirmed=true"), "control stop not confirmed\n{ev}");
+    assert!(
+        dead && quiet,
+        "lingering-intermediate orphan survived: {st}\n{ev}"
+    );
+    assert!(
+        so.contains("confirmed=true"),
+        "control stop not confirmed\n{ev}"
+    );
 }
 
 /// 2. SIGKILLed Lillith parent. The worker (runner) process is SIGKILLed
@@ -696,7 +735,10 @@ fn signal_case(sig: libc::c_int, name: &str) -> Result<String, String> {
     let mut r = Run::new(name);
     r.start_worker(&[], &["child.pid", "gc.pid", "hb.child", "hb.gc"]);
     let s = r.spawn_role("sigsettings", &[]);
-    assert!(r.wait_file("sig.ready", Duration::from_secs(20)), "sigsettings not ready");
+    assert!(
+        r.wait_file("sig.ready", Duration::from_secs(20)),
+        "sigsettings not ready"
+    );
     std::thread::sleep(Duration::from_millis(200));
     r.signal_kid(s, sig);
     let code = r.wait_kid(s, Duration::from_secs(10));
@@ -704,7 +746,9 @@ fn signal_case(sig: libc::c_int, name: &str) -> Result<String, String> {
     r.run_role("observer", &[]);
     let obs = r.read("obs.out");
     let sd = r.stop_dir();
-    let barrier = fs::metadata(sd.join(stop_session::BARRIER_FILE)).map(|m| m.len()).unwrap_or(0);
+    let barrier = fs::metadata(sd.join(stop_session::BARRIER_FILE))
+        .map(|m| m.len())
+        .unwrap_or(0);
     let disarmed_file = sd.join(stop_session::DISARMED_FILE).exists();
     let wres = r.read("worker.result");
     let line = format!(
@@ -757,7 +801,10 @@ fn adv3_real_sigint_sigterm_pull_the_kill_switch_durably() {
 #[test]
 fn adv3b_sigint_to_the_runner_process_itself() {
     let mut r = Run::new("sigself");
-    let w = r.start_worker(&[("QA_SIG", "1")], &["child.pid", "gc.pid", "hb.child", "hb.gc"]);
+    let w = r.start_worker(
+        &[("QA_SIG", "1")],
+        &["child.pid", "gc.pid", "hb.child", "hb.gc"],
+    );
     r.signal_kid(w, libc::SIGINT);
     let code = r.wait_kid(w, Duration::from_secs(10));
     let (dead, quiet) = r.wait_dead(&["child", "gc"], DEADLINE);
@@ -828,7 +875,10 @@ fn adv4b_frozen_member_is_unconfirmed_not_stopped() {
         kv(&so, "confirmed")
     );
     drop(r);
-    assert!(so.contains("confirmed=false"), "frozen member reported stopped\n{ev}");
+    assert!(
+        so.contains("confirmed=false"),
+        "frozen member reported stopped\n{ev}"
+    );
     assert!(
         outcome.contains("Incomplete") && outcome.contains(&wpid.to_string()),
         "frozen worker {wpid} not listed\n{ev}"
@@ -863,7 +913,10 @@ fn adv4c_unjoined_member_is_reported_not_confirmed() {
         kv(&so, "confirmed"),
     );
     drop(r);
-    assert!(so.contains("confirmed=false"), "opted-out member reported confirmed\n{ev}");
+    assert!(
+        so.contains("confirmed=false"),
+        "opted-out member reported confirmed\n{ev}"
+    );
     assert!(!outcome.contains("Quiescent"), "{ev}");
     let opted = outcome
         .split_once("opted_out: [")
@@ -871,8 +924,7 @@ fn adv4c_unjoined_member_is_reported_not_confirmed() {
         .map(|(list, _)| list.to_string())
         .unwrap_or_default();
     assert!(
-        outcome.starts_with("Incomplete")
-            && opted.split(',').any(|p| p.trim() == wpid.to_string()),
+        outcome.starts_with("Incomplete") && opted.split(',').any(|p| p.trim() == wpid.to_string()),
         "worker {wpid} not in opted_out\n{ev}"
     );
     assert!(
@@ -896,9 +948,18 @@ fn adv5_disarm_persists_until_rearm() {
     r.run_role("observer", &[("QA_TAG", "o2")]);
     r.run_role("observer", &[("QA_TAG", "o3"), ("QA_REARM", "1")]);
     r.run_role("observer", &[("QA_TAG", "o4")]);
-    let (o1, o2, o3, o4) = (r.read("o1.out"), r.read("o2.out"), r.read("o3.out"), r.read("o4.out"));
+    let (o1, o2, o3, o4) = (
+        r.read("o1.out"),
+        r.read("o2.out"),
+        r.read("o3.out"),
+        r.read("o4.out"),
+    );
     use std::os::unix::fs::PermissionsExt;
-    let mode = |p: PathBuf| fs::metadata(p).map(|m| m.permissions().mode() & 0o777).unwrap_or(0);
+    let mode = |p: PathBuf| {
+        fs::metadata(p)
+            .map(|m| m.permissions().mode() & 0o777)
+            .unwrap_or(0)
+    };
     let sd = r.stop_dir();
     let (dm, bm) = (mode(sd.clone()), mode(sd.join(stop_session::BARRIER_FILE)));
     let ev = r.evidence();
@@ -921,9 +982,18 @@ fn adv5_disarm_persists_until_rearm() {
         assert!(o.contains("dispatch1=ran=false err:"), "{ev}");
     }
     assert!(o3.contains("dispatch1=ran=false err:"), "{ev}");
-    assert!(o3.contains("rearm=Ok(())") && o3.contains("disarmed_after_rearm=false"), "{ev}");
-    assert!(o3.contains("dispatch2=ran=true ok:") && o3.contains("[exit 0]"), "{ev}");
-    assert!(o4.contains("disarmed=false") && o4.contains("dispatch1=ran=true ok:"), "{ev}");
+    assert!(
+        o3.contains("rearm=Ok(())") && o3.contains("disarmed_after_rearm=false"),
+        "{ev}"
+    );
+    assert!(
+        o3.contains("dispatch2=ran=true ok:") && o3.contains("[exit 0]"),
+        "{ev}"
+    );
+    assert!(
+        o4.contains("disarmed=false") && o4.contains("dispatch1=ran=true ok:"),
+        "{ev}"
+    );
     assert_eq!((dm, bm), (0o700, 0o600), "{ev}");
 }
 
@@ -947,13 +1017,25 @@ fn adv6_subreaper_keeps_exit_semantics_and_leaks_no_zombies() {
     let elapsed: u128 = kv(&o, "elapsed_ms").parse().unwrap_or(0);
     drop(r);
     assert_eq!(code, 0, "{ev}");
-    assert!(kv(&o, "out").ends_with("[exit 0]"), "normal exit not reported\n{ev}");
-    assert!((1800..6000).contains(&elapsed), "runner wait changed: {elapsed} ms\n{ev}");
     assert!(
-        ppids.contains(&top) && !ppids.contains(&format!("{mid},")) && !ppids.contains(&format!("{mid}]")),
+        kv(&o, "out").ends_with("[exit 0]"),
+        "normal exit not reported\n{ev}"
+    );
+    assert!(
+        (1800..6000).contains(&elapsed),
+        "runner wait changed: {elapsed} ms\n{ev}"
+    );
+    assert!(
+        ppids.contains(&top)
+            && !ppids.contains(&format!("{mid},"))
+            && !ppids.contains(&format!("{mid}]")),
         "orphan should reparent to the top process {top}, not the middle {mid}: {ppids}\n{ev}"
     );
     assert_eq!(kv(&o, "runner_is_subreaper"), "0", "{ev}");
     assert_eq!(kv(&o, "my_zombies"), "[]", "{ev}");
-    assert_eq!(kv(&o, "orphan_after"), "gone", "orphan left as zombie\n{ev}");
+    assert_eq!(
+        kv(&o, "orphan_after"),
+        "gone",
+        "orphan left as zombie\n{ev}"
+    );
 }

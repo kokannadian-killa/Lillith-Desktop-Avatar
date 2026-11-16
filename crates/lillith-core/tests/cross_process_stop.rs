@@ -124,7 +124,8 @@ fn qa_xstop_role_entry() {
             // stopped if dispatch is disarmed.
             let marker = dir.join("post_stop_dispatch_ran");
             let mut c = Command::new("sh");
-            c.arg("-c").arg(format!("echo RAN > '{}'", marker.display()));
+            c.arg("-c")
+                .arg(format!("echo RAN > '{}'", marker.display()));
             let out = commands::run_child(c, Duration::from_secs(5), 4096).unwrap_or_default();
             fs::write(
                 dir.join("observer.out"),
@@ -270,7 +271,10 @@ impl Run {
         }
         let t = Instant::now();
         while !need.iter().all(|f| self.dir.join(f).exists()) {
-            assert!(t.elapsed() < Duration::from_secs(20), "worker tree did not start");
+            assert!(
+                t.elapsed() < Duration::from_secs(20),
+                "worker tree did not start"
+            );
             std::thread::sleep(Duration::from_millis(50));
         }
         std::thread::sleep(Duration::from_millis(300));
@@ -313,9 +317,10 @@ impl Run {
     fn wait_dead(&self, names: &[&str], d: Duration) -> (bool, bool) {
         let t = Instant::now();
         loop {
-            let dead = names
-                .iter()
-                .all(|n| self.pid(&format!("{n}.pid")).is_none_or(|p| !Self::alive(p)));
+            let dead = names.iter().all(|n| {
+                self.pid(&format!("{n}.pid"))
+                    .is_none_or(|p| !Self::alive(p))
+            });
             if dead || t.elapsed() >= d {
                 let quiet = names
                     .iter()
@@ -448,7 +453,10 @@ fn control_in_process_stop_all_kills_worker_tree() {
     let res = r.read("worker.result");
     let ev = r.evidence();
     drop(r);
-    assert!(dead && quiet && have_result, "in-process stop: dead={dead} quiet={quiet}\n{ev}");
+    assert!(
+        dead && quiet && have_result,
+        "in-process stop: dead={dead} quiet={quiet}\n{ev}"
+    );
     assert!(res.contains("was_stopped=true"), "{ev}");
 }
 
