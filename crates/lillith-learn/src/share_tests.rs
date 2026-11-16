@@ -126,14 +126,14 @@ fn blocked_and_denylisted_hosts_and_non_web_urls_are_refused() {
         let out = accept(&cfg, &pol, &page(url, "Some text here."), Some(&audit));
         assert!(matches!(out, Outcome::Refused(_)), "{url}: {out:?}");
     }
-    assert!(
-        !d.0.join("knowledge").join(SHARE_TOPIC).exists() || {
-            std::fs::read_dir(d.0.join("knowledge").join(SHARE_TOPIC))
-                .unwrap()
-                .flatten()
-                .all(|e| !e.path().extension().is_some_and(|x| x == "md"))
-        }
-    );
+    let notes = std::fs::read_dir(d.0.join("knowledge").join(SHARE_TOPIC))
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.path().extension().is_some_and(|x| x == "md"))
+                .count()
+        })
+        .unwrap_or(0);
+    assert_eq!(notes, 0, "nothing refused is stored");
     let a = read_audit(&audit);
     assert!(
         a.contains("LEARN\tshare-refused\tblocked.example\tnote=-"),
