@@ -38,7 +38,8 @@
 //! in a fully scratch XDG environment (all of `XDG_RUNTIME_DIR`,
 //! `XDG_STATE_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`
 //! set, runtime dir not `/run/user/…`), so an ordinary test run never stops
-//! or disarms a live Lillith. lillith-core's own unit tests never auto-join.
+//! or disarms a live Lillith; the binaries' explicit [`join`] follows the
+//! same rule. lillith-core's own unit tests never auto-join.
 //!
 //! [`confirm`] turns those into a [`StopOutcome`]: `Quiescent` only when every
 //! live joined process acknowledged this generation with verified-empty
@@ -114,9 +115,13 @@ fn session() -> Option<&'static Session> {
 }
 
 fn auto_join_allowed() -> bool {
-    if cfg!(test) {
-        return false;
-    }
+    !cfg!(test) && env_allows_join()
+}
+
+/// The environment part of the join rule, shared by auto-join and the
+/// binaries' explicit [`join`]: `LILLITH_STOP_SESSION`, and never the live
+/// session from a cargo test / run without fully scratch XDG dirs.
+fn env_allows_join() -> bool {
     match std::env::var("LILLITH_STOP_SESSION").as_deref() {
         Ok("off") => return false,
         Ok("on") => return true,
@@ -165,6 +170,12 @@ pub fn default_dir() -> Option<PathBuf> {
 /// at start-up (the overlay / `lillith` CLI and `lillith-settings`). Library
 /// users and unit tests that never join keep the old, process-local stop.
 pub fn join() -> io::Result<PathBuf> {
+    if !env_allows_join() {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "stop session off (LILLITH_STOP_SESSION=off, or a cargo test/run without scratch XDG dirs)",
+        ));
+    }
     let d = default_dir()
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no runtime directory"))?;
     join_at(&d)
