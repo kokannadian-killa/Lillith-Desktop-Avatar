@@ -369,7 +369,6 @@ impl Drop for Run {
 /// P0 contract: a stop fired by a *separate* Settings process (Stop / Stop
 /// all / kill switch; Ctrl-C ends in the same call) stops the worker's job.
 #[test]
-#[ignore = "P0 cross-process stop not implemented: kill_switch.rs:1 epochs are process-local; docs/BOTS.md:30 claims Settings stops running commands. Run: cargo test -p lillith-core --test cross_process_stop -- --ignored --nocapture --test-threads=1"]
 fn p0_settings_stop_all_from_separate_process_stops_worker_tree() {
     let mut r = Run::new("p0");
     r.start_worker(false);
@@ -472,7 +471,6 @@ fn red_hush_only_hushes_worker_tree_keeps_running() {
 /// `kill_tree` only signals the pgid (`commands.rs:632-650`). It also keeps the
 /// stdout pipe open, so `run_child` cannot return a stopped result.
 #[test]
-#[ignore = "containment gap: kill_tree is process-group only; setsid descendant escapes. Run: cargo test -p lillith-core --test cross_process_stop -- --ignored --nocapture --test-threads=1"]
 fn gap_in_process_stop_all_kills_setsid_escaped_descendant() {
     let mut r = Run::new("esc");
     r.start_worker(true);
