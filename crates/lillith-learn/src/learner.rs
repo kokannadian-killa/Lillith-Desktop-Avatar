@@ -554,7 +554,7 @@ impl Learner {
     }
 }
 
-fn row_of(n: &Note, rel: &str, topic: &str) -> NoteRow {
+pub(crate) fn row_of(n: &Note, rel: &str, topic: &str) -> NoteRow {
     NoteRow {
         id: n.id.clone(),
         path: rel.to_string(),

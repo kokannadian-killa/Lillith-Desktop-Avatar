@@ -26,6 +26,7 @@ pub mod classify;
 pub mod dedupe;
 pub mod extract;
 pub mod hygiene;
+pub mod knowledge;
 pub mod learner;
 pub mod online;
 pub mod paths;

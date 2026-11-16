@@ -546,6 +546,25 @@ Rules:
 - The panel never starts the learner's model calls itself; "Learn now" only
   clears the idle wait if the other conditions hold.
 
+**Built (P3, 2026-11-15):** the `knowledge` tab
+(`crates/lillith-settings-gui/src/tabs/knowledge.rs`, API in
+`crates/lillith-learn/src/knowledge.rs`) shows the status strip (learning,
+memory, folder, note counts per topic, how many are Ko's, online / practice /
+share-socket state), browse + search (every word, case-insensitive, over
+title, topic, kind, body and source URL), edit (title + body; sets
+`origin: ko`, refuses safeword text, re-indexes the memory row), Forget
+(file + memory index row + graph node; mouse-only), the read-only sources /
+`block_hosts` list and the activity log (`LEARN` / `DREAM` / `WORKER` /
+`online_research` / `sandbox_run` / `dream_session` audit lines, newest 50;
+online trips show up there). Every write holds `knowledge/.lock` and is
+audited (ids only). The Off toggle stages `[learn] enabled = false` and
+writes `<runtime dir>/learn-off`; the running learner thread checks it every
+tick (and inside a step) and stops, dropping the step. Turning it back On
+takes effect at the next start (a fresh start with `[learn] enabled = true`
+removes a leftover marker). Not in this tab yet: the dreaming controls (they
+live in the Bots tab), workers, storage, practice queue, installs, and FTS
+search.
+
 ## 11. Dream learning (Ko-started, time-boxed) — decided by Ko
 
 Ko (03:24 MDT): *"when the user asks say for 8 or 6 hours she can learn
