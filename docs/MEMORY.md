@@ -309,5 +309,6 @@ says so).
   the first chat; `--spawn-server` asks (card only; no desktop is `NO_UI` plus the manual command);
   a card that loses its window is closed `CANCELLED` (bubble close handler,
   overlay check for a killed bubble, startup scan for orphans).
-- The orphan scan runs when the overlay starts, not for `lillith chat`
-  (an overlay bubble may have a live card up then).
+- The orphan scan runs when the overlay starts and at the start of
+  `lillith chat` (with or without `--spawn-server`). A card whose process
+  is still running is left alone, so a live overlay card stays open.
