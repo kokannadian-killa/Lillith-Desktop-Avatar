@@ -1514,7 +1514,10 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     let server = if chat_on && !cli.no_llm {
         chat::ServerGuard::start(&cfg.chat).await
     } else {
-        chat::ServerGuard::default()
+        let g = chat::ServerGuard::default();
+        // Ctrl-C / SIGTERM stop commands even with chat off.
+        g.stop_on_signal();
+        g
     };
     let launcher = chat_on.then(|| {
         let l = chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm)

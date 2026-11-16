@@ -31,24 +31,41 @@ The roster lives in `bots.toml` next to `config.toml` (Save in the bottom bar wr
   detached process from the overlay). A bot's **Stop** ends that bot; if it was running a
   command, every command of this Settings window is killed (process-local, the other Lillith
   processes keep going).
-* **Stop all**, Ctrl-C / SIGTERM on `lillith-settings`, Ctrl-C in `lillith chat` / `lillith dream`,
-  and the overlay's Ctrl-C / SIGTERM handler (installed only when `[chat.server]` spawning is
-  configured; otherwise a signal just ends the overlay) are the **cross-process kill switch**: the stopping process
-  appends to the per-user stop barrier (`$XDG_RUNTIME_DIR/lillith/stop/barrier.log`, dir 0700,
-  files 0600; local files only, no socket or network) and fsyncs it *before* reporting anything.
-  Every Lillith process that joined the stop session at start-up (the overlay / `lillith` CLI and
-  `lillith-settings` do) sees it within ~20–50 ms: its command runners kill their process
-  groups, its bots drop their plans and queued steps (nothing approved earlier is replayed; new
-  work needs a new plan and a new mouse Yes), its stop hooks run, and it acknowledges.
-  The Settings window says **Stopped** only when every live Lillith process confirmed its task
-  trees are gone; otherwise it says the stop was saved but **not confirmed** (a process that did
-  not answer, a tree still alive, or an OS where trees can't be checked). "Sent" / "accepted" is
-  never shown as stopped. A restarted process ignores old barrier entries for new work and has
-  nothing to resurrect (bot plans are not persisted).
-* Limits: a command's descendant that leaves its process group (`setsid`, double fork) is not
-  tracked or killed by a stop. If a Lillith process is killed with SIGKILL while a command runs,
-  that command's tree is not torn down. Tree verification needs `/proc` (Linux); on Windows the
-  Job-object kill still runs but the stop is reported as not confirmed.
+* **Stop all**, Ctrl-C / SIGTERM on `lillith-settings`, Ctrl-C / SIGTERM on the overlay (always,
+  with or without `[chat.server]`), Ctrl-C in `lillith chat` / `lillith dream` are one route: the
+  **cross-process kill switch** (`kill_switch::stop_all`). The stopping process writes a
+  `disarmed` marker and appends to the per-user stop barrier
+  (`$XDG_RUNTIME_DIR/lillith/stop/barrier.log`; dir 0700, files 0600; local files only, no
+  socket or network), fsyncing both *before* reporting anything. Every Lillith process joins
+  this stop session on first use and sees the barrier within ~20–50 ms: its command runners kill
+  their process group **and** every descendant they have seen (also ones that left the group
+  with `setsid`), its bots drop their plans and queued steps, its stop hooks run, and it
+  acknowledges whether its trees are really gone.
+* **Reporting.** `stop_all` waits (at most 5 s) for those acknowledgements. Settings and chat say
+  **Stopped** only when every live Lillith process confirmed its task trees are gone
+  (Quiescent). Otherwise the line says the stop was saved but **not confirmed** (a process that
+  did not answer, a tree still alive, or an OS where trees can't be checked), or that it only
+  applied in this process (barrier not saved). "Sent" / "accepted" is never shown as stopped.
+* **Disarmed until Re-arm.** After a global stop, every Lillith process refuses to start any
+  command, including processes started later (restarts, a new overlay after Ctrl-C), until Ko
+  clicks **Re-arm** in Settings ▸ Bots. Re-arm only removes the marker: it never re-runs,
+  resumes or re-approves anything (stopped plans and queued steps are gone; each new step still
+  needs its own mouse Yes). `$XDG_RUNTIME_DIR` is cleared at logout / reboot, so a reboot also
+  clears the barrier and the disarm. `LILLITH_STOP_SESSION=off` keeps a process out of the
+  session (stops stay process-local); under `cargo test` a process only joins in a fully
+  scratch XDG environment, so test runs never disarm a live Lillith.
+* **Known gaps (honest):**
+  - *Double fork between snapshots:* runners record descendants by a `/proc` parent walk about
+    every 200 ms and again at kill time. A process that double-forks and loses its parent link
+    between two snapshots is not found and survives the stop; the acknowledgement only covers
+    what was tracked, so the stop can still read as confirmed.
+  - *SIGKILLed Lillith:* if a Lillith process is killed with SIGKILL (or crashes) while a command
+    runs, nothing tears that command's tree down, and the dead process can no longer report it.
+  - *Background pipe holder on a normal exit:* when a command exits but a background child keeps
+    its output pipe open, the runner keeps waiting for the pipe (as before). A stop now ends
+    that wait and kills the holder, but without a stop the wait has no time limit.
+  - *Windows:* the Job-object kill still runs, but trees can't be checked without `/proc`, so a
+    stop is always reported as **not confirmed** there.
 * The safeword ("red" / "OOC: stop") only hushes her speech and queued lines (and cancels cards
   waiting for Ko) in the process where it was said. It never writes the barrier and never stops
   a bot, a command or any task.
