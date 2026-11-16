@@ -137,12 +137,14 @@ pub fn pick_default(
 }
 
 /// Where unattended setup looks: `~/AI/models`, `~/models`,
+/// `~/.biotekengine/models` (optional; skipped if missing),
 /// `<data>/lillith/models` (2 levels deep).
 pub fn default_dirs() -> Vec<PathBuf> {
     let mut v = Vec::new();
     if let Some(h) = paths::home_dir() {
         v.push(h.join("AI").join("models"));
         v.push(h.join("models"));
+        v.push(h.join(".biotekengine").join("models"));
     }
     if let Some(d) = paths::data_home() {
         v.push(d.join("lillith").join("models"));
@@ -302,5 +304,18 @@ mod tests {
         assert_eq!(f.len(), 1, "{f:?}");
         assert!(f[0].path.ends_with("dolphin3.0-llama3.2-3b-q4_k_m.gguf"));
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn default_dirs_include_optional_biotekengine_models() {
+        if let Some(home) = crate::paths::home_dir() {
+            let dirs = default_dirs();
+            let ai = home.join("AI").join("models");
+            let models = home.join("models");
+            let biotek = home.join(".biotekengine").join("models");
+            assert_eq!(dirs[0], ai);
+            assert_eq!(dirs[1], models);
+            assert_eq!(dirs[2], biotek);
+        }
     }
 }
