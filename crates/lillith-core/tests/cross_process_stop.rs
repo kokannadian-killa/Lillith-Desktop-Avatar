@@ -45,6 +45,25 @@
 //! checked against `/proc/<pid>/cmdline`, which must contain this run's unique
 //! temp dir. Nothing broader is ever signalled.
 //!
+//! API assumptions (main 1fcac410). To retarget at Engineering's
+//! `feat/swarm-cross-process-stop`, change only these seams:
+//! - stop call: `role "settings-stop-all"` calls `kill_switch::stop_all()`
+//!   and reads `StopReport { epoch, helper }` plus `chat_line()`. Swap in the
+//!   new authenticated Settings→supervisor client call. Write its
+//!   acknowledgement state (e.g. Accepted / Quiescent / Incomplete /
+//!   Unknown) into `settings.out`, and make check (4) fail if anything other
+//!   than a verified-quiescent state is reported as "stopped".
+//! - durable barrier: the `observer` role reads `kill_switch::epoch()` /
+//!   `stopped_since(0)` in a fresh process. Point it at the new persisted
+//!   barrier read API (or the supervisor's state query).
+//! - dispatch: the `observer` dispatches through `commands::run_child`. Point
+//!   it at the supervisor's submit path; expect refusal while disarmed.
+//! - worker: runs the job via `commands::run_child` in-process. If the new
+//!   design moves spawning into a supervisor, submit the same heartbeat
+//!   script as a registered job instead. The tree/heartbeat/PID checks are
+//!   implementation-agnostic.
+//! - hush: `kill_switch::hush()` / `hush_epoch()` / `is_safeword()`.
+//!
 //! Run the P0 (expected FAIL on main 1fcac410):
 //!   cargo test -p lillith-core --test cross_process_stop -- --ignored --nocapture --test-threads=1
 #![cfg(target_os = "linux")]
