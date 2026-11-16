@@ -217,6 +217,17 @@ impl Run {
             std::process::id()
         ));
         fs::create_dir_all(&dir).unwrap();
+        // Fresh, private XDG dirs per run: a global stop durably disarms
+        // dispatch for its session, so runs must never share one.
+        for x in ["runtime", "data", "config", "cache", "state"] {
+            let d = dir.join("xdg").join(x);
+            fs::create_dir_all(&d).unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&d, fs::Permissions::from_mode(0o700)).unwrap();
+            }
+        }
         Run { dir, worker: None }
     }
 
@@ -230,6 +241,11 @@ impl Run {
         ])
         .env(ROLE, role)
         .env(DIR, &self.dir)
+        .env("XDG_RUNTIME_DIR", self.dir.join("xdg/runtime"))
+        .env("XDG_DATA_HOME", self.dir.join("xdg/data"))
+        .env("XDG_CONFIG_HOME", self.dir.join("xdg/config"))
+        .env("XDG_CACHE_HOME", self.dir.join("xdg/cache"))
+        .env("XDG_STATE_HOME", self.dir.join("xdg/state"))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -299,7 +315,7 @@ impl Run {
         loop {
             let dead = names
                 .iter()
-                .all(|n| self.pid(&format!("{n}.pid")).map_or(true, |p| !Self::alive(p)));
+                .all(|n| self.pid(&format!("{n}.pid")).is_none_or(|p| !Self::alive(p)));
             if dead || t.elapsed() >= d {
                 let quiet = names
                     .iter()
@@ -402,7 +418,7 @@ fn p0_settings_stop_all_from_separate_process_stops_worker_tree() {
     if !quiet {
         fails.push("(3b) worker heartbeats still growing after the deadline");
     }
-    if r.read("worker.result").contains("was_stopped=true") == false && dead {
+    if !r.read("worker.result").contains("was_stopped=true") && dead {
         fails.push("(3c) tree died but worker result is not marked stopped");
     }
     // (4) no stop claim without a dead tree.
