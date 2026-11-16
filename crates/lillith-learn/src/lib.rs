@@ -33,6 +33,7 @@ pub mod readers;
 pub mod runner;
 pub mod scheduler;
 pub mod sha256;
+pub mod share;
 pub mod store;
 pub mod summarize;
 pub mod workers;

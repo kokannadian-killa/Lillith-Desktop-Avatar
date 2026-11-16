@@ -267,6 +267,27 @@ history, sessions or caches.
   rule as everything else (§7).
 - Audit: `<ts>\tLEARN\tshare\t<host>\tnote=<id>` (no page text).
 
+**Built (P6 socket, 2026-11-15):** `crates/lillith-learn/src/share.rs`,
+started from `apps/lillith/src/learn_wiring.rs` (`start_share`) only with
+`[learn] share_socket = true` (off by default) and learning + memory on.
+Linux/Unix only: `<runtime dir>/share.sock` (dir 0700, socket 0600, peer
+uid must equal ours via `SO_PEERCRED` / `getpeereid`, else refused); one
+JSON line `{"url","title","text"}` ≤ 512 KiB in, `ok <note id>` or
+`refused: <why>` out. Only `http(s)://` URLs, tracking parameters
+stripped; `block_hosts` (and their subdomains) plus a built-in denylist
+(bank / payment / password-manager hosts, webmail, `accounts.` / `login.`
+/ `auth.` hosts, login / auth / password / checkout / payment / compose
+paths) are refused with a `share-refused` audit line. Lines the ingest
+filter or the worker action filter reject (role / instruction text,
+persona or safeword words, "pipe to sh" lines) are cut; a page with the
+safeword or nothing left is refused whole. The page is stored straight
+away as a `web` note (`source.type = shared`, `url:` set,
+`fetched_via: share`, confidence 0.4, no model call), under the
+knowledge lock. Nothing is fetched and no browser file is opened. Not
+built yet: the browser extension + native-messaging host, the KDE share
+action, a Windows transport, and the Knowledge panel's "recent shared
+pages" list.
+
 **Alternative Ko can opt into later (not built, off):** automatic reading of
 pages he has opened from local Firefox/Chromium history, session and cache
 files. It would need its own one-time Soul Contract card, would exclude
