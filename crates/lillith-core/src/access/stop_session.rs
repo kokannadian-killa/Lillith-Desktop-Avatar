@@ -25,6 +25,20 @@
 //!   gone ([`Quiet::Quiet`]), still alive ([`Quiet::Busy`]) or could not be
 //!   checked on this OS ([`Quiet::Unverified`]).
 //!
+//! - `disarmed`: written (fsynced) with every global stop. While it exists,
+//!   [`super::commands::run_child`] refuses to start anything, in every
+//!   process, including ones started after the stop. Only an explicit
+//!   [`rearm`] (Settings ▸ Bots ▸ Re-arm) removes it; re-arming never
+//!   re-approves or re-runs anything.
+//!
+//! Joining: every process joins lazily on first use (auto-join) unless
+//! `LILLITH_STOP_SESSION=off` (`=on` forces it). Under `cargo test` /
+//! `cargo run` (`CARGO_MANIFEST_DIR` set at run time) auto-join only happens
+//! in a fully scratch XDG environment (all of `XDG_RUNTIME_DIR`,
+//! `XDG_STATE_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`
+//! set, runtime dir not `/run/user/…`), so an ordinary test run never stops
+//! or disarms a live Lillith. lillith-core's own unit tests never auto-join.
+//!
 //! [`confirm`] turns those into a [`StopOutcome`]: `Quiescent` only when every
 //! live joined process acknowledged this generation with verified-empty
 //! trees; otherwise `Incomplete` (an unanswered process is never counted as
@@ -33,10 +47,14 @@
 //! The safeword ("red" / "OOC: stop") never touches any of this: it only
 //! hushes speech in its own process.
 //!
-//! Limits (honest): process-group tracking cannot see a descendant that left
-//! its group (`setsid`, double fork); such an escapee is not found and not
-//! killed. Tree verification needs `/proc` (Linux); elsewhere acks say
-//! `Unverified` and the outcome is `Incomplete`.
+//! Containment: on a stop a runner kills its process group **and** every
+//! descendant it has seen (a `/proc` parent walk, refreshed while the
+//! command runs and repeated at kill time), including ones that left the
+//! group with `setsid`, plus their new groups. Limits (honest): a descendant
+//! whose parent chain was already broken before the runner saw it (a
+//! double fork that finished between two ~200 ms snapshots) is not found.
+//! Tree verification needs `/proc` (Linux); elsewhere acks say `Unverified`
+//! and the outcome is `Incomplete`.
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -47,6 +65,13 @@ use std::time::{Duration, Instant};
 
 /// The barrier file inside the session directory.
 pub const BARRIER_FILE: &str = "barrier.log";
+
+/// Present while dispatch is disarmed (after a global stop, until [`rearm`]).
+pub const DISARMED_FILE: &str = "disarmed";
+
+/// What a refused dispatch says.
+pub const DISARMED_MSG: &str = "commands are off: the kill switch was pulled (Stop all / Ctrl-C). \
+Nothing was started. Re-arm in Settings ▸ Bots to run commands again.";
 
 /// How long a process's watcher waits for its stopped trees to vanish before
 /// it acknowledges `Busy`.
@@ -70,9 +95,54 @@ struct Session {
 
 static SESSION: OnceLock<Session> = OnceLock::new();
 
-/// Whether this process joined a stop session.
+static AUTO: std::sync::Once = std::sync::Once::new();
+
+/// Joins on first use (see the module docs for when it doesn't).
+fn session() -> Option<&'static Session> {
+    if let Some(s) = SESSION.get() {
+        return Some(s);
+    }
+    AUTO.call_once(|| {
+        if auto_join_allowed() {
+            if let Err(e) = join() {
+                tracing::warn!("cross-process stop unavailable (stops stay in this process): {e}");
+            }
+        }
+    });
+    SESSION.get()
+}
+
+fn auto_join_allowed() -> bool {
+    if cfg!(test) {
+        return false;
+    }
+    match std::env::var("LILLITH_STOP_SESSION").as_deref() {
+        Ok("off") => return false,
+        Ok("on") => return true,
+        _ => {}
+    }
+    if std::env::var_os("CARGO_MANIFEST_DIR").is_some() {
+        // A cargo test / run: only into a fully scratch XDG environment
+        // (every XDG base dir set, runtime dir not the session's
+        // /run/user/<uid>), never the live session's stop barrier.
+        let set = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty());
+        let all = [
+            "XDG_STATE_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_CACHE_HOME",
+        ]
+        .iter()
+        .all(|k| set(k).is_some());
+        return all
+            && set("XDG_RUNTIME_DIR").is_some_and(|v| !Path::new(&v).starts_with("/run/user"));
+    }
+    true
+}
+
+/// Whether this process joined a stop session (joining now if allowed).
 pub fn joined() -> bool {
-    SESSION.get().is_some()
+    session().is_some()
 }
 
 /// The joined session's directory.
@@ -126,7 +196,7 @@ pub fn join_at(dir: &Path) -> io::Result<PathBuf> {
 
 /// The barrier generation (0 when not joined). Cheap: one `stat`.
 pub fn generation() -> u64 {
-    let Some(s) = SESSION.get() else {
+    let Some(s) = session() else {
         return 0;
     };
     match std::fs::metadata(&s.barrier) {
@@ -145,9 +215,13 @@ pub fn generation() -> u64 {
 /// generation. `Err` when not joined or the write failed (the stop then
 /// only reached this process).
 pub fn persist(reason: &str) -> io::Result<u64> {
-    let s = SESSION
-        .get()
+    let s = session()
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotConnected, "no stop session joined"))?;
+    // Disarm first: nothing may be dispatched once the stop is reported.
+    write_atomic(
+        &s.dir.join(DISARMED_FILE),
+        &format!("pid={}\n", std::process::id()),
+    )?;
     let mut f = open_append(&s.barrier)?;
     let line = format!(
         "{}\tpid={}\t{}\n",
@@ -163,6 +237,30 @@ pub fn persist(reason: &str) -> io::Result<u64> {
     Ok(g)
 }
 
+/// Whether dispatch is disarmed (a global stop happened and nobody re-armed).
+/// `false` when not joined (process-local behaviour, as before).
+pub fn disarmed() -> bool {
+    session().is_some_and(|s| s.dir.join(DISARMED_FILE).exists())
+}
+
+/// Re-arms dispatch after a global stop (an explicit user action). It does
+/// not move any epoch, re-approve or re-run anything: old plans and queued
+/// steps were dropped by the stop.
+pub fn rearm() -> io::Result<()> {
+    let s = session()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotConnected, "no stop session joined"))?;
+    match std::fs::remove_file(s.dir.join(DISARMED_FILE)) {
+        Ok(()) => {
+            tracing::warn!(
+                "kill switch re-armed: commands may run again (each still needs its own Yes)"
+            );
+            Ok(())
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
 // ------------------------------------------------------------ local trees
 
 /// One command tree (process group) a runner started, tracked so a stop can
@@ -172,11 +270,24 @@ pub fn persist(reason: &str) -> io::Result<u64> {
 pub struct GroupGuard {
     pgid: u32,
     start: u64,
+    /// Descendants (pid, Linux start time) the runner saw.
+    pids: Vec<(u32, u64)>,
+}
+
+impl GroupGuard {
+    /// Remembers descendants the runner saw (so a stop can check them).
+    pub fn note_pids(&mut self, pids: &[(u32, u64)]) {
+        for p in pids {
+            if !self.pids.contains(p) {
+                self.pids.push(*p);
+            }
+        }
+    }
 }
 
 struct Tracked {
     active: Vec<(u32, u64)>,
-    stopped: Vec<u32>,
+    stopped: Vec<(u32, Vec<(u32, u64)>)>,
 }
 
 static TRACKED: Mutex<Tracked> = Mutex::new(Tracked {
@@ -190,7 +301,11 @@ pub fn track_group(pgid: u32, start: u64) -> GroupGuard {
     if let Ok(mut t) = TRACKED.lock() {
         t.active.push((pgid, start));
     }
-    GroupGuard { pgid, start }
+    GroupGuard {
+        pgid,
+        start,
+        pids: Vec::new(),
+    }
 }
 
 impl Drop for GroupGuard {
@@ -204,8 +319,8 @@ impl Drop for GroupGuard {
             {
                 t.active.swap_remove(i);
             }
-            if stopped && !t.stopped.contains(&self.pgid) {
-                t.stopped.push(self.pgid);
+            if stopped {
+                t.stopped.push((self.pgid, std::mem::take(&mut self.pids)));
             }
         }
     }
@@ -253,18 +368,15 @@ pub fn local_quiescence(deadline: Duration) -> Quiet {
     let t0 = Instant::now();
     loop {
         let now = super::kill_switch::epoch();
-        let (old, groups) = match TRACKED.lock() {
+        let (old, left) = match TRACKED.lock() {
             Ok(mut t) => {
                 let old = t.active.iter().filter(|&&(_, s)| s != now).count();
-                t.stopped.retain(|&g| group_alive(g).unwrap_or(false));
-                (old, t.stopped.clone())
+                t.stopped
+                    .retain(|(g, pids)| group_alive(*g).unwrap_or(false) || any_alive(pids));
+                (old, t.stopped.len())
             }
-            Err(_) => (0, Vec::new()),
+            Err(_) => (0, 0),
         };
-        let left: usize = groups
-            .iter()
-            .filter(|&&g| group_alive(g) == Some(true))
-            .count();
         if old == 0 && left == 0 {
             return if cfg!(target_os = "linux") {
                 Quiet::Quiet
@@ -303,6 +415,96 @@ pub fn group_alive(pgid: u32) -> Option<bool> {
     {
         let _ = pgid;
         None
+    }
+}
+
+/// Whether any of `pids` (pid, start time) is still that same live process.
+fn any_alive(pids: &[(u32, u64)]) -> bool {
+    pids.iter()
+        .any(|&(p, st)| registered_alive(p, st) == Some(true))
+}
+
+/// Every descendant of `root` (pid, start time), by a `/proc` parent walk.
+/// Empty where there is no `/proc`.
+pub fn descendants(root: u32) -> Vec<(u32, u64)> {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(rd) = std::fs::read_dir("/proc") else {
+            return Vec::new();
+        };
+        let mut all: Vec<(u32, u32)> = Vec::new();
+        for e in rd.flatten() {
+            let name = e.file_name();
+            let Some(pid) = name.to_str().and_then(|n| n.parse::<u32>().ok()) else {
+                continue;
+            };
+            if let Some((_, ppid, _)) = proc_stat(pid) {
+                all.push((pid, ppid));
+            }
+        }
+        let mut out: Vec<u32> = Vec::new();
+        let mut frontier = vec![root];
+        while let Some(p) = frontier.pop() {
+            for &(c, pp) in &all {
+                if pp == p && c != root && !out.contains(&c) {
+                    out.push(c);
+                    frontier.push(c);
+                }
+            }
+        }
+        out.into_iter()
+            .filter_map(|p| Some((p, start_time(p)?)))
+            .collect()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = root;
+        Vec::new()
+    }
+}
+
+/// SIGKILLs `root`'s descendants (fresh walk plus `known`, each checked
+/// against its start time so a reused pid is never hit) and the process
+/// groups they moved to (never this process's own group). Repeats a few
+/// times to catch forks in flight. Adds what it found to `known`.
+pub fn kill_descendants(root: u32, known: &mut Vec<(u32, u64)>) {
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: getpgrp has no preconditions.
+        let own_pgrp = unsafe { libc::getpgrp() } as u32;
+        for _ in 0..3 {
+            for p in descendants(root) {
+                if !known.contains(&p) {
+                    known.push(p);
+                }
+            }
+            let mut groups: Vec<u32> = Vec::new();
+            for &(pid, st) in known.iter() {
+                if start_time(pid) != Some(st) {
+                    continue;
+                }
+                if let Some((_, _, g)) = proc_stat(pid) {
+                    if g > 1 && g != own_pgrp && g != root && !groups.contains(&g) {
+                        groups.push(g);
+                    }
+                }
+                // SAFETY: kill(2) on a pid verified (start time) as a descendant.
+                unsafe {
+                    libc::kill(pid as libc::pid_t, libc::SIGKILL);
+                }
+            }
+            for g in groups {
+                // SAFETY: killpg(2) on a group a verified descendant moved to.
+                unsafe {
+                    libc::killpg(g as libc::pid_t, libc::SIGKILL);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (root, known);
     }
 }
 
@@ -439,7 +641,7 @@ impl StopOutcome {
                 )
             }
             StopOutcome::LocalOnly { reason, local } => format!(
-                "Stopped in this window only ({}); other Lillith windows were NOT told: {reason}.",
+                "Stop applied in this process only ({}); other Lillith windows were NOT told: {reason}.",
                 match local {
                     Quiet::Quiet => "its task trees are gone".to_string(),
                     Quiet::Unverified => "not verifiable here".to_string(),
@@ -471,14 +673,11 @@ pub fn confirm_in(dir: &Path, generation: u64, deadline: Duration) -> StopOutcom
         let mut unverified = Vec::new();
         let mut ok = 0usize;
         for (pid, start) in registered(dir) {
-            match registered_alive(pid, start) {
-                Some(false) => {
-                    // Dead or a reused pid: prune it, it runs nothing of ours.
-                    let _ = std::fs::remove_file(dir.join(format!("proc-{pid}")));
-                    let _ = std::fs::remove_file(dir.join(format!("ack-{pid}")));
-                    continue;
-                }
-                Some(true) | None => {}
+            if registered_alive(pid, start) == Some(false) {
+                // Dead or a reused pid: prune it, it runs nothing of ours.
+                let _ = std::fs::remove_file(dir.join(format!("proc-{pid}")));
+                let _ = std::fs::remove_file(dir.join(format!("ack-{pid}")));
+                continue;
             }
             match read_ack(dir, pid) {
                 Some((g, q)) if g >= generation => match q {

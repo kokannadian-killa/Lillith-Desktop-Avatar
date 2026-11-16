@@ -552,6 +552,22 @@ impl BotsTab {
         if let Some(l) = &self.stop_line {
             ui.label(RichText::new(l).small().color(c32(pal::BLOOD_NEON)));
         }
+        if kill_switch::disarmed() {
+            ui.label(
+                RichText::new("Kill switch is ON: commands are refused in every Lillith window.")
+                    .small()
+                    .color(c32(pal::BLOOD_NEON)),
+            );
+            if chrome::stone_button(ui, "Re-arm").clicked() {
+                // Approves and re-runs nothing: stopped plans are gone and
+                // every new step still needs its own mouse Yes.
+                self.stop_line = Some(match kill_switch::rearm() {
+                    Ok(()) => "Re-armed: commands may run again (each still needs its own Yes)."
+                        .to_string(),
+                    Err(e) => format!("Could not re-arm: {e}"),
+                });
+            }
+        }
         ui.add_space(6.0);
         let line = self.dream_line();
         let status = self.dream.status();

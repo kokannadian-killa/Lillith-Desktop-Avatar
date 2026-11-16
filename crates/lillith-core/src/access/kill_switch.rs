@@ -52,6 +52,9 @@ pub struct StopReport {
     pub helper: HelperKill,
     /// Whether the cross-process barrier was saved.
     pub barrier: StopBarrier,
+    /// What was confirmed ([`stop_all`] waits for it; `None` for the
+    /// non-waiting [`stop_process`]). Only `Quiescent` is a proven stop.
+    pub outcome: Option<StopOutcome>,
 }
 
 /// What happened to the cross-process stop barrier.
@@ -70,13 +73,13 @@ pub enum StopBarrier {
 
 impl StopReport {
     /// The line Lillith says in chat. See [`HelperKill::chat_line`].
+    /// "Stopped. Every running command is dead." only after a proven
+    /// [`StopOutcome::Quiescent`]; otherwise the outcome says what is known.
     pub fn chat_line(&self) -> String {
-        let line = stop_chat_line(self.helper);
-        match &self.barrier {
-            StopBarrier::Failed(e) => {
-                format!("{line} Other Lillith windows were NOT told (stop barrier: {e}).")
-            }
-            _ => line,
+        match &self.outcome {
+            Some(StopOutcome::Quiescent { .. }) => stop_chat_line(self.helper),
+            Some(o) => o.line(),
+            None => "Stop requested in this process; not confirmed yet.".into(),
         }
     }
 }
@@ -85,6 +88,17 @@ impl StopReport {
 /// [`super::stop_session`]). Call once at app start-up.
 pub fn join_session() -> std::io::Result<std::path::PathBuf> {
     stop_session::join()
+}
+
+/// Whether dispatch is disarmed by a global stop (until [`rearm`]).
+pub fn disarmed() -> bool {
+    stop_session::disarmed()
+}
+
+/// Re-arms dispatch after a global stop (explicit user action only; it
+/// approves and re-runs nothing).
+pub fn rearm() -> std::io::Result<()> {
+    stop_session::rearm()
 }
 
 /// [`join_session`] at an explicit directory (tests).
@@ -155,7 +169,7 @@ pub(crate) fn clear_hooks_for_test() {
 /// report the chat layer uses for a truthful reply. Ctrl-C / SIGTERM / app
 /// shutdown / "Stop all" — the safeword calls [`hush`] instead. Also hushes.
 pub fn stop_all() -> StopReport {
-    stop_inner(true)
+    stop_all_confirmed(stop_session::CONFIRM_DEADLINE).0
 }
 
 /// The process-local stop: like [`stop_all`] but the barrier is not touched,
@@ -191,6 +205,7 @@ fn stop_inner(global: bool) -> StopReport {
         epoch: e,
         helper,
         barrier,
+        outcome: None,
     }
 }
 
@@ -198,7 +213,7 @@ fn stop_inner(global: bool) -> StopReport {
 /// process confirmed its task trees are gone. Blocking: call it off the UI
 /// thread. Only [`StopOutcome::Quiescent`] is a confirmed stop.
 pub fn stop_all_confirmed(deadline: std::time::Duration) -> (StopReport, StopOutcome) {
-    let r = stop_all();
+    let mut r = stop_inner(true);
     let out = match &r.barrier {
         StopBarrier::Saved(g) => stop_session::confirm(*g, deadline),
         StopBarrier::Failed(e) => StopOutcome::LocalOnly {
@@ -210,6 +225,8 @@ pub fn stop_all_confirmed(deadline: std::time::Duration) -> (StopReport, StopOut
             local: stop_session::local_quiescence(deadline),
         },
     };
+    tracing::warn!("stop outcome: {}", out.line());
+    r.outcome = Some(out.clone());
     (r, out)
 }
 
@@ -323,6 +340,10 @@ mod tests {
             epoch: 1,
             helper: HelperKill::Gone,
             barrier: StopBarrier::NotJoined,
+            outcome: Some(StopOutcome::Quiescent {
+                generation: 1,
+                processes: 1,
+            }),
         }
         .chat_line()
         .contains("helper is gone"));
@@ -330,6 +351,10 @@ mod tests {
             epoch: 1,
             helper: HelperKill::Unconfirmed,
             barrier: StopBarrier::NotJoined,
+            outcome: Some(StopOutcome::Quiescent {
+                generation: 1,
+                processes: 1,
+            }),
         }
         .chat_line()
         .contains("helper is gone"));
@@ -397,8 +422,13 @@ mod tests {
             epoch: 1,
             helper: HelperKill::Idle,
             barrier: StopBarrier::Failed("disk full".into()),
+            outcome: Some(StopOutcome::LocalOnly {
+                reason: "disk full".into(),
+                local: stop_session::Quiet::Quiet,
+            }),
         };
         assert!(r.chat_line().contains("NOT told"));
+        assert!(!r.chat_line().starts_with("Stopped."));
     }
 
     #[test]

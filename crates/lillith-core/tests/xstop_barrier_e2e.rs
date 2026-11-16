@@ -77,9 +77,26 @@ fn xstop_role() {
             )
             .unwrap();
         }
-        // A restarted process: a fresh job must run normally (the old
-        // barrier is not a stop for new work) and nothing old is re-run.
+        // A restarted process: dispatch stays disarmed after the global
+        // stop (nothing starts) until an explicit re-arm; then a new job
+        // runs normally (the old barrier is not a stop for new work).
         "fresh" => {
+            assert!(
+                kill_switch::disarmed(),
+                "disarm survives into a new process"
+            );
+            let refused = commands::run_captured(
+                "echo should-not-run > ran",
+                Some(&d),
+                Duration::from_secs(5),
+                4096,
+            );
+            assert!(
+                refused.is_err(),
+                "disarmed dispatch must be refused: {refused:?}"
+            );
+            assert!(!d.join("ran").exists(), "nothing started while disarmed");
+            kill_switch::rearm().expect("rearm");
             let out =
                 commands::run_captured("echo fresh-ok", Some(&d), Duration::from_secs(20), 4096)
                     .expect("run");
@@ -261,7 +278,7 @@ fn stop_from_a_separate_process_persists_the_barrier_and_kills_the_tree() {
         (mtime(&d.join("hb1")), mtime(&d.join("hb2"))),
         "nothing re-ran"
     );
-    println!("RESTART: fresh job ran to [exit 0]; cancelled job not resurrected");
+    println!("RESTART: dispatch refused while disarmed; after explicit re-arm a fresh job ran to [exit 0]; cancelled job not resurrected");
 
     cleanup_group(&d, &pgid);
     let _ = fs::remove_dir_all(&d);
