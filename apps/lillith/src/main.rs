@@ -1489,6 +1489,7 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     // events: activity pauses it; `chat.safeword` doesn't touch it (the
     // safeword only hushes her voice), Ctrl-C / stop drops a step.
     let learner = learn_wiring::start(&cfg, !cli.no_llm);
+    let _share = learn_wiring::start_share(&cfg);
     let tx = learn_wiring::tee(tx, learner.as_ref());
     // Dream learning (P7): right-click "Dream learning…" / `/dream` in the
     // bubble open its card; her lines go out as speech on the feed.
