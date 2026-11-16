@@ -386,6 +386,9 @@ mod tests {
         );
         let c = clock.clone();
         o.clock = Arc::new(move || *c.lock().unwrap());
+        // Not the process-wide hush epoch: other tests in this binary
+        // press stop / say the safeword, which would quiet this bridge.
+        o.stop_epoch = Arc::new(|| 0);
         let slot = Mutex::new(Some(brain));
         o.open = Box::new(move || slot.lock().unwrap().take());
         let bridge = Arc::new(MemoryBridge::spawn_with(o));
