@@ -1,7 +1,8 @@
 //! Backend dispatch plus the [`Controller`] both backends drive: stage
 //! (animator + renderer + mask), drag, placement, position persistence and
 //! the M3 behaviour [`Brain`] (clicks, hover, keys, drag, moods, sleep/wake,
-//! Wander/Stay, pose cycle).
+//! Wander/Follow/Stay, pose cycle). Follow walks the bottom edge toward
+//! the cursor's x; a stale or missing cursor feed leaves her standing still.
 
 use crate::backend::Backend;
 use crate::chat::{ChatAnchor, ChatHook, ClickGate, Talk};
@@ -14,7 +15,7 @@ use crate::ui::{Command, PEEK_SCALE};
 use lillith_anim::animator::{AnimatorConfig, Dir};
 use lillith_anim::atlas::{Clip, Manifest};
 use lillith_anim::avatar::AvatarStore;
-use lillith_core::config::{save_overlay, MoveMode, OverlayPos};
+use lillith_core::config::{save_overlay, MoveMode, OverlayPos, CURSOR_STALE_AFTER};
 use lillith_core::config::{Config, JiggleMode};
 use lillith_core::desktop::{Desktop, Landing, Rect};
 use lillith_core::interaction::Button;
@@ -30,7 +31,7 @@ use lillith_core::Event;
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Events from the system monitor (`lillith-sense`) and other async
 /// sources, drained into the brain once per frame. Shared so the Wayland →
@@ -293,7 +294,8 @@ pub struct OverlayOptions {
     pub exit_after: Option<Duration>,
     /// M3 behaviour timings (`[behavior]`).
     pub behavior: BehaviorConfig,
-    /// Wander or Stay (Follow behaves like Stay until M5).
+    /// Wander, Follow or Stay. Follow walks toward the cursor's x when a
+    /// fresh KWin cursor sample is available; otherwise it behaves like Stay.
     pub mode: MoveMode,
     /// Start muted (no SFX cues).
     pub muted: bool,
@@ -967,6 +969,20 @@ impl Controller {
         }
     }
 
+    /// Cursor relative to her feet (global KWin px, +y down), or `None`
+    /// when there is no screen, no feed, or the sample is stale. Follow
+    /// then stands still like Stay. The walk target is clamped by the
+    /// wander / perch area (the screen she is already on).
+    fn cursor_relative(&self) -> Option<(f32, f32)> {
+        let desk = self.desktop();
+        let (cx, cy) = desk.cursor_fresh(Instant::now(), CURSOR_STALE_AFTER)?;
+        let (_, sh) = self.screen?;
+        let frame = self.frame(&desk, sh);
+        let p = self.pending_move.unwrap_or(self.placement);
+        let (fx, fy) = frame.feet_at(p);
+        Some(((cx - fx) as f32, (cy - fy) as f32))
+    }
+
     /// Placement ↔ global mapping for the current size and screen.
     fn frame(&self, desk: &Desktop, screen_h: u32) -> Frame {
         let (_, h) = self.stage.size();
@@ -1437,6 +1453,9 @@ impl Controller {
             || self.talk.active()
             || self.gravity.sitting()
             || self.tease.active();
+        // Cursor relative to her feet, every tick. None = no/stale feed.
+        let cursor_actions = self.brain.input(Input::Cursor(self.cursor_relative()));
+        self.apply(cursor_actions);
         let actions = self.brain.tick(dt, busy);
         self.apply(actions);
         self.pump_lipsync();

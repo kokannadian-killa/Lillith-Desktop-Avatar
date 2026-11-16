@@ -12,7 +12,7 @@
 //! | [`presence`] (+ `idle_wayland`, `idle_x11`) | `user.activity`, `user.returned` | `ext-idle-notify-v1` (feature `wayland-idle`) / MIT-SCREEN-SAVER (feature `x11`) | M4 ✔ |
 //! | [`notifications`] | `notify.received`, `calendar.reminder`, `update.available` | session bus `BecomeMonitor` on `org.freedesktop.Notifications.Notify` | M4 ✔ |
 //! | [`files`] | `trash.added`, `screenshot.taken`, `archive.created` | `notify` (inotify) | M4 ✔ |
-//! | [`kwin`] | `window.*`, `start_menu.opened`, cursor position | KWin script → `org.lillith.Bridge` | TODO(M5), hook only |
+//! | [`kwin`] | `window.*`, `start_menu.opened`, cursor position (Follow / proximity wake) | KWin script → `org.lillith.Bridge` (session bus) | cursor stored on the shared `Desktop`; Follow/wake need the script on |
 //! | [`fullscreen`] | `window.fullscreen`, `window.fullscreen_left` (Ko busy) | the KWin bridge / [`win_focus`] | ✔ |
 //! | [`win_focus`] (Windows) | `window.focused` (exe id), fullscreen | foreground-window poll | ✔ |
 //! | [`dbus`] | `wifi.changed`, `hotspot.on` | NetworkManager | later |

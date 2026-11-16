@@ -115,3 +115,21 @@ The roster lives in `bots.toml` next to `config.toml` (Save in the bottom bar wr
 * The safeword ("red" / "OOC: stop") only hushes her speech and queued lines (and cancels cards
   waiting for Ko) in the process where it was said. It never writes the barrier and never stops
   a bot, a command or any task.
+
+## Follow, cursor and proximity wake
+
+With the `kwin/lillith-bridge` script installed and enabled, **Follow** walks
+along the bottom of the screen she is already on toward the cursor's *x*
+(once it is farther than `[behavior] follow_threshold_px`, default 64).
+Window perching is unchanged (gravity / perch). A sleeping Lillith wakes
+when the cursor comes within `[behavior] wake_radius_px` (default 160) of
+her feet, through the same hover-wake path as a pointer over her body.
+Old configs without those keys still load (serde defaults).
+
+The cursor uses KWin's global logical coordinates. **Screen selection and
+per-output scaling are deferred**: she is clamped to the screen she is on;
+a cursor on another screen only walks her to that screen's edge.
+
+**X11 `QueryPointer` is out of scope.** With no cursor feed (script off or
+not yet installed) or a sample older than 500 ms, Follow stays put like
+**Stay**.

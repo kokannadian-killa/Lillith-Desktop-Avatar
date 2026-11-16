@@ -89,6 +89,8 @@
 # wander_pose_chance = 0.35    # chance of an idle pose right after a walk
 # wander_pose_delay_s = 1.5
 # event_wake_priority = 80     # events at/above this priority wake her
+# follow_threshold_px = 64.0   # Follow: walk toward the cursor's x once it is this far (px)
+# wake_radius_px = 160.0       # asleep: wake when the cursor is this close to her feet (px)
 # floor_offset_px = 48         # floor (window-bottom margin) without the KWin bridge's work area
 # [behavior.gestures]
 # double_click_s = 0.35
