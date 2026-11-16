@@ -51,12 +51,12 @@ pub struct StopReport {
     pub epoch: u64,
     pub helper: HelperKill,
     /// Whether the cross-process barrier was saved.
-    pub barrier: Barrier,
+    pub barrier: StopBarrier,
 }
 
 /// What happened to the cross-process stop barrier.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Barrier {
+pub enum StopBarrier {
     /// This process never joined a stop session (process-local stop only,
     /// as before; e.g. library users and unit tests).
     NotJoined,
@@ -73,7 +73,7 @@ impl StopReport {
     pub fn chat_line(&self) -> String {
         let line = stop_chat_line(self.helper);
         match &self.barrier {
-            Barrier::Failed(e) => {
+            StopBarrier::Failed(e) => {
                 format!("{line} Other Lillith windows were NOT told (stop barrier: {e}).")
             }
             _ => line,
@@ -168,17 +168,17 @@ fn stop_inner(global: bool) -> StopReport {
     HUSH.fetch_add(1, Ordering::SeqCst);
     EPOCH.fetch_add(1, Ordering::SeqCst);
     let barrier = if !global {
-        Barrier::Local
+        StopBarrier::Local
     } else if !stop_session::joined() {
-        Barrier::NotJoined
+        StopBarrier::NotJoined
     } else {
         match stop_session::persist("stop_all") {
-            Ok(g) => Barrier::Saved(g),
+            Ok(g) => StopBarrier::Saved(g),
             Err(e) => {
                 tracing::error!(
                     "stop barrier not saved: other Lillith processes were not told: {e}"
                 );
-                Barrier::Failed(e.to_string())
+                StopBarrier::Failed(e.to_string())
             }
         }
     };
@@ -200,12 +200,12 @@ fn stop_inner(global: bool) -> StopReport {
 pub fn stop_all_confirmed(deadline: std::time::Duration) -> (StopReport, StopOutcome) {
     let r = stop_all();
     let out = match &r.barrier {
-        Barrier::Saved(g) => stop_session::confirm(*g, deadline),
-        Barrier::Failed(e) => StopOutcome::LocalOnly {
+        StopBarrier::Saved(g) => stop_session::confirm(*g, deadline),
+        StopBarrier::Failed(e) => StopOutcome::LocalOnly {
             reason: e.clone(),
             local: stop_session::local_quiescence(deadline),
         },
-        Barrier::NotJoined | Barrier::Local => StopOutcome::LocalOnly {
+        StopBarrier::NotJoined | StopBarrier::Local => StopOutcome::LocalOnly {
             reason: "no stop session joined".into(),
             local: stop_session::local_quiescence(deadline),
         },
@@ -322,14 +322,14 @@ mod tests {
         assert!(StopReport {
             epoch: 1,
             helper: HelperKill::Gone,
-            barrier: Barrier::NotJoined,
+            barrier: StopBarrier::NotJoined,
         }
         .chat_line()
         .contains("helper is gone"));
         assert!(!StopReport {
             epoch: 1,
             helper: HelperKill::Unconfirmed,
-            barrier: Barrier::NotJoined,
+            barrier: StopBarrier::NotJoined,
         }
         .chat_line()
         .contains("helper is gone"));
@@ -384,10 +384,10 @@ mod tests {
         let _g = TEST_GATE.write().unwrap_or_else(|e| e.into_inner());
         let e = epoch();
         let r = stop_all();
-        assert_eq!(r.barrier, Barrier::NotJoined);
+        assert_eq!(r.barrier, StopBarrier::NotJoined);
         assert!(stopped_since(e));
         let e = epoch();
-        assert_eq!(stop_process().barrier, Barrier::Local);
+        assert_eq!(stop_process().barrier, StopBarrier::Local);
         assert!(stopped_since(e));
     }
 
@@ -396,7 +396,7 @@ mod tests {
         let r = StopReport {
             epoch: 1,
             helper: HelperKill::Idle,
-            barrier: Barrier::Failed("disk full".into()),
+            barrier: StopBarrier::Failed("disk full".into()),
         };
         assert!(r.chat_line().contains("NOT told"));
     }
