@@ -48,7 +48,7 @@ The roster lives in `bots.toml` next to `config.toml` (Save in the bottom bar wr
   applied in this process (barrier not saved). "Sent" / "accepted" is never shown as stopped.
 * **Disarmed until Re-arm.** After a global stop, every Lillith process refuses to start any
   command, including processes started later (restarts, a new overlay after Ctrl-C), until Ko
-  clicks **Re-arm** in Settings ▸ Bots. Re-arm only removes the marker: it never re-runs,
+  clicks **Re-arm** in Settings ▸ Bots (a mouse click only; Tab + Enter never re-arms). Re-arm only removes the marker: it never re-runs,
   resumes or re-approves anything (stopped plans and queued steps are gone; each new step still
   needs its own mouse Yes). `$XDG_RUNTIME_DIR` is cleared at logout / reboot, so a reboot also
   clears the barrier and the disarm. `LILLITH_STOP_SESSION=off` keeps a process out of the

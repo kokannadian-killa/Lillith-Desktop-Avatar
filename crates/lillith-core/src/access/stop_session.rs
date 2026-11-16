@@ -33,7 +33,8 @@
 //!
 //! Joining: every process joins lazily on first use (auto-join) unless
 //! `LILLITH_STOP_SESSION=off` (`=on` forces it). Under `cargo test` /
-//! `cargo run` (`CARGO_MANIFEST_DIR` set at run time) auto-join only happens
+//! `cargo run` (`CARGO_MANIFEST_DIR` set at run time, or a test binary
+//! started directly from `target/…/deps/`) auto-join only happens
 //! in a fully scratch XDG environment (all of `XDG_RUNTIME_DIR`,
 //! `XDG_STATE_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`
 //! set, runtime dir not `/run/user/…`), so an ordinary test run never stops
@@ -121,7 +122,12 @@ fn auto_join_allowed() -> bool {
         Ok("on") => return true,
         _ => {}
     }
-    if std::env::var_os("CARGO_MANIFEST_DIR").is_some() {
+    // A cargo test binary run directly lives in `target/<profile>/deps/`.
+    let test_binary = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|p| p.ends_with("deps")))
+        .unwrap_or(false);
+    if test_binary || std::env::var_os("CARGO_MANIFEST_DIR").is_some() {
         // A cargo test / run: only into a fully scratch XDG environment
         // (every XDG base dir set, runtime dir not the session's
         // /run/user/<uid>), never the live session's stop barrier.

@@ -129,8 +129,21 @@ pub struct BotsTab {
     /// The last "Stop all": confirming (Some(task)) and/or its outcome.
     stop_all: Option<crate::task::Task<StopOutcome>>,
     stop_line: Option<String>,
+    /// What "Stop all" calls: the real cross-process kill switch. Unit tests
+    /// get a recording fake, because a real stop inside the test binary
+    /// would stop every concurrently running test's work (and, in a joined
+    /// session, disarm dispatch until re-armed).
+    stop_all_fn: fn(Duration) -> StopOutcome,
     ctx: Option<egui::Context>,
 }
+
+/// The real "Stop all": barrier saved, then every process's confirmation.
+#[cfg(not(test))]
+fn real_stop_all(d: Duration) -> StopOutcome {
+    kill_switch::stop_all_confirmed(d).1
+}
+#[cfg(test)]
+use tests::fake_stop_all as real_stop_all;
 
 impl BotsTab {
     pub fn new(shared: &Shared) -> Self {
@@ -168,6 +181,7 @@ impl BotsTab {
             kill_epoch: kill_switch::epoch(),
             stop_all: None,
             stop_line: None,
+            stop_all_fn: real_stop_all,
             ctx: None,
         }
     }
@@ -265,16 +279,16 @@ impl BotsTab {
     /// before this returns; whether every Lillith process confirmed is
     /// checked off the UI thread and shown as it really is.
     fn stop_everything(&mut self) {
+        let stop = self.stop_all_fn;
         let Some(ctx) = self.ctx.clone() else {
-            let (_, out) = kill_switch::stop_all_confirmed(CONFIRM_DEADLINE);
-            self.stop_line = Some(out.line());
+            self.stop_line = Some(stop(CONFIRM_DEADLINE).line());
             return;
         };
         self.stop_line = Some(
             "Stop sent: waiting for every Lillith process to confirm (not confirmed yet)…".into(),
         );
-        self.stop_all = Some(crate::task::Task::spawn(&ctx, "stop-all", || {
-            kill_switch::stop_all_confirmed(CONFIRM_DEADLINE).1
+        self.stop_all = Some(crate::task::Task::spawn(&ctx, "stop-all", move || {
+            stop(CONFIRM_DEADLINE)
         }));
     }
 
@@ -558,7 +572,9 @@ impl BotsTab {
                     .small()
                     .color(c32(pal::BLOOD_NEON)),
             );
-            if chrome::stone_button(ui, "Re-arm").clicked() {
+            // Mouse only (like the Soul Contract Yes): a stray Tab + Enter
+            // must never lift the kill switch.
+            if chrome::stone_button(ui, "Re-arm").clicked_by(egui::PointerButton::Primary) {
                 // Approves and re-runs nothing: stopped plans are gone and
                 // every new step still needs its own mouse Yes.
                 self.stop_line = Some(match kill_switch::rearm() {
