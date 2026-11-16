@@ -18,7 +18,9 @@ use crate::bots::{
 };
 use crate::chrome;
 use egui::{pos2, vec2, Align, Align2, FontId, Layout, RichText, Sense, Stroke};
+use lillith_core::access::commands::was_stopped;
 use lillith_core::access::kill_switch;
+use lillith_core::access::stop_session::{StopOutcome, CONFIRM_DEADLINE};
 use lillith_core::soul_contract::{PendingAction, SoulContract};
 use lillith_theme::egui_contract::{soul_contract_popup, ContractChoice, ContractView, Initiator};
 use lillith_theme::egui_theme::c32;
@@ -124,8 +126,24 @@ pub struct BotsTab {
     new_name: String,
     folder_buf: String,
     kill_epoch: u64,
+    /// The last "Stop all": confirming (Some(task)) and/or its outcome.
+    stop_all: Option<crate::task::Task<StopOutcome>>,
+    stop_line: Option<String>,
+    /// What "Stop all" calls: the real cross-process kill switch. Unit tests
+    /// get a recording fake, because a real stop inside the test binary
+    /// would stop every concurrently running test's work (and, in a joined
+    /// session, disarm dispatch until re-armed).
+    stop_all_fn: fn(Duration) -> StopOutcome,
     ctx: Option<egui::Context>,
 }
+
+/// The real "Stop all": barrier saved, then every process's confirmation.
+#[cfg(not(test))]
+fn real_stop_all(d: Duration) -> StopOutcome {
+    kill_switch::stop_all_confirmed(d).1
+}
+#[cfg(test)]
+use tests::fake_stop_all as real_stop_all;
 
 impl BotsTab {
     pub fn new(shared: &Shared) -> Self {
@@ -161,6 +179,9 @@ impl BotsTab {
             new_name: String::new(),
             folder_buf: String::new(),
             kill_epoch: kill_switch::epoch(),
+            stop_all: None,
+            stop_line: None,
+            stop_all_fn: real_stop_all,
             ctx: None,
         }
     }
@@ -235,18 +256,40 @@ impl BotsTab {
         }
         r.queue.clear();
         if r.exec.is_some() {
-            // A running command only stops through the kill switch.
-            let _ = kill_switch::stop_all();
+            // A running command only stops through the kill switch. This is
+            // one bot's Stop, so only this window's commands are stopped
+            // (the process-local switch, not the cross-process barrier).
+            let _ = kill_switch::stop_process();
             self.kill_epoch = kill_switch::epoch();
             for (j, o) in self.runs.iter_mut().enumerate() {
-                if j != i && o.busy() {
-                    o.say(Who::System, "stopped by the kill switch");
+                if j != i && o.exec.is_some() {
+                    o.say(Who::System, "stop requested by the kill switch…");
                 }
             }
+            // "stopped" only once the step's runner has returned (poll).
+            self.runs[i].say(Who::System, "■ stop requested: ending the running step…");
+            return;
         }
         let r = &mut self.runs[i];
         r.say(Who::System, "■ stopped");
         r.status = BotStatus::Stopped;
+    }
+
+    /// "Stop all": the cross-process kill switch. The barrier is saved
+    /// before this returns; whether every Lillith process confirmed is
+    /// checked off the UI thread and shown as it really is.
+    fn stop_everything(&mut self) {
+        let stop = self.stop_all_fn;
+        let Some(ctx) = self.ctx.clone() else {
+            self.stop_line = Some(stop(CONFIRM_DEADLINE).line());
+            return;
+        };
+        self.stop_line = Some(
+            "Stop sent: waiting for every Lillith process to confirm (not confirmed yet)…".into(),
+        );
+        self.stop_all = Some(crate::task::Task::spawn(&ctx, "stop-all", move || {
+            stop(CONFIRM_DEADLINE)
+        }));
     }
 
     /// The kill switch moved (Ctrl-C, Stop all, another stop): every bot
@@ -258,7 +301,10 @@ impl BotsTab {
                 t.stop();
             }
             r.queue.clear();
-            if active {
+            if r.exec.is_some() {
+                // Its runner kills the tree; "stopped" once it returned.
+                r.say(Who::System, "■ kill switch: ending the running step…");
+            } else if active {
                 r.status = BotStatus::Stopped;
                 r.say(Who::System, "■ stopped by the kill switch");
             }
@@ -359,6 +405,13 @@ impl BotsTab {
             if let Some(res) = finished {
                 let (_, step) = r.exec.take().expect("exec");
                 match res {
+                    Ok(out) if was_stopped(&out) => {
+                        // Killed by a stop: never "done", and nothing queued
+                        // after it runs.
+                        r.queue.clear();
+                        r.status = BotStatus::Stopped;
+                        r.say(Who::System, "■ stopped: the running command was killed");
+                    }
                     Ok(out) => {
                         for l in out.lines() {
                             if pose {
@@ -503,10 +556,34 @@ impl BotsTab {
                 self.new_name = bots::new_bot(self.new_kind, &self.roster).name;
             }
             if chrome::stone_button(ui, "■ Stop all").clicked() {
-                let _ = kill_switch::stop_all();
+                self.stop_everything();
             }
         });
-        chrome::hint(ui, "Stop all = the kill switch (Ctrl-C does the same).");
+        chrome::hint(
+            ui,
+            "Stop all = the kill switch for every Lillith window (Ctrl-C does the same).",
+        );
+        if let Some(l) = &self.stop_line {
+            ui.label(RichText::new(l).small().color(c32(pal::BLOOD_NEON)));
+        }
+        if kill_switch::disarmed() {
+            ui.label(
+                RichText::new("Kill switch is ON: commands are refused in every Lillith window.")
+                    .small()
+                    .color(c32(pal::BLOOD_NEON)),
+            );
+            // Mouse only (like the Soul Contract Yes): a stray Tab + Enter
+            // must never lift the kill switch.
+            if chrome::stone_button(ui, "Re-arm").clicked_by(egui::PointerButton::Primary) {
+                // Approves and re-runs nothing: stopped plans are gone and
+                // every new step still needs its own mouse Yes.
+                self.stop_line = Some(match kill_switch::rearm() {
+                    Ok(()) => "Re-armed: commands may run again (each still needs its own Yes)."
+                        .to_string(),
+                    Err(e) => format!("Could not re-arm: {e}"),
+                });
+            }
+        }
         ui.add_space(6.0);
         let line = self.dream_line();
         let status = self.dream.status();
@@ -862,7 +939,7 @@ impl SettingsTab for BotsTab {
         13
     }
     fn busy(&self) -> bool {
-        self.runs.iter().any(Run::busy)
+        self.runs.iter().any(Run::busy) || self.stop_all.is_some()
     }
     fn pending(&self) -> usize {
         usize::from(self.roster != self.saved)
@@ -908,6 +985,12 @@ impl SettingsTab for BotsTab {
         if e != self.kill_epoch {
             self.kill_epoch = e;
             self.on_kill_switch();
+        }
+        if let Some(t) = &mut self.stop_all {
+            if let Some(out) = t.poll() {
+                self.stop_line = Some(out.line());
+                self.stop_all = None;
+            }
         }
         self.poll();
         if self.busy() {

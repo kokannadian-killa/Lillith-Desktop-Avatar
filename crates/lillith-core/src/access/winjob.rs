@@ -145,15 +145,15 @@ impl HelperKill {
     /// [`HelperKill::Gone`].
     pub fn chat_line(self) -> &'static str {
         match self {
-            HelperKill::Idle => "Stopped. Every running command is dead.",
+            HelperKill::Idle => "Stopped. Every tracked command tree is gone.",
             HelperKill::Gone => {
-                "Stopped. Every running command is dead and the admin helper is gone."
+                "Stopped. Every tracked command tree is gone and the admin helper is gone."
             }
             HelperKill::Unconfirmed => {
-                "Stopped. Every running command is dead; stopping the admin helper…"
+                "Stopped. Every tracked command tree is gone; stopping the admin helper…"
             }
             HelperKill::Failed => {
-                "Stopped. Every running command is dead; could not stop the admin helper."
+                "Stopped. Every tracked command tree is gone; could not stop the admin helper."
             }
         }
     }
@@ -172,19 +172,19 @@ mod tests {
     fn stop_chat_line_is_truthful() {
         assert_eq!(
             stop_chat_line(HelperKill::Idle),
-            "Stopped. Every running command is dead."
+            "Stopped. Every tracked command tree is gone."
         );
         assert_eq!(
             stop_chat_line(HelperKill::Gone),
-            "Stopped. Every running command is dead and the admin helper is gone."
+            "Stopped. Every tracked command tree is gone and the admin helper is gone."
         );
         assert_eq!(
             stop_chat_line(HelperKill::Unconfirmed),
-            "Stopped. Every running command is dead; stopping the admin helper…"
+            "Stopped. Every tracked command tree is gone; stopping the admin helper…"
         );
         assert_eq!(
             stop_chat_line(HelperKill::Failed),
-            "Stopped. Every running command is dead; could not stop the admin helper."
+            "Stopped. Every tracked command tree is gone; could not stop the admin helper."
         );
         // Never say "gone" unless confirmed.
         for k in [

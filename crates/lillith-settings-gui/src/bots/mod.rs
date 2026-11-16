@@ -16,11 +16,15 @@
 //! the bot's allowed folders ([`confine`]) and to the operations its kind
 //! allows ([`BotKind::allows`]).
 //!
-//! **Stopping.** Each job has its own stop flag; the tab's Stop, the
-//! process-wide kill switch ([`lillith_core::access::kill_switch::stop_all`],
-//! also what Ctrl-C / SIGTERM trigger through [`install_ctrlc_stop`]) and
-//! closing the window all end every bot. A running command is killed by the
-//! kill switch (its runner watches the stop epoch).
+//! **Stopping.** Each job has its own stop flag. A bot's Stop ends that
+//! bot (and, if it was running a command, every command of this window:
+//! [`lillith_core::access::kill_switch::stop_process`]). **Stop all** and
+//! Ctrl-C / SIGTERM ([`install_ctrlc_stop`]) are the cross-process kill
+//! switch ([`lillith_core::access::kill_switch::stop_all`]): the per-user
+//! stop barrier is saved first, then every joined Lillith process (this
+//! window, the overlay, `lillith chat`) kills its command trees and
+//! acknowledges; the window only says "stopped" when they all confirmed.
+//! A running command is killed by its runner, which watches the stop epoch.
 //!
 //! **No network.** Bots never fetch anything. Online research only ever
 //! happens through the Ko-gated Tor dream-learning path (Memory Engine's
@@ -1012,9 +1016,11 @@ extern "C" fn on_signal(_: libc::c_int) {
     CTRL_C.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
-/// Ctrl-C / SIGTERM: fire the kill switch (stops every bot, build, import
-/// and command started from this window), then exit 130. The handler only
-/// sets a flag; a watcher thread does the work.
+/// Ctrl-C / SIGTERM: fire the cross-process kill switch (stops every bot,
+/// build, import and command started from this window and, through the
+/// stop barrier, every other joined Lillith process), print whether that
+/// was confirmed, then exit 130. The handler only sets a flag; a watcher
+/// thread does the work.
 pub fn install_ctrlc_stop() {
     #[cfg(unix)]
     {
@@ -1028,8 +1034,10 @@ pub fn install_ctrlc_stop() {
             .name("lillith-settings-ctrlc".into())
             .spawn(|| loop {
                 if CTRL_C.load(std::sync::atomic::Ordering::SeqCst) {
-                    let _ = lillith_core::access::kill_switch::stop_all();
-                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    let (_, out) = lillith_core::access::kill_switch::stop_all_confirmed(
+                        std::time::Duration::from_secs(2),
+                    );
+                    eprintln!("lillith-settings: {}", out.line());
                     std::process::exit(130);
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));

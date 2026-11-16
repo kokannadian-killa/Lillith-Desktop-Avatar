@@ -144,6 +144,10 @@ fn hush_spares_and_stop_all_kills_a_chatty_command() {
     let started = Instant::now();
     kill_switch::stop_all();
     let out = t.join().unwrap().unwrap();
+    // Under fully scratch XDG dirs this binary joins a (scratch) stop
+    // session, where a global stop also disarms dispatch until Re-arm. Re-arm
+    // so the other tests here can still run commands (no-op when not joined).
+    let _ = kill_switch::rearm();
     assert!(lillith_core::access::commands::was_stopped(&out), "{out}");
     assert!(out.contains("more bytes]"), "{out}");
     assert!(started.elapsed() < Duration::from_secs(5));

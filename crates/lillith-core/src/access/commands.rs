@@ -527,6 +527,13 @@ fn run_child_ungated(
     cap: usize,
 ) -> std::io::Result<String> {
     let epoch = super::kill_switch::epoch();
+    // A global stop disarms dispatch (every process, until re-armed).
+    if super::stop_session::disarmed() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            super::stop_session::DISARMED_MSG,
+        ));
+    }
     c.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
@@ -535,12 +542,37 @@ fn run_child_ungated(
         use std::os::unix::process::CommandExt;
         c.process_group(0);
     }
+    // The command's top process becomes a child subreaper (Linux): anything
+    // in its tree that double-forks and orphans itself is re-parented to it
+    // instead of to init / an outside subreaper, so the runner's `/proc`
+    // walk (and a stop) still finds and kills it. Set in the child between
+    // fork and exec (prctl is async-signal-safe; the attribute survives
+    // execve and is not inherited by the command's own children), so
+    // Lillith itself never inherits, or has to reap, anyone's orphans.
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        // SAFETY: the closure only makes one raw syscall (no allocation, no
+        // locks), which is what `pre_exec` requires.
+        unsafe {
+            c.pre_exec(|| {
+                if libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         c.creation_flags(super::winshell::CREATE_NO_WINDOW);
     }
     let mut child = c.spawn()?;
+    // Lets a (cross-process) stop check this tree is really gone.
+    let mut tracked = super::stop_session::track_group(child.id(), epoch);
+    // Descendants seen so far (a stop kills them even if they left the group).
+    let mut seen: Vec<(u32, u64)> = Vec::new();
     // Windows: put the child in a Job with KILL_ON_JOB_CLOSE so a stop /
     // timeout tears down the whole tree (cmd → nested processes) at once.
     #[cfg(windows)]
@@ -557,14 +589,36 @@ fn run_child_ungated(
     let so = child.stdout.take();
     let se = child.stderr.take();
     // Both pipes are drained continuously (so the child never blocks on a
-    // full pipe), but only a `cap`-byte prefix of each is ever kept.
-    let t_out = std::thread::spawn(move || so.map(|s| drain_capped(s, cap)).unwrap_or_default());
-    let t_err = std::thread::spawn(move || se.map(|s| drain_capped(s, cap)).unwrap_or_default());
+    // full pipe), but only a `cap`-byte prefix of each is ever kept. They
+    // report over channels so a stop never waits forever on a pipe some
+    // escaped or background process still holds open.
+    let (tx_out, t_out) = std::sync::mpsc::channel();
+    let (tx_err, t_err) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx_out.send(so.map(|s| drain_capped(s, cap)).unwrap_or_default());
+    });
+    std::thread::spawn(move || {
+        let _ = tx_err.send(se.map(|s| drain_capped(s, cap)).unwrap_or_default());
+    });
     let start = Instant::now();
-    let mut stop: Option<&str> = None;
+    let mut stop: Option<&'static str> = None;
+    let mut polls: u32 = 0;
     let status = loop {
         if let Some(st) = child.try_wait()? {
             break Some(st);
+        }
+        polls = polls.wrapping_add(1);
+        if polls % 10 == 1 {
+            let before = seen.len();
+            for p in super::stop_session::descendants(child.id()) {
+                if !seen.contains(&p) {
+                    seen.push(p);
+                }
+            }
+            if seen.len() != before {
+                // Persisted, so a stop still finds them if we die.
+                tracked.note_pids(&seen);
+            }
         }
         let why = if super::kill_switch::stopped_since(epoch) {
             Some("safeword")
@@ -579,13 +633,22 @@ fn run_child_ungated(
             if let Some(ref j) = job {
                 j.terminate();
             }
+            super::stop_session::kill_descendants(child.id(), &mut seen);
+            tracked.note_pids(&seen);
             kill_tree(&mut child);
             break None;
         }
         std::thread::sleep(Duration::from_millis(20));
     };
-    let out = t_out.join().unwrap_or_default();
-    let err = t_err.join().unwrap_or_default();
+    let mut drain = Drain {
+        epoch,
+        child: &mut child,
+        seen: &mut seen,
+        tracked: &mut tracked,
+        stop: &mut stop,
+    };
+    let out = drain.recv(&t_out);
+    let err = drain.recv(&t_err);
     let mut text = combine_capped(out, err, cap);
     if !text.is_empty() && !text.ends_with('\n') {
         text.push('\n');
@@ -602,6 +665,51 @@ fn run_child_ungated(
         _ => {}
     }
     Ok(text)
+}
+
+/// Waits for a reader's capture after the child ended or was killed. While
+/// nothing was stopped it waits as long as the pipe stays open (a normal
+/// command's background child may legitimately keep writing), but a stop
+/// arriving meanwhile kills whatever still holds the pipe (the group and
+/// every tracked descendant) and marks the run stopped. After a stop it
+/// waits at most 2 s, so an escaped holder can't hang the runner.
+struct Drain<'a> {
+    epoch: u64,
+    child: &'a mut std::process::Child,
+    seen: &'a mut Vec<(u32, u64)>,
+    tracked: &'a mut super::stop_session::GroupGuard,
+    stop: &'a mut Option<&'static str>,
+}
+
+impl Drain<'_> {
+    fn recv(&mut self, rx: &std::sync::mpsc::Receiver<CappedBuf>) -> CappedBuf {
+        use std::sync::mpsc::RecvTimeoutError;
+        let t0 = Instant::now();
+        loop {
+            let wait = if self.stop.is_some() {
+                Duration::from_secs(2).saturating_sub(t0.elapsed())
+            } else {
+                Duration::from_millis(50)
+            };
+            match rx.recv_timeout(wait) {
+                Ok(b) => return b,
+                Err(RecvTimeoutError::Disconnected) => return CappedBuf::default(),
+                Err(RecvTimeoutError::Timeout) if self.stop.is_some() => {
+                    if t0.elapsed() >= Duration::from_secs(2) {
+                        return CappedBuf::default();
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    if super::kill_switch::stopped_since(self.epoch) {
+                        *self.stop = Some("safeword");
+                        super::stop_session::kill_descendants(self.child.id(), self.seen);
+                        self.tracked.note_pids(self.seen);
+                        kill_tree(self.child);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// A bounded capture of one output stream: the first `cap` bytes plus a count
@@ -888,6 +996,54 @@ mod tests {
         assert!(out.contains("stopped by Ctrl-C/shutdown"), "{out}");
         assert!(was_stopped(&out), "{out}");
         assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    /// The child exits but a background grandchild keeps stdout open: the
+    /// runner waits for the pipe as before, yet a stop now ends that wait,
+    /// kills the holder and reports stopped (it used to block forever).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_stop_ends_a_wait_on_a_background_pipe_holder() {
+        let _gate = super::super::kill_switch::TEST_GATE
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("lillith-bgpipe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let pidf = dir.join("bg.pid");
+        let script = format!(
+            "sh -c 'echo $$ > \"{}\"; exec sleep 30' & echo started",
+            pidf.display()
+        );
+        let t = std::thread::spawn(move || {
+            let mut c = std::process::Command::new("sh");
+            c.arg("-c").arg(script);
+            run_child_ungated(c, Duration::from_secs(60), 4096)
+        });
+        let t0 = Instant::now();
+        while !pidf.exists() && t0.elapsed() < Duration::from_secs(10) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(!t.is_finished(), "runner still waits on the open pipe");
+        let started = Instant::now();
+        super::super::kill_switch::stop_process();
+        let out = t.join().unwrap().unwrap();
+        assert!(was_stopped(&out), "{out}");
+        assert!(out.contains("started"), "{out}");
+        assert!(started.elapsed() < Duration::from_secs(5));
+        let bg: u32 = std::fs::read_to_string(&pidf)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        let st = std::fs::read_to_string(format!("/proc/{bg}/stat")).unwrap_or_default();
+        let alive = st
+            .rsplit_once(')')
+            .is_some_and(|(_, r)| !r.trim_start().starts_with('Z'));
+        assert!(!alive, "the background holder was killed: {st}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

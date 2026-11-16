@@ -300,6 +300,8 @@ impl ServerGuard {
     /// server started that way.
     pub async fn start(cfg: &ChatConfig) -> Self {
         let g = Self::default();
+        // Ctrl-C / SIGTERM always pull the kill switch, server or not.
+        g.stop_on_signal();
         if !cfg.enabled || !cfg.server.should_spawn() {
             return g;
         }
@@ -311,7 +313,6 @@ impl ServerGuard {
                 "llama-server not started: [chat.server] starts only after a clicked Yes on the Soul Contract card (open the chat)"
             );
         }
-        g.stop_on_signal();
         g
     }
 
@@ -398,7 +399,15 @@ impl ServerGuard {
         ServerHandle(self.0.clone())
     }
 
-    fn stop_on_signal(&self) {
+    /// Installs the Ctrl-C / SIGTERM handler: the cross-process kill switch
+    /// (commands everywhere die, dispatch stays disarmed until Re-arm), then
+    /// this guard's server stops and the process exits 130. Installed once
+    /// per process, whether or not `[chat.server]` is configured.
+    pub fn stop_on_signal(&self) {
+        static INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if INSTALLED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
         let sig = self.clone();
         tokio::spawn(async move {
             wait_for_signal().await;

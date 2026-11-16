@@ -1,6 +1,19 @@
 use super::*;
 use crate::tabs::tests::shared;
 
+/// "Stop all" presses seen by the test fake (see `BotsTab::stop_all_fn`).
+pub(super) static FAKE_STOPS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Unit tests' "Stop all": records the press, touches no kill switch.
+pub(super) fn fake_stop_all(_: Duration) -> StopOutcome {
+    FAKE_STOPS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    StopOutcome::LocalOnly {
+        reason: "test fake".into(),
+        local: lillith_core::access::stop_session::Quiet::Quiet,
+    }
+}
+
 fn tmp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("lillith-botstab-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
@@ -388,4 +401,32 @@ fn live_status_maps_the_learn_status() {
     assert!(crate::bots::from_learn(&st, 0).is_none());
     assert_eq!(crate::bots::minutes_until("garbage", 0), 0);
     assert_eq!(crate::bots::minutes_until("1970-01-01T01:00:00Z", 0), 60);
+}
+
+#[test]
+fn stop_all_button_goes_through_the_stop_route_and_never_says_stopped_unconfirmed() {
+    use std::sync::atomic::Ordering;
+    let d = tmp("stopall");
+    let mut t = tab_in(&d);
+    let mut s = shared();
+    let ctx = egui::Context::default();
+    lillith_theme::egui_theme::install(&ctx);
+    let epoch = kill_switch::epoch();
+    let before = FAKE_STOPS.load(Ordering::SeqCst);
+    t.stop_everything();
+    let t0 = std::time::Instant::now();
+    while t.stop_all.is_some() && t0.elapsed() < Duration::from_secs(5) {
+        t.tick(&ctx, &mut s);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        FAKE_STOPS.load(Ordering::SeqCst) > before,
+        "Stop all called the stop route"
+    );
+    // The fake must not touch the real switch (other tests run commands).
+    assert_eq!(kill_switch::epoch(), epoch);
+    let line = t.stop_line.clone().unwrap_or_default();
+    assert!(line.contains("this process only"), "{line}");
+    assert!(!line.to_lowercase().starts_with("stopped"), "{line}");
+    let _ = std::fs::remove_dir_all(&d);
 }
