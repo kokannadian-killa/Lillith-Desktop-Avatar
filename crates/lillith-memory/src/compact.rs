@@ -113,16 +113,14 @@ impl Brain {
         };
         let before = db_bytes(c);
         let cutoff = now - DIGEST_AFTER_S;
-        let days: Vec<i64> = {
-            let mut st = c.prepare(
-                "SELECT DISTINCT CAST(ts / 86400 AS INTEGER) AS d FROM events
-                 WHERE ts < ?1 AND ts >= 0 ORDER BY d LIMIT ?2",
-            )?;
-            let v = st
-                .query_map(params![cutoff, MAX_DAYS_PER_RUN as i64], |r| r.get(0))?
-                .collect::<rusqlite::Result<Vec<i64>>>()?;
-            v
-        };
+        let mut st = c.prepare(
+            "SELECT DISTINCT CAST(ts / 86400 AS INTEGER) AS d FROM events
+             WHERE ts < ?1 AND ts >= 0 ORDER BY d LIMIT ?2",
+        )?;
+        let days: Vec<i64> = st
+            .query_map(params![cutoff, MAX_DAYS_PER_RUN as i64], |r| r.get(0))?
+            .collect::<rusqlite::Result<Vec<i64>>>()?;
+        drop(st);
         for day in days {
             if stop() {
                 rep.stopped = true;
@@ -159,14 +157,12 @@ impl Brain {
 fn digest_day(c: &Connection, day: i64, lo: f64, hi: f64, now: f64) -> Result<usize> {
     c.execute_batch("BEGIN IMMEDIATE")?;
     let r = (|| -> Result<usize> {
-        let rows: Vec<(String, String)> = {
-            let mut st =
-                c.prepare_cached("SELECT kind, subject FROM events WHERE ts >= ?1 AND ts < ?2")?;
-            let v = st
-                .query_map(params![lo, hi], |r| Ok((r.get(0)?, r.get(1)?)))?
-                .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
-            v
-        };
+        let mut st =
+            c.prepare_cached("SELECT kind, subject FROM events WHERE ts >= ?1 AND ts < ?2")?;
+        let rows: Vec<(String, String)> = st
+            .query_map(params![lo, hi], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
+        drop(st);
         if rows.is_empty() {
             return Ok(0);
         }
