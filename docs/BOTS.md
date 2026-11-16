@@ -103,6 +103,13 @@ The roster lives in `bots.toml` next to `config.toml` (Save in the bottom bar wr
   - *Background pipe holder on a normal exit:* when a command exits but a background child keeps
     its output pipe open, the runner keeps waiting for the pipe (as before). A stop now ends
     that wait and kills the holder, but without a stop the wait has no time limit.
+  - *Start-time / kill race:* there is a tiny window between the start-time check and `kill(2)`
+    where a pid could be reused. `pidfd_open` / `pidfd_send_signal` would close it.
+  - *Zombies of reparented orphans:* a long-lived command top process that never calls `wait`
+    accumulates zombies of reparented orphans until it exits.
+  - *Stop-line undercount:* in a cross-process stop the line can undercount, for example
+    "0 tracked command tree(s) confirmed gone" even though trees were killed. It never
+    overclaims.
   - *Windows:* the Job-object kill still runs, but trees can't be checked without `/proc`, so a
     stop is always reported as **not confirmed** there.
 * The safeword ("red" / "OOC: stop") only hushes her speech and queued lines (and cancels cards
