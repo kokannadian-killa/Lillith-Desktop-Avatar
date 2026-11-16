@@ -114,6 +114,7 @@ fn qa_xadv_role_entry() {
             }
             fs::write(dir.join(format!("{tag}.out")), s).unwrap();
         }
+        "reaper" => role_reaper(&dir),
         other => panic!("unknown role {other}"),
     }
 }
@@ -226,6 +227,115 @@ fn role_worker(dir: &Path) {
         // finishes `stop_all_confirmed` and calls `exit(130)`.
         std::thread::sleep(Duration::from_secs(10));
     }
+}
+
+/// Reaping / subreaper probe (see `adv6`). The command's top process forks
+/// a middle `sh`, then `exec`s `sleep 2` (a top process that never calls
+/// wait). The middle `sh` double-forks a short-lived `setsid` orphan. A
+/// sampler records the orphan's parent and state while the runner waits.
+fn role_reaper(dir: &Path) {
+    let d = dir.display().to_string();
+    fs::write(
+        dir.join("orphan.sh"),
+        format!("echo $$ > \"{d}/orphan.pid\"; sleep 0.4\n"),
+    )
+    .unwrap();
+    fs::write(
+        dir.join("mid.sh"),
+        format!(
+            "echo $$ > \"{d}/mid.pid\"; ( setsid sh \"{d}/orphan.sh\" </dev/null >/dev/null 2>&1 & ); sleep 1\n"
+        ),
+    )
+    .unwrap();
+    let stop = std::sync::Arc::new(AtomicBool::new(false));
+    let sampler = {
+        let dir = dir.to_path_buf();
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            let rd = |f: &str| -> Option<i32> {
+                fs::read_to_string(dir.join(f)).ok()?.trim().parse().ok()
+            };
+            let mut ppids: Vec<i32> = Vec::new();
+            let mut zombie_under_top = false;
+            while !stop.load(Ordering::SeqCst) {
+                if let (Some(o), Some(t)) = (rd("orphan.pid"), rd("top.pid")) {
+                    if let Ok(st) = fs::read_to_string(format!("/proc/{o}/stat")) {
+                        if let Some((_, rest)) = st.rsplit_once(')') {
+                            let mut it = rest.split_whitespace();
+                            let state = it.next().unwrap_or("");
+                            let pp: i32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                            if !ppids.contains(&pp) {
+                                ppids.push(pp);
+                            }
+                            if state == "Z" && pp == t {
+                                zombie_under_top = true;
+                            }
+                        }
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            (ppids, zombie_under_top)
+        })
+    };
+    let mut c = Command::new("sh");
+    c.arg("-c").arg(format!(
+        "echo $$ > \"{d}/top.pid\"; sh \"{d}/mid.sh\" & exec sleep 2"
+    ));
+    let t0 = Instant::now();
+    let out = commands::run_child(c, Duration::from_secs(20), 4096)
+        .unwrap_or_else(|e| format!("run_child error: {e}"));
+    let elapsed = t0.elapsed().as_millis();
+    std::thread::sleep(Duration::from_millis(500));
+    stop.store(true, Ordering::SeqCst);
+    let (ppids, zombie_under_top) = sampler.join().unwrap();
+    let me = std::process::id() as i32;
+    // Zombie children of this (runner) process, and the orphan's fate.
+    let mut my_zombies = Vec::new();
+    if let Ok(rd) = fs::read_dir("/proc") {
+        for e in rd.flatten() {
+            let Some(pid) = e.file_name().to_str().and_then(|n| n.parse::<i32>().ok()) else {
+                continue;
+            };
+            if let Ok(st) = fs::read_to_string(format!("/proc/{pid}/stat")) {
+                if let Some((_, rest)) = st.rsplit_once(')') {
+                    let mut it = rest.split_whitespace();
+                    let state = it.next().unwrap_or("");
+                    let pp: i32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                    if state == "Z" && pp == me {
+                        my_zombies.push(pid);
+                    }
+                }
+            }
+        }
+    }
+    let rd = |f: &str| -> i32 {
+        fs::read_to_string(dir.join(f))
+            .ok()
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0)
+    };
+    let orphan = rd("orphan.pid");
+    let orphan_after = fs::read_to_string(format!("/proc/{orphan}/stat"))
+        .map(|s| s.rsplit_once(')').map(|(_, r)| r.trim().chars().next().unwrap_or('?')).unwrap_or('?').to_string())
+        .unwrap_or_else(|_| "gone".into());
+    // SAFETY: PR_GET_CHILD_SUBREAPER writes one c_int to the pointer.
+    let mut sr: libc::c_int = -1;
+    unsafe {
+        libc::prctl(libc::PR_GET_CHILD_SUBREAPER, &mut sr as *mut libc::c_int, 0, 0, 0);
+    }
+    fs::write(
+        dir.join("reaper.out"),
+        format!(
+            "top={}\nmid={}\norphan={orphan}\norphan_ppids={ppids:?}\nzombie_under_top={zombie_under_top}\n\
+             orphan_after={orphan_after}\nmy_zombies={my_zombies:?}\nrunner_is_subreaper={sr}\n\
+             elapsed_ms={elapsed}\nout={}\n",
+            rd("top.pid"),
+            rd("mid.pid"),
+            out.trim().replace('\n', " | ")
+        ),
+    )
+    .unwrap();
 }
 
 // ---------------------------------------------------------------- harness
@@ -478,13 +588,12 @@ fn kv<'a>(text: &'a str, key: &str) -> &'a str {
 // ------------------------------------------------------------------ tests
 
 /// 1. Double fork that orphans between the runner's ~200 ms `/proc`
-/// snapshots. The worker's command forks an intermediate subshell that
-/// starts `setsid sh` (new session and group) and exits at once, so the
-/// grandchild reparents to init. A separate process then fires the stop.
-/// Contract: the orphan dies, and the stop is never reported confirmed
-/// (Quiescent) while it still heartbeats. Several timing variants.
+///    snapshots. The worker's command forks an intermediate subshell that
+///    starts `setsid sh` (new session and group) and exits at once, so the
+///    grandchild reparents to init. A separate process then fires the stop.
+///    Contract: the orphan dies, and the stop is never reported confirmed
+///    (Quiescent) while it still heartbeats. Several timing variants.
 #[test]
-#[ignore = "gap on b291da82: setsid double-fork orphan survives stop_all in all 5 timing variants (0-0.8s) and the outcome is Quiescent (confirmed) while it heartbeats (BOTS.md known gap 1)"]
 fn adv1_double_fork_orphan_between_snapshots() {
     let mut fails = Vec::new();
     let mut ev_all = String::new();
@@ -548,11 +657,10 @@ fn adv1b_control_double_fork_seen_by_snapshot_is_killed() {
 }
 
 /// 2. SIGKILLed Lillith parent. The worker (runner) process is SIGKILLed
-/// while its command tree runs, then a separate process fires the stop.
-/// Contract: never reported as confirmed while any descendant still
-/// heartbeats (Incomplete is fine). Also records whether the tree dies.
+///    while its command tree runs, then a separate process fires the stop.
+///    Contract: never reported as confirmed while any descendant still
+///    heartbeats (Incomplete is fine). Also records whether the tree dies.
 #[test]
-#[ignore = "gap on b291da82: confirm_in prunes the dead runner (stop_session.rs:711-714), so the outcome is Quiescent and the chat line says 'Stopped. Every running command is dead.' while the orphaned tree heartbeats (BOTS.md known gap 2)"]
 fn adv2_sigkilled_runner_tree_never_reported_stopped() {
     let mut r = Run::new("sigkill");
     let w = r.start_worker(&[], &["child.pid", "gc.pid", "hb.child", "hb.gc"]);
@@ -625,9 +733,9 @@ fn signal_case(sig: libc::c_int, name: &str) -> Result<String, String> {
 }
 
 /// 3. Real SIGINT / SIGTERM (kill(2)) to a separate Settings stand-in that
-/// installed a copy of the real handler (see module docs for why the real
-/// binary is not reachable). The kill switch must be pulled durably (barrier
-/// and disarm visible to a fresh process) and the worker's tree must die.
+///    installed a copy of the real handler (see module docs for why the real
+///    binary is not reachable). The kill switch must be pulled durably (barrier
+///    and disarm visible to a fresh process) and the worker's tree must die.
 #[test]
 fn adv3_real_sigint_sigterm_pull_the_kill_switch_durably() {
     let mut fails = Vec::new();
@@ -728,42 +836,56 @@ fn adv4b_frozen_member_is_unconfirmed_not_stopped() {
     assert!(dead && quiet, "after SIGCONT the tree survived: {st}\n{ev}");
 }
 
-/// 4c. A Lillith process that runs commands but is not in the session
-/// (`LILLITH_STOP_SESSION=off`). Records what the stopper reports while that
-/// tree keeps running. Expected by design (BOTS.md: `off` keeps a process
-/// out of the session), but the UI line then says "Stopped" with work alive.
+/// 4c. A Lillith process that runs commands but is outside the session
+/// (`LILLITH_STOP_SESSION=off`, honoured in debug builds only). The stop
+/// must be honest about it: `Incomplete` with that pid in `opted_out` and a
+/// line saying NOT confirmed, never `Quiescent` / "Stopped". Its tree is
+/// expected to keep running (by design in debug); that is recorded only.
 #[test]
-#[ignore = "gap on b291da82 (by design per BOTS.md, LILLITH_STOP_SESSION=off): an unjoined process is invisible, so the outcome is Quiescent and the chat line says 'Stopped. Every running command is dead.' while its tree runs"]
-fn adv4c_unjoined_member_tree_vs_stopped_claim() {
+fn adv4c_unjoined_member_is_reported_not_confirmed() {
     let mut r = Run::new("unjoined");
-    r.start_worker(
+    let w = r.start_worker(
         &[("LILLITH_STOP_SESSION", "off")],
         &["child.pid", "gc.pid", "hb.child", "hb.gc"],
     );
+    let wpid = r.kids[w].id();
     r.run_role("stopper", &[("QA_DEADLINE_MS", "2000")]);
     let so = r.read("stop.out");
     let (dead, quiet) = r.wait_dead(&["child", "gc"], Duration::from_secs(2));
     let st = r.pids_state(&["child", "gc"]);
-    let confirmed = kv(&so, "confirmed") == "true";
+    let outcome = kv(&so, "outcome").to_string();
+    let line = kv(&so, "chat_line").to_string();
     let ev = r.evidence();
     eprintln!(
-        "EVIDENCE adv4c worker_joined={} confirmed={confirmed} outcome={} chat_line={} tree: {st} dead={dead} quiet={quiet}",
+        "EVIDENCE adv4c worker={wpid} worker_joined={} confirmed={} outcome={outcome} chat_line={line} \
+         tree (alive by design in debug): {st} dead={dead} quiet={quiet}",
         r.read("worker.joined").trim(),
-        kv(&so, "outcome"),
-        kv(&so, "chat_line")
+        kv(&so, "confirmed"),
     );
     drop(r);
+    assert!(so.contains("confirmed=false"), "opted-out member reported confirmed\n{ev}");
+    assert!(!outcome.contains("Quiescent"), "{ev}");
+    let opted = outcome
+        .split_once("opted_out: [")
+        .and_then(|(_, rest)| rest.split_once(']'))
+        .map(|(list, _)| list.to_string())
+        .unwrap_or_default();
     assert!(
-        !(confirmed && !(dead && quiet)),
-        "stop reported confirmed while an unjoined process's tree runs: {st}\n{ev}"
+        outcome.starts_with("Incomplete")
+            && opted.split(',').any(|p| p.trim() == wpid.to_string()),
+        "worker {wpid} not in opted_out\n{ev}"
+    );
+    assert!(
+        line.contains("NOT confirmed") && !line.starts_with("Stopped"),
+        "line must say NOT confirmed\n{ev}"
     );
 }
 
 /// 5. Disarm persists: after a stop, a fresh process cannot dispatch until
-/// `rearm()`. Re-arm here is an API call from a non-mouse path (fine at the
-/// API level; the mouse-only rule is enforced in Settings ▸ Bots, not in
-/// core). After re-arm a fresh process dispatches and the old barrier does
-/// not stop the new command. Also checks the session dir/file modes.
+///    `rearm()`. Re-arm here is an API call from a non-mouse path (fine at the
+///    API level; the mouse-only rule is enforced in Settings ▸ Bots, not in
+///    core). After re-arm a fresh process dispatches and the old barrier does
+///    not stop the new command. Also checks the session dir/file modes.
 #[test]
 fn adv5_disarm_persists_until_rearm() {
     let mut r = Run::new("disarm");
@@ -803,4 +925,35 @@ fn adv5_disarm_persists_until_rearm() {
     assert!(o3.contains("dispatch2=ran=true ok:") && o3.contains("[exit 0]"), "{ev}");
     assert!(o4.contains("disarmed=false") && o4.contains("dispatch1=ran=true ok:"), "{ev}");
     assert_eq!((dm, bm), (0o700, 0o600), "{ev}");
+}
+
+/// 6. Subreaper / reaping (55ea8c6d makes each command's top process a
+///    child subreaper). Normal exit and wait semantics must hold: the runner
+///    returns `[exit 0]` when the top process exits, the subreaper bit is not
+///    inherited by the middle `sh` (the orphan reparents to the top process,
+///    not to the middle one), the runner process itself is not a subreaper,
+///    and no zombie is left behind afterwards. A zombie held by a top process
+///    that never waits is recorded (bounded by that process's lifetime).
+#[test]
+fn adv6_subreaper_keeps_exit_semantics_and_leaks_no_zombies() {
+    let r = Run::new("reap");
+    let code = r.run_role("reaper", &[]);
+    let o = r.read("reaper.out");
+    let ev = r.evidence();
+    eprintln!("EVIDENCE adv6 exit={code} {}", o.replace('\n', " "));
+    let top = kv(&o, "top").to_string();
+    let mid = kv(&o, "mid").to_string();
+    let ppids = kv(&o, "orphan_ppids").to_string();
+    let elapsed: u128 = kv(&o, "elapsed_ms").parse().unwrap_or(0);
+    drop(r);
+    assert_eq!(code, 0, "{ev}");
+    assert!(kv(&o, "out").ends_with("[exit 0]"), "normal exit not reported\n{ev}");
+    assert!((1800..6000).contains(&elapsed), "runner wait changed: {elapsed} ms\n{ev}");
+    assert!(
+        ppids.contains(&top) && !ppids.contains(&format!("{mid},")) && !ppids.contains(&format!("{mid}]")),
+        "orphan should reparent to the top process {top}, not the middle {mid}: {ppids}\n{ev}"
+    );
+    assert_eq!(kv(&o, "runner_is_subreaper"), "0", "{ev}");
+    assert_eq!(kv(&o, "my_zombies"), "[]", "{ev}");
+    assert_eq!(kv(&o, "orphan_after"), "gone", "orphan left as zombie\n{ev}");
 }
