@@ -296,7 +296,7 @@ Each idea is assigned to a milestone. ✅ = already built, ▶ = in progress.
 
 ### 5.2 Chat UI + setup wizard (Ko's request, added 2026-10-20, UTC-6)
 
-Folded into the milestones. The chat pieces largely exist on branch `feat/chat-bubble-llama` (speech bubble, click-to-chat, local llama-server) and need review + merge + polish.
+Folded into the milestones. The chat bubble, click-to-chat, and local llama-server are on main (`[chat]`, `lillith chat-bubble`). The first-run wizard, GGUF picker and Modelfile customizer are also on main (verified 2026-11-15; see the rows below). Remaining chat polish: Wayland bubble self-positioning (speech-bubble row).
 
 | Piece | Milestone | Notes |
 |---|---|---|
@@ -304,9 +304,9 @@ Folded into the milestones. The chat pieces largely exist on branch `feat/chat-b
 | Live chat / conversation view (scrollable transcript) | M7 | A separate egui chat window: message history, input box, streaming reply. Reuses `lillith-panel` |
 | Interface bubble / chat window toggle | M7 | Open via right-click menu item "Chat" and the `Y`/`Enter` key; closeable, remembers position |
 | Right-click access to the GUI options menu | M6 ▶ | The right-click menu (being wired now) gains an "Open interface / GUI options" item that raises the egui settings/chat window |
-| First-run setup wizard | M6 | On first launch: detect Ollama / llama-server, scan for local `.gguf` models, pick one, test it, write config. Modeled on the old Aether `aether_main_v2.py` first-run wizard (model scanner + Modelfile editor) |
-| GGUF model picker | M6 | Scan `~/.local/share`, Ollama's model dir, and a user path for `*.gguf`; list name/size/quant; choose the default; store in `[llm]` config |
-| Modelfile customizer | M6 | Edit the Ollama Modelfile / system prompt + params (temperature, context, stop tokens) in the wizard and in settings; save and (re)create the model |
+| First-run setup wizard | M6 | Landed on main (`lillith setup`, `setup --auto-gguf`, Settings → Brain, and the installer's first-run). Verified 2026-11-15 on a clean profile (temp HOME, stand-in GGUF): writes `[llm]` / `[chat]` at `http://127.0.0.1:8080` and a llama-server line with `--host 127.0.0.1 --port 8080 --jinja -c 4096 -t <physical cores>`. Non-loopback `server_url` / `ollama_host` are refused on read and write. Does not auto-open on overlay launch; run `lillith setup` or Settings → Brain. |
+| GGUF model picker | M6 | Landed. The Brain tab / `lillith-setup-wizard scan` search `bundle/models/` first, then `~/AI/models`, `~/models`, the data dir, Ollama / LM Studio / Hugging Face caches, and system Ollama stores. Unattended `setup --auto-gguf` looks in `~/AI/models`, `~/models` and `<data>/lillith/models`, and prefers `dolphin3.0-llama3.2-3b-q4_k_m.gguf` when it is there (low-power 8–16 GB machines also rank that 3B first; uncensored names win a size tier). Stored in `[llm]`. |
+| Modelfile customizer | M6 | Landed in the Brain tab and `lillith-setup-wizard write-config --sync-chat` / `modelfile`: writes `~/.config/lillith/Modelfile.lily` with `FROM` the chosen local GGUF (loopback only; `ollama create` is refused for registry names). System prompt and sampler params are editable and can recreate the Ollama model. |
 
 **M6 and M7 acceptance updated** to include the above: M6's egui settings panel also hosts the setup wizard, GGUF picker and Modelfile customizer; M7's chat covers both the over-head bubble and the scrollable conversation window, reachable from the right-click menu and the keyboard.
 
