@@ -73,7 +73,7 @@ pub enum StopBarrier {
 
 impl StopReport {
     /// The line Lillith says in chat. See [`HelperKill::chat_line`].
-    /// "Stopped. Every running command is dead." only after a proven
+    /// "Stopped. Every tracked command tree is gone." only after a proven
     /// [`StopOutcome::Quiescent`]; otherwise the outcome says what is known.
     pub fn chat_line(&self) -> String {
         match &self.outcome {
@@ -343,6 +343,7 @@ mod tests {
             outcome: Some(StopOutcome::Quiescent {
                 generation: 1,
                 processes: 1,
+                orphans_killed: 0,
             }),
         }
         .chat_line()
@@ -354,6 +355,7 @@ mod tests {
             outcome: Some(StopOutcome::Quiescent {
                 generation: 1,
                 processes: 1,
+                orphans_killed: 0,
             }),
         }
         .chat_line()

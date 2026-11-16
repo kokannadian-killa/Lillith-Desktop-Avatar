@@ -102,6 +102,20 @@ fn xstop_role() {
                     .expect("run");
             fs::write(d.join("fresh-result"), &out).unwrap();
         }
+        // An overlay that will be SIGKILLed mid-command: a group with a
+        // looping child plus a `setsid` escapee, through the real runner.
+        "orphan-worker" => {
+            let cmd = format!(
+                "echo $$ > '{0}/opgid'; \
+                 (while :; do date +%s%N > '{0}/ohb1'; sleep 0.05; done) & \
+                 setsid sh -c 'echo $$ > \"{0}/oesc\"; while :; do date +%s%N > \"{0}/ohb2\"; sleep 0.05; done' & \
+                 wait",
+                d.display()
+            );
+            let _ = commands::run_captured(&cmd, Some(&d), Duration::from_secs(120), 4096);
+            // Never reached in the test: the process is SIGKILLed first.
+            fs::write(d.join("orphan-worker-returned"), "1").unwrap();
+        }
         r => panic!("unknown role {r}"),
     }
 }
@@ -281,5 +295,134 @@ fn stop_from_a_separate_process_persists_the_barrier_and_kills_the_tree() {
     println!("RESTART: dispatch refused while disarmed; after explicit re-arm a fresh job ran to [exit 0]; cancelled job not resurrected");
 
     cleanup_group(&d, &pgid);
+    let _ = fs::remove_dir_all(&d);
+}
+
+fn pid_alive(pid: u32) -> bool {
+    match fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Ok(st) => {
+            let state = st[st.rfind(')').unwrap() + 2..].chars().next();
+            !matches!(state, Some('Z') | Some('X'))
+        }
+        Err(_) => false,
+    }
+}
+
+fn pgrp_of(pid: u32) -> Option<u32> {
+    let st = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    st[st.rfind(')')? + 2..]
+        .split_whitespace()
+        .nth(2)?
+        .parse()
+        .ok()
+}
+
+/// QA blocker (b291da82): a Lillith process SIGKILLed mid-command leaves its
+/// command tree running. The next stop (from another process) must kill the
+/// tree it recorded (group + `setsid` escapee) and never report a false
+/// "Stopped" while any of it is alive.
+#[test]
+fn stop_kills_the_tree_of_a_sigkilled_member_and_never_claims_a_false_stop() {
+    if std::env::var(ROLE).is_ok() {
+        return;
+    }
+    let d = std::env::temp_dir().join(format!("lillith-xstop-orphan-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&d);
+    fs::create_dir_all(&d).unwrap();
+
+    // 1. The member starts its job; its entry records the group and the
+    //    escapee (descendant snapshots are persisted).
+    let mut w = spawn(&d, "orphan-worker");
+    let wp = w.id();
+    wait_for("orphan job", Duration::from_secs(30), || {
+        ["opgid", "oesc", "ohb1", "ohb2"].iter().all(|f| {
+            !fs::read_to_string(d.join(f))
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+        })
+    });
+    let read_pid = |f: &str| -> u32 {
+        fs::read_to_string(d.join(f))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap()
+    };
+    let pgid = read_pid("opgid");
+    let esc = read_pid("oesc");
+    assert_ne!(pgrp_of(esc), Some(pgid), "the escapee left the group");
+    let entry = session(&d).join(format!("proc-{wp}"));
+    wait_for("entry records the tree", Duration::from_secs(10), || {
+        let e = fs::read_to_string(&entry).unwrap_or_default();
+        e.contains(&format!("\ng {pgid} ")) && e.contains(&format!("\np {esc} "))
+    });
+    println!("ENTRY:\n{}", fs::read_to_string(&entry).unwrap_or_default());
+
+    // 2. SIGKILL the member mid-command: its tree survives it.
+    w.kill().unwrap();
+    let _ = w.wait();
+    assert!(!pid_alive(wp));
+    assert!(
+        beating(&d, "ohb1", Duration::from_millis(400)),
+        "orphan group survives SIGKILL"
+    );
+    assert!(
+        beating(&d, "ohb2", Duration::from_millis(300)),
+        "orphan escapee survives SIGKILL"
+    );
+    assert!(!d.join("orphan-worker-returned").exists());
+
+    // 3. Stop from a separate process.
+    let mut s = spawn(&d, "stopper");
+    assert!(s.wait().unwrap().success(), "stopper ran");
+    let report = fs::read_to_string(d.join(format!("report-{}", s.id()))).unwrap();
+    println!("ORPHAN STOP REPORT:\n{report}");
+    assert!(report.starts_with("Saved("), "{report}");
+
+    // 4. The orphaned tree is dead.
+    assert!(
+        !beating(&d, "ohb1", Duration::from_millis(500)),
+        "ohb1 frozen"
+    );
+    assert!(
+        !beating(&d, "ohb2", Duration::from_millis(200)),
+        "ohb2 frozen"
+    );
+    assert_eq!(
+        stop_session::group_alive(pgid),
+        Some(false),
+        "group {pgid} empty"
+    );
+    assert!(!pid_alive(esc), "setsid escapee {esc} killed");
+
+    // 5. Never a false Stopped: Quiescent only with the orphan tree counted
+    //    as killed and verified (entry pruned); otherwise NOT confirmed and
+    //    the entry kept.
+    let line = report.lines().nth(2).unwrap_or("");
+    if report.contains("Quiescent") {
+        assert!(report.contains("orphans_killed: 1"), "{report}");
+        assert!(
+            line.contains("crashed Lillith process were killed"),
+            "{line}"
+        );
+        assert!(!entry.exists(), "entry pruned once its tree is gone");
+    } else {
+        assert!(
+            report.contains("Incomplete") && line.contains("NOT confirmed"),
+            "{report}"
+        );
+        assert!(!line.starts_with("Stopped"));
+        assert!(entry.exists());
+    }
+    println!("ORPHAN: SIGKILLed member's group and setsid escapee killed by the next stop; outcome {line}");
+
+    // Belt and braces: never leave anything of ours running.
+    cleanup_group(&d, &pgid.to_string());
+    if pid_alive(esc) {
+        let _ = Command::new("kill")
+            .args(["-s", "KILL", &esc.to_string()])
+            .status();
+    }
     let _ = fs::remove_dir_all(&d);
 }

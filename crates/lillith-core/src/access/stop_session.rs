@@ -19,7 +19,13 @@
 //!   an old barrier never stops new work after a restart, and nothing is
 //!   re-run or re-approved because of it (there is no queue to replay).
 //! - `proc-<pid>`: "I am a joined Lillith process" (pid + Linux start time,
-//!   so a reused pid is not mistaken for us). Stale entries are pruned.
+//!   so a reused pid is not mistaken for us), plus every command tree it
+//!   currently runs (or stopped but has not seen vanish): each group id with
+//!   its leader's start time and every descendant (pid + start time) its
+//!   runner's ~200 ms `/proc` snapshots found. Rewritten (atomic rename,
+//!   fsynced, 0600) whenever a runner starts or returns or a snapshot grows.
+//!   An entry whose process is dead (SIGKILLed / crashed) is only pruned
+//!   after [`confirm_in`] killed every recorded tree and verified it gone.
 //! - `ack-<pid>`: each joined process's watcher thread writes, for the
 //!   newest generation it saw, whether its stopped command trees are really
 //!   gone ([`Quiet::Quiet`]), still alive ([`Quiet::Busy`]) or could not be
@@ -32,7 +38,9 @@
 //!   re-approves or re-runs anything.
 //!
 //! Joining: every process joins lazily on first use (auto-join) unless
-//! `LILLITH_STOP_SESSION=off` (`=on` forces it). Under `cargo test` /
+//! `LILLITH_STOP_SESSION=off` (`=on` forces it). `off` only works in debug
+//! builds; release builds ignore it (with a warning) so no environment
+//! variable can take a shipped Lillith out of the kill switch's reach. Under `cargo test` /
 //! `cargo run` (`CARGO_MANIFEST_DIR` set at run time, or a test binary
 //! started directly from `target/…/deps/`) auto-join only happens
 //! in a fully scratch XDG environment (all of `XDG_RUNTIME_DIR`,
@@ -44,8 +52,16 @@
 //!
 //! [`confirm`] turns those into a [`StopOutcome`]: `Quiescent` only when every
 //! live joined process acknowledged this generation with verified-empty
-//! trees; otherwise `Incomplete` (an unanswered process is never counted as
-//! stopped).
+//! tracked trees and every tree a dead process left behind was killed and
+//! verified gone; otherwise `Incomplete` (an unanswered process, a dead
+//! process's tree that survives the kill, or one that can't be checked is
+//! never counted as stopped).
+//!
+//! Pid reuse: every pid is recorded with its Linux start time
+//! (`/proc/<pid>/stat` field 22) and only signalled while that still
+//! matches. A group is only killed while its leader pid is gone (Linux never
+//! reuses a pid that is still a live group's id) or still has the recorded
+//! start time.
 //!
 //! The safeword ("red" / "OOC: stop") never touches any of this: it only
 //! hushes speech in its own process.
@@ -94,6 +110,8 @@ struct Session {
     /// The generation this process's own last stop produced (its watcher
     /// does not re-run the stop hooks for it).
     own: AtomicU64,
+    /// This process's Linux start time (0 = unknown), for its entry.
+    self_start: u64,
 }
 
 static SESSION: OnceLock<Session> = OnceLock::new();
@@ -124,7 +142,17 @@ fn auto_join_allowed() -> bool {
 /// session from a cargo test / run without fully scratch XDG dirs.
 fn env_allows_join() -> bool {
     match std::env::var("LILLITH_STOP_SESSION").as_deref() {
-        Ok("off") => return false,
+        // Release builds never let an environment variable take a process
+        // out of the kill switch's reach.
+        Ok("off") if cfg!(debug_assertions) => return false,
+        Ok("off") => {
+            static WARNED: std::sync::Once = std::sync::Once::new();
+            WARNED.call_once(|| {
+                tracing::warn!(
+                    "LILLITH_STOP_SESSION=off is ignored in release builds: this process joins the cross-process stop session"
+                );
+            });
+        }
         Ok("on") => return true,
         _ => {}
     }
@@ -216,11 +244,12 @@ pub fn join_at(dir: &Path) -> io::Result<PathBuf> {
         barrier,
         last: AtomicU64::new(g),
         own: AtomicU64::new(0),
+        self_start: start_time(std::process::id()).unwrap_or(0),
     };
     if SESSION.set(s).is_err() {
         return Ok(SESSION.get().map(|s| s.dir.clone()).unwrap_or_default());
     }
-    register_self(dir)?;
+    register_self()?;
     let start = g;
     std::thread::Builder::new()
         .name("lillith-stop-watch".into())
@@ -301,64 +330,196 @@ pub fn rearm() -> io::Result<()> {
 /// One command tree (process group) a runner started, tracked so a stop can
 /// check it is really gone. Dropping it (the runner returned) moves a
 /// stopped group to the "must vanish" list.
+///
+/// Every change (a runner starts or returns, its descendant snapshot grows,
+/// a stopped tree vanishes) is also written to this process's
+/// `proc-<pid>` entry (fsynced, 0600), so if this process is SIGKILLed or
+/// crashes mid-command the next stop can still find, kill and check the
+/// trees it left behind (see [`confirm_in`]).
 #[must_use = "the group is untracked when this is dropped"]
 pub struct GroupGuard {
-    pgid: u32,
+    id: u64,
     start: u64,
-    /// Descendants (pid, Linux start time) the runner saw.
-    pids: Vec<(u32, u64)>,
 }
 
 impl GroupGuard {
-    /// Remembers descendants the runner saw (so a stop can check them).
+    /// Remembers descendants the runner saw (so a stop can check them, also
+    /// from another process if this one dies). Persists the entry when
+    /// anything new was added.
     pub fn note_pids(&mut self, pids: &[(u32, u64)]) {
-        for p in pids {
-            if !self.pids.contains(p) {
-                self.pids.push(*p);
+        let mut changed = false;
+        if let Ok(mut t) = TRACKED.lock() {
+            if let Some(tree) = t.active.iter_mut().find(|x| x.id == self.id) {
+                for p in pids {
+                    if !tree.pids.contains(p) {
+                        tree.pids.push(*p);
+                        changed = true;
+                    }
+                }
             }
+        }
+        if changed {
+            persist_trees();
         }
     }
 }
 
+/// A tracked command tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Tree {
+    id: u64,
+    /// The group (= the runner's direct child's pid).
+    pgid: u32,
+    /// Linux start time of the group leader (0 = unknown).
+    leader_start: u64,
+    /// The kill-switch epoch the runner started at.
+    epoch: u64,
+    /// Descendants (pid, Linux start time) the runner saw.
+    pids: Vec<(u32, u64)>,
+}
+
 struct Tracked {
-    active: Vec<(u32, u64)>,
-    stopped: Vec<(u32, Vec<(u32, u64)>)>,
+    next: u64,
+    active: Vec<Tree>,
+    stopped: Vec<Tree>,
 }
 
 static TRACKED: Mutex<Tracked> = Mutex::new(Tracked {
+    next: 0,
     active: Vec::new(),
     stopped: Vec::new(),
 });
 
+/// Serializes `proc-<pid>` rewrites (snapshot + write under one lock, so an
+/// older snapshot never overwrites a newer one).
+static ENTRY_WRITE: Mutex<()> = Mutex::new(());
+
 /// Tracks the process group `pgid` a runner started at stop epoch `start`
-/// (a [`super::kill_switch::epoch`] value).
+/// (a [`super::kill_switch::epoch`] value), and persists it.
 pub fn track_group(pgid: u32, start: u64) -> GroupGuard {
+    let leader_start = start_time(pgid).unwrap_or(0);
+    let mut id = 0;
     if let Ok(mut t) = TRACKED.lock() {
-        t.active.push((pgid, start));
+        t.next += 1;
+        id = t.next;
+        t.active.push(Tree {
+            id,
+            pgid,
+            leader_start,
+            epoch: start,
+            pids: Vec::new(),
+        });
     }
-    GroupGuard {
-        pgid,
-        start,
-        pids: Vec::new(),
-    }
+    persist_trees();
+    GroupGuard { id, start }
 }
 
 impl Drop for GroupGuard {
     fn drop(&mut self) {
         let stopped = super::kill_switch::stopped_since(self.start);
         if let Ok(mut t) = TRACKED.lock() {
-            if let Some(i) = t
+            let tree = t
                 .active
                 .iter()
-                .position(|&(p, s)| p == self.pgid && s == self.start)
-            {
-                t.active.swap_remove(i);
-            }
+                .position(|x| x.id == self.id)
+                .map(|i| t.active.swap_remove(i));
             if stopped {
-                t.stopped.push((self.pgid, std::mem::take(&mut self.pids)));
+                // Drop stopped trees that are verifiably gone so the entry
+                // does not grow without bound.
+                t.stopped.retain(tree_maybe_alive);
+                if let Some(tree) = tree {
+                    t.stopped.push(tree);
+                }
+            }
+        }
+        persist_trees();
+    }
+}
+
+/// Whether any process of `tree` may still be alive (unknown counts as alive).
+fn tree_maybe_alive(tree: &Tree) -> bool {
+    group_alive(tree.pgid).unwrap_or(true) || any_alive(&tree.pids)
+}
+
+/// Renders this process's entry: `<pid> <start>`, then `v2`, one
+/// `g <pgid> <leader start>` per tracked group (running or stopped but not
+/// yet verified gone), one `p <pid> <start>` per recorded descendant, then
+/// `end` (a missing `end` means the entry can't be trusted).
+fn render_entry(pid: u32, start: u64, trees: &[&Tree]) -> String {
+    let mut s = format!("{pid} {start}\nv2\n");
+    let mut seen: Vec<(u32, u64)> = Vec::new();
+    for t in trees {
+        s.push_str(&format!("g {} {}\n", t.pgid, t.leader_start));
+        for p in &t.pids {
+            if !seen.contains(p) {
+                seen.push(*p);
+                s.push_str(&format!("p {} {}\n", p.0, p.1));
             }
         }
     }
+    s.push_str("end\n");
+    s
+}
+
+/// What a `proc-<pid>` entry says a (possibly dead) process left running.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Entry {
+    /// (pgid, leader start time).
+    groups: Vec<(u32, u64)>,
+    /// (pid, start time).
+    pids: Vec<(u32, u64)>,
+}
+
+/// Parses a v2 entry. `None`: unreadable, an old format that did not record
+/// trees, or truncated, i.e. its trees can't be checked.
+fn parse_entry(body: &str) -> Option<Entry> {
+    let mut lines = body.lines();
+    let mut head = lines.next()?.split_whitespace();
+    head.next()?.parse::<u32>().ok()?;
+    head.next()?.parse::<u64>().ok()?;
+    if lines.next()?.trim() != "v2" {
+        return None;
+    }
+    let mut e = Entry::default();
+    for l in lines {
+        let mut it = l.split_whitespace();
+        match it.next()? {
+            "end" => return Some(e),
+            "g" => e
+                .groups
+                .push((it.next()?.parse().ok()?, it.next()?.parse().ok()?)),
+            "p" => e
+                .pids
+                .push((it.next()?.parse().ok()?, it.next()?.parse().ok()?)),
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Rewrites this process's entry from [`TRACKED`] (no-op when not joined).
+fn persist_trees() {
+    if SESSION.get().is_none() {
+        return;
+    }
+    if let Err(e) = write_entry() {
+        tracing::warn!("could not record running command trees for the stop session: {e}");
+    }
+}
+
+/// Writes this process's `proc-<pid>` entry (atomic rename, fsynced, 0600).
+fn write_entry() -> io::Result<()> {
+    let s = SESSION
+        .get()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotConnected, "no stop session joined"))?;
+    let _w = ENTRY_WRITE.lock().unwrap_or_else(|e| e.into_inner());
+    let pid = std::process::id();
+    let body = {
+        let t = TRACKED.lock().unwrap_or_else(|e| e.into_inner());
+        let trees: Vec<&Tree> = t.active.iter().chain(t.stopped.iter()).collect();
+        render_entry(pid, s.self_start, &trees)
+    };
+    write_atomic(&s.dir.join(format!("proc-{pid}")), &body)
 }
 
 /// Whether this process's stopped work is gone.
@@ -403,15 +564,19 @@ pub fn local_quiescence(deadline: Duration) -> Quiet {
     let t0 = Instant::now();
     loop {
         let now = super::kill_switch::epoch();
-        let (old, left) = match TRACKED.lock() {
+        let (old, left, pruned) = match TRACKED.lock() {
             Ok(mut t) => {
-                let old = t.active.iter().filter(|&&(_, s)| s != now).count();
+                let old = t.active.iter().filter(|x| x.epoch != now).count();
+                let before = t.stopped.len();
                 t.stopped
-                    .retain(|(g, pids)| group_alive(*g).unwrap_or(false) || any_alive(pids));
-                (old, t.stopped.len())
+                    .retain(|x| group_alive(x.pgid).unwrap_or(false) || any_alive(&x.pids));
+                (old, t.stopped.len(), t.stopped.len() != before)
             }
-            Err(_) => (0, 0),
+            Err(_) => (0, 0, false),
         };
+        if pruned {
+            persist_trees();
+        }
         if old == 0 && left == 0 {
             return if cfg!(target_os = "linux") {
                 Quiet::Quiet
@@ -568,11 +733,20 @@ fn start_time(_pid: u32) -> Option<u64> {
     None
 }
 
+/// Whether `/proc` can be read at all (else nothing can be checked).
+#[cfg(target_os = "linux")]
+fn proc_usable() -> bool {
+    std::fs::metadata("/proc/self/stat").is_ok()
+}
+
 /// Whether the registered process `pid` (with start time `start`, 0 =
 /// unknown) is still that same, live process. `None`: can't tell.
 fn registered_alive(pid: u32, start: u64) -> Option<bool> {
     #[cfg(target_os = "linux")]
     {
+        if !proc_usable() {
+            return None;
+        }
         match proc_stat(pid) {
             None => Some(false),
             Some((st, _, _)) if st == 'Z' || st == 'X' => Some(false),
@@ -588,10 +762,9 @@ fn registered_alive(pid: u32, start: u64) -> Option<bool> {
 
 // ------------------------------------------------------------ watcher/acks
 
-fn register_self(dir: &Path) -> io::Result<()> {
-    let pid = std::process::id();
-    let st = start_time(pid).unwrap_or(0);
-    write_atomic(&dir.join(format!("proc-{pid}")), &format!("{pid} {st}\n"))
+/// Writes this process's first entry (with any trees already tracked).
+fn register_self() -> io::Result<()> {
+    write_entry()
 }
 
 /// The watcher: on every new generation (any process's stop), run this
@@ -627,8 +800,15 @@ pub enum StopOutcome {
     /// only this process was stopped. Never shown as "stopped everywhere".
     LocalOnly { reason: String, local: Quiet },
     /// Every live joined process acknowledged generation `generation` with
-    /// verified-empty trees.
-    Quiescent { generation: u64, processes: usize },
+    /// verified-empty *tracked* trees, and every tree a dead process left
+    /// behind (its `proc-<pid>` entry) was killed and verified gone
+    /// (`orphans_killed` trees). Only what was tracked is covered (see the
+    /// module docs for the double-fork gap).
+    Quiescent {
+        generation: u64,
+        processes: usize,
+        orphans_killed: usize,
+    },
     /// The barrier is saved (`generation`), but not every process confirmed.
     Incomplete {
         generation: u64,
@@ -638,6 +818,12 @@ pub enum StopOutcome {
         busy: Vec<(u32, usize)>,
         /// Processes that acknowledged without being able to check.
         unverified: Vec<u32>,
+        /// Dead (SIGKILLed / crashed) processes whose recorded command
+        /// trees are still alive after being killed (pid, live count).
+        orphaned: Vec<(u32, usize)>,
+        /// Dead processes whose recorded trees can't be checked (unreadable
+        /// or old-format entry, no `/proc`, permission error).
+        unchecked: Vec<u32>,
     },
 }
 
@@ -650,13 +836,28 @@ impl StopOutcome {
     /// One truthful line for the UI.
     pub fn line(&self) -> String {
         match self {
-            StopOutcome::Quiescent { processes, .. } => format!(
-                "Stopped: {processes} Lillith process(es) confirmed their task trees are gone."
-            ),
+            StopOutcome::Quiescent {
+                processes,
+                orphans_killed,
+                ..
+            } => {
+                let mut l = format!(
+                    "Stopped: {processes} Lillith process(es) confirmed the command trees they tracked are gone"
+                );
+                if *orphans_killed > 0 {
+                    l.push_str(&format!(
+                        "; {orphans_killed} tree(s) left by a crashed Lillith process were killed and checked"
+                    ));
+                }
+                l.push_str(" (only tracked processes are covered).");
+                l
+            }
             StopOutcome::Incomplete {
                 unconfirmed,
                 busy,
                 unverified,
+                orphaned,
+                unchecked,
                 ..
             } => {
                 let mut parts = Vec::new();
@@ -669,6 +870,18 @@ impl StopOutcome {
                 }
                 if !unverified.is_empty() {
                     parts.push(format!("{} could not be checked", unverified.len()));
+                }
+                if !orphaned.is_empty() {
+                    let n: usize = orphaned.iter().map(|b| b.1).sum();
+                    parts.push(format!(
+                        "{n} process(es) left by a crashed Lillith process still alive"
+                    ));
+                }
+                if !unchecked.is_empty() {
+                    parts.push(format!(
+                        "{} crashed Lillith process(es) whose commands could not be checked",
+                        unchecked.len()
+                    ));
                 }
                 format!(
                     "Stop saved but NOT confirmed ({}): treat that work as possibly still running.",
@@ -700,18 +913,37 @@ pub fn confirm(generation: u64, deadline: Duration) -> StopOutcome {
 }
 
 /// [`confirm`] against an explicit session directory.
+///
+/// A registered process that is dead (or whose pid was reused) is only
+/// pruned once the command trees its entry recorded are killed and verified
+/// gone; while any of them is alive, or the entry / `/proc` can't be read,
+/// the outcome is `Incomplete` (never `Quiescent`) and the entry stays.
 pub fn confirm_in(dir: &Path, generation: u64, deadline: Duration) -> StopOutcome {
+    confirm_with(dir, generation, deadline, sigkill)
+}
+
+fn confirm_with(dir: &Path, generation: u64, deadline: Duration, kill: KillFn) -> StopOutcome {
     let t0 = Instant::now();
+    let mut orphans_killed = 0usize;
     loop {
         let mut unconfirmed = Vec::new();
         let mut busy = Vec::new();
         let mut unverified = Vec::new();
+        let mut orphaned = Vec::new();
+        let mut unchecked = Vec::new();
         let mut ok = 0usize;
         for (pid, start) in registered(dir) {
             if registered_alive(pid, start) == Some(false) {
-                // Dead or a reused pid: prune it, it runs nothing of ours.
-                let _ = std::fs::remove_file(dir.join(format!("proc-{pid}")));
-                let _ = std::fs::remove_file(dir.join(format!("ack-{pid}")));
+                // Dead or a reused pid: kill what it left running first.
+                match reap_dead_member(dir, pid, kill) {
+                    Reap::Gone(n) => {
+                        orphans_killed += n;
+                        let _ = std::fs::remove_file(dir.join(format!("proc-{pid}")));
+                        let _ = std::fs::remove_file(dir.join(format!("ack-{pid}")));
+                    }
+                    Reap::Alive(n) => orphaned.push((pid, n)),
+                    Reap::Unchecked => unchecked.push(pid),
+                }
                 continue;
             }
             match read_ack(dir, pid) {
@@ -723,10 +955,16 @@ pub fn confirm_in(dir: &Path, generation: u64, deadline: Duration) -> StopOutcom
                 _ => unconfirmed.push(pid),
             }
         }
-        if unconfirmed.is_empty() && busy.is_empty() && unverified.is_empty() {
+        let clean = unconfirmed.is_empty()
+            && busy.is_empty()
+            && unverified.is_empty()
+            && orphaned.is_empty()
+            && unchecked.is_empty();
+        if clean {
             return StopOutcome::Quiescent {
                 generation,
                 processes: ok,
+                orphans_killed,
             };
         }
         if t0.elapsed() >= deadline {
@@ -736,10 +974,232 @@ pub fn confirm_in(dir: &Path, generation: u64, deadline: Duration) -> StopOutcom
                 unconfirmed,
                 busy,
                 unverified,
+                orphaned,
+                unchecked,
             };
         }
         std::thread::sleep(WATCH_EVERY);
     }
+}
+
+// ------------------------------------------------------------ dead members
+
+/// Sends SIGKILL to a pid (`group == false`) or a process group.
+type KillFn = fn(target: u32, group: bool);
+
+fn sigkill(target: u32, group: bool) {
+    #[cfg(unix)]
+    {
+        if target <= 1 {
+            return;
+        }
+        // SAFETY: kill(2)/killpg(2) on a target the caller verified (start
+        // time / group identity) as one of a dead member's command trees.
+        unsafe {
+            if group {
+                libc::killpg(target as libc::pid_t, libc::SIGKILL);
+            } else {
+                libc::kill(target as libc::pid_t, libc::SIGKILL);
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (target, group);
+    }
+}
+
+/// What killing a dead member's recorded trees achieved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reap {
+    /// Everything recorded is verifiably gone (this many trees were listed).
+    Gone(usize),
+    /// This many recorded processes are still alive after the kill.
+    Alive(usize),
+    /// The entry or `/proc` could not be read: nothing can be claimed.
+    Unchecked,
+}
+
+/// Kills (SIGKILL: group, recorded descendants, their descendants and the
+/// groups they moved to) everything the dead member `pid` recorded in its
+/// entry, then checks it is gone.
+fn reap_dead_member(dir: &Path, pid: u32, kill: KillFn) -> Reap {
+    let Ok(body) = std::fs::read_to_string(dir.join(format!("proc-{pid}"))) else {
+        return Reap::Unchecked;
+    };
+    let Some(entry) = parse_entry(&body) else {
+        return Reap::Unchecked;
+    };
+    reap_entry(&entry, kill)
+}
+
+fn reap_entry(entry: &Entry, kill: KillFn) -> Reap {
+    if entry.groups.is_empty() && entry.pids.is_empty() {
+        return Reap::Gone(0);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if !proc_usable() {
+            return Reap::Unchecked;
+        }
+        // SAFETY: getpgrp has no preconditions.
+        let own_pgrp = unsafe { libc::getpgrp() } as u32;
+        let me = std::process::id();
+        let mut known: Vec<(u32, u64)> = entry.pids.clone();
+        let mut found: Option<usize> = None;
+        for _ in 0..3 {
+            let Some(mut groups) = our_groups(&entry.groups) else {
+                return Reap::Unchecked;
+            };
+            groups.retain(|&g| g != own_pgrp);
+            // Expand: members of our groups and the descendants of every
+            // live recorded process (orphans were re-parented, so a walk
+            // from the dead member finds nothing).
+            let mut roots: Vec<(u32, u64)> = Vec::new();
+            let mut live_groups = 0usize;
+            for &g in &groups {
+                match group_members(g) {
+                    Some(m) => {
+                        live_groups += usize::from(!m.is_empty());
+                        roots.extend(m);
+                    }
+                    None => return Reap::Unchecked,
+                }
+            }
+            let live_pids: Vec<(u32, u64)> = known
+                .iter()
+                .copied()
+                .filter(|&(p, st)| registered_alive(p, st) == Some(true))
+                .collect();
+            if found.is_none() {
+                // How many recorded trees were still running.
+                found = Some(if live_groups == 0 && !live_pids.is_empty() {
+                    1
+                } else {
+                    live_groups
+                });
+            }
+            roots.extend(live_pids);
+            for &(r, _) in &roots {
+                for d in descendants(r) {
+                    if !known.contains(&d) {
+                        known.push(d);
+                    }
+                }
+            }
+            for r in roots {
+                if !known.contains(&r) {
+                    known.push(r);
+                }
+            }
+            let mut kill_groups = groups.clone();
+            for &(p, st) in &known {
+                if p == me || start_time(p) != Some(st) {
+                    continue; // gone, or a reused pid: never touched
+                }
+                if let Some((_, _, g)) = proc_stat(p) {
+                    if !kill_groups.contains(&g) {
+                        kill_groups.push(g);
+                    }
+                }
+                kill(p, false);
+            }
+            for g in kill_groups {
+                if g > 1 && g != own_pgrp {
+                    kill(g, true);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        // Check (briefly) that it is all gone.
+        let t0 = Instant::now();
+        loop {
+            let Some(groups) = our_groups(&entry.groups) else {
+                return Reap::Unchecked;
+            };
+            // Distinct live processes (a group member may also be recorded).
+            let mut alive: Vec<u32> = Vec::new();
+            for g in groups {
+                match group_members(g) {
+                    Some(m) => alive.extend(m.into_iter().map(|(p, _)| p)),
+                    None => return Reap::Unchecked,
+                }
+            }
+            for &(p, st) in &known {
+                match registered_alive(p, st) {
+                    Some(true) => alive.push(p),
+                    Some(false) => {}
+                    None => return Reap::Unchecked,
+                }
+            }
+            alive.sort_unstable();
+            alive.dedup();
+            let alive = alive.len();
+            if alive == 0 {
+                return Reap::Gone(found.unwrap_or(0));
+            }
+            if t0.elapsed() >= Duration::from_millis(500) {
+                return Reap::Alive(alive);
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = kill;
+        Reap::Unchecked
+    }
+}
+
+/// The recorded groups that are still ours. Pid reuse: Linux never hands
+/// out a pid that is still some group's id, so a group with live members
+/// whose leader pid is gone is still the recorded group; a live process
+/// with the leader's pid but another start time means the group died and
+/// the pid was reused (skipped). An unknown leader start time (0) with a
+/// live leader can't be told apart: `None` (unchecked).
+#[cfg(target_os = "linux")]
+fn our_groups(groups: &[(u32, u64)]) -> Option<Vec<u32>> {
+    let mut out = Vec::new();
+    for &(g, leader_start) in groups {
+        if g <= 1 {
+            continue;
+        }
+        if proc_stat(g).is_none() {
+            // Leader gone: any live member is still the recorded group.
+            out.push(g);
+            continue;
+        }
+        let now = start_time(g)?;
+        if now == leader_start {
+            out.push(g);
+        } else if leader_start == 0 {
+            return None;
+        }
+        // Else: the pid was reused by an unrelated process; never touched.
+    }
+    Some(out)
+}
+
+/// Live (non-zombie) members of group `pgid` with their start times.
+/// `None` when `/proc` can't be read.
+#[cfg(target_os = "linux")]
+fn group_members(pgid: u32) -> Option<Vec<(u32, u64)>> {
+    let rd = std::fs::read_dir("/proc").ok()?;
+    let mut out = Vec::new();
+    for e in rd.flatten() {
+        let name = e.file_name();
+        let Some(pid) = name.to_str().and_then(|n| n.parse::<u32>().ok()) else {
+            continue;
+        };
+        if let Some((state, _ppid, pgrp)) = proc_stat(pid) {
+            if pgrp == pgid && state != 'Z' && state != 'X' {
+                if let Some(st) = start_time(pid) {
+                    out.push((pid, st));
+                }
+            }
+        }
+    }
+    Some(out)
 }
 
 fn registered(dir: &Path) -> Vec<(u32, u64)> {
@@ -897,18 +1357,39 @@ mod tests {
         let q = StopOutcome::Quiescent {
             generation: 9,
             processes: 2,
+            orphans_killed: 0,
         };
         assert!(q.confirmed());
         assert!(q.line().starts_with("Stopped"));
+        assert!(
+            q.line().contains("tracked"),
+            "only tracked trees are claimed: {}",
+            q.line()
+        );
+        assert!(!q.line().contains("every"), "{}", q.line());
         let i = StopOutcome::Incomplete {
             generation: 9,
             unconfirmed: vec![42],
             busy: vec![],
             unverified: vec![],
+            orphaned: vec![],
+            unchecked: vec![],
         };
         assert!(!i.confirmed());
         assert!(i.line().contains("NOT confirmed"));
         assert!(!i.line().starts_with("Stopped"));
+        for (orphaned, unchecked) in [(vec![(7, 2)], vec![]), (vec![], vec![7])] {
+            let o = StopOutcome::Incomplete {
+                generation: 9,
+                unconfirmed: vec![],
+                busy: vec![],
+                unverified: vec![],
+                orphaned,
+                unchecked,
+            };
+            assert!(!o.confirmed());
+            assert!(o.line().contains("NOT confirmed") && o.line().contains("crashed"));
+        }
         let l = StopOutcome::LocalOnly {
             reason: "x".into(),
             local: Quiet::Quiet,
@@ -925,9 +1406,9 @@ mod tests {
         // Ourselves, registered but never acking (no watcher here).
         let me = std::process::id();
         let st = start_time(me).unwrap_or(0);
-        std::fs::write(d.join(format!("proc-{me}")), format!("{me} {st}\n")).unwrap();
-        // A pid that cannot exist on Linux (> pid_max).
-        std::fs::write(d.join("proc-4194399"), "4194399 1\n").unwrap();
+        std::fs::write(d.join(format!("proc-{me}")), render_entry(me, st, &[])).unwrap();
+        // A dead pid (> pid_max) whose entry recorded no running trees.
+        std::fs::write(d.join("proc-4194399"), render_entry(4194399, 1, &[])).unwrap();
         let out = confirm_in(&d, 1, Duration::from_millis(200));
         match out {
             StopOutcome::Incomplete { unconfirmed, .. } if cfg!(target_os = "linux") => {
@@ -958,6 +1439,163 @@ mod tests {
         assert!(check_private(&d).is_err());
         std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o700)).unwrap();
         assert!(check_private(&d).is_ok());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn entries_round_trip_and_anything_else_is_uncheckable() {
+        let t = Tree {
+            id: 1,
+            pgid: 100,
+            leader_start: 7,
+            epoch: 0,
+            pids: vec![(101, 8), (102, 9)],
+        };
+        let body = render_entry(5, 6, &[&t]);
+        assert_eq!(
+            parse_entry(&body),
+            Some(Entry {
+                groups: vec![(100, 7)],
+                pids: vec![(101, 8), (102, 9)],
+            })
+        );
+        // Old format (no trees recorded), truncated, garbage: uncheckable.
+        assert_eq!(parse_entry("5 6\n"), None);
+        assert_eq!(parse_entry(&body.replace("end\n", "")), None);
+        assert_eq!(parse_entry("5 6\nv2\ng x 1\nend\n"), None);
+        assert_eq!(parse_entry(""), None);
+    }
+
+    /// Never touches anything (stands in for a kill that fails, e.g. EPERM).
+    fn no_kill(_: u32, _: bool) {}
+
+    #[cfg(target_os = "linux")]
+    fn spawn_group_sleep() -> std::process::Child {
+        use std::os::unix::process::CommandExt;
+        std::process::Command::new("sleep")
+            .arg("60")
+            .process_group(0)
+            .spawn()
+            .unwrap()
+    }
+
+    #[cfg(target_os = "linux")]
+    fn wait_gone(c: &mut std::process::Child) -> bool {
+        let t0 = Instant::now();
+        while t0.elapsed() < Duration::from_secs(5) {
+            if c.try_wait().unwrap().is_some() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        false
+    }
+
+    /// A dead member's recorded tree that is still alive: killed when the
+    /// kill works (then pruned, Quiescent), and never Quiescent when it
+    /// doesn't (the entry stays).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_dead_members_live_tree_is_killed_before_pruning_or_reported() {
+        let d =
+            std::env::temp_dir().join(format!("lillith-stopsess-orphan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        private_dir(&d).unwrap();
+        let mut orphan = spawn_group_sleep();
+        let op = orphan.id();
+        let ost = start_time(op).unwrap();
+        let tree = Tree {
+            id: 1,
+            pgid: op,
+            leader_start: ost,
+            epoch: 0,
+            pids: vec![(op, ost)],
+        };
+        let entry = d.join("proc-4194398");
+        std::fs::write(&entry, render_entry(4194398, 1, &[&tree])).unwrap();
+
+        // The kill fails: still alive, so Incomplete and the entry stays.
+        match confirm_with(&d, 1, Duration::from_millis(300), no_kill) {
+            StopOutcome::Incomplete {
+                orphaned,
+                unchecked,
+                ..
+            } => {
+                assert_eq!(orphaned, vec![(4194398, 1)]);
+                assert!(unchecked.is_empty());
+            }
+            o => panic!("a live orphan tree is never Quiescent: {o:?}"),
+        }
+        assert!(entry.exists(), "entry kept while its tree lives");
+        assert_eq!(orphan.try_wait().unwrap(), None, "no_kill touched nothing");
+
+        // The real kill: the tree dies, then the entry is pruned.
+        match confirm_in(&d, 1, Duration::from_secs(3)) {
+            StopOutcome::Quiescent { orphans_killed, .. } => assert_eq!(orphans_killed, 1),
+            o => panic!("killed and verified gone: {o:?}"),
+        }
+        assert!(wait_gone(&mut orphan), "orphan sleep was killed");
+        assert!(!entry.exists(), "pruned only after the tree was gone");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// An entry whose trees can't be checked is never treated as stopped.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_uncheckable_dead_member_is_never_quiescent() {
+        let d = std::env::temp_dir().join(format!("lillith-stopsess-unchk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        private_dir(&d).unwrap();
+        // Old format (records no trees) and a truncated v2 entry.
+        std::fs::write(d.join("proc-4194397"), "4194397 1\n").unwrap();
+        std::fs::write(d.join("proc-4194396"), "4194396 1\nv2\ng 4194395 3\n").unwrap();
+        match confirm_in(&d, 1, Duration::from_millis(200)) {
+            StopOutcome::Incomplete { unchecked, .. } => {
+                assert_eq!(unchecked, vec![4194396, 4194397]);
+            }
+            o => panic!("uncheckable is never Quiescent: {o:?}"),
+        }
+        assert!(d.join("proc-4194397").exists() && d.join("proc-4194396").exists());
+        // An entry that can't be read at all (a directory in its place).
+        let _ = std::fs::remove_file(d.join("proc-4194397"));
+        let _ = std::fs::remove_file(d.join("proc-4194396"));
+        std::fs::create_dir(d.join("proc-4194394")).unwrap();
+        assert!(matches!(
+            confirm_in(&d, 1, Duration::from_millis(100)),
+            StopOutcome::Incomplete { ref unchecked, .. } if unchecked == &vec![4194394]
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Pid reuse: a recorded group / pid whose number now belongs to a
+    /// process with another start time is never signalled.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_reused_pid_is_never_killed() {
+        let d = std::env::temp_dir().join(format!("lillith-stopsess-reuse-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        private_dir(&d).unwrap();
+        let mut stranger = spawn_group_sleep();
+        let sp = stranger.id();
+        let real = start_time(sp).unwrap();
+        // Recorded with another start time: "our" process died, the pid was
+        // reused by `stranger`.
+        let tree = Tree {
+            id: 1,
+            pgid: sp,
+            leader_start: real + 1,
+            epoch: 0,
+            pids: vec![(sp, real + 1)],
+        };
+        std::fs::write(d.join("proc-4194393"), render_entry(4194393, 1, &[&tree])).unwrap();
+        match confirm_in(&d, 1, Duration::from_millis(300)) {
+            StopOutcome::Quiescent { orphans_killed, .. } => assert_eq!(orphans_killed, 0),
+            o => panic!("our tree is gone (only the pid was reused): {o:?}"),
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(stranger.try_wait().unwrap(), None, "reused pid untouched");
+        let _ = stranger.kill();
+        let _ = stranger.wait();
         let _ = std::fs::remove_dir_all(&d);
     }
 }

@@ -588,10 +588,15 @@ fn run_child_ungated(
         }
         polls = polls.wrapping_add(1);
         if polls % 10 == 1 {
+            let before = seen.len();
             for p in super::stop_session::descendants(child.id()) {
                 if !seen.contains(&p) {
                     seen.push(p);
                 }
+            }
+            if seen.len() != before {
+                // Persisted, so a stop still finds them if we die.
+                tracked.note_pids(&seen);
             }
         }
         let why = if super::kill_switch::stopped_since(epoch) {
