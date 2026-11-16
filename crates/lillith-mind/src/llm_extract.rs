@@ -86,10 +86,13 @@ fn words(s: &str) -> Vec<String> {
         .collect()
 }
 
+/// Model facts prepared for one message: `(Ko's message, facts)`.
+type Prepared = Option<(String, Vec<Fact>)>;
+
 /// The rule extractor plus model facts prepared for the same message.
 #[derive(Debug, Clone, Default)]
 pub struct LlmFacts {
-    slot: Arc<Mutex<Option<(String, Vec<Fact>)>>>,
+    slot: Arc<Mutex<Prepared>>,
 }
 
 impl Extractor for LlmFacts {
