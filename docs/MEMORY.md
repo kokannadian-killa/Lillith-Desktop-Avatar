@@ -303,8 +303,14 @@ says so).
 - No fullscreen / "busy" sensor: `MemoryBridge::set_busy_for` is the hook
   for one. Windows has no `window.focused` source yet (KWin only), so app
   habits are learned on KDE only.
-- LLM-assisted extraction: `Extractor` trait hook exists; the default is the
-  rule-based extractor.
+- LLM-assisted extraction (built 2026-11-15, opt-in): `[memory] llm_extract
+  = true` makes chat ask the local model (loopback `[chat]` endpoint only,
+  ≤ 4 s, ≤ 160 tokens, Ko's message only, short first-person messages
+  only) for JSON-line facts before the memory write
+  (`crates/lillith-mind/src/llm_extract.rs`). Every value must be Ko's own
+  words; persona / instruction / safeword words are dropped. The
+  rule-based extractor always runs and is the fallback for any failure.
+  Off by default (it adds model time after each reply); Ko decides.
 - Model-server card (lead's decisions, done): startup waits for the card on
   the first chat; `--spawn-server` asks (card only; no desktop is `NO_UI` plus the manual command);
   a card that loses its window is closed `CANCELLED` (bubble close handler,
