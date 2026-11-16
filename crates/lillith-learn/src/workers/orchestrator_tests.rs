@@ -859,3 +859,26 @@ fn uncertain_ownership_fails_closed_until_far_past_the_deadline() {
         (DreamState::Ended, Some("Back."))
     );
 }
+
+#[test]
+fn after_a_session_the_note_sink_compacts_old_events_and_audits_it() {
+    use lillith_memory::{Brain, Ctx, MemoryConfig};
+    let d = std::env::temp_dir().join(format!("lillith-orch-compact-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let brain = Brain::open_in_memory(&MemoryConfig::default()).unwrap();
+    let now = crate::now_s();
+    for days_ago in [70.0, 71.0, 2.0] {
+        brain.observe_event(
+            &lillith_core::Event::with_detail("window.opened.app", "steam"),
+            &Ctx::at(now - days_ago * 86_400.0),
+        );
+    }
+    let log = d.join("audit.log");
+    let mut sink = NoteSink::new(&Config::default(), None, Some(brain), Some(log.clone()));
+    sink.after_session();
+    let b = sink.brain_for_tests().unwrap();
+    assert_eq!(b.stats().events, 1, "only the recent event is left");
+    let a = std::fs::read_to_string(&log).unwrap();
+    assert!(a.contains("\tCOMPACT\trows_merged=2\tbytes_saved="), "{a}");
+    let _ = std::fs::remove_dir_all(&d);
+}

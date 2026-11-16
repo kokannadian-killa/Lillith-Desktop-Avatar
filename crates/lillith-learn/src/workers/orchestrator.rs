@@ -12,8 +12,8 @@
 //!   production [`NoteSink`] writes untrusted `web` notes (`kind: dream`,
 //!   the session id as `trip_id`) and indexes them in the memory graph at
 //!   `[learn.dream] dream_strength` (weak; they only grow if used).
-//!   [`DreamSink::after_session`] is the self-compression hook (§13, P8:
-//!   a no-op today).
+//!   [`DreamSink::after_session`] is the self-compression hook (§13, P8):
+//!   the production sink runs [`lillith_memory::Brain::compact`] there.
 //! - **Announce.** Every step is a [`DreamEvent`] (where she's going,
 //!   where she's been, what she saved, how it ended) and a `DREAM` audit
 //!   line (fail-closed: no line, the session stops as `audit_failed`).
@@ -963,8 +963,8 @@ pub struct SavedFact {
 /// orchestrator hands each accepted [`Candidate`] here.
 pub trait DreamSink {
     fn save(&mut self, topic: &str, c: &Candidate, session: &str) -> Result<SavedFact, String>;
-    /// Memory self-compression after a session (§13 compaction, P8). No-op
-    /// until compaction exists.
+    /// Memory self-compression after a session (§13 compaction, P8). The
+    /// default does nothing (test sinks).
     fn after_session(&mut self) {}
 }
 
@@ -1014,6 +1014,29 @@ impl NoteSink {
 }
 
 impl DreamSink for NoteSink {
+    /// Compacts the memory graph (§13: old habit events → day digests,
+    /// then tidy). A stop or the safeword during the run cuts it short
+    /// (finished days stay done). One `COMPACT` audit line.
+    fn after_session(&mut self) {
+        use lillith_core::access::kill_switch;
+        let Some(b) = self.brain.as_ref() else {
+            return;
+        };
+        let (k0, h0) = (kill_switch::epoch(), kill_switch::hush_epoch());
+        let stop = || kill_switch::stopped_since(k0) || kill_switch::hush_epoch() != h0;
+        let now = crate::now_s();
+        match b.compact(now, &stop) {
+            Ok(r) => {
+                if let Some(log) = &self.audit_log {
+                    if let Err(e) = lillith_memory::compact::record(log, now, &r) {
+                        tracing::warn!("dream: compact audit: {e}");
+                    }
+                }
+            }
+            Err(e) => tracing::warn!("dream: compact: {e}"),
+        }
+    }
+
     fn save(&mut self, topic: &str, c: &Candidate, session: &str) -> Result<SavedFact, String> {
         let store = self.store.as_ref().ok_or("no knowledge folder")?;
         let title: String = c.title.trim().chars().take(120).collect();

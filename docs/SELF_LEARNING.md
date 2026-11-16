@@ -850,6 +850,23 @@ storage and easy access for her"*. Extends the storage model in
 Fully local. The only new dependency is the `zstd` crate via cargo (not in
 `Cargo.lock` today; vendored with the release build), no other downloads.
 
+**Built (P8 first slice, 2026-11-15):** `crates/lillith-memory/src/compact.rs`,
+`Brain::compact`, run by the dream sink's `after_session` hook (so after
+every dream session). Habit events older than 61 days (past the 60-day
+habit window, so predictions are unchanged) are rolled up per UTC day
+into one `event` node (`digest:day:<date>`: counts per app, `digest_of`
+edges to the app entities) and the originals deleted in the same
+transaction; before this they were simply deleted at 120 days. One
+transaction per day, `stop` / the safeword checked before each, so a cut
+run resumes next time. Then FTS `optimize`, `PRAGMA optimize`,
+`incremental_vacuum` and a WAL checkpoint. Notes (any origin),
+preferences, entities and errors are never touched; no schema change.
+Forgetting a topic deletes the digests that mention it. Audit:
+`COMPACT\trows_merged=N\tbytes_saved=B`. Not built yet: zstd blobs and the
+dictionary, the LRU cache, the `max_db_mb` budget prune, weekly digests,
+3B summaries, an idle-time run outside dreams, and the panel's Storage
+section.
+
 ## Config (`[learn]`, all new)
 
 ```toml
