@@ -44,19 +44,27 @@ The roster lives in `bots.toml` next to `config.toml` (Save in the bottom bar wr
 * **Crashed Lillith processes.** Each joined process keeps its entry in the stop directory
   (`proc-<pid>`, 0600, rewritten atomically and fsynced) up to date with the command trees it
   runs: each process group with its leader's start time and every descendant (pid + start time)
-  its ~200 ms `/proc` snapshots found. If that process is SIGKILLed or crashes, the next stop
+  its ~200 ms `/proc` snapshots found. Each command's top process is made a Linux *child
+  subreaper* (`PR_SET_CHILD_SUBREAPER`, set in the child just before exec), so anything in the
+  command's tree that double-forks and orphans itself is re-parented to that top process
+  instead of escaping to init, and the `/proc` walk still finds it. Lillith itself never
+  becomes a subreaper (it never inherits or has to reap anyone's orphans).
+  If that process is SIGKILLed or crashes, the next stop
   (from any Lillith process) SIGKILLs those groups, the recorded descendants, their own
   descendants and the groups they moved to, then checks they are gone. Only then is the dead
   process's entry removed. Pid reuse: a pid is only signalled while its start time
   (`/proc/<pid>/stat` field 22) still matches the recorded one, and a group only while its
   leader pid is gone or still has the recorded start time.
 * **Reporting.** `stop_all` waits (at most 5 s) for those acknowledgements. Settings and chat say
-  **Stopped** only when every live Lillith process confirmed the command trees it *tracked* are
-  gone and every tree a crashed Lillith process left behind was killed and verified gone
-  (Quiescent; the line says "tracked", see the gaps below). Otherwise the line says the stop was
+  **Stopped** only when every live Lillith process in the stop session confirmed the command
+  trees it *tracked* are gone, every tree a crashed Lillith process left behind was killed and
+  verified gone, and no Lillith process is running outside the session. The line states exactly
+  what was checked, e.g. "2 tracked command tree(s) confirmed gone by 2 stop-session member(s)
+  (this process included); processes Lillith never tracked are not covered" (the stopping
+  process counts as a member, so "1 member" means only the stopper itself answered). Otherwise the line says the stop was
   saved but **not confirmed** (a process that did not answer, a tree still alive, a crashed
-  process's tree that survived the kill or whose entry / `/proc` can't be read, or an OS where
-  trees can't be checked), or that it only applied in this process (barrier not saved).
+  process's tree that survived the kill or whose entry / `/proc` can't be read, a Lillith
+  process running outside the session, or an OS where trees can't be checked), or that it only applied in this process (barrier not saved).
   "Sent" / "accepted" is never shown as stopped.
 * **Disarmed until Re-arm.** After a global stop, every Lillith process refuses to start any
   command, including processes started later (restarts, a new overlay after Ctrl-C), until Ko
@@ -66,18 +74,23 @@ The roster lives in `bots.toml` next to `config.toml` (Save in the bottom bar wr
   clears the barrier and the disarm.
 * **Who joins.** Every release-built Lillith process joins. `LILLITH_STOP_SESSION=off` keeps a
   process out of the session (stops stay process-local) **in debug builds only**; a release
-  build ignores it and logs a warning. Under `cargo test` / `cargo run` a process only joins in
+  build ignores it and logs a warning. A debug process that opts out this way leaves an
+  `optout-<pid>` marker in the stop directory, so while it lives every stop says **not
+  confirmed** ("outside the stop session … not stopped or checked") instead of claiming it. Under `cargo test` / `cargo run` a process only joins in
   a fully scratch XDG environment (all `XDG_*` base dirs set, runtime dir in the same private
   tree as the state dir), so test runs never disarm a live Lillith. That also means a **dev
   `cargo run` with your normal XDG dirs does not join the stop session**: Stop all / Ctrl-C in
   Settings does not reach it, and its own Ctrl-C stays process-local. Use the installed
   (release) build, or give the dev run scratch XDG dirs, when you need the cross-process stop.
 * **Known gaps (honest):**
-  - *Double fork between snapshots:* runners record descendants by a `/proc` parent walk about
-    every 200 ms and again at kill time. A process that double-forks and loses its parent link
-    between two snapshots (and also left the process group) is not found and survives the stop.
-    The acknowledgement only covers what was tracked, so the stop can still read as
-    **Stopped** ("the command trees they tracked are gone"); that wording is deliberate.
+  - *Escapes the subreaper can't catch:* double-forked orphans are re-parented to the
+    command's top process only while that process lives. Not found (and so not killed, while
+    the stop can still read **Stopped**, which only claims *tracked* trees): an orphan created
+    after the command's top process already exited; a fork racing the kill itself (the kill
+    repeats its walk three times, ~10 ms apart); and anything the command asks *another*
+    service to start (`systemd-run --user`, D-Bus activation, `at`, cron), which is never in
+    the command's tree. A command whose top process is not a shell also now inherits its
+    tree's orphans (it may see unknown children; shells and make reap them).
   - *SIGKILLed / crashed Lillith:* the command trees it recorded are no longer torn down at the
     moment it dies, only at the **next** stop (Stop all / Ctrl-C / kill switch from any Lillith
     process), which kills and checks them as described above. Until then they keep running.

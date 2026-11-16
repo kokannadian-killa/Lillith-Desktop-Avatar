@@ -124,27 +124,45 @@ fn session() -> Option<&'static Session> {
         return Some(s);
     }
     AUTO.call_once(|| {
-        if auto_join_allowed() {
-            if let Err(e) = join() {
-                tracing::warn!("cross-process stop unavailable (stops stay in this process): {e}");
+        if cfg!(test) {
+            return;
+        }
+        match join_rule() {
+            JoinRule::Join => {
+                if let Err(e) = join() {
+                    tracing::warn!(
+                        "cross-process stop unavailable (stops stay in this process): {e}"
+                    );
+                }
             }
+            JoinRule::OptedOut => note_opt_out(),
+            JoinRule::No => {}
         }
     });
     SESSION.get()
 }
 
-fn auto_join_allowed() -> bool {
-    !cfg!(test) && env_allows_join()
+/// The outcome of the join rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum JoinRule {
+    Join,
+    /// `LILLITH_STOP_SESSION=off` (debug builds only) where this process
+    /// would otherwise join: it stays out, but leaves an `optout-<pid>`
+    /// marker so a stop never claims it was checked.
+    OptedOut,
+    /// A cargo test / run without fully scratch XDG dirs: nothing is
+    /// written anywhere (never the live session).
+    No,
 }
 
 /// The environment part of the join rule, shared by auto-join and the
 /// binaries' explicit [`join`]: `LILLITH_STOP_SESSION`, and never the live
 /// session from a cargo test / run without fully scratch XDG dirs.
-fn env_allows_join() -> bool {
-    match std::env::var("LILLITH_STOP_SESSION").as_deref() {
+fn join_rule() -> JoinRule {
+    let off = match std::env::var("LILLITH_STOP_SESSION").as_deref() {
         // Release builds never let an environment variable take a process
         // out of the kill switch's reach.
-        Ok("off") if cfg!(debug_assertions) => return false,
+        Ok("off") if cfg!(debug_assertions) => true,
         Ok("off") => {
             static WARNED: std::sync::Once = std::sync::Once::new();
             WARNED.call_once(|| {
@@ -152,10 +170,40 @@ fn env_allows_join() -> bool {
                     "LILLITH_STOP_SESSION=off is ignored in release builds: this process joins the cross-process stop session"
                 );
             });
+            false
         }
-        Ok("on") => return true,
-        _ => {}
+        Ok("on") => return JoinRule::Join,
+        _ => false,
+    };
+    match (cargo_rule_allows(), off) {
+        (false, _) => JoinRule::No,
+        (true, true) => JoinRule::OptedOut,
+        (true, false) => JoinRule::Join,
     }
+}
+
+/// Writes (once) this process's `optout-<pid>` marker: "a Lillith process
+/// that may run commands is outside the stop session". Best effort.
+fn note_opt_out() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let Some(d) = default_dir() else { return };
+        if private_dir(&d).is_err() || check_private(&d).is_err() {
+            return;
+        }
+        let pid = std::process::id();
+        let st = start_time(pid).unwrap_or(0);
+        match write_atomic(&d.join(format!("optout-{pid}")), &format!("{pid} {st}\n")) {
+            Ok(()) => tracing::warn!(
+                "LILLITH_STOP_SESSION=off: this process is outside the cross-process stop; stops elsewhere report it as not stopped"
+            ),
+            Err(e) => tracing::warn!("could not leave the stop-session opt-out marker: {e}"),
+        }
+    });
+}
+
+/// The cargo test / run part of the join rule.
+fn cargo_rule_allows() -> bool {
     // A cargo test binary run directly lives in `target/<profile>/deps/`.
     let test_binary = std::env::current_exe()
         .ok()
@@ -216,7 +264,11 @@ pub fn default_dir() -> Option<PathBuf> {
 /// at start-up (the overlay / `lillith` CLI and `lillith-settings`). Library
 /// users and unit tests that never join keep the old, process-local stop.
 pub fn join() -> io::Result<PathBuf> {
-    if !env_allows_join() {
+    let rule = join_rule();
+    if rule == JoinRule::OptedOut {
+        note_opt_out();
+    }
+    if rule != JoinRule::Join {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "stop session off (LILLITH_STOP_SESSION=off, or a cargo test/run without scratch XDG dirs)",
@@ -561,11 +613,28 @@ impl Quiet {
 /// Waits up to `deadline` for every runner that started before the latest
 /// stop to return and for every stopped group to be empty.
 pub fn local_quiescence(deadline: Duration) -> Quiet {
+    local_quiescence_counted(deadline).0
+}
+
+/// [`local_quiescence`] plus how many tracked command trees it saw stopped
+/// and then gone (when `Quiet`).
+fn local_quiescence_counted(deadline: Duration) -> (Quiet, usize) {
     let t0 = Instant::now();
+    let mut ids: Vec<u64> = Vec::new();
     loop {
         let now = super::kill_switch::epoch();
         let (old, left, pruned) = match TRACKED.lock() {
             Ok(mut t) => {
+                for x in t
+                    .active
+                    .iter()
+                    .filter(|x| x.epoch != now)
+                    .chain(t.stopped.iter())
+                {
+                    if !ids.contains(&x.id) {
+                        ids.push(x.id);
+                    }
+                }
                 let old = t.active.iter().filter(|x| x.epoch != now).count();
                 let before = t.stopped.len();
                 t.stopped
@@ -579,13 +648,13 @@ pub fn local_quiescence(deadline: Duration) -> Quiet {
         }
         if old == 0 && left == 0 {
             return if cfg!(target_os = "linux") {
-                Quiet::Quiet
+                (Quiet::Quiet, ids.len())
             } else {
-                Quiet::Unverified
+                (Quiet::Unverified, ids.len())
             };
         }
         if t0.elapsed() >= deadline {
-            return Quiet::Busy(old + left);
+            return (Quiet::Busy(old + left), ids.len());
         }
         std::thread::sleep(Duration::from_millis(20));
     }
@@ -784,9 +853,9 @@ fn watch(mut seen: u64) {
             tracing::warn!("stop barrier moved (generation {g}): another Lillith process pulled the kill switch");
             super::kill_switch::run_foreign_stop_hooks();
         }
-        let q = local_quiescence(LOCAL_QUIET_DEADLINE);
+        let (q, trees) = local_quiescence_counted(LOCAL_QUIET_DEADLINE);
         let pid = std::process::id();
-        let body = format!("{g} {}\n", q.word());
+        let body = format!("{g} {}\ntrees {trees}\n", q.word());
         if let Err(e) = write_atomic(&s.dir.join(format!("ack-{pid}")), &body) {
             tracing::warn!("could not write stop ack: {e}");
         }
@@ -806,7 +875,11 @@ pub enum StopOutcome {
     /// module docs for the double-fork gap).
     Quiescent {
         generation: u64,
-        processes: usize,
+        /// Session members (live joined processes, the stopping one
+        /// included) that acknowledged with verified-empty tracked trees.
+        members: usize,
+        /// Tracked command trees those members saw stopped and gone.
+        trees: usize,
         orphans_killed: usize,
     },
     /// The barrier is saved (`generation`), but not every process confirmed.
@@ -824,6 +897,9 @@ pub enum StopOutcome {
         /// Dead processes whose recorded trees can't be checked (unreadable
         /// or old-format entry, no `/proc`, permission error).
         unchecked: Vec<u32>,
+        /// Live processes outside the session (`LILLITH_STOP_SESSION=off`,
+        /// debug builds): never told, never checked.
+        opted_out: Vec<u32>,
     },
 }
 
@@ -833,31 +909,41 @@ impl StopOutcome {
         matches!(self, StopOutcome::Quiescent { .. })
     }
 
+    /// For `Quiescent`: exactly what was confirmed (counts of session
+    /// members and tracked trees), never more. Empty otherwise.
+    pub fn confirmed_detail(&self) -> String {
+        let StopOutcome::Quiescent {
+            members,
+            trees,
+            orphans_killed,
+            ..
+        } = self
+        else {
+            return String::new();
+        };
+        let mut l = format!(
+            "{trees} tracked command tree(s) confirmed gone by {members} stop-session member(s) (this process included)"
+        );
+        if *orphans_killed > 0 {
+            l.push_str(&format!(
+                ", plus {orphans_killed} tree(s) left by a crashed Lillith process killed and checked"
+            ));
+        }
+        l.push_str("; processes Lillith never tracked are not covered.");
+        l
+    }
+
     /// One truthful line for the UI.
     pub fn line(&self) -> String {
         match self {
-            StopOutcome::Quiescent {
-                processes,
-                orphans_killed,
-                ..
-            } => {
-                let mut l = format!(
-                    "Stopped: {processes} Lillith process(es) confirmed the command trees they tracked are gone"
-                );
-                if *orphans_killed > 0 {
-                    l.push_str(&format!(
-                        "; {orphans_killed} tree(s) left by a crashed Lillith process were killed and checked"
-                    ));
-                }
-                l.push_str(" (only tracked processes are covered).");
-                l
-            }
+            StopOutcome::Quiescent { .. } => format!("Stopped: {}", self.confirmed_detail()),
             StopOutcome::Incomplete {
                 unconfirmed,
                 busy,
                 unverified,
                 orphaned,
                 unchecked,
+                opted_out,
                 ..
             } => {
                 let mut parts = Vec::new();
@@ -881,6 +967,12 @@ impl StopOutcome {
                     parts.push(format!(
                         "{} crashed Lillith process(es) whose commands could not be checked",
                         unchecked.len()
+                    ));
+                }
+                if !opted_out.is_empty() {
+                    parts.push(format!(
+                        "{} Lillith process(es) outside the stop session (LILLITH_STOP_SESSION=off) not stopped or checked",
+                        opted_out.len()
                     ));
                 }
                 format!(
@@ -932,6 +1024,8 @@ fn confirm_with(dir: &Path, generation: u64, deadline: Duration, kill: KillFn) -
         let mut orphaned = Vec::new();
         let mut unchecked = Vec::new();
         let mut ok = 0usize;
+        let mut trees = 0usize;
+        let outside = opted_out(dir);
         for (pid, start) in registered(dir) {
             if registered_alive(pid, start) == Some(false) {
                 // Dead or a reused pid: kill what it left running first.
@@ -947,8 +1041,11 @@ fn confirm_with(dir: &Path, generation: u64, deadline: Duration, kill: KillFn) -
                 continue;
             }
             match read_ack(dir, pid) {
-                Some((g, q)) if g >= generation => match q {
-                    Quiet::Quiet => ok += 1,
+                Some((g, q, n)) if g >= generation => match q {
+                    Quiet::Quiet => {
+                        ok += 1;
+                        trees += n;
+                    }
                     Quiet::Unverified => unverified.push(pid),
                     Quiet::Busy(n) => busy.push((pid, n)),
                 },
@@ -959,11 +1056,13 @@ fn confirm_with(dir: &Path, generation: u64, deadline: Duration, kill: KillFn) -
             && busy.is_empty()
             && unverified.is_empty()
             && orphaned.is_empty()
-            && unchecked.is_empty();
+            && unchecked.is_empty()
+            && outside.is_empty();
         if clean {
             return StopOutcome::Quiescent {
                 generation,
-                processes: ok,
+                members: ok,
+                trees,
                 orphans_killed,
             };
         }
@@ -976,6 +1075,7 @@ fn confirm_with(dir: &Path, generation: u64, deadline: Duration, kill: KillFn) -
                 unverified,
                 orphaned,
                 unchecked,
+                opted_out: outside,
             };
         }
         std::thread::sleep(WATCH_EVERY);
@@ -1226,11 +1326,48 @@ fn registered(dir: &Path) -> Vec<(u32, u64)> {
     v
 }
 
-fn read_ack(dir: &Path, pid: u32) -> Option<(u64, Quiet)> {
+/// `(generation, state, tracked trees confirmed gone)` from `ack-<pid>`.
+fn read_ack(dir: &Path, pid: u32) -> Option<(u64, Quiet, usize)> {
     let s = std::fs::read_to_string(dir.join(format!("ack-{pid}"))).ok()?;
-    let s = s.trim();
-    let (g, q) = s.split_once(' ')?;
-    Some((g.parse().ok()?, Quiet::parse(q)?))
+    let mut lines = s.lines();
+    let (g, q) = lines.next()?.trim().split_once(' ')?;
+    let trees = lines
+        .find_map(|l| l.trim().strip_prefix("trees "))
+        .and_then(|n| n.trim().parse().ok())
+        .unwrap_or(0);
+    Some((g.parse().ok()?, Quiet::parse(q)?, trees))
+}
+
+/// Live processes that left an `optout-<pid>` marker (outside the session;
+/// can't be told to stop or checked). Dead ones are pruned; a marker whose
+/// process can't be checked counts as live (fail closed).
+fn opted_out(dir: &Path) -> Vec<u32> {
+    let mut v = Vec::new();
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return v;
+    };
+    for e in rd.flatten() {
+        let name = e.file_name();
+        let Some(pid) = name
+            .to_str()
+            .and_then(|n| n.strip_prefix("optout-"))
+            .and_then(|p| p.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let start = std::fs::read_to_string(e.path())
+            .ok()
+            .and_then(|s| s.split_whitespace().nth(1)?.parse().ok())
+            .unwrap_or(0);
+        match registered_alive(pid, start) {
+            Some(false) => {
+                let _ = std::fs::remove_file(e.path());
+            }
+            _ => v.push(pid),
+        }
+    }
+    v.sort_unstable();
+    v
 }
 
 // ------------------------------------------------------------ file helpers
@@ -1356,7 +1493,8 @@ mod tests {
     fn only_quiescent_is_confirmed_and_lines_never_overclaim() {
         let q = StopOutcome::Quiescent {
             generation: 9,
-            processes: 2,
+            members: 2,
+            trees: 3,
             orphans_killed: 0,
         };
         assert!(q.confirmed());
@@ -1367,6 +1505,12 @@ mod tests {
             q.line()
         );
         assert!(!q.line().contains("every"), "{}", q.line());
+        assert!(
+            q.line().contains("3 tracked command tree(s)")
+                && q.line().contains("2 stop-session member(s)"),
+            "{}",
+            q.line()
+        );
         let i = StopOutcome::Incomplete {
             generation: 9,
             unconfirmed: vec![42],
@@ -1374,6 +1518,7 @@ mod tests {
             unverified: vec![],
             orphaned: vec![],
             unchecked: vec![],
+            opted_out: vec![],
         };
         assert!(!i.confirmed());
         assert!(i.line().contains("NOT confirmed"));
@@ -1386,6 +1531,7 @@ mod tests {
                 unverified: vec![],
                 orphaned,
                 unchecked,
+                opted_out: vec![],
             };
             assert!(!o.confirmed());
             assert!(o.line().contains("NOT confirmed") && o.line().contains("crashed"));
@@ -1596,6 +1742,34 @@ mod tests {
         assert_eq!(stranger.try_wait().unwrap(), None, "reused pid untouched");
         let _ = stranger.kill();
         let _ = stranger.wait();
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A live process outside the session (LILLITH_STOP_SESSION=off) is
+    /// never covered by a confirmed stop; a dead one's marker is pruned.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_opted_out_live_process_is_never_quiescent() {
+        let d =
+            std::env::temp_dir().join(format!("lillith-stopsess-optout-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        private_dir(&d).unwrap();
+        let me = std::process::id();
+        let st = start_time(me).unwrap();
+        std::fs::write(d.join(format!("optout-{me}")), format!("{me} {st}\n")).unwrap();
+        std::fs::write(d.join("optout-4194390"), "4194390 1\n").unwrap();
+        match confirm_in(&d, 1, Duration::from_millis(150)) {
+            StopOutcome::Incomplete { ref opted_out, .. } => assert_eq!(opted_out, &vec![me]),
+            o => panic!("an opted-out live process is never Quiescent: {o:?}"),
+        }
+        assert!(!d.join("optout-4194390").exists(), "dead marker pruned");
+        let line = confirm_in(&d, 1, Duration::from_millis(50)).line();
+        assert!(
+            line.contains("LILLITH_STOP_SESSION=off") && line.contains("NOT confirmed"),
+            "{line}"
+        );
+        std::fs::remove_file(d.join(format!("optout-{me}"))).unwrap();
+        assert!(confirm_in(&d, 1, Duration::from_millis(50)).confirmed());
         let _ = std::fs::remove_dir_all(&d);
     }
 }

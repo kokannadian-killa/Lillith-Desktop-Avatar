@@ -77,7 +77,13 @@ impl StopReport {
     /// [`StopOutcome::Quiescent`]; otherwise the outcome says what is known.
     pub fn chat_line(&self) -> String {
         match &self.outcome {
-            Some(StopOutcome::Quiescent { .. }) => stop_chat_line(self.helper),
+            Some(o @ StopOutcome::Quiescent { .. }) => {
+                format!(
+                    "{} Confirmed: {}",
+                    stop_chat_line(self.helper),
+                    o.confirmed_detail()
+                )
+            }
             Some(o) => o.line(),
             None => "Stop requested in this process; not confirmed yet.".into(),
         }
@@ -342,7 +348,8 @@ mod tests {
             barrier: StopBarrier::NotJoined,
             outcome: Some(StopOutcome::Quiescent {
                 generation: 1,
-                processes: 1,
+                members: 1,
+                trees: 0,
                 orphans_killed: 0,
             }),
         }
@@ -354,7 +361,8 @@ mod tests {
             barrier: StopBarrier::NotJoined,
             outcome: Some(StopOutcome::Quiescent {
                 generation: 1,
-                processes: 1,
+                members: 1,
+                trees: 0,
                 orphans_killed: 0,
             }),
         }

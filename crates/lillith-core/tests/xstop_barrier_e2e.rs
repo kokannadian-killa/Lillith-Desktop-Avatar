@@ -403,7 +403,7 @@ fn stop_kills_the_tree_of_a_sigkilled_member_and_never_claims_a_false_stop() {
     if report.contains("Quiescent") {
         assert!(report.contains("orphans_killed: 1"), "{report}");
         assert!(
-            line.contains("crashed Lillith process were killed"),
+            line.contains("left by a crashed Lillith process killed and checked"),
             "{line}"
         );
         assert!(!entry.exists(), "entry pruned once its tree is gone");

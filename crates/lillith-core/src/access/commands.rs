@@ -542,6 +542,27 @@ fn run_child_ungated(
         use std::os::unix::process::CommandExt;
         c.process_group(0);
     }
+    // The command's top process becomes a child subreaper (Linux): anything
+    // in its tree that double-forks and orphans itself is re-parented to it
+    // instead of to init / an outside subreaper, so the runner's `/proc`
+    // walk (and a stop) still finds and kills it. Set in the child between
+    // fork and exec (prctl is async-signal-safe; the attribute survives
+    // execve and is not inherited by the command's own children), so
+    // Lillith itself never inherits, or has to reap, anyone's orphans.
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        // SAFETY: the closure only makes one raw syscall (no allocation, no
+        // locks), which is what `pre_exec` requires.
+        unsafe {
+            c.pre_exec(|| {
+                if libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
