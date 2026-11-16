@@ -64,6 +64,9 @@ pub fn tee(feed: Sender<Event>, bridge: &Arc<MemoryBridge>) -> Sender<Event> {
         .name("lillith-memory-tee".into())
         .spawn(move || {
             for ev in rx {
+                if let Some(secs) = busy_for(&ev) {
+                    b.set_busy_for(secs);
+                }
                 b.observe(&ev);
                 if out.send(ev).is_err() {
                     return;
@@ -76,6 +79,21 @@ pub fn tee(feed: Sender<Event>, bridge: &Arc<MemoryBridge>) -> Sender<Event> {
             tracing::warn!("memory tee: {e}; memory will not see desktop events");
             feed
         }
+    }
+}
+
+/// The longest one fullscreen report keeps Ko "busy" (proactive lines
+/// quiet) if the "left fullscreen" event never comes (the source died).
+pub const FULLSCREEN_BUSY_S: f64 = 4.0 * 3600.0;
+
+/// The busy-hook effect of a sensor event: entering fullscreen marks Ko
+/// busy ([`MemoryBridge::set_busy_for`], at most [`FULLSCREEN_BUSY_S`]),
+/// leaving it clears that (`0`). Anything else: `None`.
+pub fn busy_for(ev: &Event) -> Option<f64> {
+    match ev.name.as_str() {
+        lillith_sense::fullscreen::FULLSCREEN_EVENT => Some(FULLSCREEN_BUSY_S),
+        lillith_sense::fullscreen::FULLSCREEN_LEFT_EVENT => Some(0.0),
+        _ => None,
     }
 }
 
@@ -325,6 +343,75 @@ mod tests {
         let t1 = t + VOICE_BACKOFF;
         assert_eq!(r.poll(1, 0, t1, &m), VoiceStep::Speak);
         assert_eq!(r.poll(2, 0, t1, &m), VoiceStep::TextOnly);
+    }
+
+    #[test]
+    fn fullscreen_marks_ko_busy_and_leaving_clears_it() {
+        use lillith_sense::fullscreen::{FULLSCREEN_EVENT, FULLSCREEN_LEFT_EVENT};
+        assert_eq!(
+            busy_for(&Event::with_detail(FULLSCREEN_EVENT, "mpv")),
+            Some(FULLSCREEN_BUSY_S)
+        );
+        assert_eq!(busy_for(&Event::new(FULLSCREEN_LEFT_EVENT)), Some(0.0));
+        assert_eq!(busy_for(&Event::with_detail("window.focused", "mpv")), None);
+    }
+
+    /// End to end through the tee: a brain that expects Steam every
+    /// evening suggests it, except while a fullscreen window has focus.
+    #[test]
+    fn proactive_lines_stay_quiet_while_fullscreen() {
+        use lillith_memory::{Brain, Ctx};
+        use lillith_sense::fullscreen::{FULLSCREEN_EVENT, FULLSCREEN_LEFT_EVENT};
+        use std::sync::Mutex;
+        const MON: f64 = 1_792_368_000.0;
+        const DAY: f64 = 86_400.0;
+        let cfg = lillith_core::config::MemoryConfig::default();
+        let brain = Brain::open_in_memory(&cfg).unwrap();
+        for d in 0..5 {
+            for h in [20.0, 20.5] {
+                brain.observe_event(
+                    &Event::with_detail("window.opened.app", "steam"),
+                    &Ctx::at(MON + d as f64 * DAY + h * 3600.0),
+                );
+            }
+        }
+        let clock = Arc::new(Mutex::new(MON + 7.0 * DAY + 20.25 * 3600.0));
+        let (stx, said) = std::sync::mpsc::channel();
+        let stx = Mutex::new(stx);
+        let mut o = BridgeOptions::new(
+            &cfg,
+            Box::new(move |l| {
+                let _ = stx.lock().unwrap().send(l);
+            }),
+        );
+        let c = clock.clone();
+        o.clock = Arc::new(move || *c.lock().unwrap());
+        let slot = Mutex::new(Some(brain));
+        o.open = Box::new(move || slot.lock().unwrap().take());
+        let bridge = Arc::new(MemoryBridge::spawn_with(o));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let t = tee(tx, &bridge);
+        t.send(Event::with_detail(FULLSCREEN_EVENT, "mpv")).unwrap();
+        // The tee applies the busy hook before it forwards the event.
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap().name,
+            FULLSCREEN_EVENT
+        );
+        bridge.check_now();
+        assert!(
+            said.recv_timeout(Duration::from_millis(400)).is_err(),
+            "quiet while fullscreen"
+        );
+        t.send(Event::new(FULLSCREEN_LEFT_EVENT)).unwrap();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap().name,
+            FULLSCREEN_LEFT_EVENT
+        );
+        bridge.check_now();
+        assert!(
+            said.recv_timeout(Duration::from_millis(1500)).is_ok(),
+            "speaks again once fullscreen ends"
+        );
     }
 
     #[test]

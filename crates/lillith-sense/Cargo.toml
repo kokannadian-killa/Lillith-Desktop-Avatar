@@ -40,5 +40,13 @@ wayland-client = { workspace = true, optional = true }
 wayland-protocols = { workspace = true, optional = true }
 futures-util = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [dev-dependencies]
 tokio = { workspace = true }

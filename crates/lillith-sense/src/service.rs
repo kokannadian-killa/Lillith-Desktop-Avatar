@@ -8,6 +8,7 @@
 //! - **files**: an inotify watcher (kernel-driven, no polling).
 //! - **KWin bridge** (one task): serves `org.lillith.Bridge`; `window.*`
 //!   events only arrive when the KWin script is installed (M5), nothing faked.
+//!   On Windows the same switch also starts [`crate::win_focus`].
 
 use crate::monitor::{Monitor, Sample};
 use crate::presence::{self, IdleSource, Presence};
@@ -91,6 +92,11 @@ pub fn spawn_with(
     if cfg.kwin_bridge {
         // Receiver only: events arrive once the kwin/lillith-bridge script is
         // installed and enabled (packaging + Plasma 6 verification: M5).
+        // Windows has no KWin: the foreground-window poller is the window
+        // source there (`window.focused` app ids, fullscreen).
+        #[cfg(windows)]
+        h.tasks
+            .push(tokio::spawn(crate::win_focus::run(sink.clone())));
         let sink = sink.clone();
         h.tasks.push(tokio::spawn(async move {
             if let Err(e) = crate::kwin::serve(sink).await {
