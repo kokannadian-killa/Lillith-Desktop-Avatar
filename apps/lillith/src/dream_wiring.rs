@@ -186,15 +186,7 @@ fn digest(cfg: &Config, report: &DreamReport, control: &lillith_learn::workers::
 /// The chat bubble (its own process): `/dream …` is forwarded to the
 /// overlay, which owns the dream; status comes from the status file.
 pub fn register_bubble(emit: lillith_panel::chat_bubble::Emit) {
-    let running = || {
-        read_status_file().is_some_and(|s| {
-            matches!(
-                s.state,
-                lillith_learn::workers::DreamState::Running
-                    | lillith_learn::workers::DreamState::Proposed
-            )
-        })
-    };
+    let running = || bubble_busy(read_status_file().as_ref());
     let (e1, e2, e3) = (emit.clone(), emit.clone(), emit);
     hooks::set_hooks(Hooks {
         open: Arc::new(move |m| {
@@ -225,6 +217,22 @@ pub fn register_bubble(emit: lillith_panel::chat_bubble::Emit) {
                 .unwrap_or_else(|| "I'm not dreaming.".into())
         }),
     });
+}
+
+/// Whether the bubble treats the overlay's dream as live (a card up or a
+/// session running / ending). The status file reader already turns a
+/// crashed owner's leftover live state into `Ended`
+/// ([`lillith_learn::workers::read_status_file_at`]), so a stale file never
+/// blocks a new card; an owner it can't check stays live (fail closed).
+fn bubble_busy(s: Option<&lillith_learn::workers::DreamStatus>) -> bool {
+    s.is_some_and(|s| {
+        matches!(
+            s.state,
+            lillith_learn::workers::DreamState::Running
+                | lillith_learn::workers::DreamState::Proposed
+                | lillith_learn::workers::DreamState::Ending
+        )
+    })
 }
 
 /// In the overlay: a `chat.dream_*` event from the bubble. `true` when it
@@ -316,6 +324,42 @@ mod tests {
         // No hooks in this test process's overlay role: NotWired, handled.
         hooks::clear_hooks();
         assert!(on_bubble_event(hooks::END_EARLY_EVENT, None));
+    }
+
+    /// After an overlay crash mid-dream its `dream-status.json` still says
+    /// `running`: the bubble must not answer `/dream` with "busy" (nor the
+    /// Bots tab show it running), while a live session still is busy.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_crashed_overlays_status_file_does_not_block_a_new_card() {
+        use lillith_learn::workers::{read_status_file_at, DreamControl, DreamState};
+        let dir = std::env::temp_dir().join(format!("lillith-dw-stale-{}", std::process::id()));
+        let file = dir.join("dream-status.json");
+        let c = DreamControl::with_status_file(Some(file.clone()));
+        assert!(c.try_propose());
+        assert!(bubble_busy(read_status_file_at(&file).as_ref()), "card up");
+        // A live owner (this process) with a running state: busy.
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        v["state"] = "running".into();
+        std::fs::write(&file, v.to_string()).unwrap();
+        assert!(bubble_busy(read_status_file_at(&file).as_ref()), "live");
+        // The owner died (a reaped child's pid): not busy, not running.
+        let mut ch = std::process::Command::new("true").spawn().unwrap();
+        let dead = ch.id();
+        ch.wait().unwrap();
+        v["owner_pid"] = dead.into();
+        std::fs::write(&file, v.to_string()).unwrap();
+        let st = read_status_file_at(&file).unwrap();
+        assert_eq!(st.state, DreamState::Ended);
+        assert!(!bubble_busy(Some(&st)));
+        // No owner recorded and the deadline still ahead: fail closed.
+        v.as_object_mut().unwrap().remove("owner_pid");
+        v["deadline"] = "2999-01-01T00:00:00Z".into();
+        std::fs::write(&file, v.to_string()).unwrap();
+        assert!(bubble_busy(read_status_file_at(&file).as_ref()), "unknown");
+        assert!(!bubble_busy(None));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

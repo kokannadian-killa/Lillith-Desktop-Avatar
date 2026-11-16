@@ -747,3 +747,115 @@ fn forget_dream_item_removes_the_note_file_index_and_log_entry() {
     assert!(err.contains("not a dream note"), "{err}");
     assert!(keep.path.exists());
 }
+
+/// The pid of a process that has exited and been reaped.
+fn dead_pid() -> u32 {
+    let mut c = std::process::Command::new("true").spawn().unwrap();
+    let pid = c.id();
+    c.wait().unwrap();
+    pid
+}
+
+fn write_status(file: &std::path::Path, v: serde_json::Value) {
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(file, v.to_string()).unwrap();
+}
+
+#[test]
+fn a_crashed_owners_running_status_reads_as_ended_not_running() {
+    let env = Env::new("stale");
+    let file = env.dir.join("run/dream-status.json");
+    let c = DreamControl::with_status_file(Some(file.clone()));
+    assert!(c.try_propose());
+    c.attach(&Session::new("s-crash", Duration::from_secs(3600)));
+    // Written by this (live) process: running, with its owner.
+    let on_disk: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(on_disk["owner_pid"], std::process::id());
+    assert!(on_disk["owner_start"].is_string(), "{on_disk}");
+    assert_eq!(
+        read_status_file_at(&file).unwrap().state,
+        DreamState::Running,
+        "a live owner's session stays running"
+    );
+    // The overlay crashed mid-dream: same file, the owner is gone.
+    let mut v = on_disk.clone();
+    v["owner_pid"] = dead_pid().into();
+    write_status(&file, v);
+    let st = read_status_file_at(&file).unwrap();
+    assert_eq!(st.state, DreamState::Ended);
+    assert_eq!(st.summary.as_deref(), Some(STALE_SUMMARY));
+    assert_eq!(st.session.as_deref(), Some("s-crash"));
+    assert!(st.where_now.is_none());
+    // Reading changed nothing on disk.
+    let after: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(after["state"], "running");
+}
+
+#[test]
+fn a_reused_pid_is_not_the_owner_and_a_stale_card_is_not_up() {
+    let env = Env::new("reused");
+    let file = env.dir.join("run/dream-status.json");
+    // This process's pid but another start time: the owner was replaced.
+    write_status(
+        &file,
+        serde_json::json!({"state": "proposed", "owner_pid": std::process::id(), "owner_start": "1"}),
+    );
+    assert_eq!(read_status_file_at(&file).unwrap().state, DreamState::Ended);
+    assert_eq!(owner_liveness(dead_pid(), Some("1")), OwnerLiveness::Gone);
+}
+
+#[test]
+fn uncertain_ownership_fails_closed_until_far_past_the_deadline() {
+    let env = Env::new("unknown");
+    let file = env.dir.join("run/dream-status.json");
+    let future = crate::audit::utc(crate::now_s() + 3600.0);
+    let past = crate::audit::utc(crate::now_s() - 2.0 * 3600.0);
+    let recent = crate::audit::utc(crate::now_s() - 60.0);
+    // An older file (no owner): busy while the deadline may still hold.
+    for (state, deadline) in [
+        ("running", &future),
+        ("ending", &recent),
+        ("proposed", &past),
+    ] {
+        write_status(
+            &file,
+            serde_json::json!({"state": state, "deadline": deadline}),
+        );
+        assert_eq!(
+            read_status_file_at(&file).unwrap().state.word(),
+            state,
+            "{state} {deadline}"
+        );
+    }
+    // A live pid with no start time recorded: can't tell, stays as is.
+    write_status(
+        &file,
+        serde_json::json!({"state": "running", "owner_pid": std::process::id()}),
+    );
+    assert_eq!(
+        read_status_file_at(&file).unwrap().state,
+        DreamState::Running
+    );
+    assert_eq!(
+        owner_liveness(std::process::id(), None),
+        OwnerLiveness::Unknown
+    );
+    // No owner and long past the card deadline: the session can't be live.
+    write_status(
+        &file,
+        serde_json::json!({"state": "running", "deadline": past}),
+    );
+    assert_eq!(read_status_file_at(&file).unwrap().state, DreamState::Ended);
+    // Ended / idle files are untouched.
+    write_status(
+        &file,
+        serde_json::json!({"state": "ended", "summary": "Back.", "owner_pid": dead_pid()}),
+    );
+    let st = read_status_file_at(&file).unwrap();
+    assert_eq!(
+        (st.state, st.summary.as_deref()),
+        (DreamState::Ended, Some("Back."))
+    );
+}
