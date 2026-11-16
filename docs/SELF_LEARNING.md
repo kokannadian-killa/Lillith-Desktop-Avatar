@@ -619,11 +619,30 @@ only open the card: right-click **Dream learning…** / **End dream early**,
 `/dream [2h|90m]` (`/dream end|stop|status`) in chat, and
 `lillith dream [duration]`. Stops: End early, `stop`, the kill switch,
 Ctrl-C, the deadline, low battery, heat, Tor down, the byte / disk budgets.
-Not yet: the curiosity queue (topics come from a fixed public-reference
-seed list per `[learn] topics`, never `ko-preferences` / `self`), a summary
-model pass, the panel's live log / per-item Forget (the Bots tab can read
-`dream_status()`), the external backend (§11.1), self-compression (P8 hook
-`DreamSink::after_session` is a no-op).
+Also built (verified 2026-11-15 by tests on `fix/memory-p7-verify`):
+- the curiosity queue (`workers::curiosity::CuriosityQueue`): Ko's recent
+  mentions first, then the `[learn] topics` rotation; mentions only pick
+  fixed public pages, and names, blocklist terms and `ko-preferences` /
+  `self` never enter (`curiosity.rs` tests);
+- the summary model pass (`workers::digest::summarize_session`,
+  `[learn.dream] summarize = true`): a loopback-only digest after a dream
+  that saved notes, none when the model is down or chat holds the slot
+  (`digest.rs` tests);
+- the Bots tab's live log with per-item Forget (`LiveDream` over the
+  status file, `forget_dream_item`: that one `kind: dream` note's file and
+  memory row, audited, mouse-only; `tabs/bots/tests.rs`,
+  `forget_dream_item_removes_the_note_file_index_and_log_entry`);
+- stale status after a crash: the status file records its owner
+  (`owner_pid` / `owner_start`). A `proposed` / `running` / `ending` state
+  whose owner is gone reads as `ended` ("the app running it closed
+  unexpectedly"), so it no longer makes the chat bubble's `/dream` answer
+  busy or the Bots tab show it running; a live owner still reads busy,
+  and an owner that can't be checked fails closed (busy) until half an
+  hour past the card deadline (`read_status_file_at`).
+
+Not yet: the external backend (§11.1), self-compression (P8 hook
+`DreamSink::after_session` is a no-op). A live-GUI smoke of the Bots tab
+during a real dream is still to do on Ko's machine.
 
 ### 11.1 Optional backend: Ko's TaskCompletion bots (external) — decided by Ko
 

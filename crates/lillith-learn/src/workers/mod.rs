@@ -80,9 +80,9 @@ pub use dream::{
 pub use external::{Backend, ExternalBudget, ExternalRequest};
 pub use joblog::{JobEntry, JobLog, JobStatus};
 pub use orchestrator::{
-    dream_status, end_dream_early, forget_dream_item, read_status_file, stop_dream, DreamControl,
-    DreamEvent, DreamItem, DreamPlanner, DreamReport, DreamRun, DreamSink, DreamState, DreamStatus,
-    NoteSink, SeedPlanner,
+    dream_status, end_dream_early, forget_dream_item, read_status_file, read_status_file_at,
+    stop_dream, DreamControl, DreamEvent, DreamItem, DreamPlanner, DreamReport, DreamRun,
+    DreamSink, DreamState, DreamStatus, NoteSink, SeedPlanner,
 };
 pub use static_check::Lang;
 pub use supervisor::{JobReport, Refused, Session, Supervisor, Task};
