@@ -12,6 +12,7 @@
 //! emitted unless the script is installed and enabled (M5 ships/verifies
 //! it on Plasma 6); on X11 without the script there is no window source yet.
 
+use crate::fullscreen::FullscreenTracker;
 use crate::Sink;
 use futures_util::StreamExt;
 use lillith_core::desktop::{self, Desktop};
@@ -49,6 +50,13 @@ pub enum BridgeCall {
         id: String,
         caption: String,
     },
+    /// The active window's fullscreen state (`"1"` / `"0"` in the third
+    /// string; sent on activation and on `fullScreenChanged`).
+    Fullscreen {
+        id: String,
+        class: String,
+        on: bool,
+    },
     Geometry,
     Cursor,
     /// Window stack snapshot (see [`lillith_core::desktop::parse_stack`]).
@@ -66,6 +74,11 @@ impl BridgeCall {
             "WindowActivated" => Self::Activated { id, class },
             "WindowMinimized" => Self::Minimized { id, class },
             "WindowCaption" => Self::Caption { id, caption },
+            "WindowFullscreen" => Self::Fullscreen {
+                id,
+                class,
+                on: caption == "1",
+            },
             "WindowGeometry" => Self::Geometry,
             "Cursor" => Self::Cursor,
             "Stack" => Self::Stack(id),
@@ -84,6 +97,8 @@ pub struct Bridge {
     pub active: Option<String>,
     /// Window stack + work area for gravity (published by [`serve`]).
     pub desktop: Desktop,
+    /// The focused fullscreen window (Ko busy).
+    pub fullscreen: FullscreenTracker,
 }
 
 /// Window title markers of private/incognito browsing.
@@ -130,6 +145,7 @@ impl Bridge {
             }
             BridgeCall::Removed { id, class } => {
                 self.private_seen.remove(&id);
+                out.extend(self.fullscreen.gone(&id));
                 if self.active.as_deref() == Some(id.as_str()) {
                     self.active = None;
                 }
@@ -137,7 +153,8 @@ impl Bridge {
                     out.push(Event::with_detail("window.closed", class));
                 }
             }
-            BridgeCall::Minimized { class, .. } => {
+            BridgeCall::Minimized { id, class } => {
+                out.extend(self.fullscreen.gone(&id));
                 if !ignored_class(&class) {
                     out.push(Event::with_detail("window.minimized", class));
                 }
@@ -156,6 +173,12 @@ impl Bridge {
                     out.push(Event::with_detail("window.focused", class));
                 }
                 self.active = (!id.is_empty()).then_some(id);
+            }
+            BridgeCall::Fullscreen { id, class, on } => {
+                // Only the class (never the caption); shell surfaces and
+                // her own window are never "Ko is busy".
+                let on = on && !ignored_class(&class);
+                out.extend(self.fullscreen.focused(&id, &class, on));
             }
             BridgeCall::Stack(s) => self.desktop.set_windows(desktop::parse_stack(&s)),
             BridgeCall::Area(s) => match desktop::parse_area(&s) {
@@ -395,6 +418,42 @@ mod tests {
             BridgeCall::from_parts("Stack", "x".into(), "".into(), "".into()),
             Some(BridgeCall::Stack("x".into()))
         );
+    }
+
+    #[test]
+    fn fullscreen_focus_is_busy_until_it_ends() {
+        use crate::fullscreen::{FULLSCREEN_EVENT, FULLSCREEN_LEFT_EVENT};
+        let mut b = Bridge::default();
+        let fs = |id: &str, class: &str, on: &str| {
+            BridgeCall::from_parts("WindowFullscreen", id.into(), class.into(), on.into()).unwrap()
+        };
+        assert!(b.handle(fs("1", "konsole", "0")).is_empty());
+        assert_eq!(
+            b.handle(fs("2", "mpv", "1")),
+            [Event::with_detail(FULLSCREEN_EVENT, "mpv")]
+        );
+        assert!(b.handle(fs("2", "mpv", "1")).is_empty(), "once");
+        // Focus back on a normal window.
+        assert_eq!(
+            b.handle(fs("1", "konsole", "0")),
+            [Event::new(FULLSCREEN_LEFT_EVENT)]
+        );
+        // Closing / minimizing the fullscreen window ends it too.
+        b.handle(fs("3", "steam_app_9", "1"));
+        let ev = b.handle(BridgeCall::Removed {
+            id: "3".into(),
+            class: "steam_app_9".into(),
+        });
+        assert_eq!(ev[0], Event::new(FULLSCREEN_LEFT_EVENT));
+        b.handle(fs("4", "vlc", "1"));
+        let ev = b.handle(BridgeCall::Minimized {
+            id: "4".into(),
+            class: "vlc".into(),
+        });
+        assert_eq!(ev[0], Event::new(FULLSCREEN_LEFT_EVENT));
+        // Her own / shell surfaces never count.
+        assert!(b.handle(fs("5", "plasmashell", "1")).is_empty());
+        assert!(b.handle(fs("6", "lillith", "1")).is_empty());
     }
 
     #[test]

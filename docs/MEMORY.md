@@ -300,9 +300,18 @@ says so).
 
 ## Not done / for the lead
 
-- No fullscreen / "busy" sensor: `MemoryBridge::set_busy_for` is the hook
-  for one. Windows has no `window.focused` source yet (KWin only), so app
-  habits are learned on KDE only.
+- Fullscreen / "busy" sensor (done): the KWin script sends the active
+  window's fullscreen state (`WindowFullscreen`, class only) and on Windows
+  the foreground-window poller (`lillith_sense::win_focus`) checks whether
+  the focused app covers its monitor; both emit `window.fullscreen` /
+  `window.fullscreen_left` (`lillith_sense::fullscreen`). The app's memory
+  tee turns them into `MemoryBridge::set_busy_for` (at most 4 h, cleared on
+  leave), so proactive lines stay quiet meanwhile. The memory filter drops
+  both events (nothing is learned from them).
+- Windows `window.focused` (done): the same poller emits the focused app's
+  exe id (`steam`, `firefox`; never a caption) on focus changes, so app
+  habits are learned on Windows too, with the bridge's usual debounce.
+  Shell surfaces and her own windows are ignored.
 - LLM-assisted extraction (built 2026-11-15, opt-in): `[memory] llm_extract
   = true` makes chat ask the local model (loopback `[chat]` endpoint only,
   ≤ 4 s, ≤ 160 tokens, Ko's message only, short first-person messages

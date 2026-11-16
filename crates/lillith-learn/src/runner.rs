@@ -18,6 +18,7 @@ use crate::summarize::{LlmSummarizer, SumError, Summarizer};
 use lillith_core::access::kill_switch;
 use lillith_core::config::Config;
 use lillith_core::Event;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -92,9 +93,18 @@ struct Shared {
     last_activity_ms: AtomicU64,
     quit: AtomicBool,
     state: AtomicU8,
+    /// The Knowledge panel's Off switch ([`crate::knowledge::set_switch`]):
+    /// present, the thread stops (a running step is dropped).
+    off_marker: Option<PathBuf>,
 }
 
 impl Shared {
+    fn switched_off(&self) -> bool {
+        self.off_marker
+            .as_deref()
+            .is_some_and(crate::knowledge::switched_off_at)
+    }
+
     fn now_s(&self) -> f64 {
         self.start.elapsed().as_secs_f64()
     }
@@ -158,14 +168,36 @@ impl LearnHandle {
         sensors: Box<dyn Sensors>,
         make_summarizer: Box<dyn FnOnce() -> Result<Box<dyn Summarizer>, String> + Send>,
     ) -> Option<Self> {
+        Self::spawn_at(
+            cfg,
+            sensors,
+            make_summarizer,
+            crate::knowledge::off_marker_path(),
+        )
+    }
+
+    /// [`spawn_with`](Self::spawn_with) with an explicit Off marker path.
+    /// The config says on, so a marker left from an earlier run is removed
+    /// first (the panel saves `[learn] enabled = false` for good).
+    #[allow(clippy::type_complexity)]
+    fn spawn_at(
+        cfg: &Config,
+        sensors: Box<dyn Sensors>,
+        make_summarizer: Box<dyn FnOnce() -> Result<Box<dyn Summarizer>, String> + Send>,
+        off_marker: Option<PathBuf>,
+    ) -> Option<Self> {
         if !crate::should_run(cfg) {
             return None;
+        }
+        if let Some(m) = &off_marker {
+            let _ = crate::knowledge::set_switch_at(m, true);
         }
         let shared = Arc::new(Shared {
             start: Instant::now(),
             last_activity_ms: AtomicU64::new(0),
             quit: AtomicBool::new(false),
             state: AtomicU8::new(state_code(State::Waiting)),
+            off_marker,
         });
         let cfg = cfg.clone();
         let sh = shared.clone();
@@ -246,6 +278,10 @@ fn run_loop(
     let mut sched = Scheduler::new(Limits::from(&cfg.learn));
     tracing::info!(priority = how, "learn: idle learner ready");
     while !sh.quit.load(Ordering::SeqCst) {
+        if sh.switched_off() {
+            tracing::info!("learn: switched off in the Knowledge panel");
+            break;
+        }
         let now = sh.now_s();
         let inputs = Inputs {
             now,
@@ -268,6 +304,7 @@ fn run_loop(
             let stop = || {
                 sh.quit.load(Ordering::SeqCst)
                     || stopped()
+                    || sh.switched_off()
                     || (pause_on_activity && sh.last_activity_ms.load(Ordering::SeqCst) != act0)
             };
             let rep = learner.step(sum, &stop);
@@ -303,7 +340,7 @@ fn run_loop(
         sh.state.store(state_code(sched.state()), Ordering::SeqCst);
         // Sleep in short slices so quit is seen quickly.
         let until = Instant::now() + TICK;
-        while Instant::now() < until && !sh.quit.load(Ordering::SeqCst) {
+        while Instant::now() < until && !sh.quit.load(Ordering::SeqCst) && !sh.switched_off() {
             std::thread::sleep(Duration::from_millis(100));
         }
     }
@@ -330,6 +367,7 @@ mod tests {
             last_activity_ms: AtomicU64::new(7),
             quit: AtomicBool::new(false),
             state: AtomicU8::new(state_code(State::Running)),
+            off_marker: None,
         };
         let h = LearnHandle {
             shared: Arc::new(sh),
@@ -363,5 +401,36 @@ mod tests {
         cfg.learn.enabled = false;
         assert!(LearnHandle::spawn(&cfg, true).is_none());
         assert!(!d.exists());
+    }
+
+    #[test]
+    fn the_panels_off_switch_stops_the_running_learner() {
+        let d = std::env::temp_dir().join(format!("lillith-runner-switch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let mut cfg = Config::default();
+        cfg.memory.db_path = d.join("memory.db").display().to_string();
+        cfg.mind.knowledge_dir = d.join("knowledge").display().to_string();
+        let marker = d.join("run").join(crate::knowledge::OFF_MARKER);
+        // A marker from an earlier run: the config says on, so it goes.
+        crate::knowledge::set_switch_at(&marker, false).unwrap();
+        let h = LearnHandle::spawn_at(
+            &cfg,
+            Box::new(SysSensors),
+            Box::new(|| Ok(Box::new(crate::FakeSummarizer::default()) as Box<dyn Summarizer>)),
+            Some(marker.clone()),
+        )
+        .expect("learning on");
+        assert!(!marker.exists());
+        std::thread::sleep(Duration::from_millis(300));
+        // Waiting, or Paused on a busy machine: running either way.
+        assert_ne!(h.state(), State::Off);
+        crate::knowledge::set_switch_at(&marker, false).unwrap();
+        let until = Instant::now() + TICK + Duration::from_secs(3);
+        while h.state() != State::Off && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert_eq!(h.state(), State::Off, "Off stops the thread");
+        drop(h);
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

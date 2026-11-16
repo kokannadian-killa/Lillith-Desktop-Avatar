@@ -121,6 +121,9 @@ function watch(w) {
     });
     w.frameGeometryChanged.connect(() => send("WindowGeometry", ...describe(w)));
     w.captionChanged.connect(() => send("WindowCaption", ...describe(w)));
+    on(w, "fullScreenChanged", () => {
+        if (w === workspace.activeWindow) sendFullscreen(w);
+    });
 }
 
 workspace.windowAdded.connect((w) => {
@@ -139,7 +142,16 @@ workspace.windowRemoved.connect((w) => {
 workspace.windowActivated.connect((w) => {
     changed();
     send("WindowActivated", ...describe(w));
+    sendFullscreen(w);
 });
+
+// The active window's fullscreen state (id, class, "1"/"0"; never the
+// caption): Ko is busy while it is fullscreen, so she keeps quiet.
+function sendFullscreen(w) {
+    if (!w) return;
+    send("WindowFullscreen", String(w.internalId), String(w.resourceClass || ""),
+         w.fullScreen ? "1" : "0");
+}
 
 on(workspace, "stackingOrderChanged", changed);
 on(workspace, "currentDesktopChanged", changed);
