@@ -566,6 +566,12 @@ pub async fn cli_chat(
     spawn_server: bool,
     no_history: bool,
 ) -> Result<()> {
+    // The overlay already reaps model-server cards a dead process left
+    // PROPOSED. `lillith chat` used to skip that scan (MEMORY.md), so a
+    // stale card stayed open until the overlay started. A card whose pid
+    // is still running is left alone (it may still be on screen).
+    SoulContract::new(mind.audit_log_path())
+        .close_orphaned_model_server_cards("orphaned PROPOSED closed by lillith chat");
     let _server = if spawn_server {
         let mut c = cfg.clone();
         c.enabled = true;

@@ -300,7 +300,7 @@ Folded into the milestones. The chat bubble, click-to-chat, and local llama-serv
 
 | Piece | Milestone | Notes |
 |---|---|---|
-| Speech bubble over her head | M7 | On `feat/chat-bubble-llama` (`[chat] overlay_speech`, overlay grows upward). Needs on-overlay text rendering finished and Wayland self-positioning |
+| Speech bubble over her head | M7 | Landed on main: `[chat] overlay_speech` is drawn on the overlay (window grows upward, feet stay put). The click-to-chat `eframe` window still cannot self-position on Wayland (`xdg-toplevel` has no move request; KWin typically centres it). A layer-shell / `xdg_popup` bubble, like the right-click menu, is the remaining fix; it is not wired yet and was not verified on a Plasma 6 session. See docs/CHAT.md “Known limits”. |
 | Live chat / conversation view (scrollable transcript) | M7 | A separate egui chat window: message history, input box, streaming reply. Reuses `lillith-panel` |
 | Interface bubble / chat window toggle | M7 | Open via right-click menu item "Chat" and the `Y`/`Enter` key; closeable, remembers position |
 | Right-click access to the GUI options menu | M6 ▶ | The right-click menu (being wired now) gains an "Open interface / GUI options" item that raises the egui settings/chat window |
