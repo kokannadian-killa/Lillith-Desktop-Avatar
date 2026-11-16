@@ -380,6 +380,12 @@ async fn app_main() -> Result<()> {
     log.with_writer(std::io::stderr).init();
 
     let cli = Cli::parse();
+    // Join the per-user cross-process stop barrier: a Stop / Ctrl-C / kill
+    // switch in any Lillith process (e.g. the detached settings window)
+    // reaches this one's commands, and ours reach theirs. Local files only.
+    if let Err(e) = lillith_core::access::kill_switch::join_session() {
+        tracing::warn!("cross-process stop unavailable (stops stay in this process): {e}");
+    }
     let rules = RuleSet::bundled();
 
     match cli.command {

@@ -68,6 +68,14 @@ fn main() {
             path => opts.config_path = Some(PathBuf::from(path)),
         }
     }
+    // Join the per-user cross-process stop barrier, so a Stop / Ctrl-C in
+    // the overlay reaches this window's bots and "Stop all" here reaches the
+    // overlay's commands. Without it the stop stays local to this window.
+    if let Err(e) = lillith_core::access::kill_switch::join_session() {
+        eprintln!(
+            "lillith-settings: cross-process stop unavailable (stops stay in this window): {e}"
+        );
+    }
     // Ctrl-C / SIGTERM pull the kill switch: helper bots and their
     // commands stop before the window exits.
     lillith_settings_gui::bots::install_ctrlc_stop();
