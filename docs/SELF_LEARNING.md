@@ -267,6 +267,27 @@ history, sessions or caches.
   rule as everything else (§7).
 - Audit: `<ts>\tLEARN\tshare\t<host>\tnote=<id>` (no page text).
 
+**Built (P6 socket, 2026-11-15):** `crates/lillith-learn/src/share.rs`,
+started from `apps/lillith/src/learn_wiring.rs` (`start_share`) only with
+`[learn] share_socket = true` (off by default) and learning + memory on.
+Linux/Unix only: `<runtime dir>/share.sock` (dir 0700, socket 0600, peer
+uid must equal ours via `SO_PEERCRED` / `getpeereid`, else refused); one
+JSON line `{"url","title","text"}` ≤ 512 KiB in, `ok <note id>` or
+`refused: <why>` out. Only `http(s)://` URLs, tracking parameters
+stripped; `block_hosts` (and their subdomains) plus a built-in denylist
+(bank / payment / password-manager hosts, webmail, `accounts.` / `login.`
+/ `auth.` hosts, login / auth / password / checkout / payment / compose
+paths) are refused with a `share-refused` audit line. Lines the ingest
+filter or the worker action filter reject (role / instruction text,
+persona or safeword words, "pipe to sh" lines) are cut; a page with the
+safeword or nothing left is refused whole. The page is stored straight
+away as a `web` note (`source.type = shared`, `url:` set,
+`fetched_via: share`, confidence 0.4, no model call), under the
+knowledge lock. Nothing is fetched and no browser file is opened. Not
+built yet: the browser extension + native-messaging host, the KDE share
+action, a Windows transport, and the Knowledge panel's "recent shared
+pages" list.
+
 **Alternative Ko can opt into later (not built, off):** automatic reading of
 pages he has opened from local Firefox/Chromium history, session and cache
 files. It would need its own one-time Soul Contract card, would exclude
@@ -546,6 +567,25 @@ Rules:
 - The panel never starts the learner's model calls itself; "Learn now" only
   clears the idle wait if the other conditions hold.
 
+**Built (P3, 2026-11-15):** the `knowledge` tab
+(`crates/lillith-settings-gui/src/tabs/knowledge.rs`, API in
+`crates/lillith-learn/src/knowledge.rs`) shows the status strip (learning,
+memory, folder, note counts per topic, how many are Ko's, online / practice /
+share-socket state), browse + search (every word, case-insensitive, over
+title, topic, kind, body and source URL), edit (title + body; sets
+`origin: ko`, refuses safeword text, re-indexes the memory row), Forget
+(file + memory index row + graph node; mouse-only), the read-only sources /
+`block_hosts` list and the activity log (`LEARN` / `DREAM` / `WORKER` /
+`online_research` / `sandbox_run` / `dream_session` audit lines, newest 50;
+online trips show up there). Every write holds `knowledge/.lock` and is
+audited (ids only). The Off toggle stages `[learn] enabled = false` and
+writes `<runtime dir>/learn-off`; the running learner thread checks it every
+tick (and inside a step) and stops, dropping the step. Turning it back On
+takes effect at the next start (a fresh start with `[learn] enabled = true`
+removes a leftover marker). Not in this tab yet: the dreaming controls (they
+live in the Bots tab), workers, storage, practice queue, installs, and FTS
+search.
+
 ## 11. Dream learning (Ko-started, time-boxed) — decided by Ko
 
 Ko (03:24 MDT): *"when the user asks say for 8 or 6 hours she can learn
@@ -619,11 +659,30 @@ only open the card: right-click **Dream learning…** / **End dream early**,
 `/dream [2h|90m]` (`/dream end|stop|status`) in chat, and
 `lillith dream [duration]`. Stops: End early, `stop`, the kill switch,
 Ctrl-C, the deadline, low battery, heat, Tor down, the byte / disk budgets.
-Not yet: the curiosity queue (topics come from a fixed public-reference
-seed list per `[learn] topics`, never `ko-preferences` / `self`), a summary
-model pass, the panel's live log / per-item Forget (the Bots tab can read
-`dream_status()`), the external backend (§11.1), self-compression (P8 hook
-`DreamSink::after_session` is a no-op).
+Also built (verified 2026-11-15 by tests on `fix/memory-p7-verify`):
+- the curiosity queue (`workers::curiosity::CuriosityQueue`): Ko's recent
+  mentions first, then the `[learn] topics` rotation; mentions only pick
+  fixed public pages, and names, blocklist terms and `ko-preferences` /
+  `self` never enter (`curiosity.rs` tests);
+- the summary model pass (`workers::digest::summarize_session`,
+  `[learn.dream] summarize = true`): a loopback-only digest after a dream
+  that saved notes, none when the model is down or chat holds the slot
+  (`digest.rs` tests);
+- the Bots tab's live log with per-item Forget (`LiveDream` over the
+  status file, `forget_dream_item`: that one `kind: dream` note's file and
+  memory row, audited, mouse-only; `tabs/bots/tests.rs`,
+  `forget_dream_item_removes_the_note_file_index_and_log_entry`);
+- stale status after a crash: the status file records its owner
+  (`owner_pid` / `owner_start`). A `proposed` / `running` / `ending` state
+  whose owner is gone reads as `ended` ("the app running it closed
+  unexpectedly"), so it no longer makes the chat bubble's `/dream` answer
+  busy or the Bots tab show it running; a live owner still reads busy,
+  and an owner that can't be checked fails closed (busy) until half an
+  hour past the card deadline (`read_status_file_at`).
+
+Not yet: the external backend (§11.1), self-compression (P8 hook
+`DreamSink::after_session` is a no-op). A live-GUI smoke of the Bots tab
+during a real dream is still to do on Ko's machine.
 
 ### 11.1 Optional backend: Ko's TaskCompletion bots (external) — decided by Ko
 
@@ -790,6 +849,23 @@ storage and easy access for her"*. Extends the storage model in
 
 Fully local. The only new dependency is the `zstd` crate via cargo (not in
 `Cargo.lock` today; vendored with the release build), no other downloads.
+
+**Built (P8 first slice, 2026-11-15):** `crates/lillith-memory/src/compact.rs`,
+`Brain::compact`, run by the dream sink's `after_session` hook (so after
+every dream session). Habit events older than 61 days (past the 60-day
+habit window, so predictions are unchanged) are rolled up per UTC day
+into one `event` node (`digest:day:<date>`: counts per app, `digest_of`
+edges to the app entities) and the originals deleted in the same
+transaction; before this they were simply deleted at 120 days. One
+transaction per day, `stop` / the safeword checked before each, so a cut
+run resumes next time. Then FTS `optimize`, `PRAGMA optimize`,
+`incremental_vacuum` and a WAL checkpoint. Notes (any origin),
+preferences, entities and errors are never touched; no schema change.
+Forgetting a topic deletes the digests that mention it. Audit:
+`COMPACT\trows_merged=N\tbytes_saved=B`. Not built yet: zstd blobs and the
+dictionary, the LRU cache, the `max_db_mb` budget prune, weekly digests,
+3B summaries, an idle-time run outside dreams, and the panel's Storage
+section.
 
 ## Config (`[learn]`, all new)
 

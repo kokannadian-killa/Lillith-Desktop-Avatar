@@ -16,6 +16,7 @@
 //! See `docs/MEMORY.md` for the design.
 
 pub mod bridge;
+pub mod compact;
 pub mod decay;
 pub mod errors;
 pub mod extract;

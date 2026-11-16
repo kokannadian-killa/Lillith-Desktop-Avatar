@@ -2554,6 +2554,7 @@ dependencies = [
  "tracing",
  "wayland-client",
  "wayland-protocols",
+ "windows-sys 0.59.0",
  "wl-clipboard-rs",
  "x11rb",
  "zbus",

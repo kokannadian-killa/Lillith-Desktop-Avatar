@@ -147,9 +147,16 @@ impl Note {
             .collect::<Vec<_>>()
             .join(", ");
         let web = match &self.web {
+            // A page Ko shared arrived over the local share socket; every
+            // other web note came over Tor on a trip.
             Some(w) => format!(
-                "url: {}\nfetched_via: tor\ntrip_id: {}\n",
+                "url: {}\nfetched_via: {}\ntrip_id: {}\n",
                 q(&w.url),
+                if self.source_type == "shared" {
+                    "share"
+                } else {
+                    "tor"
+                },
                 q(&w.trip_id)
             ),
             None => String::new(),

@@ -12,8 +12,8 @@
 //!   production [`NoteSink`] writes untrusted `web` notes (`kind: dream`,
 //!   the session id as `trip_id`) and indexes them in the memory graph at
 //!   `[learn.dream] dream_strength` (weak; they only grow if used).
-//!   [`DreamSink::after_session`] is the self-compression hook (§13, P8:
-//!   a no-op today).
+//!   [`DreamSink::after_session`] is the self-compression hook (§13, P8):
+//!   the production sink runs [`lillith_memory::Brain::compact`] there.
 //! - **Announce.** Every step is a [`DreamEvent`] (where she's going,
 //!   where she's been, what she saved, how it ended) and a `DREAM` audit
 //!   line (fail-closed: no line, the session stops as `audit_failed`).
@@ -276,7 +276,7 @@ impl DreamControl {
         let mut g = self.lock();
         f(&mut g.status);
         if let Some(p) = g.file.clone() {
-            let _ = write_private(&p, g.status.to_json().to_string().as_bytes());
+            let _ = write_private(&p, owned_json(&g.status).as_bytes());
         }
     }
 
@@ -308,7 +308,7 @@ impl DreamControl {
             ..Default::default()
         };
         if let Some(p) = g.file.clone() {
-            let _ = write_private(&p, g.status.to_json().to_string().as_bytes());
+            let _ = write_private(&p, owned_json(&g.status).as_bytes());
         }
         true
     }
@@ -410,10 +410,247 @@ pub fn status_file_path() -> Option<PathBuf> {
 
 /// The status another process (the app running the dream) last wrote;
 /// for the settings window, which runs in its own process.
+///
+/// A live state (`proposed` / `running` / `ending`) left behind by a
+/// process that is gone (an overlay crash mid-dream) reads as
+/// [`DreamState::Ended`] with [`STALE_SUMMARY`], so it neither blocks a new
+/// card nor shows as running ([`read_status_file_at`]).
 pub fn read_status_file() -> Option<DreamStatus> {
-    let p = status_file_path()?;
-    let t = std::fs::read_to_string(p).ok()?;
-    DreamStatus::from_json(&serde_json::from_str(&t).ok()?).map(DreamStatus::without_forgotten)
+    read_status_file_at(&status_file_path()?)
+}
+
+/// What a live state left by a dead owner reads as.
+pub const STALE_SUMMARY: &str =
+    "The last dream didn't finish: the app running it closed unexpectedly.";
+
+/// How long past its card deadline a live state without a checkable owner
+/// may still be live (the end: killing workers, the summary, the digest).
+const STALE_GRACE_S: i64 = 30 * 60;
+
+/// [`read_status_file`] for an explicit path. The writer's owner (pid and
+/// process start, `owner_pid` / `owner_start`) decides whether a live state
+/// is still live:
+///
+/// - the owner is running: as written (busy);
+/// - the owner is certainly gone (no such process, or the pid now belongs
+///   to a process started at another time): [`DreamState::Ended`],
+///   [`STALE_SUMMARY`], no `where_now`;
+/// - ownership can't be checked (no owner in the file, no process info):
+///   fails closed, i.e. as written, unless a `running` / `ending` state is
+///   more than half an hour past its card deadline.
+///
+/// Reading never writes the file and never deletes anything.
+pub fn read_status_file_at(path: &Path) -> Option<DreamStatus> {
+    let t = std::fs::read_to_string(path).ok()?;
+    let v: Value = serde_json::from_str(&t).ok()?;
+    let st = DreamStatus::from_json(&v)?;
+    Some(settle_stale(st, &v, crate::now_s() as i64).without_forgotten())
+}
+
+/// Whether the owner of a status file is alive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwnerLiveness {
+    Alive,
+    Gone,
+    /// Can't tell (fail closed: treated as alive).
+    Unknown,
+}
+
+fn settle_stale(mut st: DreamStatus, v: &Value, now: i64) -> DreamStatus {
+    if !matches!(
+        st.state,
+        DreamState::Proposed | DreamState::Running | DreamState::Ending
+    ) {
+        return st;
+    }
+    let pid = v
+        .get("owner_pid")
+        .and_then(Value::as_u64)
+        .and_then(|p| u32::try_from(p).ok());
+    let start = v.get("owner_start").and_then(Value::as_str);
+    let live = match pid {
+        Some(pid) => owner_liveness(pid, start),
+        None => OwnerLiveness::Unknown,
+    };
+    let overdue = matches!(st.state, DreamState::Running | DreamState::Ending)
+        && st
+            .deadline
+            .as_deref()
+            .and_then(utc_secs)
+            .is_some_and(|d| now > d + STALE_GRACE_S);
+    let stale = match live {
+        OwnerLiveness::Alive => false,
+        OwnerLiveness::Gone => true,
+        OwnerLiveness::Unknown => overdue,
+    };
+    if stale {
+        st.state = DreamState::Ended;
+        st.where_now = None;
+        st.summary = Some(STALE_SUMMARY.into());
+    }
+    st
+}
+
+/// Seconds since the epoch for `YYYY-MM-DDTHH:MM:SSZ` (`None` otherwise).
+fn utc_secs(t: &str) -> Option<i64> {
+    let b = t.as_bytes();
+    if b.len() != 20 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' || b[19] != b'Z' {
+        return None;
+    }
+    let n = |r: std::ops::Range<usize>| -> Option<i64> { t.get(r)?.parse().ok() };
+    let (y, mo, d, h, mi, s) = (
+        n(0..4)?,
+        n(5..7)?,
+        n(8..10)?,
+        n(11..13)?,
+        n(14..16)?,
+        n(17..19)?,
+    );
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) {
+        return None;
+    }
+    // Days from the civil date (Howard Hinnant's algorithm).
+    let y2 = if mo <= 2 { y - 1 } else { y };
+    let era = y2.div_euclid(400);
+    let yoe = y2 - era * 400;
+    let mp = (mo + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some(days * 86_400 + h * 3600 + mi * 60 + s)
+}
+
+/// The status as written to its file: the status plus this process as its
+/// owner (`owner_pid`, `owner_start`), so readers in other processes can
+/// tell a crashed owner's leftovers from a live session.
+fn owned_json(st: &DreamStatus) -> String {
+    let mut v = st.to_json();
+    if let Value::Object(m) = &mut v {
+        let (pid, start) = this_owner();
+        m.insert("owner_pid".into(), json!(pid));
+        m.insert("owner_start".into(), json!(start));
+    }
+    v.to_string()
+}
+
+fn this_owner() -> (u32, Option<String>) {
+    static O: OnceLock<(u32, Option<String>)> = OnceLock::new();
+    O.get_or_init(|| {
+        let pid = std::process::id();
+        (pid, process_start(pid))
+    })
+    .clone()
+}
+
+/// Whether process `pid`, started at `start` (as [`process_start`] gives
+/// it), is still running.
+pub fn owner_liveness(pid: u32, start: Option<&str>) -> OwnerLiveness {
+    if pid == 0 {
+        return OwnerLiveness::Unknown;
+    }
+    match process_start(pid) {
+        Some(now) => match start {
+            Some(rec) if rec == now => OwnerLiveness::Alive,
+            // The pid was reused by a process started at another time.
+            Some(_) => OwnerLiveness::Gone,
+            None => OwnerLiveness::Unknown,
+        },
+        None if process_info_available() && !process_exists(pid) => OwnerLiveness::Gone,
+        None => OwnerLiveness::Unknown,
+    }
+}
+
+/// An opaque process start time (clock ticks since boot on Linux, the
+/// creation FILETIME on Windows); `None` when there is no such process or
+/// it can't be read.
+#[cfg(target_os = "linux")]
+fn process_start(pid: u32) -> Option<String> {
+    let t = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    // `pid (comm) state ppid ...`: comm may hold spaces / parens, so split
+    // after the last ')'. Start time is field 22, the 20th after it.
+    let rest = &t[t.rfind(')')? + 1..];
+    let f = rest.split_whitespace().nth(19)?;
+    f.parse::<u64>().ok().map(|v| v.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn process_info_available() -> bool {
+    Path::new("/proc/self/stat").exists()
+}
+
+#[cfg(target_os = "linux")]
+fn process_exists(pid: u32) -> bool {
+    Path::new(&format!("/proc/{pid}")).exists()
+}
+
+#[cfg(windows)]
+fn process_start(pid: u32) -> Option<String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, FILETIME};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    const STILL_ACTIVE: u32 = 259;
+    // SAFETY: plain Win32 calls on a handle this function opens and closes.
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h.is_null() {
+            return None;
+        }
+        let mut code = 0u32;
+        let z = FILETIME {
+            dwLowDateTime: 0,
+            dwHighDateTime: 0,
+        };
+        let (mut c, mut e, mut k, mut u) = (z, z, z, z);
+        let ok = GetExitCodeProcess(h, &mut code) != 0
+            && code == STILL_ACTIVE
+            && GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u) != 0;
+        CloseHandle(h);
+        ok.then(|| ((u64::from(c.dwHighDateTime) << 32) | u64::from(c.dwLowDateTime)).to_string())
+    }
+}
+
+#[cfg(windows)]
+fn process_info_available() -> bool {
+    true
+}
+
+#[cfg(windows)]
+fn process_exists(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_INVALID_PARAMETER};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    const STILL_ACTIVE: u32 = 259;
+    // SAFETY: as in `process_start`.
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h.is_null() {
+            // No such process; any other error (access denied) means it
+            // may exist.
+            return GetLastError() != ERROR_INVALID_PARAMETER;
+        }
+        let mut code = 0u32;
+        let read = GetExitCodeProcess(h, &mut code) != 0;
+        CloseHandle(h);
+        // Exited but still referenced: gone. Unreadable: it may exist.
+        !read || code == STILL_ACTIVE
+    }
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn process_start(_pid: u32) -> Option<String> {
+    None
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn process_info_available() -> bool {
+    false
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn process_exists(_pid: u32) -> bool {
+    true
 }
 
 /// Forgets one dream-saved note (the live log's per-item Forget): deletes
@@ -726,8 +963,8 @@ pub struct SavedFact {
 /// orchestrator hands each accepted [`Candidate`] here.
 pub trait DreamSink {
     fn save(&mut self, topic: &str, c: &Candidate, session: &str) -> Result<SavedFact, String>;
-    /// Memory self-compression after a session (§13 compaction, P8). No-op
-    /// until compaction exists.
+    /// Memory self-compression after a session (§13 compaction, P8). The
+    /// default does nothing (test sinks).
     fn after_session(&mut self) {}
 }
 
@@ -777,6 +1014,29 @@ impl NoteSink {
 }
 
 impl DreamSink for NoteSink {
+    /// Compacts the memory graph (§13: old habit events → day digests,
+    /// then tidy). A stop or the safeword during the run cuts it short
+    /// (finished days stay done). One `COMPACT` audit line.
+    fn after_session(&mut self) {
+        use lillith_core::access::kill_switch;
+        let Some(b) = self.brain.as_ref() else {
+            return;
+        };
+        let (k0, h0) = (kill_switch::epoch(), kill_switch::hush_epoch());
+        let stop = || kill_switch::stopped_since(k0) || kill_switch::hush_epoch() != h0;
+        let now = crate::now_s();
+        match b.compact(now, &stop) {
+            Ok(r) => {
+                if let Some(log) = &self.audit_log {
+                    if let Err(e) = lillith_memory::compact::record(log, now, &r) {
+                        tracing::warn!("dream: compact audit: {e}");
+                    }
+                }
+            }
+            Err(e) => tracing::warn!("dream: compact: {e}"),
+        }
+    }
+
     fn save(&mut self, topic: &str, c: &Candidate, session: &str) -> Result<SavedFact, String> {
         let store = self.store.as_ref().ok_or("no knowledge folder")?;
         let title: String = c.title.trim().chars().take(120).collect();
