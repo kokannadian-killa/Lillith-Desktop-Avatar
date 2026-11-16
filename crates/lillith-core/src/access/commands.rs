@@ -541,6 +541,8 @@ fn run_child_ungated(
         c.creation_flags(super::winshell::CREATE_NO_WINDOW);
     }
     let mut child = c.spawn()?;
+    // Lets a (cross-process) stop check this tree is really gone.
+    let _tracked = super::stop_session::track_group(child.id(), epoch);
     // Windows: put the child in a Job with KILL_ON_JOB_CLOSE so a stop /
     // timeout tears down the whole tree (cmd → nested processes) at once.
     #[cfg(windows)]

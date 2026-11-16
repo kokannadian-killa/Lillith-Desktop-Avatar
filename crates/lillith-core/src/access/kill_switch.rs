@@ -7,18 +7,33 @@
 //!   the Windows admin helper, helper workers, sandbox builds and idle
 //!   learning are left alone (Ko, 2026-10-24: "Only remove the shutdown
 //!   part; red still stops her talking", then "Just the voice").
-//! - [`stop_all`] (Ctrl-C / SIGTERM / app shutdown). Every command runner
-//!   started before that moment sees [`epoch`] move and kills its child
-//!   process tree, and the registered hooks run. The Windows admin broker
-//!   registers one that force-kills the elevated helper out-of-band (Job /
-//!   process handle — never waits on the in-flight pipe lock). A stop also
-//!   counts as a hush, so everything a safeword cancels is cancelled too.
+//! - [`stop_all`] (Ctrl-C / SIGTERM / app shutdown / Settings "Stop all").
+//!   Every command runner started before that moment sees [`epoch`] move and
+//!   kills its child process tree, and the registered hooks run. The Windows
+//!   admin broker registers one that force-kills the elevated helper
+//!   out-of-band (Job / process handle — never waits on the in-flight pipe
+//!   lock). A stop also counts as a hush, so everything a safeword cancels is
+//!   cancelled too.
+//!
+//! **Across processes.** The epochs themselves are process-wide statics, so
+//! on their own a stop in the detached `lillith-settings` window could not
+//! reach the overlay (and the other way round). A process that called
+//! [`join_session`] (the apps do at start-up) also folds the per-user stop
+//! barrier ([`super::stop_session`]) into [`epoch`] and [`hush_epoch`]:
+//! [`stop_all`] appends to it and fsyncs **before** it returns, and every
+//! other joined process's runners see the moved epoch and kill their trees;
+//! their watcher runs their stop hooks and acknowledges. [`stop_all_confirmed`]
+//! waits for those acks and only reports a confirmed stop when every live
+//! process said its trees are gone. [`stop_process`] is the old process-local
+//! stop (a single bot's Stop). The safeword stays local and never touches the
+//! barrier.
 //!
 //! Nothing here approves anything: it can only stop work.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
+use super::stop_session::{self, StopOutcome};
 use super::winjob::{stop_chat_line, HelperKill};
 
 static EPOCH: AtomicU64 = AtomicU64::new(0);
@@ -35,19 +50,56 @@ pub(crate) static TEST_GATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
 pub struct StopReport {
     pub epoch: u64,
     pub helper: HelperKill,
+    /// Whether the cross-process barrier was saved.
+    pub barrier: Barrier,
+}
+
+/// What happened to the cross-process stop barrier.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Barrier {
+    /// This process never joined a stop session (process-local stop only,
+    /// as before; e.g. library users and unit tests).
+    NotJoined,
+    /// Appended and fsynced; the new barrier generation.
+    Saved(u64),
+    /// Joined, but the write failed: other processes were NOT told.
+    Failed(String),
+    /// A process-local stop on purpose ([`stop_process`]).
+    Local,
 }
 
 impl StopReport {
     /// The line Lillith says in chat. See [`HelperKill::chat_line`].
     pub fn chat_line(&self) -> String {
-        stop_chat_line(self.helper)
+        let line = stop_chat_line(self.helper);
+        match &self.barrier {
+            Barrier::Failed(e) => {
+                format!("{line} Other Lillith windows were NOT told (stop barrier: {e}).")
+            }
+            _ => line,
+        }
     }
+}
+
+/// Joins the per-user cross-process stop session (see the module docs and
+/// [`super::stop_session`]). Call once at app start-up.
+pub fn join_session() -> std::io::Result<std::path::PathBuf> {
+    stop_session::join()
+}
+
+/// [`join_session`] at an explicit directory (tests).
+pub fn join_session_at(dir: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    stop_session::join_at(dir)
 }
 
 /// The current stop epoch. A runner remembers it at start and stops its
 /// child once [`stopped_since`] says it moved.
 pub fn epoch() -> u64 {
-    EPOCH.load(Ordering::SeqCst)
+    // The barrier generation only grows (it is a file length), so the sum
+    // moves whenever either part moves.
+    EPOCH
+        .load(Ordering::SeqCst)
+        .wrapping_add(stop_session::generation())
 }
 
 /// Whether [`stop_all`] ran since `start` (an [`epoch`] value).
@@ -67,7 +119,9 @@ pub fn hush() -> u64 {
 
 /// The current hush epoch (moved by [`hush`] and by [`stop_all`]).
 pub fn hush_epoch() -> u64 {
+    // A stop from another process also cancels what the safeword cancels.
     HUSH.load(Ordering::SeqCst)
+        .wrapping_add(stop_session::generation())
 }
 
 /// Whether the safeword ([`hush`]) or a [`stop_all`] happened since `start`
@@ -95,12 +149,77 @@ pub(crate) fn clear_hooks_for_test() {
 }
 
 /// Kills every running command child (they poll the epoch) and runs the
-/// stop hooks (the admin helper is force-killed out-of-band). Returns a
+/// stop hooks (the admin helper is force-killed out-of-band). In a joined
+/// process the stop barrier is appended and fsynced before this returns, so
+/// every other joined Lillith process stops its commands too. Returns a
 /// report the chat layer uses for a truthful reply. Ctrl-C / SIGTERM / app
-/// shutdown only — the safeword calls [`hush`] instead. Also hushes.
+/// shutdown / "Stop all" — the safeword calls [`hush`] instead. Also hushes.
 pub fn stop_all() -> StopReport {
+    stop_inner(true)
+}
+
+/// The process-local stop: like [`stop_all`] but the barrier is not touched,
+/// so other Lillith processes keep running (one bot's Stop).
+pub fn stop_process() -> StopReport {
+    stop_inner(false)
+}
+
+fn stop_inner(global: bool) -> StopReport {
     HUSH.fetch_add(1, Ordering::SeqCst);
-    let e = EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
+    EPOCH.fetch_add(1, Ordering::SeqCst);
+    let barrier = if !global {
+        Barrier::Local
+    } else if !stop_session::joined() {
+        Barrier::NotJoined
+    } else {
+        match stop_session::persist("stop_all") {
+            Ok(g) => Barrier::Saved(g),
+            Err(e) => {
+                tracing::error!(
+                    "stop barrier not saved: other Lillith processes were not told: {e}"
+                );
+                Barrier::Failed(e.to_string())
+            }
+        }
+    };
+    let helper = run_hooks();
+    let e = epoch();
+    tracing::warn!(
+        "stop: stopped every running command (epoch {e}, helper={helper:?}, barrier={barrier:?})"
+    );
+    StopReport {
+        epoch: e,
+        helper,
+        barrier,
+    }
+}
+
+/// [`stop_all`], then waits up to `deadline` until every joined Lillith
+/// process confirmed its task trees are gone. Blocking: call it off the UI
+/// thread. Only [`StopOutcome::Quiescent`] is a confirmed stop.
+pub fn stop_all_confirmed(deadline: std::time::Duration) -> (StopReport, StopOutcome) {
+    let r = stop_all();
+    let out = match &r.barrier {
+        Barrier::Saved(g) => stop_session::confirm(*g, deadline),
+        Barrier::Failed(e) => StopOutcome::LocalOnly {
+            reason: e.clone(),
+            local: stop_session::local_quiescence(deadline),
+        },
+        Barrier::NotJoined | Barrier::Local => StopOutcome::LocalOnly {
+            reason: "no stop session joined".into(),
+            local: stop_session::local_quiescence(deadline),
+        },
+    };
+    (r, out)
+}
+
+/// Another process moved the barrier: run this process's stop hooks (the
+/// epochs already moved through the barrier generation).
+pub(crate) fn run_foreign_stop_hooks() -> HelperKill {
+    run_hooks()
+}
+
+fn run_hooks() -> HelperKill {
     let hooks: Vec<fn() -> HelperKill> = HOOKS.lock().map(|h| h.clone()).unwrap_or_default();
     let mut helper = HelperKill::Idle;
     for h in hooks {
@@ -108,8 +227,7 @@ pub fn stop_all() -> StopReport {
         // Prefer the strongest confirmed outcome across hooks.
         helper = merge_helper(helper, r);
     }
-    tracing::warn!("stop: stopped every running command (epoch {e}, helper={helper:?})");
-    StopReport { epoch: e, helper }
+    helper
 }
 
 fn merge_helper(a: HelperKill, b: HelperKill) -> HelperKill {
@@ -204,12 +322,14 @@ mod tests {
         assert!(StopReport {
             epoch: 1,
             helper: HelperKill::Gone,
+            barrier: Barrier::NotJoined,
         }
         .chat_line()
         .contains("helper is gone"));
         assert!(!StopReport {
             epoch: 1,
             helper: HelperKill::Unconfirmed,
+            barrier: Barrier::NotJoined,
         }
         .chat_line()
         .contains("helper is gone"));
@@ -257,6 +377,28 @@ mod tests {
         );
         holder.join().unwrap();
         clear_hooks_for_test();
+    }
+
+    #[test]
+    fn an_unjoined_process_stays_process_local() {
+        let _g = TEST_GATE.write().unwrap_or_else(|e| e.into_inner());
+        let e = epoch();
+        let r = stop_all();
+        assert_eq!(r.barrier, Barrier::NotJoined);
+        assert!(stopped_since(e));
+        let e = epoch();
+        assert_eq!(stop_process().barrier, Barrier::Local);
+        assert!(stopped_since(e));
+    }
+
+    #[test]
+    fn a_failed_barrier_says_so_in_chat() {
+        let r = StopReport {
+            epoch: 1,
+            helper: HelperKill::Idle,
+            barrier: Barrier::Failed("disk full".into()),
+        };
+        assert!(r.chat_line().contains("NOT told"));
     }
 
     #[test]
