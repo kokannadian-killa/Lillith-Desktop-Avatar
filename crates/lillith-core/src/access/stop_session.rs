@@ -37,7 +37,8 @@
 //! started directly from `target/…/deps/`) auto-join only happens
 //! in a fully scratch XDG environment (all of `XDG_RUNTIME_DIR`,
 //! `XDG_STATE_HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`
-//! set, runtime dir not `/run/user/…`), so an ordinary test run never stops
+//! set, and the runtime dir inside the same private tree as the state dir,
+//! never `/run/user/…` or an inherited `/tmp/xdg-runtime-…`), so an ordinary test run never stops
 //! or disarms a live Lillith; the binaries' explicit [`join`] follows the
 //! same rule. lillith-core's own unit tests never auto-join.
 //!
@@ -145,10 +146,27 @@ fn env_allows_join() -> bool {
         ]
         .iter()
         .all(|k| set(k).is_some());
-        return all
-            && set("XDG_RUNTIME_DIR").is_some_and(|v| !Path::new(&v).starts_with("/run/user"));
+        let (Some(rt), Some(st)) = (set("XDG_RUNTIME_DIR"), set("XDG_STATE_HOME")) else {
+            return false;
+        };
+        return all && scratch_runtime(Path::new(&rt), Path::new(&st), &std::env::temp_dir());
     }
     true
+}
+
+/// Whether `runtime` belongs to the same scratch tree as `state` (a test that
+/// set only some XDG dirs inherits the live session's runtime dir, e.g.
+/// `/run/user/<uid>` or `/tmp/xdg-runtime-…`, which must never be joined):
+/// the runtime dir's parent must hold the state dir and be deeper than the
+/// temp dir / filesystem root.
+fn scratch_runtime(runtime: &Path, state: &Path, tmp: &Path) -> bool {
+    if runtime.starts_with("/run/user") {
+        return false;
+    }
+    let Some(root) = runtime.parent() else {
+        return false;
+    };
+    root != Path::new("/") && root != tmp && !tmp.starts_with(root) && state.starts_with(root)
 }
 
 /// Whether this process joined a stop session (joining now if allowed).
@@ -836,6 +854,34 @@ fn write_atomic(path: &Path, body: &str) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn only_a_scratch_runtime_tree_counts_as_scratch() {
+        let tmp = Path::new("/tmp");
+        // QA-style per-run tree: runtime and state share a private root.
+        assert!(scratch_runtime(
+            Path::new("/tmp/run-1/xdg/runtime"),
+            Path::new("/tmp/run-1/xdg/state"),
+            tmp
+        ));
+        // A test that set only HOME / XDG_*_HOME inherits the live runtime.
+        assert!(!scratch_runtime(
+            Path::new("/tmp/xdg-runtime-box-31"),
+            Path::new("/tmp/setup-e2e/home/.local/state"),
+            tmp
+        ));
+        assert!(!scratch_runtime(
+            Path::new("/run/user/1000"),
+            Path::new("/run/user/state"),
+            tmp
+        ));
+        assert!(!scratch_runtime(
+            Path::new("/tmp/a/runtime"),
+            Path::new("/tmp/b/state"),
+            tmp
+        ));
+    }
+
     use super::*;
 
     #[test]
