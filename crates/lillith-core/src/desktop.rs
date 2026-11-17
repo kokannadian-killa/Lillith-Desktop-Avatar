@@ -3,12 +3,17 @@
 //! the pure [`landing_target`] that decides where she lands after a drop.
 //!
 //! The model is filled by `lillith-sense`'s KWin bridge receiver
-//! (`kwin/lillith-bridge` sends `Stack` and `Area` snapshots) and read by
-//! the overlay's gravity each frame through [`shared`]. Coordinates are
-//! KWin's global logical px, +y down. Without the bridge the model stays
-//! empty ([`Desktop::has_bridge`] = `false`) and she lands on the floor.
+//! (`kwin/lillith-bridge` sends `Stack` and `Area` snapshots, plus a 10 Hz
+//! `Cursor` sample) and read by the overlay's gravity each frame through
+//! [`shared`]. Coordinates are KWin's global logical px, +y down. Without
+//! the bridge the model stays empty ([`Desktop::has_bridge`] = `false`) and
+//! she lands on the floor. A missing or stale cursor makes Follow behave
+//! like Stay.
 
 use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+use crate::config::CURSOR_STALE_AFTER;
 
 /// Axis-aligned rectangle, global logical px (+y down).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -58,6 +63,11 @@ pub struct Desktop {
     pub has_bridge: bool,
     /// Bumped on every update (cheap change detection).
     pub generation: u64,
+    /// Latest cursor from the KWin bridge, in global logical px (+y down).
+    /// Missing when the script is off or has never sent `Cursor`.
+    pub cursor: Option<(i32, i32)>,
+    /// When [`Self::cursor`] was last written (monotonic).
+    pub cursor_at: Option<Instant>,
 }
 
 impl Desktop {
@@ -78,6 +88,26 @@ impl Desktop {
         self.work_area = Some(work_area);
         self.has_bridge = true;
         self.generation = self.generation.wrapping_add(1);
+    }
+
+    /// Records a `Cursor` sample. Does not set [`Self::has_bridge`] or bump
+    /// [`Self::generation`]: those flag window-stack / work-area snapshots
+    /// used by gravity, and the cursor arrives at 10 Hz.
+    pub fn set_cursor(&mut self, x: i32, y: i32) {
+        self.cursor = Some((x, y));
+        self.cursor_at = Some(Instant::now());
+    }
+
+    /// The cursor if it was written no longer than `max_age` before `now`.
+    /// A missing or stale sample is `None` (Follow then behaves like Stay).
+    pub fn cursor_fresh(&self, now: Instant, max_age: Duration) -> Option<(i32, i32)> {
+        let (pos, at) = self.cursor.zip(self.cursor_at)?;
+        (now.saturating_duration_since(at) <= max_age).then_some(pos)
+    }
+
+    /// [`Self::cursor_fresh`] with [`CURSOR_STALE_AFTER`].
+    pub fn cursor_live(&self, now: Instant) -> Option<(i32, i32)> {
+        self.cursor_fresh(now, CURSOR_STALE_AFTER)
     }
 }
 
@@ -348,5 +378,33 @@ mod tests {
         d.set_area(Rect::new(0, 0, 10, 10), Rect::new(0, 0, 10, 9));
         assert_eq!(d.generation, 2);
         assert!(ignored_class("Lillith") && !ignored_class("dolphin"));
+    }
+
+    #[test]
+    fn cursor_sample_is_fresh_until_it_goes_stale() {
+        let mut d = Desktop::default();
+        assert_eq!(d.cursor, None);
+        assert_eq!(d.generation, 0);
+        assert!(!d.has_bridge);
+        d.set_cursor(100, 200);
+        assert_eq!(d.cursor, Some((100, 200)));
+        assert_eq!(d.generation, 0, "cursor must not look like a stack update");
+        assert!(!d.has_bridge);
+        let at = d.cursor_at.expect("timestamp");
+        assert_eq!(d.cursor_fresh(at, CURSOR_STALE_AFTER), Some((100, 200)));
+        assert_eq!(
+            d.cursor_fresh(at + CURSOR_STALE_AFTER, CURSOR_STALE_AFTER),
+            Some((100, 200)),
+            "exactly max_age is still fresh"
+        );
+        assert_eq!(
+            d.cursor_fresh(
+                at + CURSOR_STALE_AFTER + Duration::from_millis(1),
+                CURSOR_STALE_AFTER
+            ),
+            None
+        );
+        let missing = Desktop::default();
+        assert_eq!(missing.cursor_live(Instant::now()), None);
     }
 }

@@ -11,6 +11,7 @@ use crate::spring::SpringParams;
 use crate::state::BehaviorConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// Spring tunables with README-SP defaults.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,6 +100,18 @@ pub enum MoveMode {
     /// She stays where you put her.
     Stay,
 }
+
+/// How far the cursor must be from her, along x, before Follow takes a
+/// step (px). Smaller than [`crate::state::BehaviorConfig::wander_min_step_px`]
+/// so she tracks without starting a walk for 10 Hz jitter.
+pub const FOLLOW_THRESHOLD_PX: f32 = 64.0;
+/// How close the cursor must be to her feet (px) to wake a sleeping Lillith.
+/// Larger than a pointer sitting on her body, so "coming near" is enough.
+pub const WAKE_RADIUS_PX: f32 = 160.0;
+/// A cursor sample older than this is treated as missing, so Follow stands
+/// still like Stay. The KWin script sends `Cursor` at 10 Hz; 500 ms is five
+/// missed samples.
+pub const CURSOR_STALE_AFTER: Duration = Duration::from_millis(500);
 
 /// Where the overlay sits (M1). Both backends use the same numbers: the
 /// distance in px from the left edge and from the bottom edge of the output
@@ -1690,6 +1703,27 @@ mode = \"auto\"\n";
         assert_eq!(d.memory.proactive_min_confidence, 0.5);
         assert_eq!(d.memory.proactive_interval_min, 12.0);
         assert_eq!(d.memory.proactive_max_per_hour, 2);
+    }
+
+    #[test]
+    fn follow_and_wake_defaults_load_on_old_configs() {
+        // Old files without the keys still load; serde defaults match the
+        // constants (no Settings UI for these yet).
+        assert_eq!(
+            Config::default().behavior.follow_threshold_px,
+            FOLLOW_THRESHOLD_PX
+        );
+        assert_eq!(Config::default().behavior.wake_radius_px, WAKE_RADIUS_PX);
+        let c = Config::from_toml_str("scale = 0.75\n[behavior]\npose_cycle_s = 30.0\n").unwrap();
+        assert_eq!(c.behavior.follow_threshold_px, FOLLOW_THRESHOLD_PX);
+        assert_eq!(c.behavior.wake_radius_px, WAKE_RADIUS_PX);
+        assert_eq!(c.behavior.pose_cycle_s, 30.0);
+        let c = Config::from_toml_str(
+            "[behavior]\nfollow_threshold_px = 40.0\nwake_radius_px = 200.0\n",
+        )
+        .unwrap();
+        assert_eq!(c.behavior.follow_threshold_px, 40.0);
+        assert_eq!(c.behavior.wake_radius_px, 200.0);
     }
 
     #[test]
