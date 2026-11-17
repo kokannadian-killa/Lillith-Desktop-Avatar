@@ -300,6 +300,11 @@
 # proactive_interval_min = 12.0    # how often she checks
 # proactive_cooldown_min = 180.0   # same suggestion at most this often
 # proactive_max_per_hour = 2
+# After each reply, also ask the local model (the loopback [chat] endpoint
+# only, at most 4 s) which facts your message states; only your own words
+# are kept and the rule-based extractor always runs as the fallback. Off by
+# default because it adds model time after every reply.
+# llm_extract = false
 
 # Idle self-learning (docs/SELF_LEARNING.md). While you're away she reads one
 # small chunk of an installed doc (man / info pages, /usr/share/doc, the local

@@ -795,6 +795,11 @@ pub struct MemoryConfig {
     pub proactive_cooldown_min: f32,
     /// Proactive lines per hour at most.
     pub proactive_max_per_hour: u32,
+    /// After each reply, also ask the local model (loopback `[chat]`
+    /// endpoint only) which facts Ko's message states; the rule-based
+    /// extractor always runs and is the fallback. Off by default: it costs
+    /// up to 4 s of model time after a reply.
+    pub llm_extract: bool,
 }
 
 impl Default for MemoryConfig {
@@ -816,6 +821,7 @@ impl Default for MemoryConfig {
             proactive_interval_min: 12.0,
             proactive_cooldown_min: 180.0,
             proactive_max_per_hour: 2,
+            llm_extract: false,
         }
     }
 }
