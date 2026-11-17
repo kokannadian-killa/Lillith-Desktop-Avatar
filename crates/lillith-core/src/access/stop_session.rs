@@ -1115,6 +1115,7 @@ enum Reap {
     /// Everything recorded is verifiably gone (this many trees were listed).
     Gone(usize),
     /// This many recorded processes are still alive after the kill.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     Alive(usize),
     /// The entry or `/proc` could not be read: nothing can be claimed.
     Unchecked,
