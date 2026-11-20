@@ -18648,6 +18648,40 @@
       "video": "xmas__sleep/xmas__sleep.mp4",
       "season": "xmas",
       "outfit": "xmas"
+    },
+    {
+      "name": "xmas__perch_lounge",
+      "frame_count": 84,
+      "frame_width": 400,
+      "frame_height": 400,
+      "fps": 12.0,
+      "loop": true,
+      "baseline_y": 392,
+      "anchor": [
+        200,
+        392
+      ],
+      "scale": 0.6211,
+      "body_anchor_x": 200,
+      "facing": "side (lying on her side along the top edge, head left)",
+      "canvas_compliant": true,
+      "placeholder": false,
+      "source": "grok-imagine-video",
+      "dir": "xmas__perch_lounge/",
+      "sheet": "xmas__perch_lounge/xmas__perch_lounge_sheet.png",
+      "manifest": "xmas__perch_lounge/xmas__perch_lounge.json",
+      "preview": "xmas__perch_lounge/xmas__perch_lounge_preview.gif",
+      "tags": [
+        "baked_motion",
+        "seasonal",
+        "outfit:xmas",
+        "season:xmas",
+        "outfit_of:perch_lounge"
+      ],
+      "video": "xmas__perch_lounge/xmas__perch_lounge.mp4",
+      "severity": 1,
+      "season": "xmas",
+      "outfit": "xmas"
     }
   ]
 }
