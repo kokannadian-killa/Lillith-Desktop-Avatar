@@ -11,6 +11,7 @@ pub mod build;
 pub mod companion;
 pub mod icon;
 pub mod import;
+pub mod jiggle;
 pub mod knobs;
 pub mod knowledge;
 pub mod sealed;

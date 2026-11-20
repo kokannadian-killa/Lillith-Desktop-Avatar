@@ -454,6 +454,7 @@ impl SettingsTab for KnobTab {
         ui.add_space(6.0);
         if self.id == "motion" {
             super::bounce::section(ui, shared);
+            super::jiggle::section(ui, shared);
         }
         let groups = std::mem::take(&mut self.groups);
         let two = ui.available_width() > 820.0 && groups.len() > 1;

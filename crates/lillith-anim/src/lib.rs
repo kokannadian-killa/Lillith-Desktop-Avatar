@@ -24,6 +24,7 @@ pub mod avatar;
 pub mod avatar_edit;
 pub mod catalog;
 pub mod gestures;
+pub mod layered_art;
 pub mod lipsync;
 pub mod particles;
 pub mod player;

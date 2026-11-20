@@ -37,6 +37,7 @@ pub mod event;
 pub mod icons;
 pub mod idle;
 pub mod interaction;
+pub mod jiggle;
 pub mod launch_audit;
 pub mod llm_gate;
 pub mod localtime;

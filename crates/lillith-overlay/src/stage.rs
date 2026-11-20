@@ -10,6 +10,7 @@ use crate::speech::{draw_speech, SpeechLayout, SpeechView};
 use lillith_anim::animator::{Animator, AnimatorConfig, Layer};
 use lillith_anim::atlas::Manifest;
 use lillith_anim::avatar::{draw_avatar, Avatar, AvatarMotion, AvatarPose, MotionInputs};
+use lillith_anim::layered_art::LayeredArt;
 use lillith_anim::render::{
     draw_cell, draw_cell_crossfade, draw_mouth, frame_transform, PageCache,
 };
@@ -60,6 +61,8 @@ struct Key {
     speech: u64,
     /// Custom avatar pose, quantised (all zero for Lillith's sprites).
     pose: [i32; 6],
+    /// Layered jiggle region offsets, quantised (moves region layer art).
+    jiggle: [i32; 4],
 }
 
 /// A custom avatar on stage, animated per render frame.
@@ -81,6 +84,10 @@ struct SpeechArea {
 
 pub struct Stage {
     anim: Animator,
+    /// Clips with region layer art (`lillith.layered_art.v1`), by name.
+    layered: std::collections::HashMap<String, LayeredArt>,
+    /// Layered art whose sheets failed to load (drawn flat from then on).
+    layered_failed: std::collections::HashSet<String>,
     /// Last cropped cell, keyed by (clip, frame): crops only on frame change.
     cell: Option<((String, usize), Canvas)>,
     /// Second cached cell: the frame being cross-faded in (smooth mode).
@@ -169,7 +176,17 @@ impl Stage {
         let mut manifest = manifest;
         let mut pages = pages;
         drop_unloadable_mouth_patches(&mut manifest, &mut pages);
-        let anim = Animator::new(manifest, cfg)?;
+        let mut anim = Animator::new(manifest, cfg)?;
+        let mut layered = std::collections::HashMap::new();
+        for (name, clip) in &anim.manifest().clips {
+            if let Some(art) = LayeredArt::discover(pages.dir(), clip) {
+                tracing::info!(clip = %name, layers = art.layers.len(), "layered art");
+                layered.insert(name.clone(), art);
+            }
+        }
+        for (name, art) in &layered {
+            anim.set_layered_regions(name, art.regions());
+        }
         // Feet anchor of the idle base: every clip shares the canvas/baseline.
         let a = anim.current().rect.anchor;
         let w = (cw as f32 * scale).round() as u32;
@@ -177,6 +194,8 @@ impl Stage {
         let canvas = Canvas::new(w, h).ok_or(StageError::Size(w, h))?;
         Ok(Self {
             anim,
+            layered,
+            layered_failed: Default::default(),
             cell: None,
             cell_next: None,
             mask_key: None,
@@ -494,6 +513,14 @@ impl Stage {
     /// screen changed (clip/frame/flip, or the spring transform by more than
     /// ~¼ px / 0.05° / 0.1 %).
     pub fn tick(&mut self, dt: f32) -> Result<Changed, StageError> {
+        let art_v = {
+            let f = self.anim.current();
+            self.layered
+                .get(f.clip_name)
+                .and_then(|a| a.torso_velocity(f.frame))
+                .map_or((0.0, 0.0), |(x, y)| (if f.flip { -x } else { x }, y))
+        };
+        self.anim.set_art_body_velocity(art_v);
         self.anim.tick(dt);
         if let Some(r) = &mut self.avatar {
             let walking =
@@ -529,6 +556,8 @@ impl Stage {
             blend: f.blend.map(|(n, w)| (n, (w * 24.0).round() as i32)),
             speech: 0,
             pose: [0; 6],
+            jiggle: lillith_core::jiggle::Region::ALL
+                .map(|r| (f.jiggle.get(r) / (2.0 * px)).round() as i32),
             q: [
                 (t.x / px).round() as i32,
                 (t.y / px).round() as i32,
@@ -590,6 +619,10 @@ impl Stage {
                     self.pages.prefetch(c);
                 }
             }
+            let layers = self
+                .layered
+                .get(f.clip_name)
+                .filter(|_| !self.layered_failed.contains(f.clip_name));
             match Self::render_sprite(
                 &mut self.pages,
                 &mut self.cell,
@@ -599,6 +632,8 @@ impl Stage {
                 self.scale,
                 &f,
                 &t,
+                layers,
+                &mut self.layered_failed,
                 self.fresh,
             )? {
                 Some((head, exact)) => {
@@ -668,6 +703,8 @@ impl Stage {
         scale: f32,
         f: &lillith_anim::animator::FrameRef<'_>,
         t: &lillith_core::spring::Transform,
+        layers: Option<&LayeredArt>,
+        layered_failed: &mut std::collections::HashSet<String>,
         must_draw: bool,
     ) -> Result<Option<(f32, bool)>, StageError> {
         let t = *t;
@@ -703,7 +740,21 @@ impl Stage {
                 }
             }
         }
-        if let Some((next, w)) = blend {
+        let layered_done = match layers {
+            Some(art) if exact => match draw_layered(canvas, pages, art, f, &t, origin, scale) {
+                Ok(()) => true,
+                Err(e) => {
+                    tracing::warn!(clip = %f.clip_name, error = %e, "layered art off");
+                    layered_failed.insert(f.clip_name.to_string());
+                    canvas.fill(tiny_skia::Color::TRANSPARENT);
+                    false
+                }
+            },
+            _ => false,
+        };
+        if layered_done {
+            // drawn from its layers (no cross-fade on layered clips)
+        } else if let Some((next, w)) = blend {
             let a = &cell_cache.as_ref().expect("cell cached").1;
             let b = &cell_next.as_ref().expect("cell cached").1;
             let anchor_b = f.clip.frames[next].anchor;
@@ -798,6 +849,56 @@ fn drop_unloadable_mouth_patches(manifest: &mut Manifest, pages: &mut PageCache)
             clip.mouth_patches.clear();
         }
     }
+}
+
+/// Draws frame `f` from its layered art: every layer of `art` bottom
+/// first, movable layers moved by their region's jiggle (chest drop/lift,
+/// pigtail swing about the root pivot; seam-safe, mirrored with the sprite).
+fn draw_layered(
+    canvas: &mut Canvas,
+    pages: &mut PageCache,
+    art: &LayeredArt,
+    f: &lillith_anim::animator::FrameRef<'_>,
+    t: &lillith_core::spring::Transform,
+    origin: (f32, f32),
+    scale: f32,
+) -> Result<(), StageError> {
+    let (x, y, w, h) = art.cell_rect(f.frame);
+    for l in &art.layers {
+        let m = l.motion(&f.jiggle.flipped(f.flip));
+        let page = pages.image(&l.sheet)?;
+        let cell = tiny_skia::IntRect::from_xywh(x as i32, y as i32, w, h)
+            .and_then(|r| page.clone_rect(r))
+            .ok_or_else(|| {
+                StageError::Atlas(lillith_anim::atlas::AtlasError::InvalidClip {
+                    clip: l.sheet.clone(),
+                    reason: format!("frame {} outside the layer sheet", f.frame),
+                })
+            })?;
+        // Moves are in cell px about the layer's pivot, so the sprite flip
+        // mirrors them with the art.
+        let (px, py) = l
+            .pivot
+            .as_deref()
+            .and_then(|p| art.pivot(f.frame, p))
+            .unwrap_or((0.0, 0.0));
+        let tf = frame_transform(f.rect.anchor, origin, f.flip, t, scale)
+            .pre_translate(m.dx + px, m.dy + py)
+            .pre_rotate(m.angle_deg)
+            .pre_translate(-px, -py);
+        canvas.draw_pixmap(
+            0,
+            0,
+            cell.as_ref(),
+            &tiny_skia::PixmapPaint {
+                quality: tiny_skia::FilterQuality::Bilinear,
+                ..Default::default()
+            },
+            tf,
+            None,
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]
