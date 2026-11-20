@@ -1926,10 +1926,7 @@ fn search_files(path: &Path, query: &str, max_bytes: usize) -> std::io::Result<S
 /// Runs `command` through `sh -c` and returns its combined stdout+stderr with
 /// an exit-status line. Only ever reached after an explicit confirmation.
 fn run_shell(command: &str) -> std::io::Result<String> {
-    let out = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(command)
-        .output()?;
+    let out = crate::proc::command("sh").arg("-c").arg(command).output()?;
     let mut text = String::new();
     text.push_str(&String::from_utf8_lossy(&out.stdout));
     if !out.stderr.is_empty() {

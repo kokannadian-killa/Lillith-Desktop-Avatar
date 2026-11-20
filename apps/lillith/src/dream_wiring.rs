@@ -345,7 +345,7 @@ mod tests {
         std::fs::write(&file, v.to_string()).unwrap();
         assert!(bubble_busy(read_status_file_at(&file).as_ref()), "live");
         // The owner died (a reaped child's pid): not busy, not running.
-        let mut ch = std::process::Command::new("true").spawn().unwrap();
+        let mut ch = lillith_core::proc::command("true").spawn().unwrap();
         let dead = ch.id();
         ch.wait().unwrap();
         v["owner_pid"] = dead.into();

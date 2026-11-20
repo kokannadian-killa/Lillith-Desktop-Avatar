@@ -247,7 +247,7 @@ impl Settings {
                 ),
             ];
             for (bin, args) in tries {
-                let mut c = std::process::Command::new(bin);
+                let mut c = lillith_core::proc::command(bin);
                 c.args(args);
                 lillith_core::launch_audit::record_command("avatar_picker", &c);
                 if let Ok(out) = c.output() {

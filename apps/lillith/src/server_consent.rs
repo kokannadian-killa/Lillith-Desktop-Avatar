@@ -139,7 +139,7 @@ pub fn show_card(action: &PendingAction) -> Option<CardChoice> {
         return None;
     };
     let exe = std::env::current_exe().ok()?;
-    let mut cmd = std::process::Command::new(exe);
+    let mut cmd = lillith_core::proc::command(exe);
     cmd.arg("server-card");
     if *restart {
         cmd.arg("--restart");

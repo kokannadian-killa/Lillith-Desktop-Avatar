@@ -130,7 +130,7 @@ impl Playback for ChildPlayback {
         }
         self.finish();
         if let Some((bin, args)) = self.on_stop.take() {
-            let mut c = Command::new(bin);
+            let mut c = lillith_core::proc::command(bin);
             c.args(args);
             audit_once("tts_stop", &c, None);
             let _ = c
@@ -184,7 +184,7 @@ impl Engine for EspeakNg {
     fn start(&mut self, text: &str, o: &SpeakOpts) -> std::io::Result<Box<dyn Playback>> {
         let voice = o.voice.clone().unwrap_or_else(|| "en+f3".into());
         let safe = arg_safe(text);
-        let mut c = Command::new(&self.bin);
+        let mut c = lillith_core::proc::command(&self.bin);
         c.arg("-v")
             .arg(voice)
             .arg("-s")
@@ -230,7 +230,7 @@ impl Engine for SpdSay {
         "spd-say"
     }
     fn start(&mut self, text: &str, o: &SpeakOpts) -> std::io::Result<Box<dyn Playback>> {
-        let mut cmd = Command::new(&self.bin);
+        let mut cmd = lillith_core::proc::command(&self.bin);
         cmd.arg("-w")
             .arg("-r")
             .arg(Self::rate_arg(o.rate).to_string())
@@ -438,13 +438,13 @@ impl Player {
     fn command(&self, sample_rate: u32) -> Command {
         match self {
             Player::Aplay(b) => {
-                let mut c = Command::new(b);
+                let mut c = lillith_core::proc::command(b);
                 c.args(["-q", "-t", "raw", "-f", "S16_LE", "-c", "1", "-r"])
                     .arg(sample_rate.to_string());
                 c
             }
             Player::Paplay(b) => {
-                let mut c = Command::new(b);
+                let mut c = lillith_core::proc::command(b);
                 c.args(["--raw", "--format=s16le", "--channels=1"])
                     .arg(format!("--rate={sample_rate}"));
                 c
@@ -497,7 +497,7 @@ impl Engine for Piper {
         "piper"
     }
     fn start(&mut self, text: &str, o: &SpeakOpts) -> std::io::Result<Box<dyn Playback>> {
-        let mut cmd = Command::new(&self.bin);
+        let mut cmd = lillith_core::proc::command(&self.bin);
         cmd.arg("--model").arg(&self.model).arg("--output_raw");
         if (o.rate - 1.0).abs() > 1e-3 {
             cmd.arg("--length_scale")
@@ -625,7 +625,7 @@ impl Engine for Sapi {
             Self::rate_arg(o.rate),
             (o.volume * 100.0).round().clamp(0.0, 100.0) as i32,
         );
-        let mut c = Command::new(&self.bin);
+        let mut c = lillith_core::proc::command(&self.bin);
         c.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
         audit_once("tts_engine", &c, None);
         let mut child = c

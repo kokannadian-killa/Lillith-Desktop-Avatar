@@ -26,7 +26,7 @@ use crate::Canvas;
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 use tiny_skia::IntSize;
@@ -39,6 +39,10 @@ pub const ALPHA_LO: u8 = 3;
 pub const ALPHA_HI: u8 = 251;
 /// Default decoded-frame cache budget in MiB (≈ 300 cells of 400×400).
 pub const DEFAULT_BUDGET_MB: usize = 192;
+/// At most this many ffmpeg decoders run at once (plus the one standby).
+/// Starting another kills the least-recently-used unfinished decode, so
+/// rapid clip changes never pile up ffmpeg processes.
+pub const MAX_DECODERS: usize = 2;
 /// yuv -> rgb exactly as the packer encoded it.
 const SCALE_VF: &str = "scale=in_color_matrix=bt709:in_range=pc:flags=accurate_rnd+full_chroma_int";
 
@@ -199,7 +203,7 @@ pub fn unpack_frame(rgb: &[u8], w: u32, h: u32) -> Option<Canvas> {
 /// frames. Used by `import-manifest --check` and tests; the overlay uses
 /// the streaming [`VideoCache`].
 pub fn decode_all(ffmpeg: &Path, path: &Path, w: u32, h: u32) -> Result<Vec<Canvas>, VideoError> {
-    let mut c = Command::new(ffmpeg);
+    let mut c = lillith_core::proc::command(ffmpeg);
     c.args(ffmpeg_args(&format!("file:{}", path.display())));
     lillith_core::launch_audit::record_command_once("video_decode", &c);
     let out = c
@@ -246,11 +250,38 @@ struct Decoded {
 
 type SharedDecode = Arc<(Mutex<Decoded>, Condvar)>;
 
+/// The decoder process of one entry; the reader thread takes and reaps it
+/// when its output ends, [`Entry::cancel`] kills and reaps it early.
+type SharedChild = Arc<Mutex<Option<Child>>>;
+
 #[derive(Debug)]
 struct Entry {
     state: SharedDecode,
+    child: SharedChild,
     last_used: u64,
     bytes: usize,
+}
+
+impl Entry {
+    fn in_flight(&self) -> bool {
+        let d = self.state.0.lock().expect("video lock");
+        !d.done
+    }
+
+    /// Kills and reaps the decoder if it is still running (no zombie, no
+    /// leaked process when a clip is dropped mid-decode).
+    fn cancel(&self) {
+        if let Some(mut c) = self.child.lock().expect("video child lock").take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+    }
+}
+
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.cancel();
+    }
 }
 
 /// Result of [`VideoCache::poll`].
@@ -306,6 +337,8 @@ impl Drop for VideoCache {
             let _ = c.kill();
             let _ = c.wait();
         }
+        // Entries kill and reap their own decoders on drop.
+        self.entries.clear();
     }
 }
 
@@ -347,8 +380,18 @@ impl VideoCache {
         }
     }
 
+    /// ffmpeg decoders running right now (not counting the standby).
+    pub fn running_decoders(&self) -> usize {
+        self.entries
+            .values()
+            .filter(|e| e.child.lock().expect("video child lock").is_some())
+            .count()
+    }
+
     fn spawn(&self) -> Result<Child, VideoError> {
-        let mut c = Command::new(&self.cfg.ffmpeg);
+        // `proc::command`: CREATE_NO_WINDOW on Windows, so a clip change
+        // never flashes (and stacks) a console window.
+        let mut c = lillith_core::proc::command(&self.cfg.ffmpeg);
         c.args(ffmpeg_args("pipe:0"));
         // One line per process: the standby decoder runs per clip change.
         lillith_core::launch_audit::record_command_once("video_decode", &c);
@@ -394,12 +437,14 @@ impl VideoCache {
             e.last_used = now;
             return;
         }
+        self.cap_decoders(path);
         match self.start(path, w, h, frames) {
-            Ok(state) => {
+            Ok((state, child)) => {
                 self.entries.insert(
                     path.to_path_buf(),
                     Entry {
                         state,
+                        child,
                         last_used: now,
                         bytes: frames * (w * h * 4) as usize,
                     },
@@ -418,13 +463,37 @@ impl VideoCache {
         }
     }
 
+    /// Keeps running decoders below [`MAX_DECODERS`] before a new one
+    /// starts: the least-recently-used unfinished clip (never `keep`) is
+    /// killed and dropped (it decodes again if it plays again).
+    fn cap_decoders(&mut self, keep: &Path) {
+        loop {
+            let running: Vec<(PathBuf, u64)> = self
+                .entries
+                .iter()
+                .filter(|(p, e)| p.as_path() != keep && e.in_flight())
+                .map(|(p, e)| (p.clone(), e.last_used))
+                .collect();
+            if running.len() < MAX_DECODERS {
+                return;
+            }
+            let Some((victim, _)) = running.into_iter().min_by_key(|(_, t)| *t) else {
+                return;
+            };
+            if let Some(e) = self.entries.remove(&victim) {
+                e.cancel();
+            }
+            self.evictions += 1;
+        }
+    }
+
     fn start(
         &mut self,
         path: &Path,
         w: u32,
         h: u32,
         frames: usize,
-    ) -> Result<SharedDecode, VideoError> {
+    ) -> Result<(SharedDecode, SharedChild), VideoError> {
         let bytes = std::fs::read(path)?;
         let mut child = self.take_process()?;
         self.decodes += 1;
@@ -432,6 +501,7 @@ impl VideoCache {
         let mut stdout = child.stdout.take().expect("piped stdout");
         let mut stderr = child.stderr.take().expect("piped stderr");
         let state: SharedDecode = Arc::default();
+        let shared_child: SharedChild = Arc::new(Mutex::new(Some(child)));
         // Writer: feeds the MP4 (ffmpeg's output must be drained meanwhile,
         // so this is its own thread).
         std::thread::Builder::new()
@@ -440,6 +510,7 @@ impl VideoCache {
                 let _ = stdin.write_all(&bytes);
             })?;
         let st = Arc::clone(&state);
+        let ch = Arc::clone(&shared_child);
         let name = path.display().to_string();
         std::thread::Builder::new()
             .name("lillith-video-out".into())
@@ -464,6 +535,16 @@ impl VideoCache {
                 drop(stdout);
                 let mut msg = String::new();
                 let _ = stderr.read_to_string(&mut msg);
+                // Reap it here unless a cancel already killed and reaped it.
+                let taken = ch.lock().expect("video child lock").take();
+                let Some(mut child) = taken else {
+                    let (m, cv) = &*st;
+                    let mut d = m.lock().expect("video lock");
+                    d.done = true;
+                    d.error = Some("cancelled".into());
+                    cv.notify_all();
+                    return;
+                };
                 let status = child.wait();
                 let err = err
                     .or_else(|| match status {
@@ -483,7 +564,7 @@ impl VideoCache {
                 d.error = err;
                 cv.notify_all();
             })?;
-        Ok(state)
+        Ok((state, shared_child))
     }
 
     /// Drops least-recently-used clips (never `keep`) until the reserved
@@ -591,7 +672,7 @@ fn read_full(r: &mut impl Read, buf: &mut [u8]) -> std::io::Result<bool> {
 /// if it does not run.
 pub fn find_ffmpeg() -> Option<PathBuf> {
     let p = VideoConfig::from_env().ffmpeg;
-    let mut c = Command::new(&p);
+    let mut c = lillith_core::proc::command(&p);
     c.arg("-version");
     lillith_core::launch_audit::record_command_once("video_probe", &c);
     c.stdout(Stdio::null())
@@ -641,7 +722,7 @@ mod tests {
                 }
             }
         }
-        let mut c = Command::new(ff)
+        let mut c = lillith_core::proc::command(ff)
             .args([
                 "-v",
                 "error",

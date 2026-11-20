@@ -609,7 +609,7 @@ impl ImportCmd {
     /// The child process (unbuffered stdout, own process group).
     pub fn command(&self) -> Command {
         let argv = self.argv();
-        let mut c = Command::new(&argv[0]);
+        let mut c = lillith_core::proc::command(&argv[0]);
         c.args(&argv[1..]).env("PYTHONUNBUFFERED", "1");
         c
     }
@@ -1289,7 +1289,7 @@ mod tests {
     /// A stub pipeline (sh) standing in for user_import.py.
     #[cfg(unix)]
     fn stub(body: &str) -> Command {
-        let mut c = Command::new("sh");
+        let mut c = lillith_core::proc::command("sh");
         c.arg("-c").arg(body);
         c
     }

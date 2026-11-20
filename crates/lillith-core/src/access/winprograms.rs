@@ -281,7 +281,7 @@ pub fn installed() -> Vec<WinProgram> {
     let start = scan_start_menu(&start_menu_dirs(|k| std::env::var(k).ok()));
     let (mut app_paths, mut uninstall) = (Vec::new(), Vec::new());
     for (key, is_app) in REG_KEYS {
-        let mut c = std::process::Command::new("reg.exe");
+        let mut c = crate::proc::command("reg.exe");
         c.args(["query", key, "/s"]);
         crate::launch_audit::record_command("win_programs", &c);
         let out = c

@@ -354,7 +354,7 @@ pub fn spawn_detached(argv: &[String]) -> std::io::Result<u32> {
         use std::os::windows::process::CommandExt;
         const DETACHED_PROCESS: u32 = 0x0000_0008;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        let child = std::process::Command::new(cmd)
+        let child = crate::proc::command(cmd)
             .args(args)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
@@ -403,7 +403,7 @@ pub fn shell_open(file: &str, params: &str) -> std::io::Result<()> {
 
 #[cfg(not(windows))]
 fn spawn_unix(cmd: &str, args: &[String]) -> std::io::Result<u32> {
-    let mut c = std::process::Command::new(cmd);
+    let mut c = crate::proc::command(cmd);
     c.args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

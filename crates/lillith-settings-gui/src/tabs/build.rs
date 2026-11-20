@@ -254,7 +254,7 @@ impl BuildTab {
 /// (`OPEN_DIR_UNGATED`, no card: Ko exempted it). Not spawned here.
 fn open_dir_command(dir: &std::path::Path, audit: Option<PathBuf>) -> std::process::Command {
     use lillith_core::soul_contract as sc;
-    let mut cmd = std::process::Command::new("xdg-open");
+    let mut cmd = lillith_core::proc::command("xdg-open");
     cmd.arg(dir);
     SoulContract::new(audit).record_ungated_launch_as(
         sc::OPEN_DIR_UNGATED_TAG,

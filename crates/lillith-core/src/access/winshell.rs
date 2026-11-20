@@ -308,7 +308,7 @@ pub fn run(
     {
         use std::os::windows::process::CommandExt;
         let (prog, args) = invocation(shell, command);
-        let mut c = std::process::Command::new(prog);
+        let mut c = crate::proc::command(prog);
         for a in args {
             match a {
                 Arg::Plain(p) => {

@@ -28,7 +28,7 @@ use lillith_panel::chat_bubble::{
 };
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -150,7 +150,7 @@ impl Launcher {
 
     fn spawn(&self, a: ChatAnchor) -> Result<Child> {
         let exe = std::env::current_exe()?;
-        let mut cmd = Command::new(exe);
+        let mut cmd = lillith_core::proc::command(exe);
         // Top-level flags go before the subcommand.
         if let Some(c) = &self.config {
             cmd.arg("--config").arg(c);
@@ -1557,7 +1557,7 @@ mod tests {
         let stop0 = lillith_core::access::kill_switch::epoch();
         // The "chat loop" is blocked running an approved command inline.
         let t = std::thread::spawn(|| {
-            let mut c = std::process::Command::new("sh");
+            let mut c = lillith_core::proc::command("sh");
             c.arg("-c").arg("sleep 1; echo still-ran");
             run_child(c, Duration::from_secs(30), 4096)
         });
@@ -1590,7 +1590,7 @@ mod tests {
         use lillith_core::access::commands::{run_child, was_stopped};
         let _g = INLINE_CMD.lock().unwrap_or_else(|e| e.into_inner());
         let t = std::thread::spawn(|| {
-            let mut c = std::process::Command::new("sh");
+            let mut c = lillith_core::proc::command("sh");
             c.arg("-c").arg("sleep 20");
             run_child(c, Duration::from_secs(30), 4096)
         });
