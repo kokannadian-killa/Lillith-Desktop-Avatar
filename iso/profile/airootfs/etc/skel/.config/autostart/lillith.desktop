@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Lillith
+Comment=Lillith desktop avatar (DemonOS PhantomCore)
+Exec=/usr/bin/lillith
+Icon=lillith
+X-KDE-autostart-phase=2
+X-GNOME-Autostart-enabled=true

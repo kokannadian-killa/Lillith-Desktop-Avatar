@@ -9,6 +9,8 @@ post_install() {
         qdbus6 org.kde.KWin /KWin reconfigure
     - Desktop icon / autostart: Lillith Settings > Window, or ./linux/install.sh
     - App icon: Lillith Settings > Icon, or: lillith icon --list / lillith icon <id>
+    - QuantumSec user units (not enabled): systemctl --user enable --now lillith-quantumsec.service
+    - Biotek data home: ~/.biotek (created on first QuantumSec tick)
 MSG
 }
 

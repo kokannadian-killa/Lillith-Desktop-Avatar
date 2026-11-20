@@ -38,6 +38,7 @@
 //! ```
 
 pub mod audit;
+pub mod biotek;
 pub mod bundle;
 pub mod check;
 pub mod config;

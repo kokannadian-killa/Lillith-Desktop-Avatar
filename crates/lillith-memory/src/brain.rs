@@ -995,6 +995,18 @@ impl Brain {
                     reinforced: 0,
                 });
             }
+            if name.starts_with("quantumsec.") {
+                let subject = if detail.is_empty() {
+                    name.trim_start_matches("quantumsec.").to_string()
+                } else {
+                    detail.chars().take(64).collect()
+                };
+                self.log_event("quantumsec", &subject, ctx)?;
+                return Ok(Observed::Learned {
+                    facts: 1,
+                    reinforced: 0,
+                });
+            }
             Ok(Observed::Ignored)
         })();
         let out = r.unwrap_or_else(|e| Observed::Failed(e.to_string()));

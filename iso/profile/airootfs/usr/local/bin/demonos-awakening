@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# First-boot QuantumSec awakening. Shown until the user completes it
+# (lillith-settings writes ~/.biotek/config/awakening.json). Nothing here
+# changes the system; the awakening dialog itself asks before anything does.
+flag="${HOME}/.biotek/config/awakening.json"
+[[ -e "$flag" ]] && exit 0
+sleep "${DEMONOS_AWAKENING_DELAY:-6}"   # let Plasma + Lillith settle first
+exec /usr/bin/lillith-settings --tab quantumsec --step awakening

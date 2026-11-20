@@ -234,6 +234,14 @@ if [[ $UNINSTALL == 1 ]]; then
   for f in "$BIN_DIR/lillith" "$BIN_DIR/lillith-settings" "$APP_FILE"; do
     [[ -e $f ]] && rm -f -- "$f" && ok "removed $f"
   done
+  for unit in lillith.service lillith-quantumsec.service; do
+    u="$CONFIG_HOME/systemd/user/$unit"
+    if [[ -f $u ]]; then
+      if have systemctl; then systemctl --user disable --now "$unit" >/dev/null 2>&1 || true; fi
+      rm -f -- "$u" && ok "removed $u"
+    fi
+  done
+  if have systemctl; then systemctl --user daemon-reload >/dev/null 2>&1 || true; fi
   # Autostart: same file Lillith's own settings toggle writes.
   if [[ -f $AUTOSTART_FILE ]] && grep -q 'lillith' "$AUTOSTART_FILE"; then
     rm -f -- "$AUTOSTART_FILE" && ok "removed $AUTOSTART_FILE"
@@ -536,6 +544,19 @@ DESK
 mkdir -p "$(dirname "$APP_FILE")"
 desktop_entry > "$APP_FILE"
 ok "app menu entry $APP_FILE"
+
+# QuantumSec / Lillith user units (install only — never enable here).
+SYSTEMD_USER_DIR="$CONFIG_HOME/systemd/user"
+mkdir -p "$SYSTEMD_USER_DIR"
+for unit in lillith.service lillith-quantumsec.service; do
+  if [[ -f $HERE/systemd/$unit ]]; then
+    install -Dm644 "$HERE/systemd/$unit" "$SYSTEMD_USER_DIR/$unit"
+    ok "user unit $SYSTEMD_USER_DIR/$unit (not enabled; enable with: systemctl --user enable --now $unit)"
+  fi
+done
+# Ensure Biotek data home skeleton exists (additive).
+mkdir -p "$HOME/.biotek"/{config,logs,memory,reports,bots/registry,bots/swarm,consent,quantumsec,teams/red,teams/blue,teams/purple}
+ok "Biotek data home ~/.biotek (layout)"
 
 # ── 5. desktop shortcut + autostart ─────────────────────────────────
 step "5/8  Shortcuts"

@@ -123,6 +123,21 @@ impl EventFilter {
                 return None;
             }
             (key, Event::with_detail(kind, text))
+        } else if name.starts_with("quantumsec.") {
+            // Phase 2: shield / teams / deploy (detail truncated; no secrets).
+            let key = format!("qsec:{name}");
+            if self.recent(&key, now, 30.0) {
+                return None;
+            }
+            let detail = detail.chars().take(160).collect::<String>();
+            (
+                key,
+                if detail.is_empty() {
+                    Event::new(name)
+                } else {
+                    Event::with_detail(name, detail)
+                },
+            )
         } else {
             return None;
         };

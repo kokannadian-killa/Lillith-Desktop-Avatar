@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=DemonOS first-boot look
+Comment=Applies the DemonOS colour scheme and wallpaper once
+Exec=/usr/local/bin/demonos-firstboot
+X-KDE-autostart-phase=1
+X-GNOME-Autostart-enabled=true

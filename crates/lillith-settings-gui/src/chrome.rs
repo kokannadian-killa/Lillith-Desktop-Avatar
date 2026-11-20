@@ -311,10 +311,16 @@ pub fn blade_button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
         galley,
         tc,
     );
+    let tip = if enabled {
+        format!("{text} — click to act")
+    } else {
+        format!("{text} (disabled)")
+    };
     if enabled {
         resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(tip)
     } else {
-        resp
+        resp.on_hover_text(tip)
     }
 }
 
@@ -347,6 +353,7 @@ pub fn stone_button(ui: &mut Ui, text: &str) -> Response {
         c32(pal::TEXT),
     );
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(format!("{text} — click to act"))
 }
 
 /// Live validation badge under / next to a field: green "LOOPBACK ONLY"

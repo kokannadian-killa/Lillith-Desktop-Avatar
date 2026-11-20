@@ -96,6 +96,31 @@ fn errors_are_reduced_to_kind_and_app_and_deduped() {
 }
 
 #[test]
+fn quantumsec_events_are_admitted() {
+    let mut f = EventFilter::new(20);
+    let e = f
+        .admit(
+            &Event::with_detail("quantumsec.status.elevated", "cpu warm"),
+            MON,
+        )
+        .unwrap();
+    assert_eq!(e.name, "quantumsec.status.elevated");
+    // Debounce same name within 30s.
+    assert!(f
+        .admit(
+            &Event::with_detail("quantumsec.status.elevated", "again"),
+            MON + 5.0
+        )
+        .is_none());
+    assert!(f
+        .admit(
+            &Event::with_detail("quantumsec.lockdown.proposed", "sim"),
+            MON + 6.0
+        )
+        .is_some());
+}
+
+#[test]
 fn events_per_minute_are_capped() {
     let mut f = EventFilter::new(3);
     let admitted = (0..10)

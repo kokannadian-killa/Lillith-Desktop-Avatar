@@ -1,0 +1,12 @@
+[SddmGreeterTheme]
+Name=DemonOS PhantomCore
+Description=Void-black login with the DemonOS sigil
+Author=Ko Kannadian
+Type=sddm-theme
+Version=0.1
+Website=https://github.com/kokannadian-killa/Lillith-Desktop-Avatar
+MainScript=Main.qml
+ConfigFile=theme.conf
+Theme-Id=demonos
+Theme-API=2.0
+QtVersion=6

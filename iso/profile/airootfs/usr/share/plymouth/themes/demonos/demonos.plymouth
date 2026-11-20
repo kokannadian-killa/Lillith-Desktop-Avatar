@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=DemonOS PhantomCore
+Description=Void-black boot splash with the PhantomCore sigil (palette #0a0a0f #ff3e6c #00f0ff #b829f7)
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/demonos
+ScriptFile=/usr/share/plymouth/themes/demonos/demonos.script

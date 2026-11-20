@@ -1,0 +1,20 @@
+[Unit]
+Description=Lillith QuantumSec shield (protons / status; local only)
+# Not enabled by the installer; enable yourself:
+#   systemctl --user enable --now lillith-quantumsec.service
+# Requires the `lillith quantumsec` subcommand (poll loop, writes ~/.biotek/quantumsec/status.json).
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/lillith quantumsec
+Restart=on-failure
+RestartSec=5
+Nice=10
+Environment=BIOTEK_HOME=%h/.biotek
+# Local only: no ambient network capability beyond what the process needs for sysinfo.
+NoNewPrivileges=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=default.target

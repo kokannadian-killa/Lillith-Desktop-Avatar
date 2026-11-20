@@ -1,0 +1,56 @@
+# DemonOS PhantomCore Plymouth theme. Images come from iso/theme/make-theme-assets.py.
+Window.SetBackgroundTopColor(0.039, 0.039, 0.059);
+Window.SetBackgroundBottomColor(0.039, 0.039, 0.059);
+sw = Window.GetWidth(); sh = Window.GetHeight();
+
+bg_img = Image("background.png");
+bg = Sprite(bg_img.Scale(sw, sh)); bg.SetZ(-100);
+
+logo_img = Image("logo.png");
+logo = Sprite(logo_img);
+logo.SetX(sw / 2 - logo_img.GetWidth() / 2);
+logo.SetY(sh / 2 - logo_img.GetHeight() / 2 - 60);
+
+title_img = Image("title.png");
+title = Sprite(title_img);
+title.SetX(sw / 2 - title_img.GetWidth() / 2);
+title.SetY(sh / 2 + logo_img.GetHeight() / 2 - 30);
+
+bar_bg_img = Image("progress-bg.png");
+bar_bg = Sprite(bar_bg_img);
+bx = sw / 2 - bar_bg_img.GetWidth() / 2; by = sh / 2 + logo_img.GetHeight() / 2 + 50;
+bar_bg.SetPosition(bx, by, 1);
+bar_fg_img = Image("progress-fg.png");
+bar = Sprite(); bar.SetPosition(bx, by, 2);
+
+t = 0;
+fun refresh() {
+    t++;
+    # slow neon pulse on the sigil
+    logo.SetOpacity(0.75 + 0.25 * Math.Sin(t / 18));
+}
+Plymouth.SetRefreshFunction(refresh);
+
+fun progress(duration, progress) {
+    w = Math.Int(bar_fg_img.GetWidth() * progress);
+    if (w < 1) w = 1;
+    bar.SetImage(bar_fg_img.Scale(w, bar_fg_img.GetHeight()));
+}
+Plymouth.SetBootProgressFunction(progress);
+
+msg = Sprite();
+fun message(text) {
+    msg.SetImage(Image.Text(text, 0.0, 0.94, 1.0));
+    msg.SetPosition(sw / 2 - 200, by + 30, 3);
+}
+Plymouth.SetMessageFunction(message);
+
+# password prompts (not used on the live ISO, kept for installs)
+fun display_password(prompt, bullets) {
+    s = prompt + "  ";
+    for (i = 0; i < bullets; i++) s += "*";
+    message(s);
+}
+Plymouth.SetDisplayPasswordFunction(display_password);
+fun display_normal() { msg.SetOpacity(1); }
+Plymouth.SetDisplayNormalFunction(display_normal);

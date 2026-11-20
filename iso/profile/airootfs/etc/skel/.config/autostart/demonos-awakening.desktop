@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=DemonOS Awakening
+Comment=First-boot QuantumSec awakening (shown once, until you finish it)
+Exec=/usr/local/bin/demonos-awakening
+Icon=lillith
+X-KDE-autostart-phase=2
+X-GNOME-Autostart-enabled=true

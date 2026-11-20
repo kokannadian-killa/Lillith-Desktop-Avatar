@@ -1,0 +1,20 @@
+[Unit]
+Description=Lillith desktop companion (user session)
+# Not enabled by the installer; enable yourself:
+#   systemctl --user enable --now lillith.service
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/lillith
+Restart=on-failure
+RestartSec=5
+Nice=5
+# Data home for QuantumSec / Biotek Engine (Lillith side).
+Environment=BIOTEK_HOME=%h/.biotek
+# No NewPrivileges: stays a normal user unit.
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
