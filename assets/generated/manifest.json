@@ -18167,6 +18167,47 @@
       "video": "idle_tease_heels_click_wink/idle_tease_heels_click_wink.mp4",
       "severity": 3,
       "system": false
+    },
+    {
+      "name": "sit_down",
+      "frame_count": 24,
+      "frame_width": 400,
+      "frame_height": 400,
+      "fps": 12.0,
+      "loop": false,
+      "baseline_y": 392,
+      "anchor": [
+        200,
+        392
+      ],
+      "scale": 0.52,
+      "body_anchor_x": 200,
+      "facing": "front -> right (seated)",
+      "canvas_compliant": true,
+      "placeholder": false,
+      "source": "grok-imagine-video",
+      "dir": "sit_down/",
+      "sheet": "sit_down/sit_down_sheet.png",
+      "manifest": "sit_down/sit_down.json",
+      "preview": "sit_down/sit_down_preview.gif",
+      "tags": [
+        "baked_motion",
+        "canonical"
+      ],
+      "video": "sit_down/sit_down.mp4",
+      "severity": 1,
+      "system": false,
+      "seat_y": 230,
+      "seat_x_range": [
+        136,
+        279
+      ],
+      "feet_lowest_y": 365,
+      "blend": true,
+      "from": "idle",
+      "to": "sit_swing",
+      "from_frame": 0,
+      "to_frame": 0
     }
   ]
 }

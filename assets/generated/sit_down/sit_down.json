@@ -1,0 +1,293 @@
+{
+  "name": "sit_down",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "sit_down_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": false,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.52,
+  "body_anchor_x": 200,
+  "facing": "front -> right (seated)",
+  "source_files": [
+    "../../source/video/sit_down/sit_down_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 47,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine I2V + scratch-hangsit1/kit/zoom_place.py (zoom_tease matte, custom placement)",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "scratch-hangsit1/kit/zoom_place.py (matte_v2 functions)",
+  "centering": "lerp-registered",
+  "baseline_snap": "off (registered or grip-aligned; not feet-to-392)",
+  "placement": {
+    "mode": "lerp",
+    "scale0": 0.54,
+    "scale1": 0.5,
+    "paste_ends": [
+      "frame 0 replaced with official start canvas",
+      "last frame replaced with official end canvas"
+    ],
+    "grip_src": null,
+    "grip_dst": 16
+  },
+  "cleavage_zoom": {
+    "zmax": 1.7,
+    "target_canvas_xy": [
+      200.0,
+      140.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        4,
+        8,
+        14,
+        20
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 1.131,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.1094,
+      1.35,
+      1.5906,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.6481,
+      1.5185,
+      1.35,
+      1.1815,
+      1.0519,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing; focus is the face"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "baked_motion",
+    "canonical"
+  ],
+  "system": false,
+  "notes": "Transition sit_down: registered first frame to idle_a_f0_canvas.png and last to sit_swing_f0_canvas.png; scale lerps 0.540->0.500; modest face push-in zmax=1.7. frame 0 replaced with official start canvas last frame replaced with official end canvas",
+  "bbox_per_frame": [
+    [
+      132,
+      270,
+      22,
+      392
+    ],
+    [
+      132,
+      269,
+      22,
+      392
+    ],
+    [
+      134,
+      268,
+      21,
+      390
+    ],
+    [
+      136,
+      265,
+      20,
+      390
+    ],
+    [
+      140,
+      259,
+      19,
+      389
+    ],
+    [
+      139,
+      267,
+      16,
+      392
+    ],
+    [
+      81,
+      285,
+      14,
+      392
+    ],
+    [
+      68,
+      300,
+      13,
+      392
+    ],
+    [
+      138,
+      319,
+      13,
+      392
+    ],
+    [
+      119,
+      331,
+      14,
+      392
+    ],
+    [
+      86,
+      349,
+      15,
+      392
+    ],
+    [
+      63,
+      359,
+      22,
+      392
+    ],
+    [
+      26,
+      371,
+      38,
+      392
+    ],
+    [
+      0,
+      375,
+      48,
+      392
+    ],
+    [
+      0,
+      377,
+      59,
+      392
+    ],
+    [
+      0,
+      368,
+      61,
+      392
+    ],
+    [
+      0,
+      343,
+      56,
+      392
+    ],
+    [
+      16,
+      316,
+      47,
+      392
+    ],
+    [
+      35,
+      299,
+      34,
+      392
+    ],
+    [
+      49,
+      293,
+      27,
+      388
+    ],
+    [
+      55,
+      288,
+      21,
+      367
+    ],
+    [
+      57,
+      290,
+      19,
+      366
+    ],
+    [
+      74,
+      293,
+      17,
+      364
+    ],
+    [
+      118,
+      347,
+      17,
+      365
+    ]
+  ],
+  "canvas_compliant": false,
+  "video": {
+    "file": "sit_down.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 24,
+    "fps": 12.0,
+    "bytes": 365469,
+    "quality": {
+      "edge_mae": 2.066,
+      "edge_p99": 21.0,
+      "halo_dark": 0.033,
+      "halo_light": -0.109,
+      "alpha_mae": 0.085
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "severity": 1,
+  "seat_y": 230,
+  "seat_x_range": [
+    136,
+    279
+  ],
+  "feet_lowest_y": 365,
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "fc4bb1e0ca0cbe029301ba0e1b575e14125cc61fd80df0e002b70fb2f2520764",
+    "source_sha256": "be55ea08aad638dc2bdb5e6c8b5d2ac98eb93abbfbb36f03dd33f6c56eadc712"
+  },
+  "blend": true,
+  "from": "idle",
+  "to": "sit_swing",
+  "from_frame": 0,
+  "to_frame": 0
+}
