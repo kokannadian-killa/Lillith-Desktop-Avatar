@@ -1,0 +1,536 @@
+{
+  "name": "summer__hip_sway_slow",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "summer__hip_sway_slow_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/summer_hip_sway_bounce/summer_hip_sway_bounce_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 1.8,
+    "focus_canvas_xy": [
+      206.98000000000002,
+      71.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      195.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 1.029,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "flirt_set",
+    "hip_sway",
+    "outfit:summer",
+    "outfit_of:hip_sway_slow",
+    "season:summer",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      137,
+      282,
+      8,
+      392
+    ],
+    [
+      137,
+      284,
+      8,
+      392
+    ],
+    [
+      142,
+      292,
+      8,
+      392
+    ],
+    [
+      149,
+      304,
+      8,
+      392
+    ],
+    [
+      152,
+      309,
+      8,
+      392
+    ],
+    [
+      153,
+      307,
+      8,
+      392
+    ],
+    [
+      152,
+      302,
+      8,
+      392
+    ],
+    [
+      151,
+      302,
+      8,
+      392
+    ],
+    [
+      152,
+      311,
+      8,
+      392
+    ],
+    [
+      153,
+      313,
+      8,
+      392
+    ],
+    [
+      152,
+      308,
+      8,
+      392
+    ],
+    [
+      149,
+      298,
+      8,
+      392
+    ],
+    [
+      147,
+      289,
+      8,
+      392
+    ],
+    [
+      139,
+      280,
+      11,
+      392
+    ],
+    [
+      135,
+      279,
+      11,
+      392
+    ],
+    [
+      139,
+      287,
+      8,
+      392
+    ],
+    [
+      148,
+      299,
+      8,
+      392
+    ],
+    [
+      151,
+      308,
+      8,
+      392
+    ],
+    [
+      155,
+      313,
+      8,
+      392
+    ],
+    [
+      155,
+      308,
+      8,
+      392
+    ],
+    [
+      153,
+      301,
+      8,
+      392
+    ],
+    [
+      151,
+      295,
+      8,
+      392
+    ],
+    [
+      148,
+      289,
+      8,
+      392
+    ],
+    [
+      137,
+      281,
+      10,
+      392
+    ],
+    [
+      134,
+      282,
+      10,
+      392
+    ],
+    [
+      139,
+      289,
+      8,
+      392
+    ],
+    [
+      149,
+      301,
+      8,
+      392
+    ],
+    [
+      152,
+      312,
+      8,
+      392
+    ],
+    [
+      157,
+      315,
+      8,
+      392
+    ],
+    [
+      156,
+      307,
+      8,
+      392
+    ],
+    [
+      152,
+      297,
+      8,
+      392
+    ],
+    [
+      147,
+      286,
+      8,
+      392
+    ],
+    [
+      136,
+      278,
+      10,
+      392
+    ],
+    [
+      131,
+      282,
+      11,
+      392
+    ],
+    [
+      142,
+      295,
+      8,
+      392
+    ],
+    [
+      149,
+      309,
+      8,
+      392
+    ],
+    [
+      152,
+      313,
+      8,
+      392
+    ],
+    [
+      152,
+      304,
+      8,
+      392
+    ],
+    [
+      148,
+      288,
+      8,
+      392
+    ],
+    [
+      138,
+      280,
+      11,
+      392
+    ],
+    [
+      133,
+      282,
+      12,
+      392
+    ],
+    [
+      142,
+      295,
+      8,
+      392
+    ],
+    [
+      152,
+      310,
+      8,
+      392
+    ],
+    [
+      156,
+      317,
+      8,
+      392
+    ],
+    [
+      157,
+      307,
+      8,
+      392
+    ],
+    [
+      153,
+      296,
+      8,
+      392
+    ],
+    [
+      147,
+      287,
+      8,
+      392
+    ],
+    [
+      137,
+      284,
+      10,
+      392
+    ],
+    [
+      144,
+      297,
+      8,
+      392
+    ],
+    [
+      151,
+      310,
+      8,
+      392
+    ],
+    [
+      153,
+      313,
+      8,
+      392
+    ],
+    [
+      152,
+      303,
+      8,
+      392
+    ],
+    [
+      148,
+      291,
+      8,
+      392
+    ],
+    [
+      137,
+      281,
+      9,
+      392
+    ],
+    [
+      139,
+      289,
+      8,
+      392
+    ],
+    [
+      149,
+      304,
+      8,
+      392
+    ],
+    [
+      151,
+      311,
+      8,
+      392
+    ],
+    [
+      149,
+      301,
+      8,
+      392
+    ],
+    [
+      144,
+      287,
+      8,
+      392
+    ],
+    [
+      138,
+      282,
+      8,
+      392
+    ]
+  ],
+  "canvas_compliant": true,
+  "video": {
+    "file": "summer__hip_sway_slow.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 693052,
+    "quality": {
+      "edge_mae": 2.091,
+      "edge_p99": 18.0,
+      "halo_dark": 0.044,
+      "halo_light": -0.066,
+      "alpha_mae": 0.0734
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "c3d41dba193158647ef0e532f2f734ac2dd5ec96a3a2c576e6228f025e20a34c",
+    "source_sha256": "546760678ab6acc27ee90c4044ce91ee4f1feca5e4c728a635f43d1d7a96c92b"
+  },
+  "season": "summer",
+  "outfit": "summer",
+  "allure": true,
+  "severity": 1,
+  "outfit_of": "hip_sway_slow"
+}

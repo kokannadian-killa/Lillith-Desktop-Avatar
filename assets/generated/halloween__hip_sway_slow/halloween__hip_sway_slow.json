@@ -1,0 +1,536 @@
+{
+  "name": "halloween__hip_sway_slow",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "halloween__hip_sway_slow_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/halloween_hip_sway_bounce/halloween_hip_sway_bounce_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 1.8,
+    "focus_canvas_xy": [
+      206.98000000000002,
+      72.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      195.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 1.029,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "flirt_set",
+    "hip_sway",
+    "outfit:halloween",
+    "outfit_of:hip_sway_slow",
+    "season:halloween",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      128,
+      278,
+      9,
+      392
+    ],
+    [
+      127,
+      278,
+      9,
+      392
+    ],
+    [
+      123,
+      278,
+      9,
+      392
+    ],
+    [
+      120,
+      279,
+      10,
+      392
+    ],
+    [
+      126,
+      288,
+      9,
+      392
+    ],
+    [
+      136,
+      306,
+      9,
+      392
+    ],
+    [
+      150,
+      322,
+      13,
+      392
+    ],
+    [
+      150,
+      326,
+      15,
+      392
+    ],
+    [
+      140,
+      317,
+      9,
+      392
+    ],
+    [
+      115,
+      290,
+      9,
+      392
+    ],
+    [
+      97,
+      277,
+      9,
+      392
+    ],
+    [
+      91,
+      279,
+      10,
+      392
+    ],
+    [
+      91,
+      283,
+      9,
+      392
+    ],
+    [
+      104,
+      288,
+      9,
+      392
+    ],
+    [
+      131,
+      315,
+      12,
+      392
+    ],
+    [
+      147,
+      326,
+      16,
+      392
+    ],
+    [
+      144,
+      326,
+      13,
+      392
+    ],
+    [
+      130,
+      310,
+      9,
+      392
+    ],
+    [
+      110,
+      292,
+      9,
+      392
+    ],
+    [
+      93,
+      278,
+      10,
+      392
+    ],
+    [
+      93,
+      283,
+      9,
+      392
+    ],
+    [
+      105,
+      287,
+      9,
+      392
+    ],
+    [
+      122,
+      307,
+      13,
+      392
+    ],
+    [
+      145,
+      322,
+      16,
+      392
+    ],
+    [
+      139,
+      319,
+      9,
+      392
+    ],
+    [
+      122,
+      303,
+      9,
+      392
+    ],
+    [
+      103,
+      284,
+      10,
+      392
+    ],
+    [
+      96,
+      281,
+      9,
+      392
+    ],
+    [
+      98,
+      285,
+      9,
+      392
+    ],
+    [
+      116,
+      307,
+      14,
+      392
+    ],
+    [
+      138,
+      321,
+      16,
+      392
+    ],
+    [
+      145,
+      321,
+      12,
+      392
+    ],
+    [
+      131,
+      310,
+      9,
+      392
+    ],
+    [
+      113,
+      292,
+      9,
+      392
+    ],
+    [
+      94,
+      278,
+      10,
+      392
+    ],
+    [
+      94,
+      282,
+      9,
+      392
+    ],
+    [
+      103,
+      288,
+      9,
+      392
+    ],
+    [
+      118,
+      305,
+      13,
+      392
+    ],
+    [
+      141,
+      319,
+      16,
+      392
+    ],
+    [
+      144,
+      320,
+      9,
+      392
+    ],
+    [
+      129,
+      307,
+      9,
+      392
+    ],
+    [
+      111,
+      289,
+      10,
+      392
+    ],
+    [
+      100,
+      280,
+      10,
+      392
+    ],
+    [
+      102,
+      284,
+      9,
+      392
+    ],
+    [
+      115,
+      296,
+      11,
+      392
+    ],
+    [
+      133,
+      309,
+      16,
+      392
+    ],
+    [
+      148,
+      316,
+      13,
+      392
+    ],
+    [
+      139,
+      312,
+      9,
+      392
+    ],
+    [
+      124,
+      295,
+      9,
+      392
+    ],
+    [
+      108,
+      278,
+      9,
+      392
+    ],
+    [
+      111,
+      278,
+      9,
+      392
+    ],
+    [
+      121,
+      280,
+      9,
+      392
+    ],
+    [
+      129,
+      281,
+      9,
+      392
+    ],
+    [
+      131,
+      283,
+      10,
+      392
+    ],
+    [
+      128,
+      280,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ]
+  ],
+  "canvas_compliant": true,
+  "video": {
+    "file": "halloween__hip_sway_slow.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 717270,
+    "quality": {
+      "edge_mae": 1.939,
+      "edge_p99": 16.19,
+      "halo_dark": 0.017,
+      "halo_light": -0.106,
+      "alpha_mae": 0.0706
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "b8b28b29c3cdbf2e6c0880b358c67cb7fb376b73869a29e0d8c199cae05be6a5",
+    "source_sha256": "a35591177c1aca156df8708963c8087ea5026b7ed5af4ef66801ba5c6d3006ea"
+  },
+  "season": "halloween",
+  "outfit": "halloween",
+  "allure": true,
+  "severity": 1,
+  "outfit_of": "hip_sway_slow"
+}

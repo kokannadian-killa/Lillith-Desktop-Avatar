@@ -1,0 +1,536 @@
+{
+  "name": "xmas__seduce_blow_kiss_screen",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "xmas__seduce_blow_kiss_screen_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/xmas_flirt_beckon_kiss/xmas_flirt_beckon_kiss_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 1.8,
+    "focus_canvas_xy": [
+      201.98000000000002,
+      72.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      195.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 1.029,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "flirt_idle",
+    "flirt_set",
+    "outfit:xmas",
+    "outfit_of:seduce_blow_kiss_screen",
+    "season:xmas",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      138,
+      274,
+      11,
+      392
+    ],
+    [
+      138,
+      274,
+      12,
+      392
+    ],
+    [
+      138,
+      293,
+      12,
+      392
+    ],
+    [
+      138,
+      309,
+      12,
+      392
+    ],
+    [
+      138,
+      298,
+      13,
+      392
+    ],
+    [
+      138,
+      276,
+      13,
+      392
+    ],
+    [
+      140,
+      275,
+      12,
+      392
+    ],
+    [
+      143,
+      280,
+      12,
+      392
+    ],
+    [
+      147,
+      284,
+      15,
+      392
+    ],
+    [
+      149,
+      284,
+      18,
+      392
+    ],
+    [
+      150,
+      282,
+      22,
+      392
+    ],
+    [
+      151,
+      280,
+      24,
+      392
+    ],
+    [
+      151,
+      280,
+      24,
+      392
+    ],
+    [
+      151,
+      281,
+      24,
+      392
+    ],
+    [
+      151,
+      281,
+      23,
+      392
+    ],
+    [
+      151,
+      280,
+      23,
+      392
+    ],
+    [
+      152,
+      279,
+      24,
+      392
+    ],
+    [
+      152,
+      278,
+      26,
+      392
+    ],
+    [
+      151,
+      276,
+      27,
+      392
+    ],
+    [
+      151,
+      307,
+      28,
+      392
+    ],
+    [
+      151,
+      277,
+      27,
+      392
+    ],
+    [
+      151,
+      277,
+      26,
+      392
+    ],
+    [
+      151,
+      277,
+      24,
+      392
+    ],
+    [
+      150,
+      279,
+      20,
+      392
+    ],
+    [
+      149,
+      279,
+      18,
+      392
+    ],
+    [
+      148,
+      279,
+      18,
+      392
+    ],
+    [
+      148,
+      278,
+      19,
+      392
+    ],
+    [
+      149,
+      277,
+      21,
+      392
+    ],
+    [
+      150,
+      278,
+      24,
+      392
+    ],
+    [
+      149,
+      278,
+      26,
+      392
+    ],
+    [
+      149,
+      324,
+      26,
+      392
+    ],
+    [
+      149,
+      280,
+      26,
+      392
+    ],
+    [
+      150,
+      279,
+      26,
+      392
+    ],
+    [
+      150,
+      279,
+      25,
+      392
+    ],
+    [
+      150,
+      282,
+      21,
+      392
+    ],
+    [
+      149,
+      289,
+      16,
+      392
+    ],
+    [
+      147,
+      301,
+      11,
+      392
+    ],
+    [
+      144,
+      310,
+      9,
+      392
+    ],
+    [
+      140,
+      304,
+      9,
+      392
+    ],
+    [
+      138,
+      285,
+      9,
+      392
+    ],
+    [
+      137,
+      275,
+      10,
+      392
+    ],
+    [
+      136,
+      273,
+      10,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      138,
+      274,
+      11,
+      392
+    ],
+    [
+      138,
+      275,
+      11,
+      392
+    ],
+    [
+      138,
+      275,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      136,
+      274,
+      11,
+      392
+    ],
+    [
+      136,
+      274,
+      11,
+      392
+    ],
+    [
+      136,
+      274,
+      11,
+      392
+    ],
+    [
+      136,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ]
+  ],
+  "canvas_compliant": true,
+  "video": {
+    "file": "xmas__seduce_blow_kiss_screen.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 790545,
+    "quality": {
+      "edge_mae": 2.509,
+      "edge_p99": 24.99,
+      "halo_dark": 0.004,
+      "halo_light": -0.077,
+      "alpha_mae": 0.0716
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "072850a1b6f869d1099acf531ccec3ab3ffb37df7d24f53e32b03d3cb96c5f51",
+    "source_sha256": "f52f255070d1c6a5133921b9990895bd80edac62ddb5d7e840d415eb4858d569"
+  },
+  "season": "xmas",
+  "outfit": "xmas",
+  "allure": true,
+  "severity": 1,
+  "outfit_of": "seduce_blow_kiss_screen"
+}

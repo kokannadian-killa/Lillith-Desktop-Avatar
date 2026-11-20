@@ -1,0 +1,536 @@
+{
+  "name": "newyear__hip_sway_slow",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "newyear__hip_sway_slow_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/newyear_hip_sway_bounce/newyear_hip_sway_bounce_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 1.8,
+    "focus_canvas_xy": [
+      200.98000000000002,
+      75.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      195.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 1.029,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "flirt_set",
+    "hip_sway",
+    "outfit:newyear",
+    "outfit_of:hip_sway_slow",
+    "season:newyear",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      129,
+      280,
+      12,
+      392
+    ],
+    [
+      121,
+      275,
+      12,
+      392
+    ],
+    [
+      111,
+      274,
+      12,
+      392
+    ],
+    [
+      111,
+      280,
+      13,
+      392
+    ],
+    [
+      126,
+      295,
+      19,
+      392
+    ],
+    [
+      134,
+      316,
+      21,
+      392
+    ],
+    [
+      138,
+      322,
+      17,
+      392
+    ],
+    [
+      135,
+      314,
+      14,
+      392
+    ],
+    [
+      129,
+      289,
+      21,
+      392
+    ],
+    [
+      111,
+      274,
+      24,
+      392
+    ],
+    [
+      108,
+      274,
+      17,
+      392
+    ],
+    [
+      125,
+      287,
+      15,
+      392
+    ],
+    [
+      123,
+      312,
+      19,
+      392
+    ],
+    [
+      133,
+      328,
+      20,
+      392
+    ],
+    [
+      138,
+      327,
+      16,
+      392
+    ],
+    [
+      135,
+      315,
+      15,
+      392
+    ],
+    [
+      130,
+      297,
+      16,
+      392
+    ],
+    [
+      115,
+      278,
+      21,
+      392
+    ],
+    [
+      100,
+      274,
+      21,
+      392
+    ],
+    [
+      112,
+      278,
+      15,
+      392
+    ],
+    [
+      128,
+      300,
+      15,
+      392
+    ],
+    [
+      122,
+      320,
+      20,
+      392
+    ],
+    [
+      130,
+      328,
+      21,
+      392
+    ],
+    [
+      138,
+      321,
+      16,
+      392
+    ],
+    [
+      136,
+      303,
+      14,
+      392
+    ],
+    [
+      127,
+      283,
+      17,
+      392
+    ],
+    [
+      108,
+      274,
+      22,
+      392
+    ],
+    [
+      109,
+      274,
+      21,
+      392
+    ],
+    [
+      133,
+      299,
+      14,
+      392
+    ],
+    [
+      126,
+      318,
+      16,
+      392
+    ],
+    [
+      125,
+      326,
+      20,
+      392
+    ],
+    [
+      135,
+      324,
+      21,
+      392
+    ],
+    [
+      138,
+      312,
+      18,
+      392
+    ],
+    [
+      133,
+      288,
+      14,
+      392
+    ],
+    [
+      106,
+      274,
+      16,
+      392
+    ],
+    [
+      94,
+      274,
+      22,
+      392
+    ],
+    [
+      99,
+      274,
+      22,
+      392
+    ],
+    [
+      120,
+      286,
+      22,
+      392
+    ],
+    [
+      133,
+      317,
+      23,
+      392
+    ],
+    [
+      138,
+      327,
+      19,
+      392
+    ],
+    [
+      137,
+      320,
+      15,
+      392
+    ],
+    [
+      133,
+      301,
+      15,
+      392
+    ],
+    [
+      123,
+      280,
+      21,
+      392
+    ],
+    [
+      102,
+      274,
+      23,
+      392
+    ],
+    [
+      110,
+      275,
+      17,
+      392
+    ],
+    [
+      128,
+      295,
+      17,
+      392
+    ],
+    [
+      126,
+      317,
+      21,
+      392
+    ],
+    [
+      138,
+      327,
+      20,
+      392
+    ],
+    [
+      138,
+      322,
+      16,
+      392
+    ],
+    [
+      135,
+      306,
+      14,
+      392
+    ],
+    [
+      131,
+      287,
+      19,
+      392
+    ],
+    [
+      110,
+      274,
+      24,
+      392
+    ],
+    [
+      106,
+      274,
+      22,
+      392
+    ],
+    [
+      127,
+      292,
+      19,
+      392
+    ],
+    [
+      128,
+      313,
+      19,
+      392
+    ],
+    [
+      137,
+      322,
+      15,
+      392
+    ],
+    [
+      138,
+      321,
+      12,
+      392
+    ],
+    [
+      135,
+      312,
+      12,
+      392
+    ],
+    [
+      132,
+      295,
+      12,
+      392
+    ],
+    [
+      131,
+      285,
+      12,
+      392
+    ]
+  ],
+  "canvas_compliant": true,
+  "video": {
+    "file": "newyear__hip_sway_slow.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 764096,
+    "quality": {
+      "edge_mae": 1.981,
+      "edge_p99": 15.0,
+      "halo_dark": 0.019,
+      "halo_light": -0.099,
+      "alpha_mae": 0.0821
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "24b789056f478f638b3576df5865c24eac127872a126b0bdf67eb94523ecc730",
+    "source_sha256": "91e78f6f8fd84f65ec463eac4199d59a12da2af95cd207fa1a2891773c4f6916"
+  },
+  "season": "newyear",
+  "outfit": "newyear",
+  "allure": true,
+  "severity": 1,
+  "outfit_of": "hip_sway_slow"
+}

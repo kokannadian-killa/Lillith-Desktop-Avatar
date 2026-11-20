@@ -1,0 +1,536 @@
+{
+  "name": "spring__seduce_blow_kiss_screen",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "spring__seduce_blow_kiss_screen_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/spring_flirt_beckon_kiss/spring_flirt_beckon_kiss_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 1.8,
+    "focus_canvas_xy": [
+      205.98000000000002,
+      69.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      195.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 1.029,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "flirt_idle",
+    "flirt_set",
+    "outfit:spring",
+    "outfit_of:seduce_blow_kiss_screen",
+    "season:spring",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      138,
+      280,
+      8,
+      392
+    ],
+    [
+      138,
+      280,
+      8,
+      392
+    ],
+    [
+      138,
+      280,
+      8,
+      392
+    ],
+    [
+      138,
+      280,
+      8,
+      392
+    ],
+    [
+      136,
+      279,
+      8,
+      392
+    ],
+    [
+      133,
+      279,
+      8,
+      392
+    ],
+    [
+      136,
+      280,
+      7,
+      392
+    ],
+    [
+      145,
+      281,
+      7,
+      392
+    ],
+    [
+      137,
+      281,
+      8,
+      392
+    ],
+    [
+      133,
+      281,
+      9,
+      392
+    ],
+    [
+      134,
+      281,
+      9,
+      392
+    ],
+    [
+      140,
+      280,
+      7,
+      392
+    ],
+    [
+      153,
+      280,
+      7,
+      392
+    ],
+    [
+      154,
+      279,
+      9,
+      392
+    ],
+    [
+      153,
+      278,
+      11,
+      392
+    ],
+    [
+      152,
+      276,
+      14,
+      392
+    ],
+    [
+      151,
+      275,
+      16,
+      392
+    ],
+    [
+      151,
+      275,
+      15,
+      392
+    ],
+    [
+      150,
+      276,
+      15,
+      392
+    ],
+    [
+      150,
+      276,
+      15,
+      392
+    ],
+    [
+      150,
+      276,
+      15,
+      392
+    ],
+    [
+      150,
+      276,
+      15,
+      392
+    ],
+    [
+      151,
+      276,
+      12,
+      392
+    ],
+    [
+      152,
+      277,
+      8,
+      392
+    ],
+    [
+      143,
+      278,
+      7,
+      392
+    ],
+    [
+      134,
+      280,
+      8,
+      392
+    ],
+    [
+      131,
+      281,
+      10,
+      392
+    ],
+    [
+      130,
+      282,
+      12,
+      392
+    ],
+    [
+      130,
+      284,
+      12,
+      392
+    ],
+    [
+      130,
+      284,
+      11,
+      392
+    ],
+    [
+      130,
+      284,
+      11,
+      392
+    ],
+    [
+      131,
+      284,
+      11,
+      392
+    ],
+    [
+      138,
+      284,
+      12,
+      392
+    ],
+    [
+      153,
+      285,
+      9,
+      392
+    ],
+    [
+      154,
+      285,
+      7,
+      392
+    ],
+    [
+      154,
+      285,
+      6,
+      392
+    ],
+    [
+      155,
+      285,
+      6,
+      392
+    ],
+    [
+      155,
+      284,
+      6,
+      392
+    ],
+    [
+      155,
+      283,
+      6,
+      392
+    ],
+    [
+      155,
+      283,
+      6,
+      392
+    ],
+    [
+      155,
+      283,
+      6,
+      392
+    ],
+    [
+      156,
+      284,
+      6,
+      392
+    ],
+    [
+      155,
+      284,
+      6,
+      392
+    ],
+    [
+      154,
+      284,
+      6,
+      392
+    ],
+    [
+      154,
+      284,
+      6,
+      392
+    ],
+    [
+      154,
+      284,
+      6,
+      392
+    ],
+    [
+      154,
+      284,
+      6,
+      392
+    ],
+    [
+      154,
+      283,
+      6,
+      392
+    ],
+    [
+      154,
+      283,
+      6,
+      392
+    ],
+    [
+      153,
+      283,
+      6,
+      392
+    ],
+    [
+      153,
+      283,
+      6,
+      392
+    ],
+    [
+      150,
+      283,
+      6,
+      392
+    ],
+    [
+      140,
+      282,
+      6,
+      392
+    ],
+    [
+      134,
+      281,
+      6,
+      392
+    ],
+    [
+      134,
+      280,
+      6,
+      392
+    ],
+    [
+      136,
+      279,
+      7,
+      392
+    ],
+    [
+      138,
+      280,
+      9,
+      392
+    ],
+    [
+      138,
+      280,
+      9,
+      392
+    ],
+    [
+      138,
+      280,
+      8,
+      392
+    ],
+    [
+      138,
+      280,
+      8,
+      392
+    ]
+  ],
+  "canvas_compliant": true,
+  "video": {
+    "file": "spring__seduce_blow_kiss_screen.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 703938,
+    "quality": {
+      "edge_mae": 1.962,
+      "edge_p99": 14.9,
+      "halo_dark": 0.019,
+      "halo_light": -0.076,
+      "alpha_mae": 0.0616
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "262ad159632b5ec73195d3f797c1f6c7fff778a94ff3d2ee1cb9da9fe1234103",
+    "source_sha256": "4ab6b1fdca2bd3fd0e241a365da2275c11e2b31dfb4b072de9f86070c0506995"
+  },
+  "season": "spring",
+  "outfit": "spring",
+  "allure": true,
+  "severity": 1,
+  "outfit_of": "seduce_blow_kiss_screen"
+}

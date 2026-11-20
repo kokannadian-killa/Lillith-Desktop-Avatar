@@ -1,0 +1,536 @@
+{
+  "name": "xmas__seduce_lip_bite_glance",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "xmas__seduce_lip_bite_glance_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/xmas_face_pushin_lipbite/xmas_face_pushin_lipbite_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 3.4,
+    "focus_canvas_xy": [
+      201.98000000000002,
+      72.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      262.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        5,
+        19,
+        43,
+        56
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 0.545,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.035,
+      1.1329,
+      1.2834,
+      1.4758,
+      1.6997,
+      1.9446,
+      2.2,
+      2.4554,
+      2.7003,
+      2.9242,
+      3.1166,
+      3.2671,
+      3.365,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.3596,
+      3.2471,
+      3.0756,
+      2.8582,
+      2.608,
+      2.3382,
+      2.0618,
+      1.792,
+      1.5418,
+      1.3244,
+      1.1529,
+      1.0404,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "face_zoom",
+    "flirt_set",
+    "outfit:xmas",
+    "outfit_of:seduce_lip_bite_glance",
+    "season:xmas",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      134,
+      274,
+      12,
+      392
+    ],
+    [
+      128,
+      282,
+      14,
+      392
+    ],
+    [
+      118,
+      293,
+      16,
+      392
+    ],
+    [
+      105,
+      306,
+      19,
+      392
+    ],
+    [
+      90,
+      323,
+      23,
+      392
+    ],
+    [
+      75,
+      341,
+      27,
+      392
+    ],
+    [
+      59,
+      361,
+      31,
+      392
+    ],
+    [
+      42,
+      375,
+      36,
+      392
+    ],
+    [
+      37,
+      344,
+      40,
+      392
+    ],
+    [
+      32,
+      357,
+      45,
+      392
+    ],
+    [
+      23,
+      367,
+      49,
+      392
+    ],
+    [
+      14,
+      375,
+      53,
+      392
+    ],
+    [
+      8,
+      381,
+      56,
+      392
+    ],
+    [
+      6,
+      383,
+      59,
+      392
+    ],
+    [
+      6,
+      383,
+      61,
+      392
+    ],
+    [
+      6,
+      383,
+      63,
+      392
+    ],
+    [
+      8,
+      382,
+      67,
+      392
+    ],
+    [
+      8,
+      382,
+      67,
+      392
+    ],
+    [
+      10,
+      382,
+      67,
+      392
+    ],
+    [
+      9,
+      382,
+      67,
+      392
+    ],
+    [
+      8,
+      382,
+      65,
+      392
+    ],
+    [
+      8,
+      380,
+      63,
+      392
+    ],
+    [
+      6,
+      380,
+      63,
+      392
+    ],
+    [
+      6,
+      380,
+      63,
+      392
+    ],
+    [
+      5,
+      379,
+      61,
+      392
+    ],
+    [
+      4,
+      377,
+      61,
+      392
+    ],
+    [
+      4,
+      376,
+      61,
+      392
+    ],
+    [
+      3,
+      374,
+      63,
+      392
+    ],
+    [
+      3,
+      374,
+      63,
+      392
+    ],
+    [
+      3,
+      374,
+      65,
+      392
+    ],
+    [
+      3,
+      374,
+      64,
+      392
+    ],
+    [
+      3,
+      376,
+      64,
+      392
+    ],
+    [
+      3,
+      376,
+      64,
+      392
+    ],
+    [
+      3,
+      376,
+      63,
+      392
+    ],
+    [
+      3,
+      376,
+      64,
+      392
+    ],
+    [
+      3,
+      376,
+      63,
+      392
+    ],
+    [
+      3,
+      379,
+      63,
+      392
+    ],
+    [
+      3,
+      380,
+      63,
+      392
+    ],
+    [
+      7,
+      378,
+      58,
+      392
+    ],
+    [
+      13,
+      373,
+      55,
+      392
+    ],
+    [
+      24,
+      365,
+      50,
+      392
+    ],
+    [
+      36,
+      354,
+      44,
+      392
+    ],
+    [
+      36,
+      340,
+      38,
+      392
+    ],
+    [
+      51,
+      371,
+      34,
+      392
+    ],
+    [
+      68,
+      351,
+      29,
+      392
+    ],
+    [
+      86,
+      331,
+      24,
+      392
+    ],
+    [
+      102,
+      313,
+      20,
+      392
+    ],
+    [
+      116,
+      297,
+      16,
+      392
+    ],
+    [
+      127,
+      285,
+      14,
+      392
+    ],
+    [
+      134,
+      277,
+      11,
+      392
+    ],
+    [
+      136,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ],
+    [
+      137,
+      274,
+      11,
+      392
+    ]
+  ],
+  "canvas_compliant": true,
+  "video": {
+    "file": "xmas__seduce_lip_bite_glance.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 1312351,
+    "quality": {
+      "edge_mae": 2.305,
+      "edge_p99": 24.98,
+      "halo_dark": 0.019,
+      "halo_light": -0.083,
+      "alpha_mae": 0.1161
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "b3091fea07f0feb3860f67ac64a773d10648566cd7ac67ab5d3231d88f5f3ffc",
+    "source_sha256": "24b5d5350ead4eb8c7767a0077ba3289a24ad5a6bd94198a6dbb94f5cf6ad769"
+  },
+  "season": "xmas",
+  "outfit": "xmas",
+  "allure": true,
+  "severity": 2,
+  "outfit_of": "seduce_lip_bite_glance"
+}
