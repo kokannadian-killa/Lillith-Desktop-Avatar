@@ -131913,6 +131913,102 @@ w = 400
 h = 400
 anchor = [231, 392]
 
+[clips.xmas__sit_swing]
+page = "xmas__sit_swing/xmas__sit_swing_sheet.png"
+fps = 8.0
+mode = "loop"
+baseline_y = 392
+scale = 0.5882
+tags = ["canonical", "facing:right (side profile, seated on an edge)", "baked_motion", "seasonal", "outfit:xmas", "season:xmas", "outfit_of:sit_swing"]
+seat_y = 230
+seat_x_range = [136, 279]
+feet_lowest_y = 366
+video = "xmas__sit_swing/xmas__sit_swing.mp4"
+
+[[clips.xmas__sit_swing.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__sit_swing.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.xmas__walk_left]
 page = "xmas__walk_left/xmas__walk_left_sheet.png"
 fps = 12.0

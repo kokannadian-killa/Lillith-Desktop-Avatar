@@ -18256,6 +18256,39 @@
       "outfit": "xmas"
     },
     {
+      "name": "xmas__sit_swing",
+      "frame_count": 12,
+      "frame_width": 400,
+      "frame_height": 400,
+      "fps": 8.0,
+      "loop": true,
+      "baseline_y": 392,
+      "anchor": [
+        200,
+        392
+      ],
+      "scale": 0.5882,
+      "body_anchor_x": 200,
+      "facing": "right (side profile, seated on an edge)",
+      "canvas_compliant": true,
+      "placeholder": false,
+      "source": "grok-imagine-video",
+      "dir": "xmas__sit_swing/",
+      "sheet": "xmas__sit_swing/xmas__sit_swing_sheet.png",
+      "manifest": "xmas__sit_swing/xmas__sit_swing.json",
+      "preview": "xmas__sit_swing/xmas__sit_swing_preview.gif",
+      "tags": [
+        "baked_motion",
+        "seasonal",
+        "outfit:xmas",
+        "season:xmas",
+        "outfit_of:sit_swing"
+      ],
+      "video": "xmas__sit_swing/xmas__sit_swing.mp4",
+      "season": "xmas",
+      "outfit": "xmas"
+    },
+    {
       "name": "xmas__walk_left",
       "frame_count": 14,
       "frame_width": 400,

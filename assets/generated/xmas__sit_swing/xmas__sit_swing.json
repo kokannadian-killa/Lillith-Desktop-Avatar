@@ -1,0 +1,279 @@
+{
+  "name": "xmas__sit_swing",
+  "placeholder": false,
+  "frame_count": 12,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "xmas__sit_swing_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 8.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.5882,
+  "body_anchor_x": 200,
+  "facing": "right (side profile, seated on an edge)",
+  "source_files": [
+    "../../source/video/xmas__sit_swing/xmas__sit_swing_v3_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 28,
+    "step": null,
+    "frames": [
+      1,
+      3,
+      6,
+      8,
+      11,
+      13,
+      16,
+      18,
+      21,
+      23,
+      26,
+      28
+    ],
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers; explicit list (even-time resample)"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    605.0,
+    605.0,
+    605.0,
+    605.0,
+    605.0,
+    605.0,
+    605.0,
+    605.0,
+    605.0,
+    605.0,
+    605.0,
+    605.0
+  ],
+  "horn_fix": {
+    "ref_horn_px": 468,
+    "ref_hue_median": 248.4,
+    "mean_hue_shift_deg_per_frame": [
+      0.2,
+      -0.2,
+      -0.5,
+      -2.4,
+      -2.9,
+      -2.2,
+      -2.2,
+      -2.2,
+      -1.8,
+      -1.4,
+      0.0,
+      -0.9
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Christmas outfit take of sit_swing (outfit_of): same move redrawn in the xmas Santa bikini, Grok Imagine I2V from an xmas edit of sit_swing's source still, frames picked to match sit_swing's pose phase/timing; drawn in place of the source clip while outfit xmas is worn. Matte with LILLITH_WHITE_TRIM=1 (white fur).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      137,
+      322,
+      22,
+      361
+    ],
+    [
+      137,
+      322,
+      21,
+      360
+    ],
+    [
+      139,
+      319,
+      19,
+      350
+    ],
+    [
+      136,
+      323,
+      16,
+      354
+    ],
+    [
+      127,
+      367,
+      13,
+      361
+    ],
+    [
+      120,
+      383,
+      12,
+      364
+    ],
+    [
+      116,
+      383,
+      12,
+      364
+    ],
+    [
+      116,
+      370,
+      12,
+      364
+    ],
+    [
+      116,
+      344,
+      13,
+      363
+    ],
+    [
+      119,
+      320,
+      15,
+      360
+    ],
+    [
+      128,
+      316,
+      18,
+      353
+    ],
+    [
+      134,
+      321,
+      21,
+      357
+    ]
+  ],
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_ab_of": "generated_v2/xmas__sit_swing/",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -156,
+        -20,
+        0.0303
+      ],
+      [
+        -156,
+        -20,
+        0.031
+      ],
+      [
+        -156,
+        -20,
+        0.0317
+      ],
+      [
+        -156,
+        -20,
+        0.0271
+      ],
+      [
+        -156,
+        -20,
+        0.0251
+      ],
+      [
+        -156,
+        -20,
+        0.0254
+      ],
+      [
+        -156,
+        -20,
+        0.0264
+      ],
+      [
+        -156,
+        -20,
+        0.0267
+      ],
+      [
+        -156,
+        -20,
+        0.0277
+      ],
+      [
+        -156,
+        -20,
+        0.0302
+      ],
+      [
+        -156,
+        -20,
+        0.0312
+      ],
+      [
+        -156,
+        -20,
+        0.0286
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
+  "video": {
+    "file": "xmas__sit_swing.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 12,
+    "fps": 8.0,
+    "bytes": 185733,
+    "quality": {
+      "edge_mae": 2.394,
+      "edge_p99": 22.54,
+      "halo_dark": 0.001,
+      "halo_light": -0.063,
+      "alpha_mae": 0.0739
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "5deb975fdc536bf568c5c4b2ac5db5de169fa44ca8934cc065f4050258d3a92b",
+    "source_sha256": "e1b0585210655c80a5d3064c840aec387d617a79d36ff0e0540fcf3d9960ea9e"
+  },
+  "seat_y": 230,
+  "seat_x_range": [
+    136,
+    279
+  ],
+  "feet_lowest_y": 366,
+  "tags": [
+    "baked_motion",
+    "seasonal",
+    "outfit:xmas",
+    "season:xmas",
+    "outfit_of:sit_swing"
+  ],
+  "season": "xmas",
+  "outfit": "xmas",
+  "outfit_of": "sit_swing"
+}
