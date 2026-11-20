@@ -101363,6 +101363,193 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.stand_up]
+page = "stand_up/stand_up_sheet.png"
+fps = 12.0
+mode = "once"
+baseline_y = 392
+scale = 0.52
+tags = ["canonical", "facing:right (seated) -> front", "baked_motion", "blend"]
+severity = 1
+seat_y = 230
+seat_x_range = [136, 279]
+feet_lowest_y = 365
+video = "stand_up/stand_up.mp4"
+
+[clips.stand_up.blend]
+from = "sit_swing"
+to = "idle"
+from_frame = 0
+to_frame = 0
+
+[[clips.stand_up.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 5600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 6000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 6400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 6800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 7200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 7600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 8000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 8400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 8800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.stand_up.frames]]
+x = 9200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.stretch_arch]
 page = "stretch_arch/stretch_arch_sheet.png"
 fps = 10.34000015258789
