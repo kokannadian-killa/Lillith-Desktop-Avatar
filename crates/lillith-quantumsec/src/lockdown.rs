@@ -179,7 +179,7 @@ pub fn execute_with_token(
     }
     let mut outs = Vec::with_capacity(proposal.commands.len());
     for cmd in &proposal.commands {
-        let out = std::process::Command::new("sh")
+        let out = lillith_core::proc::command("sh")
             .arg("-c")
             .arg(cmd)
             .output()

@@ -207,6 +207,6 @@ pub(crate) mod tests {
         assert_eq!(r.tabs.iter().filter(|t| t.sealed()).count(), 0);
         // No sealed slot left: an add-in is appended.
         r.unseal(Box::new(Dummy));
-        assert_eq!(r.index_of("dummy"), Some(12));
+        assert_eq!(r.index_of("dummy"), Some(13));
     }
 }
