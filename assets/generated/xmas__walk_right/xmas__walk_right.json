@@ -1,0 +1,301 @@
+{
+  "name": "xmas__walk_right",
+  "placeholder": false,
+  "frame_count": 14,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "xmas__walk_right_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.6353,
+  "body_anchor_x": 200,
+  "facing": "right",
+  "source_files": [
+    "../../source/video/xmas__walk_right/xmas__walk_right_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 43,
+    "last": 70,
+    "step": null,
+    "frames": [
+      43,
+      45,
+      47,
+      49,
+      51,
+      53,
+      55,
+      57,
+      60,
+      62,
+      64,
+      66,
+      68,
+      70
+    ],
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers; explicit list (even-time resample)"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "body_trend",
+  "baseline_snap": "per_frame",
+  "body_point_src_x": [
+    625.5,
+    623.8,
+    622.4,
+    625.2,
+    627.2,
+    630.4,
+    628.4,
+    622.2,
+    619.8,
+    618.2,
+    620.2,
+    624.5,
+    622.9,
+    629.8
+  ],
+  "horn_fix": {
+    "ref_horn_px": 570,
+    "ref_hue_median": 259.7,
+    "mean_hue_shift_deg_per_frame": [
+      -2.7,
+      -1.3,
+      -2.7,
+      -1.2,
+      -2.7,
+      -2.4,
+      -2.8,
+      -3.2,
+      -0.9,
+      -2.2,
+      -2.1,
+      -2.1,
+      -2.1,
+      -2.0
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Christmas outfit take of walk_right (outfit_of): same move redrawn in the xmas Santa bikini, Grok Imagine I2V from an xmas edit of walk_right's source still, frames picked to match walk_right's pose phase/timing; drawn in place of the source clip while outfit xmas is worn. Matte with LILLITH_WHITE_TRIM=1 (white fur).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      117,
+      258,
+      8,
+      391
+    ],
+    [
+      116,
+      263,
+      9,
+      392
+    ],
+    [
+      115,
+      298,
+      12,
+      391
+    ],
+    [
+      116,
+      303,
+      17,
+      391
+    ],
+    [
+      107,
+      284,
+      19,
+      392
+    ],
+    [
+      117,
+      260,
+      13,
+      391
+    ],
+    [
+      119,
+      245,
+      11,
+      392
+    ],
+    [
+      115,
+      257,
+      11,
+      392
+    ],
+    [
+      111,
+      290,
+      14,
+      391
+    ],
+    [
+      112,
+      308,
+      19,
+      392
+    ],
+    [
+      113,
+      301,
+      20,
+      392
+    ],
+    [
+      103,
+      284,
+      17,
+      391
+    ],
+    [
+      116,
+      265,
+      13,
+      391
+    ],
+    [
+      119,
+      248,
+      10,
+      391
+    ]
+  ],
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_ab_of": "generated_v2/xmas__walk_right/",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -197,
+        -46,
+        0.0218
+      ],
+      [
+        -197,
+        -45,
+        0.023
+      ],
+      [
+        -197,
+        -45,
+        0.0287
+      ],
+      [
+        -197,
+        -45,
+        0.0247
+      ],
+      [
+        -197,
+        -43,
+        0.0248
+      ],
+      [
+        -197,
+        -45,
+        0.0239
+      ],
+      [
+        -197,
+        -44,
+        0.0212
+      ],
+      [
+        -197,
+        -43,
+        0.0211
+      ],
+      [
+        -197,
+        -43,
+        0.023
+      ],
+      [
+        -196,
+        -42,
+        0.0239
+      ],
+      [
+        -196,
+        -45,
+        0.028
+      ],
+      [
+        -196,
+        -46,
+        0.0293
+      ],
+      [
+        -196,
+        -46,
+        0.0319
+      ],
+      [
+        -196,
+        -46,
+        0.0268
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
+  "video": {
+    "file": "xmas__walk_right.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 14,
+    "fps": 12.0,
+    "bytes": 204406,
+    "quality": {
+      "edge_mae": 2.473,
+      "edge_p99": 22.39,
+      "halo_dark": 0.022,
+      "halo_light": -0.078,
+      "alpha_mae": 0.0926
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "582b817230e9a5d3d22e3df30dff19f21a697a1864b48c904c4e0df250aa11c6",
+    "source_sha256": "93b2829dc84e29fab6765f1b8323e0c1ee15035d3576d56df16785d96c2607d8"
+  },
+  "tags": [
+    "baked_motion",
+    "seasonal",
+    "outfit:xmas",
+    "season:xmas",
+    "outfit_of:walk_right"
+  ],
+  "season": "xmas",
+  "outfit": "xmas",
+  "outfit_of": "walk_right"
+}

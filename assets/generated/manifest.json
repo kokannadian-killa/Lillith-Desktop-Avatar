@@ -18202,11 +18202,11 @@
       "outfit": "xmas"
     },
     {
-      "name": "xmas__idle",
-      "frame_count": 72,
+      "name": "xmas__walk_right",
+      "frame_count": 14,
       "frame_width": 400,
       "frame_height": 400,
-      "fps": 11.0,
+      "fps": 12.0,
       "loop": true,
       "baseline_y": 392,
       "anchor": [
@@ -18215,25 +18215,45 @@
       ],
       "scale": 0.6353,
       "body_anchor_x": 200,
-      "facing": "front",
+      "facing": "right",
       "canvas_compliant": true,
       "placeholder": false,
       "source": "grok-imagine-video",
-      "dir": "xmas__idle_a/",
-      "sheet": "xmas__idle_a/xmas__idle_a_sheet.png",
-      "manifest": "xmas__idle_a/xmas__idle_a.json",
-      "preview": "xmas__idle_a/xmas__idle_a_preview.gif",
+      "dir": "xmas__walk_right/",
+      "sheet": "xmas__walk_right/xmas__walk_right_sheet.png",
+      "manifest": "xmas__walk_right/xmas__walk_right.json",
+      "preview": "xmas__walk_right/xmas__walk_right_preview.gif",
       "tags": [
         "baked_motion",
         "seasonal",
         "outfit:xmas",
         "season:xmas",
-        "outfit_of:idle"
+        "outfit_of:walk_right"
       ],
-      "video": "xmas__idle_a/xmas__idle_a.mp4",
+      "video": "xmas__walk_right/xmas__walk_right.mp4",
+      "root_motion": [
+        20.0,
+        21.0,
+        21.0,
+        18.0,
+        22.0,
+        21.0,
+        22.0,
+        21.0,
+        22.0,
+        10.0,
+        18.0,
+        22.0,
+        21.0,
+        23.0
+      ],
+      "contact_frames": [
+        3,
+        9
+      ],
+      "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)",
       "season": "xmas",
-      "outfit": "xmas",
-      "alias_of": "xmas__idle_a"
+      "outfit": "xmas"
     }
   ]
 }
