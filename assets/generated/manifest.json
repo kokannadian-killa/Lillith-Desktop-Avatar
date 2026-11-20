@@ -18615,6 +18615,39 @@
       "severity": 1,
       "season": "xmas",
       "outfit": "xmas"
+    },
+    {
+      "name": "xmas__sleep",
+      "frame_count": 24,
+      "frame_width": 400,
+      "frame_height": 400,
+      "fps": 6.0,
+      "loop": true,
+      "baseline_y": 392,
+      "anchor": [
+        200,
+        392
+      ],
+      "scale": 0.3412,
+      "body_anchor_x": 200,
+      "facing": "right (side profile)",
+      "canvas_compliant": true,
+      "placeholder": false,
+      "source": "grok-imagine-video",
+      "dir": "xmas__sleep/",
+      "sheet": "xmas__sleep/xmas__sleep_sheet.png",
+      "manifest": "xmas__sleep/xmas__sleep.json",
+      "preview": "xmas__sleep/xmas__sleep_preview.gif",
+      "tags": [
+        "baked_motion",
+        "seasonal",
+        "outfit:xmas",
+        "season:xmas",
+        "outfit_of:sleep"
+      ],
+      "video": "xmas__sleep/xmas__sleep.mp4",
+      "season": "xmas",
+      "outfit": "xmas"
     }
   ]
 }

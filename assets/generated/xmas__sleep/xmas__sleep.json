@@ -1,0 +1,415 @@
+{
+  "name": "xmas__sleep",
+  "placeholder": false,
+  "frame_count": 24,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "xmas__sleep_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 6.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.3412,
+  "body_anchor_x": 200,
+  "facing": "right (side profile)",
+  "source_files": [
+    "../../source/video/xmas__sleep/xmas__sleep_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 93,
+    "step": 4,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5,
+    621.5
+  ],
+  "horn_fix": {
+    "ref_horn_px": 221,
+    "ref_hue_median": 254.2,
+    "mean_hue_shift_deg_per_frame": [
+      -0.1,
+      -1.7,
+      -2.9,
+      -1.4,
+      -0.8,
+      -0.4,
+      -1.5,
+      -2.4,
+      0.6,
+      -3.4,
+      -2.6,
+      -1.8,
+      -1.0,
+      -1.2,
+      -1.2,
+      -0.9,
+      0.6,
+      -2.9,
+      -1.6,
+      -1.1,
+      -1.7,
+      -1.2,
+      -1.1,
+      -2.4
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Christmas outfit take of sleep (outfit_of): same move redrawn in the xmas Santa bikini, Grok Imagine I2V from an xmas edit of sleep's source still, frames picked to match sleep's pose phase/timing; drawn in place of the source clip while outfit xmas is worn. Matte with LILLITH_WHITE_TRIM=1 (white fur).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      114,
+      286,
+      201,
+      392
+    ],
+    [
+      114,
+      286,
+      201,
+      392
+    ],
+    [
+      114,
+      286,
+      202,
+      392
+    ],
+    [
+      115,
+      286,
+      203,
+      392
+    ],
+    [
+      115,
+      286,
+      203,
+      392
+    ],
+    [
+      114,
+      286,
+      203,
+      392
+    ],
+    [
+      114,
+      286,
+      202,
+      392
+    ],
+    [
+      114,
+      286,
+      201,
+      392
+    ],
+    [
+      114,
+      286,
+      201,
+      392
+    ],
+    [
+      114,
+      286,
+      201,
+      392
+    ],
+    [
+      114,
+      286,
+      202,
+      392
+    ],
+    [
+      115,
+      286,
+      203,
+      392
+    ],
+    [
+      115,
+      286,
+      203,
+      392
+    ],
+    [
+      114,
+      286,
+      202,
+      392
+    ],
+    [
+      114,
+      286,
+      201,
+      392
+    ],
+    [
+      114,
+      286,
+      201,
+      392
+    ],
+    [
+      114,
+      287,
+      201,
+      392
+    ],
+    [
+      114,
+      287,
+      202,
+      392
+    ],
+    [
+      115,
+      286,
+      203,
+      392
+    ],
+    [
+      115,
+      286,
+      203,
+      392
+    ],
+    [
+      115,
+      286,
+      203,
+      392
+    ],
+    [
+      114,
+      286,
+      202,
+      392
+    ],
+    [
+      114,
+      286,
+      202,
+      392
+    ],
+    [
+      114,
+      286,
+      201,
+      392
+    ]
+  ],
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_ab_of": "generated_v2/xmas__sleep/",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -12,
+        162,
+        0.0144
+      ],
+      [
+        -12,
+        162,
+        0.0174
+      ],
+      [
+        -12,
+        162,
+        0.0148
+      ],
+      [
+        -12,
+        162,
+        0.011
+      ],
+      [
+        -12,
+        162,
+        0.0113
+      ],
+      [
+        -12,
+        162,
+        0.0111
+      ],
+      [
+        -12,
+        162,
+        0.0108
+      ],
+      [
+        -12,
+        162,
+        0.015
+      ],
+      [
+        -12,
+        162,
+        0.0112
+      ],
+      [
+        -12,
+        162,
+        0.0173
+      ],
+      [
+        -12,
+        162,
+        0.0112
+      ],
+      [
+        -12,
+        162,
+        0.0114
+      ],
+      [
+        -12,
+        162,
+        0.0113
+      ],
+      [
+        -12,
+        162,
+        0.0117
+      ],
+      [
+        -12,
+        162,
+        0.0119
+      ],
+      [
+        -12,
+        162,
+        0.0145
+      ],
+      [
+        -12,
+        162,
+        0.0137
+      ],
+      [
+        -12,
+        162,
+        0.0142
+      ],
+      [
+        -12,
+        162,
+        0.0148
+      ],
+      [
+        -12,
+        162,
+        0.0114
+      ],
+      [
+        -12,
+        162,
+        0.0111
+      ],
+      [
+        -12,
+        162,
+        0.0118
+      ],
+      [
+        -12,
+        162,
+        0.0123
+      ],
+      [
+        -12,
+        162,
+        0.0122
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
+  "video": {
+    "file": "xmas__sleep.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 24,
+    "fps": 6.0,
+    "bytes": 147241,
+    "quality": {
+      "edge_mae": 2.475,
+      "edge_p99": 25.0,
+      "halo_dark": 0.009,
+      "halo_light": -0.049,
+      "alpha_mae": 0.0242
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "640c50c1a8e4604b03d0970b7083378189dd733682eec1cd3c65607ab4fe1965",
+    "source_sha256": "6bfe0c54131da984fc84db49569d5ba1fe28e81f7ba15077d7b49a43c82b37bb"
+  },
+  "tags": [
+    "baked_motion",
+    "seasonal",
+    "outfit:xmas",
+    "season:xmas",
+    "outfit_of:sleep"
+  ],
+  "season": "xmas",
+  "outfit": "xmas",
+  "outfit_of": "sleep"
+}
