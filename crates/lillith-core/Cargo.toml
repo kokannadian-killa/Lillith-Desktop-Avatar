@@ -12,6 +12,8 @@ publish.workspace = true
 [dependencies]
 serde.workspace = true
 toml.workspace = true
+# update_config keeps comments and formatting (already in the lock via toml).
+toml_edit = "0.22"
 glam.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

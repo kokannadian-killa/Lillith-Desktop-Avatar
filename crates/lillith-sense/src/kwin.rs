@@ -3,7 +3,8 @@
 //!
 //! `kwin/lillith-bridge` (a KWin 6 script) calls `callDBus` on
 //! [`BUS_NAME`] / [`OBJECT_PATH`] for window added/removed/activated/
-//! minimized/caption/geometry and a 10 Hz cursor position, plus `Stack`
+//! minimized/caption/geometry and a 10 Hz cursor position (stored on the
+//! shared [`Desktop`] snapshot for Follow and proximity wake), plus `Stack`
 //! (the z-ordered visible normal windows) and `Area` (screen + usable work
 //! area) snapshots for gravity/perching, which land in
 //! [`lillith_core::desktop::shared`]. [`serve`] owns
@@ -12,6 +13,7 @@
 //! emitted unless the script is installed and enabled (M5 ships/verifies
 //! it on Plasma 6); on X11 without the script there is no window source yet.
 
+use crate::fullscreen::FullscreenTracker;
 use crate::Sink;
 use futures_util::StreamExt;
 use lillith_core::desktop::{self, Desktop};
@@ -49,8 +51,19 @@ pub enum BridgeCall {
         id: String,
         caption: String,
     },
+    /// The active window's fullscreen state (`"1"` / `"0"` in the third
+    /// string; sent on activation and on `fullScreenChanged`).
+    Fullscreen {
+        id: String,
+        class: String,
+        on: bool,
+    },
     Geometry,
-    Cursor,
+    /// Global pointer, logical px, +y down (`workspace.cursorPos` at 10 Hz).
+    Cursor {
+        x: i32,
+        y: i32,
+    },
     /// Window stack snapshot (see [`lillith_core::desktop::parse_stack`]).
     Stack(String),
     /// Screen + work area (see [`lillith_core::desktop::parse_area`]).
@@ -66,8 +79,17 @@ impl BridgeCall {
             "WindowActivated" => Self::Activated { id, class },
             "WindowMinimized" => Self::Minimized { id, class },
             "WindowCaption" => Self::Caption { id, caption },
+            "WindowFullscreen" => Self::Fullscreen {
+                id,
+                class,
+                on: caption == "1",
+            },
             "WindowGeometry" => Self::Geometry,
-            "Cursor" => Self::Cursor,
+            "Cursor" => Self::Cursor {
+                // Optional: tests may pass the pair as the first two strings.
+                x: id.parse().unwrap_or(0),
+                y: class.parse().unwrap_or(0),
+            },
             "Stack" => Self::Stack(id),
             "Area" => Self::Area(id),
             _ => return None,
@@ -84,6 +106,8 @@ pub struct Bridge {
     pub active: Option<String>,
     /// Window stack + work area for gravity (published by [`serve`]).
     pub desktop: Desktop,
+    /// The focused fullscreen window (Ko busy).
+    pub fullscreen: FullscreenTracker,
 }
 
 /// Window title markers of private/incognito browsing.
@@ -130,6 +154,7 @@ impl Bridge {
             }
             BridgeCall::Removed { id, class } => {
                 self.private_seen.remove(&id);
+                out.extend(self.fullscreen.gone(&id));
                 if self.active.as_deref() == Some(id.as_str()) {
                     self.active = None;
                 }
@@ -137,7 +162,8 @@ impl Bridge {
                     out.push(Event::with_detail("window.closed", class));
                 }
             }
-            BridgeCall::Minimized { class, .. } => {
+            BridgeCall::Minimized { id, class } => {
+                out.extend(self.fullscreen.gone(&id));
                 if !ignored_class(&class) {
                     out.push(Event::with_detail("window.minimized", class));
                 }
@@ -148,7 +174,9 @@ impl Bridge {
                 }
             }
             BridgeCall::Activated { id, class } => {
-                // TODO(M5): focus.long_work timer and Follow/perch targets.
+                // TODO(M5): focus.long_work timer and window-follow /
+                // perch-on-the-focused-title-bar targets. Follow itself
+                // walks the bottom edge toward the cursor's x.
                 // `window.focused` carries only the window class (never the
                 // caption) so memory can learn app habits; private windows
                 // and shell surfaces never emit it.
@@ -157,12 +185,19 @@ impl Bridge {
                 }
                 self.active = (!id.is_empty()).then_some(id);
             }
+            BridgeCall::Fullscreen { id, class, on } => {
+                // Only the class (never the caption); shell surfaces and
+                // her own window are never "Ko is busy".
+                let on = on && !ignored_class(&class);
+                out.extend(self.fullscreen.focused(&id, &class, on));
+            }
             BridgeCall::Stack(s) => self.desktop.set_windows(desktop::parse_stack(&s)),
             BridgeCall::Area(s) => match desktop::parse_area(&s) {
                 Some((screen, work)) => self.desktop.set_area(screen, work),
                 None => tracing::debug!(area = %s, "KWin bridge: bad Area"),
             },
-            BridgeCall::Geometry | BridgeCall::Cursor => {}
+            BridgeCall::Geometry => {}
+            BridgeCall::Cursor { x, y } => self.desktop.set_cursor(x, y),
         }
         out
     }
@@ -189,6 +224,36 @@ fn parse_strings(body: &zbus::message::Body) -> (String, String, String) {
     Default::default()
 }
 
+/// Reads a `Cursor(x, y)` pair, whichever numeric type `callDBus` picked.
+fn parse_cursor(body: &zbus::message::Body) -> Option<(i32, i32)> {
+    if let Ok((x, y)) = body.deserialize::<(i32, i32)>() {
+        return Some((x, y));
+    }
+    if let Ok((x, y)) = body.deserialize::<(f64, f64)>() {
+        return Some((x.round() as i32, y.round() as i32));
+    }
+    if let Ok((x, y)) = body.deserialize::<(i64, i64)>() {
+        let clamp = |v: i64| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+        return Some((clamp(x), clamp(y)));
+    }
+    None
+}
+
+/// Coerces a synthetic KWin `Cursor` pair (int, float or long) to pixels.
+/// Used by tests; [`serve`] uses [`parse_cursor`] on the real D-Bus body.
+pub fn cursor_xy_from_ints(x: i32, y: i32) -> (i32, i32) {
+    (x, y)
+}
+/// Same as [`cursor_xy_from_ints`] for a float pair (KWin may send doubles).
+pub fn cursor_xy_from_floats(x: f64, y: f64) -> (i32, i32) {
+    (x.round() as i32, y.round() as i32)
+}
+/// Same as [`cursor_xy_from_ints`] for a 64-bit int pair.
+pub fn cursor_xy_from_longs(x: i64, y: i64) -> (i32, i32) {
+    let clamp = |v: i64| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+    (clamp(x), clamp(y))
+}
+
 /// Owns [`BUS_NAME`] on the session bus and serves the script until the
 /// connection closes.
 pub async fn serve(sink: Sink) -> zbus::Result<()> {
@@ -207,19 +272,32 @@ pub async fn serve(sink: Sink) -> zbus::Result<()> {
         let hdr = msg.header();
         let member = hdr.member().map(|m| m.to_string()).unwrap_or_default();
         let _ = conn.reply(&hdr, &()).await;
-        let (id, class, caption) = match member.as_str() {
-            "Cursor" => Default::default(),
+        let call = match member.as_str() {
+            "Cursor" => match parse_cursor(&msg.body()) {
+                Some((x, y)) => Some(BridgeCall::Cursor { x, y }),
+                None => continue,
+            },
             // Snapshots: one string argument.
             "Stack" | "Area" => match msg.body().deserialize::<(String,)>() {
-                Ok((s,)) => (s, String::new(), String::new()),
+                Ok((s,)) => BridgeCall::from_parts(&member, s, String::new(), String::new()),
                 Err(_) => continue,
             },
-            _ => parse_strings(&msg.body()),
+            _ => {
+                let (id, class, caption) = parse_strings(&msg.body());
+                BridgeCall::from_parts(&member, id, class, caption)
+            }
         };
         let snapshot = matches!(member.as_str(), "Stack" | "Area");
-        if let Some(call) = BridgeCall::from_parts(&member, id, class, caption) {
+        let is_cursor = matches!(call, Some(BridgeCall::Cursor { .. }));
+        if let Some(call) = call {
             for ev in bridge.handle(call) {
                 sink(ev);
+            }
+        }
+        if is_cursor {
+            if let Ok(mut d) = desktop::shared().lock() {
+                d.cursor = bridge.desktop.cursor;
+                d.cursor_at = bridge.desktop.cursor_at;
             }
         }
         if snapshot {
@@ -345,7 +423,7 @@ mod tests {
         // Her own window and shell surfaces are ignored.
         assert!(b.handle(added("9", "lillith", "Lillith")).is_empty());
         assert!(b.handle(added("9", "plasmashell", "")).is_empty());
-        assert!(b.handle(BridgeCall::Cursor).is_empty());
+        assert!(b.handle(BridgeCall::Cursor { x: 0, y: 0 }).is_empty());
     }
 
     #[test]
@@ -398,6 +476,42 @@ mod tests {
     }
 
     #[test]
+    fn fullscreen_focus_is_busy_until_it_ends() {
+        use crate::fullscreen::{FULLSCREEN_EVENT, FULLSCREEN_LEFT_EVENT};
+        let mut b = Bridge::default();
+        let fs = |id: &str, class: &str, on: &str| {
+            BridgeCall::from_parts("WindowFullscreen", id.into(), class.into(), on.into()).unwrap()
+        };
+        assert!(b.handle(fs("1", "konsole", "0")).is_empty());
+        assert_eq!(
+            b.handle(fs("2", "mpv", "1")),
+            [Event::with_detail(FULLSCREEN_EVENT, "mpv")]
+        );
+        assert!(b.handle(fs("2", "mpv", "1")).is_empty(), "once");
+        // Focus back on a normal window.
+        assert_eq!(
+            b.handle(fs("1", "konsole", "0")),
+            [Event::new(FULLSCREEN_LEFT_EVENT)]
+        );
+        // Closing / minimizing the fullscreen window ends it too.
+        b.handle(fs("3", "steam_app_9", "1"));
+        let ev = b.handle(BridgeCall::Removed {
+            id: "3".into(),
+            class: "steam_app_9".into(),
+        });
+        assert_eq!(ev[0], Event::new(FULLSCREEN_LEFT_EVENT));
+        b.handle(fs("4", "vlc", "1"));
+        let ev = b.handle(BridgeCall::Minimized {
+            id: "4".into(),
+            class: "vlc".into(),
+        });
+        assert_eq!(ev[0], Event::new(FULLSCREEN_LEFT_EVENT));
+        // Her own / shell surfaces never count.
+        assert!(b.handle(fs("5", "plasmashell", "1")).is_empty());
+        assert!(b.handle(fs("6", "lillith", "1")).is_empty());
+    }
+
+    #[test]
     fn from_parts() {
         assert_eq!(
             BridgeCall::from_parts("Nope", "".into(), "".into(), "".into()),
@@ -405,8 +519,39 @@ mod tests {
         );
         assert_eq!(
             BridgeCall::from_parts("Cursor", "".into(), "".into(), "".into()),
-            Some(BridgeCall::Cursor)
+            Some(BridgeCall::Cursor { x: 0, y: 0 })
         );
+        assert_eq!(
+            BridgeCall::from_parts("Cursor", "100".into(), "200".into(), "".into()),
+            Some(BridgeCall::Cursor { x: 100, y: 200 })
+        );
+    }
+
+    #[test]
+    fn cursor_message_parses_int_float_or_long_into_desktop() {
+        let mut b = Bridge::default();
+        assert_eq!(b.desktop.cursor, None);
+        // int
+        let (x, y) = cursor_xy_from_ints(320, 1080);
+        assert!(b.handle(BridgeCall::Cursor { x, y }).is_empty());
+        assert_eq!(b.desktop.cursor, Some((320, 1080)));
+        assert!(b.desktop.cursor_at.is_some());
+        assert!(!b.desktop.has_bridge);
+        assert_eq!(b.desktop.generation, 0);
+        // float (KWin may send doubles); half-up via round
+        let (x, y) = cursor_xy_from_floats(10.4, 11.6);
+        assert_eq!((x, y), (10, 12));
+        b.handle(BridgeCall::Cursor { x, y });
+        assert_eq!(b.desktop.cursor, Some((10, 12)));
+        // long
+        let (x, y) = cursor_xy_from_longs(640i64, -20i64);
+        assert_eq!((x, y), (640, -20));
+        b.handle(BridgeCall::Cursor { x, y });
+        assert_eq!(b.desktop.cursor, Some((640, -20)));
+        // A later Stack snapshot keeps the last cursor.
+        b.handle(BridgeCall::Stack("7\tdolphin\t0\t300\t800\t500".into()));
+        assert_eq!(b.desktop.cursor, Some((640, -20)));
+        assert!(b.desktop.has_bridge);
     }
 
     #[test]

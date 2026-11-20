@@ -200,6 +200,8 @@ impl Default for ScanOptions {
 /// Default search locations, in order. Missing ones are reported, not errors.
 /// A bundled `bundle/models/` next to the install comes first
 /// ([`crate::bundle::model_dirs`], only when it exists), then `~/AI/models`.
+/// `~/.biotekengine/models` is an optional extra path (Biotek engine
+/// registry); a missing folder is listed as absent, not an error.
 pub fn default_scan_dirs() -> Vec<PathBuf> {
     default_scan_dirs_with(&crate::bundle::model_dirs())
 }
@@ -211,6 +213,7 @@ pub fn default_scan_dirs_with(bundled: &[PathBuf]) -> Vec<PathBuf> {
         for d in [
             "AI/models",
             "models",
+            ".biotekengine/models",
             ".cache/llama.cpp",
             ".ollama/models/blobs",
             ".lmstudio/models",
@@ -232,7 +235,6 @@ pub fn default_scan_dirs_with(bundled: &[PathBuf]) -> Vec<PathBuf> {
     v.push(PathBuf::from("/var/lib/ollama/blobs"));
     v.push(PathBuf::from("/var/lib/ollama/.ollama/models/blobs"));
     v.push(PathBuf::from("/usr/share/ollama/.ollama/models/blobs"));
-    v.push(PathBuf::from("/workspace/models"));
     dedup_paths(v)
 }
 
@@ -1055,6 +1057,59 @@ mod tests {
         assert_eq!(f.chat_template, ChatTemplate::ChatMl);
         assert!(r.models.iter().any(|m| m.source == ModelSource::OllamaBlob));
         assert!(!r.dirs[1].exists);
+    }
+
+    #[test]
+    fn biotekengine_models_is_an_optional_scan_path() {
+        // After ~/AI/models and ~/models; missing folder is not an error.
+        if let Some(home) = paths::home_dir() {
+            let dirs = default_scan_dirs_with(&[]);
+            let ai = home.join("AI/models");
+            let models = home.join("models");
+            let biotek = home.join(".biotekengine/models");
+            let ai_i = dirs.iter().position(|d| d == &ai).expect("~/AI/models");
+            let models_i = dirs.iter().position(|d| d == &models).expect("~/models");
+            let biotek_i = dirs
+                .iter()
+                .position(|d| d == &biotek)
+                .expect("~/.biotekengine/models");
+            assert!(ai_i < models_i && models_i < biotek_i, "{dirs:?}");
+        }
+
+        let root =
+            std::env::temp_dir().join(format!("lillith-setup-biotek-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let missing = root.join("missing/.biotekengine/models");
+        let present = root.join("present/.biotekengine/models");
+        std::fs::create_dir_all(&present).unwrap();
+        let mut g = build_gguf(&[("general.architecture", TestVal::Str("llama"))]);
+        g.resize(2048, 0);
+        std::fs::write(present.join("engine-model.gguf"), &g).unwrap();
+        let r = scan(&ScanOptions {
+            dirs: vec![missing.clone(), present.clone()],
+            max_depth: 4,
+            include_ollama_blobs: false,
+            min_size_bytes: 1,
+        });
+        std::fs::remove_dir_all(&root).ok();
+        assert!(!r.dirs[0].exists);
+        assert_eq!(r.dirs[0].models_found, 0);
+        assert!(r.dirs[1].exists);
+        assert_eq!(r.dirs[1].models_found, 1);
+        assert_eq!(r.models.len(), 1, "{r:#?}");
+        assert_eq!(r.models[0].file_name, "engine-model.gguf");
+        assert_eq!(r.models[0].path, present.join("engine-model.gguf"));
+    }
+
+    #[test]
+    fn default_dirs_have_no_build_box_paths() {
+        // Only the user's own folders (and the system Ollama stores); no
+        // leftover build-machine path such as /workspace/models.
+        let dirs = default_scan_dirs_with(&[]);
+        assert!(
+            dirs.iter().all(|d| !d.starts_with("/workspace")),
+            "{dirs:?}"
+        );
     }
 
     #[test]

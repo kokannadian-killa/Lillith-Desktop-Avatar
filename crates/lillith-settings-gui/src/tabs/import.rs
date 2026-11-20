@@ -45,6 +45,8 @@ struct Tools {
     /// Bundled `bin/` copies (passed on); otherwise the pipeline looks.
     ffmpeg: Option<PathBuf>,
     ffprobe: Option<PathBuf>,
+    /// The install's bundled isnet-anime.onnx (`--model`).
+    model: Option<PathBuf>,
 }
 
 /// The decision waiting on the card.
@@ -230,6 +232,7 @@ impl ImportTab {
             script: script.unwrap_or_default(),
             ffmpeg: vi::bundled_tool("ffmpeg"),
             ffprobe: vi::bundled_tool("ffprobe"),
+            model: vi::find_matte_model(),
         })
     }
 
@@ -263,6 +266,7 @@ impl ImportTab {
             ffprobe: tools.ffprobe,
             matte: self.matte,
             max_candidates: self.max_candidates,
+            model: tools.model,
         };
         let action = PendingAction::RunCommand {
             command: cmd.display(),
@@ -1071,6 +1075,7 @@ mod tests {
             script: script.to_path_buf(),
             ffmpeg: None,
             ffprobe: None,
+            model: None,
         });
         t
     }

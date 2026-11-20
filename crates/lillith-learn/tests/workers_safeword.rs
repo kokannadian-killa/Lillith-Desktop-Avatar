@@ -146,6 +146,22 @@ fn a_session_exists_only_after_a_click_with_its_lines_first() {
     let req = c.seen.borrow()[0].clone();
     assert_eq!(req.text.title, "START DREAM SESSION");
     assert!(req.text.detail.contains("End early"), "{}", req.text.detail);
+    // The card shows the end in local time with a zone label; the request
+    // field, the action and the audit keep the UTC stamp.
+    assert!(req.deadline_utc.ends_with('Z'), "{}", req.deadline_utc);
+    let local = lillith_core::localtime::label_for_utc_stamp(&req.deadline_utc).unwrap();
+    assert!(
+        req.text.summary.ends_with(&format!("ends {local}")),
+        "{}",
+        req.text.summary
+    );
+    assert!(
+        req.text
+            .detail
+            .contains(&format!("ends: {local} ({})", req.deadline_utc)),
+        "{}",
+        req.text.detail
+    );
     assert!(!req.external_offered);
     let card = a.card().to_string();
     let s = Session::from_card(a).unwrap();

@@ -374,9 +374,8 @@ pub enum FixOutcome {
 /// to reconfigure (`qdbus6 org.kde.KWin /KWin reconfigure`). With
 /// `dry_run` nothing is written. Returns one outcome per enabled effect.
 pub fn fix_kwin(dry_run: bool) -> std::io::Result<Vec<FixOutcome>> {
-    use std::process::Command;
     let read = |group: &str, key: &str| -> std::io::Result<String> {
-        let mut c = Command::new("kreadconfig6");
+        let mut c = lillith_core::proc::command("kreadconfig6");
         c.args(["--file", "kwinrc", "--group", group, "--key", key]);
         lillith_core::launch_audit::record_command("fix_kwin", &c);
         let out = c.output()?;
@@ -400,7 +399,7 @@ pub fn fix_kwin(dry_run: bool) -> std::io::Result<Vec<FixOutcome>> {
         match exclude_her(&classes, blacklist) {
             Some(new) => {
                 if !dry_run {
-                    let mut c = Command::new("kwriteconfig6");
+                    let mut c = lillith_core::proc::command("kwriteconfig6");
                     c.args([
                         "--file",
                         "kwinrc",
@@ -432,12 +431,12 @@ pub fn fix_kwin(dry_run: bool) -> std::io::Result<Vec<FixOutcome>> {
         }
     }
     if changed {
-        let mut c = Command::new("qdbus6");
+        let mut c = lillith_core::proc::command("qdbus6");
         c.args(["org.kde.KWin", "/KWin", "reconfigure"]);
         lillith_core::launch_audit::record_command("fix_kwin", &c);
         let ok = c.status().is_ok_and(|s| s.success());
         if !ok {
-            let mut c = Command::new("dbus-send");
+            let mut c = lillith_core::proc::command("dbus-send");
             c.args([
                 "--session",
                 "--type=method_call",

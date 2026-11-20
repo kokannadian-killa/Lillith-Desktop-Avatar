@@ -11,7 +11,9 @@ pub mod build;
 pub mod companion;
 pub mod icon;
 pub mod import;
+pub mod jiggle;
 pub mod knobs;
+pub mod knowledge;
 pub mod quantumsec;
 pub mod sealed;
 
@@ -94,9 +96,9 @@ pub struct TabRegistry {
 }
 
 impl TabRegistry {
-    /// Companion, Motion, Chat / Brain, Avatar, Icon, Voice, Build, Bots, About,
-    /// QuantumSec, Access (`[mind.access]`, in the first add-in slot), Pose
-    /// Builder (video import, in the second).
+    /// Companion, Motion, Chat / Brain, Avatar, Icon, Voice, Build, Bots,
+    /// Knowledge, About, QuantumSec, Access (`[mind.access]`, in the first
+    /// add-in slot), Pose Builder (video import, in the second).
     pub fn with_defaults(shared: &Shared) -> Self {
         let mut r = Self::default();
         r.register(Box::new(companion::CompanionTab::new(shared)));
@@ -106,7 +108,10 @@ impl TabRegistry {
         r.register(Box::new(icon::IconTab::new()));
         r.register(Box::new(knobs::KnobTab::voice()));
         r.register(Box::new(build::BuildTab::new(shared)));
-        r.register(Box::new(bots::BotsTab::new(shared)));
+        let mut bots_tab = bots::BotsTab::new(shared);
+        bots_tab.set_dream_source(Box::new(crate::bots::LiveDream::new(&shared.config_path)));
+        r.register(Box::new(bots_tab));
+        r.register(Box::new(knowledge::KnowledgeTab::new(&shared.config_path)));
         r.register(Box::new(about::AboutTab));
         r.register(Box::new(quantumsec::QuantumSecTab::new()));
         for n in 1..=2 {
@@ -192,6 +197,7 @@ pub(crate) mod tests {
                 "voice",
                 "build",
                 "bots",
+                "knowledge",
                 "about",
                 "quantumsec",
                 "access",

@@ -1,7 +1,7 @@
 //! The interaction & behaviour state machine (PLAN.md §3.1, milestone M3).
 //!
 //! [`Brain`] owns everything above the animator: the locomotion phase
-//! (idle / walking / dragged / asleep), the [`MoveMode`] (Wander or Stay),
+//! (idle / walking / dragged / asleep), the [`MoveMode`] (Wander, Follow or Stay),
 //! sleep/wake timers, moods, the mischief meter, pointer gestures (with the
 //! secret sequence), README-SP keys, the 16 s pose cycle and the event →
 //! reaction rules (priority + cooldown + line + SFX + mood). It is pure: the
@@ -25,8 +25,13 @@
 //! Inactivity (no input on her, no `user.activity` event) makes her drowsy
 //! after `sleepy_after_s` (`idle.long`, mood Sleepy) and puts her to sleep
 //! after `asleep_after_s` (base clip `sleep`). Any input on her, hovering
-//! her (proximity) or `user.returned` wakes her with the `wake` clip. While
-//! asleep she sleeps through events below `event_wake_priority`.
+//! her (proximity), a cursor within [`BehaviorConfig::wake_radius_px`] of her
+//! feet, or `user.returned` wakes her with the `wake` clip. While asleep she
+//! sleeps through events below `event_wake_priority`. Follow walks the
+//! bottom edge toward the cursor's x once it is past
+//! [`BehaviorConfig::follow_threshold_px`]; with no cursor (or a stale one
+//! the overlay reports as `Input::Cursor(None)`) Follow stands still like
+//! Stay.
 
 use crate::bag::ShuffleBag;
 use crate::config::MoveMode;
@@ -88,6 +93,12 @@ pub struct BehaviorConfig {
     pub tease: crate::tease::TeaseConfig,
     /// Loneliness → attention poses (`[behavior.loneliness]`).
     pub loneliness: crate::loneliness::LonelinessConfig,
+    /// How far the cursor must be from her, along x, before Follow walks
+    /// (px). Default [`crate::config::FOLLOW_THRESHOLD_PX`].
+    pub follow_threshold_px: f32,
+    /// How close the cursor must be to her feet (px) to wake her when she
+    /// is asleep. Default [`crate::config::WAKE_RADIUS_PX`].
+    pub wake_radius_px: f32,
 }
 
 /// `[behavior.gravity]`: after a drag-release she falls (holding the
@@ -148,6 +159,8 @@ impl Default for BehaviorConfig {
             gravity: GravityConfig::default(),
             tease: crate::tease::TeaseConfig::default(),
             loneliness: crate::loneliness::LonelinessConfig::default(),
+            follow_threshold_px: crate::config::FOLLOW_THRESHOLD_PX,
+            wake_radius_px: crate::config::WAKE_RADIUS_PX,
         }
     }
 }
@@ -165,6 +178,10 @@ pub enum Input {
     DragEnd { left: i32 },
     /// A key while she has keyboard focus.
     Key(Key),
+    /// Cursor position relative to her feet (px, +x right, +y down).
+    /// `None` means no feed or a stale one: Follow stands still like Stay.
+    /// The overlay sends this every tick.
+    Cursor(Option<(f32, f32)>),
 }
 
 /// Keys the overlay forwards.
@@ -394,6 +411,8 @@ pub struct Brain {
     last_greet: Option<f32>,
     /// Loneliness → attention poses ([`crate::loneliness`]).
     lonely: crate::loneliness::Loneliness,
+    /// Latest relative cursor from the overlay (`None` = missing or stale).
+    cursor: Option<(f32, f32)>,
     out: Vec<Action>,
 }
 
@@ -438,6 +457,7 @@ impl Brain {
             banter: crate::banter::Picker::new(seed ^ 0xB4_7E5D_EA10),
             last_greet: None,
             lonely,
+            cursor: None,
             out: Vec::new(),
         }
     }
@@ -673,6 +693,19 @@ impl Brain {
                 self.schedule_wander();
             }
             Input::Key(k) => self.on_key(k),
+            Input::Cursor(pos) => {
+                self.cursor = pos;
+                // Proximity wake uses the same HoverEnter path as a pointer
+                // on her body. Once she is awake the cursor is not a hover
+                // (that would fire input.hover / hold off sleep).
+                if self.asleep() {
+                    if let Some((dx, dy)) = pos {
+                        if dx.hypot(dy) <= self.cfg.wake_radius_px.max(0.0) {
+                            self.on_hover(Gesture::HoverEnter);
+                        }
+                    }
+                }
+            }
         }
         self.refresh_baseline();
         self.take()
@@ -773,6 +806,18 @@ impl Brain {
             && t >= self.next_wander
         {
             self.start_wander();
+        }
+
+        // Follow: walk the bottom edge toward the cursor's x, re-aiming as
+        // it moves. Window perching (the wander area the overlay set) is
+        // unchanged. No or stale cursor → stand still like Stay.
+        if self.mode == MoveMode::Follow
+            && !busy
+            && !self.drowsy
+            && !hovering
+            && !matches!(self.phase, Phase::Dragged | Phase::Asleep)
+        {
+            self.follow_cursor();
         }
 
         // Loneliness: rises while Ko ignores her; an attention bid poses
@@ -1258,12 +1303,12 @@ impl Brain {
             return;
         }
         self.mode = mode;
-        if mode != MoveMode::Wander {
+        if mode == MoveMode::Stay {
             if let Phase::Walking { .. } = self.phase {
                 self.phase = Phase::Idle;
                 self.out.push(Action::Stand);
             }
-        } else {
+        } else if mode == MoveMode::Wander {
             self.schedule_wander();
         }
         self.out.push(Action::ModeChanged(mode));
@@ -1297,6 +1342,49 @@ impl Brain {
             }
         }
         self.schedule_wander();
+    }
+
+    /// Walk along the bottom edge toward the cursor's x, clamped to the
+    /// overlay's wander / perch area. Re-aims an in-flight walk.
+    fn follow_cursor(&mut self) {
+        let Some((dx, _)) = self.cursor else {
+            if let Phase::Walking { .. } = self.phase {
+                self.phase = Phase::Idle;
+                self.out.push(Action::Stand);
+            }
+            return;
+        };
+        let Some((lo, hi)) = self.area else {
+            return;
+        };
+        let target = (self.x + dx).clamp(lo, hi).round();
+        let threshold = self.cfg.follow_threshold_px.max(0.0);
+        if (target - self.x).abs() < threshold {
+            if let Phase::Walking { .. } = self.phase {
+                self.phase = Phase::Idle;
+                self.out.push(Action::MoveTo {
+                    left: self.x.round() as i32,
+                });
+                self.out.push(Action::Stand);
+            }
+            return;
+        }
+        let right = target > self.x;
+        match self.phase {
+            Phase::Walking {
+                right: was_right, ..
+            } => {
+                self.phase = Phase::Walking { target, right };
+                if was_right != right {
+                    self.out.push(Action::Walk { right });
+                }
+            }
+            Phase::Idle => {
+                self.phase = Phase::Walking { target, right };
+                self.out.push(Action::Walk { right });
+            }
+            _ => {}
+        }
     }
 
     /// A wander walk just ended: now and then she strikes a pose soon
@@ -1929,6 +2017,113 @@ mod tests {
             .all(|a| !matches!(a, Action::Walk { .. } | Action::MoveTo { .. })));
         let a = b.set_mode(MoveMode::Wander);
         assert_eq!(a, [Action::ModeChanged(MoveMode::Wander)]);
+    }
+
+    fn follow_brain() -> Brain {
+        let mut b = brain_with(
+            BehaviorConfig {
+                sleepy_after_s: 1e6,
+                asleep_after_s: 2e6,
+                pose_cycle_s: 1e6,
+                wander_speed_px_s: 60.0,
+                walk_root_motion: false,
+                follow_threshold_px: 64.0,
+                wake_radius_px: 160.0,
+                mischief: MischiefConfig {
+                    boredom_s: 0.0,
+                    ..MischiefConfig::default()
+                },
+                ..BehaviorConfig::default()
+            },
+            MoveMode::Follow,
+        );
+        b.set_area(0.0, 1500.0);
+        b.set_position(700.0);
+        b
+    }
+
+    #[test]
+    fn follow_walks_toward_the_cursor_x_and_reaims() {
+        let mut b = follow_brain();
+        // Within the threshold: stay put, like Stay.
+        assert!(b.input(Input::Cursor(Some((20.0, 0.0)))).is_empty());
+        assert!(run(&mut b, 1.0, false)
+            .iter()
+            .all(|a| !matches!(a, Action::Walk { .. } | Action::MoveTo { .. })));
+        assert_eq!(b.phase(), Phase::Idle);
+        assert_eq!(b.x(), 700.0);
+
+        // Past the threshold: walk right toward 700+200.
+        // dt=0 starts the walk without a step; a later tick with dt>0
+        // advances an in-flight walk before follow_cursor re-aims.
+        let a = b.input(Input::Cursor(Some((200.0, 10.0))));
+        let a2 = b.tick(0.0, false);
+        let a: Vec<_> = a.into_iter().chain(a2).collect();
+        assert!(a.contains(&Action::Walk { right: true }), "{a:?}");
+        let Phase::Walking { target, right } = b.phase() else {
+            panic!("expected walking: {:?}", b.phase());
+        };
+        assert!(right);
+        assert_eq!(target, 900.0);
+
+        // Re-aim left past her: the walk flips heading.
+        let a = b.input(Input::Cursor(Some((-300.0, 0.0))));
+        let a2 = b.tick(0.0, false);
+        let a: Vec<_> = a.into_iter().chain(a2).collect();
+        assert!(a.contains(&Action::Walk { right: false }), "{a:?}");
+        let Phase::Walking { target, right } = b.phase() else {
+            panic!("expected re-aimed walk: {:?}", b.phase());
+        };
+        assert!(!right);
+        assert_eq!(target, 400.0);
+
+        // Clamped to the area she may walk (the screen she is on).
+        b.input(Input::Cursor(Some((2000.0, 0.0))));
+        b.tick(0.1, false);
+        let Phase::Walking { target, right } = b.phase() else {
+            panic!("expected clamped walk: {:?}", b.phase());
+        };
+        assert!(right);
+        assert_eq!(target, 1500.0);
+    }
+
+    #[test]
+    fn follow_without_a_cursor_feed_stays_put() {
+        let mut b = follow_brain();
+        // Missing feed.
+        assert!(b.input(Input::Cursor(None)).is_empty());
+        assert!(run(&mut b, 2.0, false)
+            .iter()
+            .all(|a| !matches!(a, Action::Walk { .. } | Action::MoveTo { .. })));
+        assert_eq!(b.phase(), Phase::Idle);
+        // A stale / dropped feed mid-walk stops her (Follow == Stay).
+        b.input(Input::Cursor(Some((200.0, 0.0))));
+        b.tick(0.1, false);
+        assert!(matches!(b.phase(), Phase::Walking { .. }));
+        let a = b.input(Input::Cursor(None));
+        let a2 = b.tick(0.1, false);
+        let a: Vec<_> = a.into_iter().chain(a2).collect();
+        assert!(a.contains(&Action::Stand), "{a:?}");
+        assert_eq!(b.phase(), Phase::Idle);
+    }
+
+    #[test]
+    fn asleep_wakes_when_the_cursor_is_within_the_radius() {
+        let mut b = follow_brain();
+        let a = b.event(&Event::new("idle.asleep"));
+        assert!(b.asleep(), "{a:?}");
+        // Outside the 160 px radius: still asleep.
+        let a = b.input(Input::Cursor(Some((200.0, 0.0))));
+        assert!(!a.iter().any(|a| matches!(a, Action::Stand)), "{a:?}");
+        assert!(b.asleep());
+        // Within the radius: same hover-wake path (Stand + wake clip/line).
+        let a = b.input(Input::Cursor(Some((80.0, 60.0))));
+        // 80-60-0 hypot = 100 < 160.
+        assert!(a.contains(&Action::Stand), "{a:?}");
+        assert!(!b.asleep());
+        let s = says(&a);
+        assert_eq!(s.len(), 1, "wake line: {s:?}");
+        assert!(in_pool(s[0], crate::banter::WAKE), "{s:?}");
     }
 
     fn calm_cfg() -> BehaviorConfig {

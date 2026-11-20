@@ -351,15 +351,17 @@ pub fn spawn_detached(argv: &[String]) -> std::io::Result<u32> {
         {
             return shell_open(cmd, &super::winshell::join_args(args)).map(|()| 0);
         }
-        use std::os::windows::process::CommandExt;
-        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        // Own process group, and CREATE_NO_WINDOW (not DETACHED_PROCESS,
+        // which would cancel it): a console program it starts (a .bat,
+        // say) inherits a hidden console instead of popping a window.
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        let child = std::process::Command::new(cmd)
+        let mut c = crate::proc::command(cmd);
+        crate::proc::hide_with(&mut c, CREATE_NEW_PROCESS_GROUP);
+        let child = c
             .args(args)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
             .spawn()?;
         Ok(child.id())
     }
@@ -403,7 +405,7 @@ pub fn shell_open(file: &str, params: &str) -> std::io::Result<()> {
 
 #[cfg(not(windows))]
 fn spawn_unix(cmd: &str, args: &[String]) -> std::io::Result<u32> {
-    let mut c = std::process::Command::new(cmd);
+    let mut c = crate::proc::command(cmd);
     c.args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

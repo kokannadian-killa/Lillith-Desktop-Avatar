@@ -480,6 +480,13 @@ Section "Uninstall"
   Delete "$INSTDIR\LICENSE.txt"
   Delete "$INSTDIR\LICENSE-ASSETS.txt"
   Delete "$INSTDIR\config.example.toml"
+  ; Pose Builder's pipeline and the AI cut-out model the installer put there
+  ; (other files you dropped in models\ stay).
+  RMDir /r "$INSTDIR\tools\video-pipeline"
+  RMDir "$INSTDIR\tools"
+  Delete "$INSTDIR\models\rembg\isnet-anime.onnx"
+  RMDir "$INSTDIR\models\rembg"
+  RMDir "$INSTDIR\models"
   ; The bundled llama-server is ours; models in bundle\models stay.
   RMDir /r "$INSTDIR\bundle\llama"
   Delete "$INSTDIR\bundle\models\README.txt"

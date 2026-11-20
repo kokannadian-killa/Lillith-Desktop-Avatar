@@ -88,6 +88,8 @@ pub struct ChatSession {
     /// The learning memory graph (`[memory]`). `None` = off: nothing is
     /// read or written. Attached by [`ChatSession::with_memory`].
     memory: Option<lillith_memory::Brain>,
+    /// `[memory] llm_extract`: model facts prepared before each memory write.
+    llm_facts: Option<crate::llm_extract::LlmFacts>,
     /// The shared model lock (`llm.lock`, docs/SELF_LEARNING.md §1): chat
     /// signals `llm.want` and takes it so a background learner request
     /// yields at once. `None` = no gate (offline, tests).
@@ -445,6 +447,7 @@ impl ChatSession {
             last_tool_output: None,
             last_tool_op: None,
             memory: None,
+            llm_facts: None,
             llm_gate: (!offline && !cfg!(test))
                 .then(lillith_core::llm_gate::LlmGate::shared)
                 .flatten(),
@@ -463,8 +466,14 @@ impl ChatSession {
     /// that fails to open, leaves memory off (logged, chat unaffected).
     pub fn with_memory(mut self, cfg: &MemoryConfig) -> Self {
         self.memory = None;
+        self.llm_facts = None;
         if cfg.enabled {
             match lillith_memory::Brain::open(cfg) {
+                Ok(b) if b.is_enabled() && cfg.llm_extract => {
+                    let f = crate::llm_extract::LlmFacts::default();
+                    self.memory = Some(b.with_extractor(Box::new(f.clone())));
+                    self.llm_facts = Some(f);
+                }
                 Ok(b) if b.is_enabled() => self.memory = Some(b),
                 Ok(_) => {}
                 Err(e) => tracing::warn!("[memory] could not open the memory db: {e}"),
@@ -910,6 +919,14 @@ impl ChatSession {
                 self.history.push(Message::assistant(reply.clone()));
                 if let Err(e) = self.save() {
                     tracing::warn!("could not save chat history: {e}");
+                }
+                // `[memory] llm_extract`: ask the local model first (bounded,
+                // chat's side of the model lock), never inside the DB write.
+                if let (Some(f), Some(client), true) =
+                    (&self.llm_facts, &self.client, self.memory.is_some())
+                {
+                    let _llm = take_llm_gate(self.llm_gate.clone()).await;
+                    f.prepare(client, user).await;
                 }
                 if let Some(b) = &self.memory {
                     b.observe_interaction(user, &reply, &lillith_memory::Ctx::now());

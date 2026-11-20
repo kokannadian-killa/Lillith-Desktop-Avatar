@@ -27,5 +27,109 @@ The roster lives in `bots.toml` next to `config.toml` (Save in the bottom bar wr
 * Planning uses Lillith's local model on loopback (127.0.0.1) or a built-in recipe. No network.
   Online research only exists in Memory Engine's Ko-gated Tor dream sessions; the Bots tab
   only shows that session's status (`DreamStatusSource` hook) and never starts one.
-* Bots are supervised worker threads: **Stop**, **Stop all**, the kill switch and Ctrl-C /
-  SIGTERM on `lillith-settings` stop them and any command they are running.
+* Bots are supervised worker threads inside the `lillith-settings` process (a separate,
+  detached process from the overlay). A bot's **Stop** ends that bot; if it was running a
+  command, every command of this Settings window is killed (process-local, the other Lillith
+  processes keep going).
+* **Stop all**, Ctrl-C / SIGTERM on `lillith-settings`, Ctrl-C / SIGTERM on the overlay (always,
+  with or without `[chat.server]`), Ctrl-C in `lillith chat` / `lillith dream` are one route: the
+  **cross-process kill switch** (`kill_switch::stop_all`). The stopping process writes a
+  `disarmed` marker and appends to the per-user stop barrier
+  (`$XDG_RUNTIME_DIR/lillith/stop/barrier.log`; dir 0700, files 0600; local files only, no
+  socket or network), fsyncing both *before* reporting anything. Every Lillith process joins
+  this stop session on first use and sees the barrier within ~20–50 ms: its command runners kill
+  their process group **and** every descendant they have seen (also ones that left the group
+  with `setsid`), its bots drop their plans and queued steps, its stop hooks run, and it
+  acknowledges whether its trees are really gone.
+* **Crashed Lillith processes.** Each joined process keeps its entry in the stop directory
+  (`proc-<pid>`, 0600, rewritten atomically and fsynced) up to date with the command trees it
+  runs: each process group with its leader's start time and every descendant (pid + start time)
+  its ~200 ms `/proc` snapshots found. Each command's top process is made a Linux *child
+  subreaper* (`PR_SET_CHILD_SUBREAPER`, set in the child just before exec), so anything in the
+  command's tree that double-forks and orphans itself is re-parented to that top process
+  instead of escaping to init, and the `/proc` walk still finds it. Lillith itself never
+  becomes a subreaper (it never inherits or has to reap anyone's orphans).
+  If that process is SIGKILLed or crashes, the next stop
+  (from any Lillith process) SIGKILLs those groups, the recorded descendants, their own
+  descendants and the groups they moved to, then checks they are gone. Only then is the dead
+  process's entry removed. Pid reuse: a pid is only signalled while its start time
+  (`/proc/<pid>/stat` field 22) still matches the recorded one, and a group only while its
+  leader pid is gone or still has the recorded start time.
+* **Reporting.** `stop_all` waits (at most 5 s) for those acknowledgements. Settings and chat say
+  **Stopped** only when every live Lillith process in the stop session confirmed the command
+  trees it *tracked* are gone, every tree a crashed Lillith process left behind was killed and
+  verified gone, and no Lillith process is running outside the session. The line states exactly
+  what was checked, e.g. "2 tracked command tree(s) confirmed gone by 2 stop-session member(s)
+  (this process included); processes Lillith never tracked are not covered" (the stopping
+  process counts as a member, so "1 member" means only the stopper itself answered). Otherwise the line says the stop was
+  saved but **not confirmed** (a process that did not answer, a tree still alive, a crashed
+  process's tree that survived the kill or whose entry / `/proc` can't be read, a Lillith
+  process running outside the session, or an OS where trees can't be checked), or that it only applied in this process (barrier not saved).
+  "Sent" / "accepted" is never shown as stopped.
+* **Disarmed until Re-arm.** After a global stop, every Lillith process refuses to start any
+  command, including processes started later (restarts, a new overlay after Ctrl-C), until Ko
+  clicks **Re-arm** in Settings ▸ Bots (a mouse click only; Tab + Enter never re-arms). Re-arm only removes the marker: it never re-runs,
+  resumes or re-approves anything (stopped plans and queued steps are gone; each new step still
+  needs its own mouse Yes). `$XDG_RUNTIME_DIR` is cleared at logout / reboot, so a reboot also
+  clears the barrier and the disarm.
+* **Who joins.** Every release-built Lillith process joins. `LILLITH_STOP_SESSION=off` keeps a
+  process out of the session (stops stay process-local) **in debug builds only**; a release
+  build ignores it and logs a warning. A debug process that opts out this way leaves an
+  `optout-<pid>` marker in the stop directory, so while it lives every stop says **not
+  confirmed** ("outside the stop session … not stopped or checked") instead of claiming it. Under `cargo test` / `cargo run` a process only joins in
+  a fully scratch XDG environment (all `XDG_*` base dirs set, runtime dir in the same private
+  tree as the state dir), so test runs never disarm a live Lillith. That also means a **dev
+  `cargo run` with your normal XDG dirs does not join the stop session**: Stop all / Ctrl-C in
+  Settings does not reach it, and its own Ctrl-C stays process-local. Use the installed
+  (release) build, or give the dev run scratch XDG dirs, when you need the cross-process stop.
+* **Known gaps (honest):**
+  - *Escapes the subreaper can't catch:* double-forked orphans are re-parented to the
+    command's top process only while that process lives. Not found (and so not killed, while
+    the stop can still read **Stopped**, which only claims *tracked* trees): an orphan created
+    after the command's top process already exited; a fork racing the kill itself (the kill
+    repeats its walk three times, ~10 ms apart); and anything the command asks *another*
+    service to start (`systemd-run --user`, D-Bus activation, `at`, cron), which is never in
+    the command's tree. A command whose top process is not a shell also now inherits its
+    tree's orphans (it may see unknown children; shells and make reap them).
+  - *SIGKILLed / crashed Lillith:* the command trees it recorded are no longer torn down at the
+    moment it dies, only at the **next** stop (Stop all / Ctrl-C / kill switch from any Lillith
+    process), which kills and checks them as described above. Until then they keep running.
+    What the dead process never recorded is not covered: a descendant that appeared after its
+    last ~200 ms snapshot (and left the group), or a command it spawned in the instant before
+    the entry was rewritten. If a recorded tree survives the kill, or the entry can't be read
+    (corrupt, written by an older Lillith that did not record trees) or `/proc` is unavailable,
+    every later stop says **not confirmed** and the entry stays until it can be checked (a
+    reboot / logout clears `$XDG_RUNTIME_DIR`).
+  - *Background pipe holder on a normal exit:* when a command exits but a background child keeps
+    its output pipe open, the runner keeps waiting for the pipe (as before). A stop now ends
+    that wait and kills the holder, but without a stop the wait has no time limit.
+  - *Start-time / kill race:* there is a tiny window between the start-time check and `kill(2)`
+    where a pid could be reused. `pidfd_open` / `pidfd_send_signal` would close it.
+  - *Zombies of reparented orphans:* a long-lived command top process that never calls `wait`
+    accumulates zombies of reparented orphans until it exits.
+  - *Stop-line undercount:* in a cross-process stop the line can undercount, for example
+    "0 tracked command tree(s) confirmed gone" even though trees were killed. It never
+    overclaims.
+  - *Windows:* the Job-object kill still runs, but trees can't be checked without `/proc`, so a
+    stop is always reported as **not confirmed** there.
+* The safeword ("red" / "OOC: stop") only hushes her speech and queued lines (and cancels cards
+  waiting for Ko) in the process where it was said. It never writes the barrier and never stops
+  a bot, a command or any task.
+
+## Follow, cursor and proximity wake
+
+With the `kwin/lillith-bridge` script installed and enabled, **Follow** walks
+along the bottom of the screen she is already on toward the cursor's *x*
+(once it is farther than `[behavior] follow_threshold_px`, default 64).
+Window perching is unchanged (gravity / perch). A sleeping Lillith wakes
+when the cursor comes within `[behavior] wake_radius_px` (default 160) of
+her feet, through the same hover-wake path as a pointer over her body.
+Old configs without those keys still load (serde defaults).
+
+The cursor uses KWin's global logical coordinates. **Screen selection and
+per-output scaling are deferred**: she is clamped to the screen she is on;
+a cursor on another screen only walks her to that screen's edge.
+
+**X11 `QueryPointer` is out of scope.** With no cursor feed (script off or
+not yet installed) or a sample older than 500 ms, Follow stays put like
+**Stay**.

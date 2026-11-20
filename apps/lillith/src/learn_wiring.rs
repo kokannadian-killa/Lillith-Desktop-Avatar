@@ -22,6 +22,19 @@ pub fn start(cfg: &Config, llm_allowed: bool) -> Option<Arc<LearnHandle>> {
     h
 }
 
+/// Starts the "Share this page with Lillith" socket when
+/// `[learn] share_socket = true` (off by default) and learning + memory are
+/// on. Keep the handle alive; dropping it removes the socket.
+pub fn start_share(cfg: &Config) -> Option<lillith_learn::share::ShareServer> {
+    let s = lillith_learn::share::ShareServer::spawn(cfg);
+    tracing::info!(
+        on = s.is_some(),
+        share_socket = cfg.learn.share_socket,
+        "share socket"
+    );
+    s
+}
+
 /// A sender that forwards everything to `feed` and shows each event to the
 /// learner on the way (activity → pause; `chat.safeword` is ignored, the
 /// safeword only hushes her voice; never blocks). No learner: `feed` itself, no thread.

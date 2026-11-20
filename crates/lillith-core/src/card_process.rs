@@ -11,7 +11,7 @@
 
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// What the card shows.
@@ -141,7 +141,7 @@ fn show_and_wait(
     timeout: Duration,
     stop: impl Fn() -> bool,
 ) -> CardAnswer {
-    let mut child = match Command::new(exe)
+    let mut child = match crate::proc::command(exe)
         .arg("contract-card")
         .arg("--timeout")
         .arg(timeout.as_secs().max(1).to_string())

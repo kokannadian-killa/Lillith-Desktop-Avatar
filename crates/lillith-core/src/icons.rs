@@ -295,7 +295,7 @@ pub fn desktop_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("XDG_DESKTOP_DIR").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(d));
     }
-    let mut c = std::process::Command::new("xdg-user-dir");
+    let mut c = crate::proc::command("xdg-user-dir");
     c.arg("DESKTOP").stderr(std::process::Stdio::null());
     crate::launch_audit::record_command_once("icon_desktop_dir", &c);
     if let Ok(o) = c.output() {
@@ -375,7 +375,7 @@ fn refresh_linux(data: &Path, a: &mut Applied) {
         if find_program(prog).is_none() {
             return;
         }
-        let mut c = std::process::Command::new(prog);
+        let mut c = crate::proc::command(prog);
         c.args(args)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
@@ -508,8 +508,6 @@ pub fn apply_windows_shortcuts(root: &Path, id: &str, card: &str) -> Result<Appl
     let argv = windows_shortcut_argv();
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         if let Some(log) = crate::config::audit_log_path() {
             crate::launch_audit::record_to(
                 &log,
@@ -519,11 +517,10 @@ pub fn apply_windows_shortcuts(root: &Path, id: &str, card: &str) -> Result<Appl
                 Some(card),
             );
         }
-        let out = std::process::Command::new(&argv[0])
+        let out = crate::proc::command(&argv[0])
             .args(&argv[1..])
             .env("LILLITH_ICON", &ico)
             .stdin(std::process::Stdio::null())
-            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .map_err(|e| format!("powershell: {e}"))?;
         let n = String::from_utf8_lossy(&out.stdout).trim().to_string();

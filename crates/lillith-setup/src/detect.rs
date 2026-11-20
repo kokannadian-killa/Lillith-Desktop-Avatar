@@ -7,7 +7,7 @@ use crate::local::LocalUrl;
 use crate::paths;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 pub const DEFAULT_LLAMA_SERVER_URL: &str = "http://127.0.0.1:8080";
@@ -261,7 +261,7 @@ pub fn binary_version(bin: &Path, timeout: Duration) -> Option<String> {
         );
         return None;
     }
-    let mut child = Command::new(bin)
+    let mut child = crate::proc::command(bin)
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

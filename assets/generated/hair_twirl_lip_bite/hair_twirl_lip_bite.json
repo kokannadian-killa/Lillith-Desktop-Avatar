@@ -711,13 +711,13 @@
     [
       129,
       280,
-      19,
+      20,
       392
     ],
     [
       127,
       276,
-      20,
+      21,
       392
     ],
     [
@@ -879,7 +879,7 @@
     [
       116,
       281,
-      19,
+      20,
       392
     ],
     [
@@ -923,22 +923,292 @@
     "height": 400,
     "frame_count": 60,
     "fps": 12.0,
-    "bytes": 644614,
+    "bytes": 651516,
     "quality": {
-      "edge_mae": 2.022,
+      "edge_mae": 2.052,
       "edge_p99": 18.0,
-      "halo_dark": 0.037,
-      "halo_light": -0.088,
-      "alpha_mae": 0.0664
+      "halo_dark": 0.046,
+      "halo_light": -0.1,
+      "alpha_mae": 0.0693
     },
     "tool": "tools/video-pipeline/pack_mp4.py"
   },
   "matte_clean": {
-    "version": 2,
+    "version": 6,
     "tool": "tools/matte-clean/matte_clean.py",
-    "sheet_sha256": "b7dc0edc4a6704d19f3469e4cf03ff4b7f11b0e33caae8bfc0012baec53171d6",
-    "source_sha256": "3ebe8ca8bb957d97eb892cd4617752473af9900c7c99b5bd070943eec260242a"
+    "sheet_sha256": "75d0988cfce112f37aa8d1c161258cf06f1ea4384f85f4931ddff644bcc07572",
+    "source_sha256": "74c8632e7d046a6fad4effd88c9e2f66d5c82b5d2e1496604c290a0f99711130",
+    "polish": "polish/chest-bounce-3: dropout fill + mfix/edge2 (keep bounce; no retime; gentle on look_away; keep holefill on lean_doorframe_smolder; pig/hip/tail untouched on pigtail_twirl)"
   },
   "allure": true,
-  "idle_variant": true
+  "idle_variant": true,
+  "chest_bounce_bake": {
+    "tool": "scratch-bounce3/bake_chest2.py (chest-only adaptation of generated_v2/_tools/bake_jiggle_v2.py; v1 bake_jiggle.py springs; cleavage_zoom-aware)",
+    "batch": "art/chest-bounce-3",
+    "chest": {
+      "k": 110,
+      "c": 3.2,
+      "cap_px": 6.5,
+      "body_gain": 0.9,
+      "kick_scale": 1.6
+    },
+    "breath_kicks": {
+      "every_s": 1.4,
+      "strength": 0.55
+    },
+    "pigtails_hip_tail": "not touched (no field rendered; owned by jiggle bot)",
+    "cleavage_zoom_aware": false,
+    "ease_frames": 8,
+    "frame0_identical_to_source": true,
+    "tease_holes": "n/a (no highlight holes worth filling / fill not attempted)",
+    "max_chest_offset_px_normal_framing": 4.69,
+    "chest_track_ncc_min": 0.943,
+    "bounce_hp_rms_px_before_after": [
+      0.299,
+      1.028
+    ],
+    "baked_chest_offsets_px": [
+      [
+        -0.0,
+        0.0
+      ],
+      [
+        -0.0,
+        0.1
+      ],
+      [
+        0.0,
+        0.5
+      ],
+      [
+        0.01,
+        1.08
+      ],
+      [
+        -0.02,
+        1.31
+      ],
+      [
+        -0.11,
+        0.16
+      ],
+      [
+        -0.13,
+        -1.53
+      ],
+      [
+        -0.04,
+        -2.09
+      ],
+      [
+        0.07,
+        -1.18
+      ],
+      [
+        0.16,
+        1.78
+      ],
+      [
+        0.28,
+        4.68
+      ],
+      [
+        0.29,
+        4.29
+      ],
+      [
+        0.17,
+        1.29
+      ],
+      [
+        0.06,
+        -2.35
+      ],
+      [
+        -0.06,
+        -3.4
+      ],
+      [
+        -0.11,
+        -2.23
+      ],
+      [
+        -0.08,
+        0.95
+      ],
+      [
+        -0.06,
+        3.53
+      ],
+      [
+        -0.1,
+        3.33
+      ],
+      [
+        -0.07,
+        2.13
+      ],
+      [
+        -0.0,
+        1.63
+      ],
+      [
+        0.0,
+        0.33
+      ],
+      [
+        -0.1,
+        -0.74
+      ],
+      [
+        -0.11,
+        -0.94
+      ],
+      [
+        -0.1,
+        -0.4
+      ],
+      [
+        -0.18,
+        0.22
+      ],
+      [
+        -0.17,
+        0.41
+      ],
+      [
+        -0.01,
+        1.64
+      ],
+      [
+        0.02,
+        3.84
+      ],
+      [
+        0.08,
+        3.23
+      ],
+      [
+        0.17,
+        0.53
+      ],
+      [
+        0.13,
+        -2.04
+      ],
+      [
+        0.07,
+        -2.58
+      ],
+      [
+        0.07,
+        -1.4
+      ],
+      [
+        0.03,
+        0.44
+      ],
+      [
+        -0.02,
+        1.64
+      ],
+      [
+        -0.05,
+        2.95
+      ],
+      [
+        -0.04,
+        4.5
+      ],
+      [
+        -0.01,
+        3.56
+      ],
+      [
+        0.07,
+        0.48
+      ],
+      [
+        0.18,
+        -2.35
+      ],
+      [
+        0.15,
+        -2.92
+      ],
+      [
+        0.08,
+        -0.51
+      ],
+      [
+        0.07,
+        3.8
+      ],
+      [
+        -0.03,
+        4.25
+      ],
+      [
+        -0.19,
+        2.27
+      ],
+      [
+        -0.19,
+        -1.25
+      ],
+      [
+        -0.12,
+        -2.42
+      ],
+      [
+        -0.14,
+        -0.64
+      ],
+      [
+        -0.16,
+        1.39
+      ],
+      [
+        -0.08,
+        2.01
+      ],
+      [
+        0.04,
+        2.64
+      ],
+      [
+        0.05,
+        3.97
+      ],
+      [
+        -0.02,
+        3.2
+      ],
+      [
+        0.03,
+        1.86
+      ],
+      [
+        0.04,
+        1.01
+      ],
+      [
+        0.02,
+        0.55
+      ],
+      [
+        0.01,
+        0.01
+      ],
+      [
+        0.02,
+        -0.14
+      ],
+      [
+        0.0,
+        -0.02
+      ]
+    ],
+    "engine_note": "extra chest bounce is baked into pixels; engine chest spring should stay off/low for this clip"
+  }
 }

@@ -17,6 +17,50 @@ pub fn clock_label(unix_secs: i64) -> String {
     }
 }
 
+/// A `YYYY-MM-DDTHH:MM:SSZ` UTC stamp (the audit / `deadline` format)
+/// as a local clock label ([`clock_label`]); `None` when it isn't one.
+pub fn label_for_utc_stamp(stamp: &str) -> Option<String> {
+    parse_utc_stamp(stamp).map(clock_label)
+}
+
+/// Seconds since the epoch of a `YYYY-MM-DDTHH:MM:SSZ` stamp.
+pub fn parse_utc_stamp(stamp: &str) -> Option<i64> {
+    let b = stamp.trim().as_bytes();
+    if b.len() != 20
+        || b[4] != b'-'
+        || b[7] != b'-'
+        || b[10] != b'T'
+        || b[13] != b':'
+        || b[16] != b':'
+        || b[19] != b'Z'
+    {
+        return None;
+    }
+    let num = |r: std::ops::Range<usize>| -> Option<i64> {
+        let s = std::str::from_utf8(&b[r]).ok()?;
+        s.bytes()
+            .all(|c| c.is_ascii_digit())
+            .then(|| s.parse().ok())?
+    };
+    let (y, mo, d) = (num(0..4)?, num(5..7)?, num(8..10)?);
+    let (h, mi, se) = (num(11..13)?, num(14..16)?, num(17..19)?);
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || se > 60 {
+        return None;
+    }
+    Some(days_from_civil(y, mo as u32, d as u32) * 86_400 + h * 3600 + mi * 60 + se)
+}
+
+/// A zone label from an offset east of UTC: `UTC-06:00`, `UTC+05:30`,
+/// `UTC` (where the platform has no abbreviation).
+pub fn offset_label(offset_secs: i64) -> String {
+    let m = offset_secs / 60;
+    if m == 0 {
+        return "UTC".into();
+    }
+    let sign = if m < 0 { '-' } else { '+' };
+    format!("UTC{sign}{:02}:{:02}", m.abs() / 60, m.abs() % 60)
+}
+
 /// A local wall-clock time, broken down.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalParts {
@@ -86,19 +130,25 @@ pub fn local_parts(unix_secs: i64) -> Option<LocalParts> {
     unix,
     any(target_os = "linux", target_os = "android", target_os = "macos")
 ))]
+#[allow(clippy::useless_conversion)] // `c_long` is `i64` on some targets only
 fn zone_of(tm: &libc::tm) -> Option<String> {
     if tm.tm_zone.is_null() {
-        return None;
+        return Some(offset_label(i64::from(tm.tm_gmtoff)));
     }
     // SAFETY: a non-null `tm_zone` from `localtime_r` points at a
     // NUL-terminated static string.
     let z = unsafe { std::ffi::CStr::from_ptr(tm.tm_zone) };
-    let z = z.to_str().ok()?.trim();
-    (!z.is_empty()
+    let z = z.to_str().ok().map(str::trim).unwrap_or_default();
+    let ok = !z.is_empty()
         && z.len() <= 8
         && z.chars()
-            .all(|c| c.is_ascii_alphanumeric() || "+-".contains(c)))
-    .then(|| z.to_string())
+            .all(|c| c.is_ascii_alphanumeric() || "+-".contains(c));
+    // No usable abbreviation: the numeric offset, so there is always a zone.
+    Some(if ok {
+        z.to_string()
+    } else {
+        offset_label(i64::from(tm.tm_gmtoff))
+    })
 }
 
 #[cfg(all(
@@ -141,13 +191,13 @@ pub fn local_parts(unix_secs: i64) -> Option<LocalParts> {
     Some(LocalParts {
         hour: (s / 3600) as u32,
         minute: ((s % 3600) / 60) as u32,
-        zone: None,
+        // Windows has no short abbreviation API: the numeric offset.
+        zone: Some(offset_label(offset)),
         days_ahead: local.div_euclid(86_400) - now_local.div_euclid(86_400),
     })
 }
 
 /// Days since 1970-01-01 of a civil date (Howard Hinnant).
-#[cfg(windows)]
 fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = y.div_euclid(400);
@@ -189,10 +239,42 @@ mod tests {
         assert!(!l.ends_with('Z'), "{l}");
     }
 
-    #[cfg(windows)]
     #[test]
     fn civil_days() {
         assert_eq!(days_from_civil(1970, 1, 1), 0);
         assert_eq!(days_from_civil(2026, 10, 30), 20_756);
+    }
+
+    #[test]
+    fn utc_stamps_parse_and_label_locally() {
+        assert_eq!(parse_utc_stamp("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(
+            parse_utc_stamp("2026-10-31T01:30:00Z"),
+            Some(20_757 * 86_400 + 5_400)
+        );
+        for bad in [
+            "",
+            "2026-10-31 01:30:00",
+            "2026-13-01T00:00:00Z",
+            "2026-10-31T01:30:00+00",
+        ] {
+            assert_eq!(parse_utc_stamp(bad), None, "{bad}");
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let p = local_parts(now).expect("local time readable");
+        assert!(p.zone.is_some(), "a zone label is always there");
+        let l = label_for_utc_stamp("2026-10-31T01:30:00Z").unwrap();
+        assert_eq!(l, clock_label(20_757 * 86_400 + 5_400));
+        assert!(!l.contains("2026") && !l.ends_with('Z'), "{l}");
+    }
+
+    #[test]
+    fn offset_labels() {
+        assert_eq!(offset_label(0), "UTC");
+        assert_eq!(offset_label(-6 * 3600), "UTC-06:00");
+        assert_eq!(offset_label(5 * 3600 + 1800), "UTC+05:30");
     }
 }

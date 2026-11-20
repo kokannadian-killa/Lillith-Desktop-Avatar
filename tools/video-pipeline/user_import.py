@@ -567,13 +567,16 @@ MODEL_NAME = matte_model.MODEL_NAME
 
 
 def model_candidates(flag=None, env=None, home=None, **kw):
-    """isnet-anime lookup order (never downloaded; see matte_model.py):
+    """isnet-anime lookup order (never downloaded; see matte_model.py). Each models dir is tried as
+    <dir>/rembg/isnet-anime.onnx, then <dir>/isnet-anime.onnx:
       1. --model (a file, or a folder holding isnet-anime.onnx)
-      2. $U2NET_HOME/isnet-anime.onnx
-      3. <install>/models/rembg/isnet-anime.onnx (Arch /opt/lillith/models/rembg, Windows <install>\\models\\rembg)
-      4. <home>/.u2net/isnet-anime.onnx          (rembg's own folder)
-      5. <home>/.rembg/models/isnet-anime/isnet-anime.onnx   (home = pathlib home: ~ on Linux/macOS,
-         %USERPROFILE% on Windows)"""
+      2. /opt/lillith/models (the Arch install, Linux only)
+      3. <install or repo>/models next to tools/ (Windows <install dir>\\models; a checkout's models/)
+      4. the user data dir: ~/.local/share/lillith/models, %LOCALAPPDATA%\\lillith\\models
+      5. <home>/.rembg/models/isnet-anime/isnet-anime.onnx   (home = pathlib home: ~ or %USERPROFILE%)
+      6. <home>/.u2net/isnet-anime.onnx          (rembg's own folder)
+      7. $U2NET_HOME/isnet-anime.onnx            (last)
+    """
     return matte_model.model_candidates(flag, env, home, **kw)
 
 
@@ -598,7 +601,7 @@ class Matter:
             self.mode = 'alpha' if info['alpha'] else self.fallback
         if self.mode == 'isnet':
             if model is None:
-                raise Fail('--matte isnet: the isnet-anime model was not found (nothing is downloaded). Tried: '
+                raise Fail('--matte isnet: the isnet-anime model was not found (nothing is downloaded). Tried, in order: '
                            + '; '.join(str(t) for t in tried)
                            + '. ' + matte_model.fix_hint() + ' Or pass --model <file>.')
             if not _has_ort():
@@ -1158,8 +1161,9 @@ def main(argv=None):
     ap.add_argument('--json-progress', action='store_true', help='JSON lines on stdout (the GUI contract)')
     ap.add_argument('--max-ram-mb', type=int, default=1500, help='RAM cap for the importer + its ffmpeg (default 1500)')
     ap.add_argument('--matte', choices=('auto', 'isnet', 'key', 'alpha'), default='auto')
-    ap.add_argument('--model', help='isnet-anime.onnx file or folder. Lookup: --model, $U2NET_HOME, the installer copy '
-                         '(<install>/models/rembg), ~/.u2net, ~/.rembg/models/isnet-anime (%%USERPROFILE%% on Windows); '
+    ap.add_argument('--model', help='isnet-anime.onnx file or folder. Lookup: --model, /opt/lillith/models, the install '
+                         'or repo models dir (<install>/models), the user data dir (~/.local/share/lillith/models), '
+                         '~/.rembg/models/isnet-anime, ~/.u2net (%%USERPROFILE%% on Windows), then $U2NET_HOME; '
                          'never downloaded (see matte_model.py)')
     ap.add_argument('--zmax', type=float, default=ZMAX, help='peak cleavage zoom (1 = no zoom; default 1.8)')
     ap.add_argument('--min-seconds', type=float, default=1.5)

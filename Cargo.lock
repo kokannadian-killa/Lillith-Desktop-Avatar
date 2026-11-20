@@ -2449,6 +2449,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.21",
  "toml",
+ "toml_edit 0.22.27",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -2567,6 +2568,7 @@ dependencies = [
  "tracing",
  "wayland-client",
  "wayland-protocols",
+ "windows-sys 0.59.0",
  "wl-clipboard-rs",
  "x11rb",
  "zbus",
@@ -2582,6 +2584,7 @@ dependencies = [
  "libc",
  "lillith-anim",
  "lillith-core",
+ "lillith-learn",
  "lillith-quantumsec",
  "lillith-setup",
  "lillith-theme",

@@ -27,20 +27,36 @@ DOM = {'dom_beckon_finger', 'dom_point_down', 'dom_arms_crossed_demand', 'smug_s
        'soul_contract_sign', 'kneel_pout_beg', 'hug_screen_possessive',
        'seduce_beckon_finger', 'seduce_lip_bite_glance', 'seduce_lean_to_screen_whisper',
        'seduce_blow_kiss_screen', 'seduce_tap_glass'}
+# idle-tease batch 1 (art/idle-tease-1): idle/waiting rotation variants
+VARIANT_OF.update({'idle_tease_fan_flustered': 'idle', 'idle_tease_self_hug_tail_swish': 'idle', 'idle_tease_desk_chin_lean': 'idle', 'idle_tease_wrist_tap_pout': 'idle', })
+# idle-tease batch 2 (art/idle-tease-2): idle/waiting rotation variants
+VARIANT_OF.update({'idle_tease_ear_cup_bop': 'idle', 'idle_tease_hips_huff_stomp': 'idle', 'idle_tease_jog_in_place': 'idle', })
+# idle-tease batch 3 (art/idle-tease-3): idle/waiting rotation variants
+VARIANT_OF.update({'idle_tease_heels_click_wink': 'idle', 'idle_tease_knee_sway_lip_trace': 'idle', 'idle_tease_collar_tug_smirk': 'idle', 'idle_tease_deep_breath_hold': 'idle', })
 VARIANT_OF.update({'stalk_prowl_right': 'walk_right', 'stalk_prowl_left': 'walk_left'})
 # idle rotation picks (lillithTaskCompletionBot / parent, 2026-10-23): short gesture loops played once per pick (variant_play_once)
 VARIANT_OF.update({c: 'idle' for c in ('smug_smirk', 'hungry_lip_lick', 'tail_wrap_pull', 'hair_lift_stretch', 'body_roll_slow')})
 # arch_back_over_shoulder / bend_forward_wink / slow_turn_spin_tease (+ _long) failed batch 15 review but stay
 # registered unchanged (lead, 2026-10-23) until a keep/remove decision; list folder names here to exclude them.
+# perch variants (Sit & Perch, 2026-10-30): start/end on perch_sit f0, seat fields in the per-clip JSON
+VARIANT_OF.update({c: 'perch_sit' for c in ('cleavage_beckon', 'chest_press_tease', 'arch_trace', 'perch_bounce_kick',
+                                            'perch_lean_cleavage_bounce', 'perch_stretch_arch', 'oops_perch_slip',
+                                            'lonely_perch_kick_feet_tease', 'lonely_perch_leg_cross_tease',
+                                            'lonely_perch_over_shoulder', 'lonely_sit_edge_lean_attention',
+                                            'lonely_perch_lie_along', 'lonely_perch_window_lean',
+                                            'lonely_perch_window_peek')})
+# 'severity' (0..=4, loneliness picker) is copied from the per-clip JSON when present (see entry()).
+# picker tags carried over from the per-clip JSON (loneliness picker / oops pool)
+PICKER_TAGS = ('oops', 'lonely_idle')
 REJECTED: set = set()
 ALIASES = {'finger_wag_tease': 'lean_tease', 'hands_behind_head_pose': 'idle_flirt_stretch', 'bounce_giggle': 'idle_flirt_shy_giggle'}
 def entry(name, folder, j, extra_tags=()):
     e = {k: j[k] for k in ('frame_count', 'frame_width', 'frame_height', 'fps', 'loop', 'baseline_y', 'anchor', 'scale',
-                           'body_anchor_x', 'facing', 'frame_durations_ms', 'canvas_compliant') if j.get(k) is not None}
+                           'body_anchor_x', 'facing', 'frame_durations_ms', 'canvas_compliant', 'severity') if j.get(k) is not None}
     e.update(name=name, placeholder=False, source=j.get('source', 'grok-imagine-video'), dir=f'{folder}/',
              sheet=f'{folder}/{folder}_sheet.png', manifest=f'{folder}/{folder}.json',
              preview=f'{folder}/{folder}_preview.gif', frames=f'{folder}/frames/',
-             tags=['baked_motion', *extra_tags])
+             tags=['baked_motion', *extra_tags, *(t for t in j.get('tags', []) if t in PICKER_TAGS and t not in extra_tags)])
     for k in ('allure', 'idle_variant'):
         if V1.get(name, {}).get(k): e[k] = True
     return e

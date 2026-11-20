@@ -7,7 +7,7 @@
 
 use lillith_core::config::{ChatConfig, LlamaServerConfig};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 
 /// Server spawn errors.
@@ -199,7 +199,7 @@ impl LlamaServer {
         let args = command_args(s, &host, port);
         let shown = masked_args(&args);
         tracing::info!(bin = %bin.display(), args = ?shown, api_key = !cfg.api_key.is_empty(), "starting llama-server");
-        let mut cmd = Command::new(&bin);
+        let mut cmd = lillith_core::proc::command(&bin);
         // Nothing from our environment may steer the server (llama.cpp reads
         // LLAMA_ARG_* for every flag, e.g. a model URL or HF repo to fetch).
         for (k, _) in std::env::vars_os() {
@@ -229,12 +229,9 @@ impl LlamaServer {
             }
             let _ = dir;
         }
-        // Windows: no console window for the server.
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-        }
+        // Windows: no console window for the server (already set by
+        // `proc::command`; kept explicit so a later flag cannot drop it).
+        lillith_core::proc::hide(&mut cmd);
         let child = cmd.spawn()?;
         Ok(Self {
             child: Some(child),

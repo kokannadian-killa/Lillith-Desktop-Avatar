@@ -236,7 +236,7 @@ No model is included: drop your `.gguf` into `bundle/models/` or `~/AI/models/`.
 
    If you'd rather use the GUI, run `./bin/lillith-settings` and open the
    **Brain** tab. That's the setup wizard, and it can also scan your disks
-   for GGUF files (the bundle's `bundle/models/`, `~/AI/models`, `~/models`, `~/Downloads`,
+   for GGUF files (the bundle's `bundle/models/`, `~/AI/models`, `~/models`, `~/.biotekengine/models`, `~/Downloads`,
    `~/.local/share/lillith/models`, `~/.cache/llama.cpp` and the LM Studio /
    Ollama folders). On a low-power CPU with 8–16 GB of RAM it recommends
    `dolphin3.0-llama3.2-3b-q4_k_m.gguf` and ranks uncensored models above

@@ -174,6 +174,12 @@ impl Settings {
     /// Saves now and tells the overlay.
     pub fn save(&mut self) {
         self.dirty_at = None;
+        // This panel has no outfit control: keep the outfit Ko picked
+        // (right-click ▸ Avatar ▸ Outfit) since it opened, instead of
+        // writing back the stale copy it loaded.
+        if let Ok(disk) = Config::load(&self.path) {
+            self.cfg.seasonal_outfit = disk.seasonal_outfit;
+        }
         match self.cfg.save(&self.path) {
             Ok(()) => {
                 self.status = format!("saved ✓  {}", self.path.display());
@@ -241,7 +247,7 @@ impl Settings {
                 ),
             ];
             for (bin, args) in tries {
-                let mut c = std::process::Command::new(bin);
+                let mut c = lillith_core::proc::command(bin);
                 c.args(args);
                 lillith_core::launch_audit::record_command("avatar_picker", &c);
                 if let Ok(out) = c.output() {
@@ -795,6 +801,36 @@ pub fn run_settings(opts: SettingsOptions) -> eframe::Result<()> {
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn saving_keeps_the_outfit_picked_meanwhile() {
+        let dir =
+            std::env::temp_dir().join(format!("lillith-settings-outfit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "seasonal_outfit = \"auto\"\n").unwrap();
+        let emit: Emit = Arc::new(|_, _| {});
+        let mut s = Settings::new(SettingsOptions {
+            config_path: path.clone(),
+            section: None,
+            avatars: None,
+            import: None,
+            emit,
+        });
+        assert_eq!(s.cfg.seasonal_outfit, "auto");
+        // Ko picks an outfit from the right-click menu while this is open.
+        lillith_core::config::save_seasonal_outfit(&path, "valentines").unwrap();
+        s.cfg.anim.playback_speed = 0.8;
+        s.save();
+        let back = Config::load(&path).unwrap();
+        assert_eq!(
+            back.seasonal_outfit, "valentines",
+            "stale copy written back"
+        );
+        assert!((back.anim.playback_speed - 0.8).abs() < 1e-6);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn edits_save_and_notify() {

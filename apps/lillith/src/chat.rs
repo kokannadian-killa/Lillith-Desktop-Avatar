@@ -28,7 +28,7 @@ use lillith_panel::chat_bubble::{
 };
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -150,7 +150,7 @@ impl Launcher {
 
     fn spawn(&self, a: ChatAnchor) -> Result<Child> {
         let exe = std::env::current_exe()?;
-        let mut cmd = Command::new(exe);
+        let mut cmd = lillith_core::proc::command(exe);
         // Top-level flags go before the subcommand.
         if let Some(c) = &self.config {
             cmd.arg("--config").arg(c);
@@ -300,6 +300,8 @@ impl ServerGuard {
     /// server started that way.
     pub async fn start(cfg: &ChatConfig) -> Self {
         let g = Self::default();
+        // Ctrl-C / SIGTERM always pull the kill switch, server or not.
+        g.stop_on_signal();
         if !cfg.enabled || !cfg.server.should_spawn() {
             return g;
         }
@@ -311,7 +313,6 @@ impl ServerGuard {
                 "llama-server not started: [chat.server] starts only after a clicked Yes on the Soul Contract card (open the chat)"
             );
         }
-        g.stop_on_signal();
         g
     }
 
@@ -398,7 +399,15 @@ impl ServerGuard {
         ServerHandle(self.0.clone())
     }
 
-    fn stop_on_signal(&self) {
+    /// Installs the Ctrl-C / SIGTERM handler: the cross-process kill switch
+    /// (commands everywhere die, dispatch stays disarmed until Re-arm), then
+    /// this guard's server stops and the process exits 130. Installed once
+    /// per process, whether or not `[chat.server]` is configured.
+    pub fn stop_on_signal(&self) {
+        static INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if INSTALLED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
         let sig = self.clone();
         tokio::spawn(async move {
             wait_for_signal().await;
@@ -566,6 +575,12 @@ pub async fn cli_chat(
     spawn_server: bool,
     no_history: bool,
 ) -> Result<()> {
+    // The overlay already reaps model-server cards a dead process left
+    // PROPOSED. `lillith chat` used to skip that scan (MEMORY.md), so a
+    // stale card stayed open until the overlay started. A card whose pid
+    // is still running is left alone (it may still be on screen).
+    SoulContract::new(mind.audit_log_path())
+        .close_orphaned_model_server_cards("orphaned PROPOSED closed by lillith chat");
     let _server = if spawn_server {
         let mut c = cfg.clone();
         c.enabled = true;
@@ -1542,7 +1557,7 @@ mod tests {
         let stop0 = lillith_core::access::kill_switch::epoch();
         // The "chat loop" is blocked running an approved command inline.
         let t = std::thread::spawn(|| {
-            let mut c = std::process::Command::new("sh");
+            let mut c = lillith_core::proc::command("sh");
             c.arg("-c").arg("sleep 1; echo still-ran");
             run_child(c, Duration::from_secs(30), 4096)
         });
@@ -1575,7 +1590,7 @@ mod tests {
         use lillith_core::access::commands::{run_child, was_stopped};
         let _g = INLINE_CMD.lock().unwrap_or_else(|e| e.into_inner());
         let t = std::thread::spawn(|| {
-            let mut c = std::process::Command::new("sh");
+            let mut c = lillith_core::proc::command("sh");
             c.arg("-c").arg("sleep 20");
             run_child(c, Duration::from_secs(30), 4096)
         });

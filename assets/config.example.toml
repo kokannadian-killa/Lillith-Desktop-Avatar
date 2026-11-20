@@ -75,6 +75,17 @@
 # intensity = 1.0        # 0 … 3 (1 = 100 %)
 # softness = 0.85        # 0 = firm … 1 = softest
 
+# [springs.jiggle]       # Settings ▸ Motion ▸ Jiggle (layered secondary motion)
+# enabled = true
+# multiplier = 1.5       # overall, 0 … 3 (1.5 = 150 %)
+# chest = 1.2            # per region, 0 … 2 (1.2 = 120 %)
+# hips = 1.2             # hips / butt
+# pigtails = 1.2         # pigtails / hair
+# tail = 1.2
+# layers = 3             # spring layers per region (primary, secondary, flutter), 1 … 3
+# build_up = 0.6         # 0 … 1: bouncing / hanging / running builds the jiggle up
+# zoom_follow = true     # push-in / close-up clips jiggle at their framing scale
+
 # ── Behaviour ────────────────────────────────────────────────────────────────
 # [behavior]
 # mood_tau_s = 45.0
@@ -89,6 +100,8 @@
 # wander_pose_chance = 0.35    # chance of an idle pose right after a walk
 # wander_pose_delay_s = 1.5
 # event_wake_priority = 80     # events at/above this priority wake her
+# follow_threshold_px = 64.0   # Follow: walk toward the cursor's x once it is this far (px)
+# wake_radius_px = 160.0       # asleep: wake when the cursor is this close to her feet (px)
 # floor_offset_px = 48         # floor (window-bottom margin) without the KWin bridge's work area
 # [behavior.gestures]
 # double_click_s = 0.35
@@ -300,6 +313,11 @@
 # proactive_interval_min = 12.0    # how often she checks
 # proactive_cooldown_min = 180.0   # same suggestion at most this often
 # proactive_max_per_hour = 2
+# After each reply, also ask the local model (the loopback [chat] endpoint
+# only, at most 4 s) which facts your message states; only your own words
+# are kept and the rule-based extractor always runs as the fallback. Off by
+# default because it adds model time after every reply.
+# llm_extract = false
 
 # Idle self-learning (docs/SELF_LEARNING.md). While you're away she reads one
 # small chunk of an installed doc (man / info pages, /usr/share/doc, the local

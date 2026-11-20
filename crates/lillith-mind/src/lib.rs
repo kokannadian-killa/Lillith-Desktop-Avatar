@@ -21,6 +21,7 @@ pub mod chat;
 pub mod fstools;
 pub mod knowledge;
 pub mod llm;
+pub mod llm_extract;
 pub mod memory;
 pub mod persona;
 pub mod server;

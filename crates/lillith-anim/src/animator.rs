@@ -32,9 +32,18 @@ use crate::atlas::{Clip, FrameRect, LoopMode, Manifest};
 use crate::player::ClipPlayer;
 use lillith_core::config::Springs;
 use lillith_core::idle::{IdleConfig, IdleCue, IdleLife};
+use lillith_core::jiggle::{framing_zoom, Drive, JiggleOffsets, Region, RegionMode};
 use lillith_core::mood::Mood;
 use lillith_core::physics_config::{PhysicsConfig, Recipe};
 use lillith_core::physics_driver::{Motion, Overlay as PhysicsOverlay, PhysicsDriver};
+
+/// Share of the tail offset folded into the whole-sprite skew when the
+/// clip has no tail layer art.
+pub const TAIL_FOLD: f32 = 0.4;
+/// Hip offset → whole-sprite sideways shift (px per px) without hip art.
+pub const HIP_FOLD_PX: f32 = 0.35;
+/// Hip offset → whole-sprite rock (rad per px) without hip art.
+pub const HIP_FOLD_RAD: f32 = 0.0015;
 use lillith_core::spring::{Channel, Physics, SpringMask, Transform};
 use std::collections::{BTreeMap, VecDeque};
 
@@ -146,6 +155,48 @@ pub const BAKED_MOTION_TAG: &str = "baked_motion";
 /// base cycles: one variant loops until the hold is over, then a new one is
 /// picked at a loop end.
 pub const VARIANT_OF_TAG: &str = "variant_of:";
+
+/// Clip tag prefix: `outfit_of:<clip>` marks a seasonal-outfit take of
+/// `<clip>` (the same move, drawn in that outfit). Together with
+/// `outfit:<id>` it makes the animator draw it in place of `<clip>` while
+/// outfit `<id>` is worn ([`Animator::set_outfit`]), whether `<clip>` is
+/// the base, an idle take, a transition or a reaction. Clips without such
+/// a take keep her base outfit (see docs/SEASONS.md, "Outfit coverage").
+pub const OUTFIT_OF_TAG: &str = "outfit_of:";
+
+/// Highest clip severity drawn as an idle take while
+/// [`Animator::set_idle_calm`] is on (a system interaction such as a Soul
+/// Contract card, or the safeword hush): flirty / sultry at most.
+pub const CALM_IDLE_SEVERITY: u8 = 2;
+
+/// Outfit id -> (clip -> its `outfit_of` take) for every clip tagged both
+/// `outfit:<id>` and `outfit_of:<clip>` whose `<clip>` exists in
+/// `manifest`. The first take by name wins if two claim the same clip.
+pub fn outfit_variant_map(manifest: &Manifest) -> BTreeMap<String, BTreeMap<String, String>> {
+    let mut m: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    for (name, clip) in &manifest.clips {
+        let Some(base) = clip
+            .tags
+            .iter()
+            .find_map(|t| t.strip_prefix(OUTFIT_OF_TAG))
+            .map(str::trim)
+        else {
+            continue;
+        };
+        if base == name || !manifest.clips.contains_key(base) {
+            continue;
+        }
+        for t in &clip.tags {
+            if let Some(id) = t.strip_prefix("outfit:") {
+                m.entry(id.trim().to_string())
+                    .or_default()
+                    .entry(base.to_string())
+                    .or_insert_with(|| name.clone());
+            }
+        }
+    }
+    m
+}
 
 /// Sultry walk takes (name prefixes + `_left` / `_right`). When a walk base
 /// has any of these among its takes, only these are drawn as walk variants
@@ -388,6 +439,11 @@ pub struct FrameRef<'a> {
     pub flip: bool,
     pub layer: Layer,
     pub transform: Transform,
+    /// Layered jiggle region offsets at this clip's framing zoom (px,
+    /// lillith_core::jiggle), screen space. Regions without layer art are
+    /// folded into `transform`; the renderer moves layered-art layers
+    /// (`lillith.layered_art.v1`, [`crate::layered_art`]) by them.
+    pub jiggle: JiggleOffsets,
     /// Mouth patch to paste over the face (true lip-sync while talking).
     pub mouth: Option<MouthDraw<'a>>,
     /// Smooth mode: the next frame of the same clip and its cross-fade
@@ -459,10 +515,29 @@ pub struct Animator {
     physics: Physics,
     /// Present when [`AnimatorConfig::physics_driver`] is on; owns the springs.
     driver: Option<PhysicsDriver>,
+    /// Clip → regions its layered art moves ([`Self::set_layered_regions`]).
+    layered: BTreeMap<String, Vec<(Region, f32)>>,
     last_key: Option<(String, usize)>,
     idle_base: String,
-    /// `variant_of:<base>` tags: base clip -> its variant clips (sorted).
+    /// Base clip -> the takes drawn for it now (sorted): its
+    /// `variant_of:<base>` clips and, for the idle base, the whole idle
+    /// pool ([`Animator::set_idle_pool`]), all under the severity cap.
     variants: BTreeMap<String, Vec<String>>,
+    /// `variant_of:<base>` tags as loaded (before the severity cap).
+    tagged_variants: BTreeMap<String, Vec<String>>,
+    /// Every pose the idle cycle may draw on the idle base.
+    idle_pool: Vec<String>,
+    /// Highest clip severity drawn as an idle take (0..=5).
+    max_severity: u8,
+    /// System interaction / hush: idle takes capped at [`CALM_IDLE_SEVERITY`].
+    idle_calm: bool,
+    /// Play-once mode: per base, the variant indices still due this round
+    /// (a shuffle bag: every take plays once before any repeats).
+    variant_bags: BTreeMap<String, Vec<usize>>,
+    /// Seasonal outfit worn now (`None` = base outfit).
+    outfit: Option<String>,
+    /// [`outfit_variant_map`] of the manifest.
+    outfit_variants: BTreeMap<String, BTreeMap<String, String>>,
     /// Per base with variants: the take drawn now and its age.
     takes: BTreeMap<String, VariantTake>,
     /// xorshift state for the variant pick (seeded from `cfg.seed`).
@@ -600,8 +675,16 @@ impl Animator {
             idle,
             physics,
             driver,
+            layered: BTreeMap::new(),
             last_key: None,
+            tagged_variants: variants.clone(),
             variants,
+            idle_pool: Vec::new(),
+            max_severity: lillith_core::loneliness::MAX_SEVERITY,
+            idle_calm: false,
+            variant_bags: BTreeMap::new(),
+            outfit: None,
+            outfit_variants: outfit_variant_map(&manifest),
             takes: BTreeMap::new(),
             variant_rng: cfg.seed | 1,
             pinned_base_frame: None,
@@ -776,10 +859,7 @@ impl Animator {
             if n == 0 {
                 return;
             }
-            match t.last {
-                Some(l) if n >= 2 => (l + 1 + (self.next_rng() % (n as u64 - 1)) as usize) % n,
-                _ => (self.next_rng() % n as u64) as usize,
-            }
+            self.next_from_bag(n, t.last)
         } else {
             if n < 2 {
                 return;
@@ -792,6 +872,169 @@ impl Animator {
         t.age = 0.0;
         self.takes.insert(self.base.clone(), t);
         self.base_player = self.base_player_for_drawn();
+    }
+
+    /// Next take of the current base from its shuffle bag: every one of its
+    /// `n` takes plays once per round, in random order, and a new round
+    /// never starts with the take that ended the last one (`last`).
+    fn next_from_bag(&mut self, n: usize, last: Option<usize>) -> usize {
+        let key = self.base.clone();
+        let due = self
+            .variant_bags
+            .get(&key)
+            .is_some_and(|b| b.iter().any(|&i| i < n));
+        if !due {
+            let mut b: Vec<usize> = (0..n).collect();
+            for i in (1..n).rev() {
+                let j = (self.next_rng() % (i as u64 + 1)) as usize;
+                b.swap(i, j);
+            }
+            // Popped from the back.
+            if n >= 2 && b.last().copied() == last {
+                b.swap(0, n - 1);
+            }
+            self.variant_bags.insert(key.clone(), b);
+        }
+        let bag = self.variant_bags.entry(key).or_default();
+        while let Some(i) = bag.pop() {
+            if i < n {
+                return i;
+            }
+        }
+        0
+    }
+
+    /// Takes of the current base still due this round (play-once mode).
+    pub fn variants_left_this_round(&self) -> usize {
+        let n = self.variants(&self.base).len();
+        self.variant_bags
+            .get(&self.base)
+            .map_or(n, |b| b.iter().filter(|&&i| i < n).count())
+    }
+
+    /// Every pose the idle cycle may draw (play-once mode): they join the
+    /// idle base's `variant_of:idle` takes, so the idle cycle plays each of
+    /// them once per round, still filtered by [`Animator::set_max_severity`].
+    /// Unknown names and base loops are ignored.
+    pub fn set_idle_pool(&mut self, pool: Vec<String>) {
+        if pool != self.idle_pool {
+            self.idle_pool = pool;
+            self.rebuild_variants();
+        }
+    }
+
+    /// The idle pool set by [`Animator::set_idle_pool`].
+    pub fn idle_pool(&self) -> &[String] {
+        &self.idle_pool
+    }
+
+    /// Highest clip severity (0..=5, `[behavior.loneliness] max_severity`)
+    /// drawn as an idle take. Lower = the explicit takes are skipped.
+    pub fn set_max_severity(&mut self, cap: u8) {
+        let cap = cap.min(lillith_core::loneliness::MAX_SEVERITY);
+        if cap != self.max_severity {
+            self.max_severity = cap;
+            self.rebuild_variants();
+        }
+    }
+
+    pub fn max_severity(&self) -> u8 {
+        self.max_severity
+    }
+
+    /// A system interaction is open or the safeword hush holds: idle takes
+    /// drop to [`CALM_IDLE_SEVERITY`] until it is over.
+    pub fn set_idle_calm(&mut self, calm: bool) {
+        if calm != self.idle_calm {
+            self.idle_calm = calm;
+            self.rebuild_variants();
+        }
+    }
+
+    /// Recomputes [`Animator::variants`] from the tags, the idle pool and
+    /// the caps. Bases whose list changed start a fresh round on the clean
+    /// clip (a take that is now over the cap stops at once).
+    fn rebuild_variants(&mut self) {
+        let cap = if self.idle_calm {
+            self.max_severity.min(CALM_IDLE_SEVERITY)
+        } else {
+            self.max_severity
+        };
+        let clips = &self.manifest.clips;
+        let ok = |n: &str| {
+            clips
+                .get(n)
+                .is_some_and(|c| c.severity <= cap && c.jiggle_of.is_none())
+        };
+        let mut map: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (base, v) in &self.tagged_variants {
+            let v: Vec<String> = v.iter().filter(|n| ok(n)).cloned().collect();
+            map.insert(base.clone(), v);
+        }
+        let idle = map.entry(self.idle_base.clone()).or_default();
+        for n in &self.idle_pool {
+            if *n != self.idle_base
+                && ok(n)
+                && !self.tagged_variants.contains_key(n)
+                && !idle.contains(n)
+            {
+                idle.push(n.clone());
+            }
+        }
+        map.retain(|_, v| {
+            v.sort();
+            v.dedup();
+            !v.is_empty()
+        });
+        if map == self.variants {
+            return;
+        }
+        let changed: Vec<String> = map
+            .keys()
+            .chain(self.variants.keys())
+            .filter(|k| map.get(*k) != self.variants.get(*k))
+            .cloned()
+            .collect();
+        self.variants = map;
+        for k in &changed {
+            self.variant_bags.remove(k);
+            if let Some(t) = self.takes.get_mut(k) {
+                t.pick = (!self.cfg.idle.variant_play_once).then_some(0);
+                t.last = None;
+            }
+        }
+        if changed.contains(&self.base) {
+            self.base_player = self.base_player_for_drawn();
+            self.pinned_base_frame = None;
+            self.sync_spring_mask();
+        }
+    }
+
+    /// Wears seasonal outfit `id` (`None` = base outfit): from now on every
+    /// clip with an `outfit_of` take for it ([`OUTFIT_OF_TAG`]) is drawn as
+    /// that take. Clips without one keep the base outfit.
+    pub fn set_outfit(&mut self, id: Option<&str>) {
+        let id = id.map(str::to_string);
+        if id != self.outfit {
+            self.outfit = id;
+            self.base_player = self.base_player_for_drawn();
+            self.pinned_base_frame = None;
+            self.sync_spring_mask();
+        }
+    }
+
+    /// The outfit worn ([`Animator::set_outfit`]).
+    pub fn outfit(&self) -> Option<&str> {
+        self.outfit.as_deref()
+    }
+
+    /// The worn outfit's take of `name`, if it has one.
+    pub fn outfit_take(&self, name: &str) -> Option<&str> {
+        self.outfit
+            .as_ref()
+            .and_then(|o| self.outfit_variants.get(o))
+            .and_then(|m| m.get(name))
+            .map(String::as_str)
     }
 
     /// Play-once mode: a variant pass ended, back to the clean base.
@@ -918,7 +1161,7 @@ impl Animator {
     /// tagged [`BAKED_MOTION_TAG`]; pigtails by their own
     /// `baked_pigtail_gain` (capped at `baked_pigtail_max_px`) when that is
     /// on, else by `baked_motion_gain` like before.
-    fn transform_for(&self, clip: &Clip) -> Transform {
+    fn transform_for(&self, name: &str, clip: &Clip) -> Transform {
         let mut t = self.physics().transform();
         // Baked-jiggle clips: their disabled springs read as rest, even
         // before the next tick parks them (see `sync_spring_mask`).
@@ -961,12 +1204,108 @@ impl Animator {
             // chest bounce > 100 %: a light engine layer over the baked art
             t.chest_offset = self.physics().layered_chest_offset();
         }
+        // Layered jiggle on top, for regions without their own layer art.
+        let j = self.jiggle_for(name, clip);
+        // A region with layer art shows up to its seam-safe px there; only
+        // the rest goes into the whole-sprite fold.
+        let fold = |r: Region| {
+            let v = j.get(r);
+            match self.layer_px(name, r) {
+                Some(px) => v - v.clamp(-px, px),
+                None => v,
+            }
+        };
+        t.chest_offset += fold(Region::Chest);
+        t.pigtail_offset += fold(Region::Pigtails) + TAIL_FOLD * fold(Region::Tail);
+        let hips = fold(Region::Hips);
+        t.x += HIP_FOLD_PX * hips;
+        t.angle += HIP_FOLD_RAD * hips;
         t
+    }
+
+    /// Layered jiggle offsets for a frame of `clip` (`name`): the driver's
+    /// [`lillith_core::jiggle::LayeredJiggle`] at the clip's framing zoom
+    /// (push-in / `cleavage_zoom` / `zoom:<f>` clips jiggle bigger). Regions
+    /// the clip's own `disable_springs` names (baked-jiggle art) stay at
+    /// rest, baked-motion regions get only the gain above 100 %; rest
+    /// everywhere without the physics driver.
+    pub fn jiggle_for(&self, name: &str, clip: &Clip) -> JiggleOffsets {
+        match &self.driver {
+            Some(d) => {
+                let zoom = framing_zoom(name, clip.tags.iter().map(String::as_str));
+                // Baked-jiggle art (`disable_springs`) owns its regions; on
+                // baked-motion art (the region's spring masked) only the
+                // gain above 100 % is added, so the bake never doubles.
+                let own = clip.spring_mask();
+                let masked = self.clip_mask(clip);
+                let ch = |r: Region| match r {
+                    Region::Chest => Channel::Chest,
+                    Region::Hips => Channel::RootX,
+                    Region::Pigtails | Region::Tail => Channel::Pigtail,
+                };
+                let j = d.jiggle().offsets_with(zoom, |r| {
+                    if own.contains(ch(r)) {
+                        RegionMode::Off
+                    } else if masked.contains(ch(r)) {
+                        RegionMode::AboveBaked
+                    } else {
+                        RegionMode::Full
+                    }
+                });
+                j
+            }
+            None => JiggleOffsets::default(),
+        }
+    }
+
+    /// `true` if `clip` has region layer art moving region `r`
+    /// ([`Self::set_layered_regions`]).
+    pub fn has_layer_art(&self, clip: &str, r: Region) -> bool {
+        self.layer_px(clip, r).is_some()
+    }
+
+    /// Px of region `r` `clip`'s layer art shows (the rest is folded).
+    fn layer_px(&self, clip: &str, r: Region) -> Option<f32> {
+        self.layered
+            .get(clip)?
+            .iter()
+            .find(|(q, _)| *q == r)
+            .map(|&(_, px)| px)
+    }
+
+    /// Registers the regions `clip`'s layer art moves (the renderer found
+    /// `lillith.layered_art.v1` art for it); those regions are no longer
+    /// folded into the whole-sprite transform up to the px each layer
+    /// shows (beyond it, the rest still is). Empty = unregister.
+    pub fn set_layered_regions(&mut self, clip: &str, regions: Vec<(Region, f32)>) {
+        if regions.is_empty() {
+            self.layered.remove(clip);
+        } else {
+            self.layered.insert(clip.to_string(), regions);
+        }
+    }
+
+    /// Regions of `clip` with no layer art yet (the renderer folds those
+    /// into the whole-sprite squash/skew).
+    pub fn missing_layer_art(&self, clip: &str) -> Vec<Region> {
+        Region::ALL
+            .into_iter()
+            .filter(|&r| !self.has_layer_art(clip, r))
+            .collect()
+    }
+
+    /// Adds the drawn art's own body velocity (layered-art torso hints,
+    /// px/s) to the layered jiggle's inertia (driver mode).
+    pub fn set_art_body_velocity(&mut self, v: (f32, f32)) {
+        if let Some(d) = &mut self.driver {
+            d.set_art_body_velocity(v);
+        }
     }
 
     /// The clip actually drawn for `name`: its baked-jiggle sibling when
     /// [`AnimatorConfig::prefer_jiggle_variants`] is on and one exists.
     fn drawn<'a>(&'a self, name: &'a str) -> &'a str {
+        let name = self.outfit_take(name).unwrap_or(name);
         if self.cfg.prefer_jiggle_variants && !self.cfg.no_jiggle_clips.iter().any(|c| c == name) {
             if let Some(v) = self.manifest.clips[name]
                 .jiggle_variant
@@ -1036,6 +1375,13 @@ impl Animator {
                 }
             }
             self.entry = None;
+            if self.base != name {
+                // Sitting down, perching, hanging, bouncing: the new base
+                // pose sets the layered jiggle off.
+                if let (Some(d), Some(drive)) = (&mut self.driver, Drive::for_clip(name)) {
+                    d.drive_jiggle(drive);
+                }
+            }
             self.base = name.to_string();
             if self.play_once() && self.takes.contains_key(name) {
                 // Play-once: (re)entering a base always starts on the clean
@@ -1415,6 +1761,11 @@ impl Animator {
         if self.overlay.is_some() || self.base != self.idle_base || self.blink_frames.is_empty() {
             return;
         }
+        // The blink frames are base-outfit art: no blink while the worn
+        // outfit's take of the base is drawn.
+        if self.outfit_take(self.drawn_base(&self.base)).is_some() {
+            return;
+        }
         let clip = &self.manifest.clips[&self.cfg.blink_clip];
         let durs = clip.frame_durations_s();
         let mut t = 0.0;
@@ -1491,6 +1842,14 @@ impl Animator {
         let clip_dt = dt * clamp_speed(self.cfg.playback_speed);
         let before = self.base_player.frame();
         self.base_player.advance(clip_dt);
+        if self.base_player.frame() < before {
+            // Looping bounce / hang clips kick every pass: the jiggle builds.
+            if let (Some(d), Some(drive)) = (&mut self.driver, Drive::for_clip(&self.base)) {
+                if drive.repeats() {
+                    d.drive_jiggle(drive);
+                }
+            }
+        }
         // Variants: at a loop end of the base once the hold is over, a new
         // random take; play-once mode returns to the base after one pass.
         if !self.variants(&self.base).is_empty() {
@@ -1634,9 +1993,11 @@ impl Animator {
         if let Some(o) = &self.overlay {
             let name = o.drawn.as_str();
             let clip = &self.manifest.clips[name];
-            let transform = self.transform_for(clip);
+            let transform = self.transform_for(name, clip);
+            let jiggle = self.jiggle_for(name, clip);
             let frame = o.player.frame().min(clip.frames.len() - 1);
             return FrameRef {
+                jiggle,
                 clip_name: name,
                 clip,
                 frame,
@@ -1663,8 +2024,10 @@ impl Animator {
                 .get_key_value(&self.cfg.blink_clip)
                 .expect("blink clip checked on start");
             let frame = bl.frames[idx].min(clip.frames.len() - 1);
-            let transform = self.transform_for(clip);
+            let transform = self.transform_for(name, clip);
+            let jiggle = self.jiggle_for(name, clip);
             return FrameRef {
+                jiggle,
                 clip_name: name,
                 clip,
                 frame,
@@ -1682,7 +2045,8 @@ impl Animator {
             .pinned_base_frame
             .unwrap_or_else(|| self.base_player.frame())
             .min(clip.frames.len() - 1);
-        let transform = self.transform_for(clip);
+        let transform = self.transform_for(name, clip);
+        let jiggle = self.jiggle_for(name, clip);
         let mouth = self.mouth.and_then(|m| {
             let clean = clip
                 .jiggle_of
@@ -1715,6 +2079,7 @@ impl Animator {
             (m, _) => m,
         };
         FrameRef {
+            jiggle,
             clip_name: name,
             clip,
             frame,
@@ -2027,6 +2392,176 @@ mod tests {
         assert_eq!(a.overlay_clip(), Some("hip_sway"));
         run(&mut a, 0.2);
         assert_eq!(a.overlay_clip(), None);
+    }
+
+    fn layered_manifest(extra: &str) -> Manifest {
+        let mut s = String::new();
+        let clips: &[(&str, usize, &str)] = &[
+            ("idle", 4, ""),
+            ("perch_sit", 4, ""),
+            ("perch_bounce_kick", 4, ""),
+            ("window_hang_swing", 4, ""),
+            (
+                "perch_push_in_wink",
+                4,
+                "tags = [\"cleavage_zoom\", \"zoom:2.0\"]\n",
+            ),
+            ("blend_drag_held_to_perch_sit", 3, ""),
+        ];
+        for (name, n, tags) in clips {
+            s += &format!(
+                "[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\nmode = \"loop\"\n{tags}frames = ["
+            );
+            for i in 0..*n {
+                s += &format!(
+                    "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                    i * 400
+                );
+            }
+            s += "]\n";
+        }
+        s += extra;
+        Manifest::from_toml_str(&s).unwrap()
+    }
+
+    fn peak_jiggle(a: &mut Animator, secs: f32) -> JiggleOffsets {
+        let mut m = JiggleOffsets::default();
+        for _ in 0..(secs * 60.0) as usize {
+            a.tick(1.0 / 60.0);
+            let j = a.current().jiggle;
+            m.chest = m.chest.max(j.chest.abs());
+            m.hips = m.hips.max(j.hips.abs());
+            m.pigtails = m.pigtails.max(j.pigtails.abs());
+            m.tail = m.tail.max(j.tail.abs());
+        }
+        m
+    }
+
+    #[test]
+    fn sit_perch_and_hang_bases_set_the_layered_jiggle_off() {
+        for clip in ["perch_sit", "window_hang_swing", "perch_bounce_kick"] {
+            let mut a = Animator::new(layered_manifest(""), driven()).unwrap();
+            peak_jiggle(&mut a, 3.0); // settle the start-up
+            a.set_base(clip, false).unwrap();
+            let p = peak_jiggle(&mut a, 1.0);
+            for r in Region::ALL {
+                assert!(p.get(r) > 1.0, "{clip}: {r:?} {p:?}");
+            }
+        }
+        // Without the driver: no layered jiggle at all.
+        let mut plain = Animator::new(layered_manifest(""), quiet()).unwrap();
+        plain.set_base("perch_sit", false).unwrap();
+        assert_eq!(peak_jiggle(&mut plain, 0.5), JiggleOffsets::default());
+    }
+
+    #[test]
+    fn outfit_of_takes_get_the_layered_jiggle_of_their_move() {
+        let mut take = String::from(
+            "[clips.halloween_perch_sit]\npage = \"h.png\"\nfps = 10.0\nmode = \"loop\"\n\
+             tags = [\"seasonal\", \"outfit:halloween\", \"outfit_of:perch_sit\", \"cleavage_zoom\"]\nframes = [",
+        );
+        for i in 0..4 {
+            take += &format!(
+                "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                i * 400
+            );
+        }
+        take += "]\n";
+        let run = |outfit: Option<&str>| {
+            let mut a = Animator::new(layered_manifest(&take), driven()).unwrap();
+            a.set_outfit(outfit);
+            peak_jiggle(&mut a, 3.0);
+            a.set_base("perch_sit", false).unwrap();
+            a.tick(1.0 / 60.0);
+            let drawn = a.current().clip_name.to_string();
+            (drawn, peak_jiggle(&mut a, 1.0), a)
+        };
+        let (plain_name, plain, _) = run(None);
+        let (name, worn, mut a) = run(Some("halloween"));
+        assert_eq!(plain_name, "perch_sit");
+        assert_eq!(name, "halloween_perch_sit");
+        // The take drives the same sit-down bounce (logical base name) and
+        // jiggles at its own push-in framing.
+        for r in Region::ALL {
+            assert!(
+                worn.get(r) > plain.get(r) * 1.3,
+                "{r:?} {worn:?} vs {plain:?}"
+            );
+        }
+        // Layer art is looked up by the drawn take, so registering it on
+        // the take takes the chest out of the whole-sprite fold.
+        let folded = |a: &Animator| a.current().transform.chest_offset;
+        peak_jiggle(&mut a, 3.0);
+        a.driver
+            .as_mut()
+            .unwrap()
+            .drive_jiggle(Drive::Land { impact: 1.0 });
+        peak_jiggle(&mut a, 0.15);
+        let with_fold = folded(&a);
+        assert!(with_fold.abs() > 0.5, "{with_fold}");
+        a.set_layered_regions("halloween_perch_sit", vec![(Region::Chest, 1000.0)]);
+        assert!(a.has_layer_art("halloween_perch_sit", Region::Chest));
+        assert!(!a.has_layer_art("perch_sit", Region::Chest));
+        let j = a.current().jiggle.chest;
+        assert!((with_fold - folded(&a) - j).abs() < 1e-4, "{with_fold} {j}");
+        // A layer that only shows 1 px leaves the rest in the fold.
+        a.set_layered_regions("halloween_perch_sit", vec![(Region::Chest, 1.0)]);
+        assert!((with_fold - folded(&a) - j.clamp(-1.0, 1.0)).abs() < 1e-4);
+    }
+
+    #[test]
+    fn looping_bounce_builds_up_every_pass() {
+        let mut a = Animator::new(layered_manifest(""), driven()).unwrap();
+        peak_jiggle(&mut a, 3.0);
+        a.set_base("perch_bounce_kick", false).unwrap();
+        a.tick(1.0 / 60.0);
+        let e0 = a.driver().unwrap().jiggle().energy(Region::Chest);
+        // 4 frames at 10 fps: a pass every 0.4 s.
+        peak_jiggle(&mut a, 1.7);
+        let e1 = a.driver().unwrap().jiggle().energy(Region::Chest);
+        assert!(e1 > e0 * 1.5, "energy builds: {e0} -> {e1}");
+    }
+
+    #[test]
+    fn push_in_clips_jiggle_at_their_framing_zoom() {
+        let mut a = Animator::new(layered_manifest(""), driven()).unwrap();
+        a.set_base("perch_sit", false).unwrap();
+        for _ in 0..8 {
+            a.tick(1.0 / 60.0);
+        }
+        let d = a.driver().unwrap();
+        let clips = &a.manifest().clips;
+        let plain = a.jiggle_for("perch_sit", &clips["perch_sit"]);
+        let zoomed = a.jiggle_for("perch_push_in_wink", &clips["perch_push_in_wink"]);
+        assert_eq!(plain, d.jiggle().offsets(1.0));
+        assert!(plain.chest.abs() > 0.1);
+        assert!((zoomed.chest - 2.0 * plain.chest).abs() < 1e-4);
+    }
+
+    #[test]
+    fn layer_art_takes_its_region_out_of_the_whole_sprite_fold() {
+        let mut with = Animator::new(layered_manifest(""), driven()).unwrap();
+        let mut without = Animator::new(layered_manifest(""), driven()).unwrap();
+        with.set_layered_regions("perch_sit", vec![(Region::Chest, 1000.0)]);
+        assert!(with.has_layer_art("perch_sit", Region::Chest));
+        assert!(!with.has_layer_art("perch_sit", Region::Tail));
+        assert_eq!(without.missing_layer_art("perch_sit"), Region::ALL.to_vec());
+        assert_eq!(with.missing_layer_art("perch_sit").len(), 3);
+        for a in [&mut with, &mut without] {
+            a.set_base("perch_sit", false).unwrap();
+            for _ in 0..10 {
+                a.tick(1.0 / 60.0);
+            }
+        }
+        let (fw, fo) = (with.current(), without.current());
+        assert_eq!(fw.jiggle, fo.jiggle);
+        assert!(fw.jiggle.chest.abs() > 0.5);
+        let d = fo.transform.chest_offset - fw.transform.chest_offset;
+        assert!(
+            (d - fo.jiggle.chest).abs() < 1e-4,
+            "{d} vs {}",
+            fo.jiggle.chest
+        );
     }
 
     fn driven() -> AnimatorConfig {
@@ -2889,6 +3424,195 @@ mod tests {
         assert_eq!(seen, vec![(0, 0), (1, 1), (2, 2), (3, 2), (4, 2)]);
         // Same length as the clean clip (600 ms), not cut at 3 frames.
         assert!((t - 0.6).abs() < 0.03, "reaction lasted {t}s");
+        assert_eq!(a.current().clip_name, "idle");
+    }
+
+    /// `(name, frames, severity, tags)` clips, 10 fps loops.
+    fn rated_manifest(clips: &[(&str, usize, u8, &str)]) -> Manifest {
+        let mut s = String::new();
+        for (name, n, sev, tags) in clips {
+            s += &format!("[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\nmode = \"loop\"\nseverity = {sev}\ntags = {tags}\nframes = [");
+            for i in 0..*n {
+                s += &format!(
+                    "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                    i * 400
+                );
+            }
+            s += "]\n";
+        }
+        Manifest::from_toml_str(&s).unwrap()
+    }
+
+    fn rated_set() -> Manifest {
+        rated_manifest(&[
+            ("idle", 4, 0, "[]"),
+            ("idle_yawn", 3, 0, "[\"variant_of:idle\"]"),
+            ("idle_tease_wink", 3, 3, "[\"variant_of:idle\"]"),
+            ("wave", 3, 0, "[]"),
+            ("hip_pop_wink", 3, 1, "[]"),
+            ("chest_press_tease", 3, 3, "[]"),
+            ("oops_drop_bend", 3, 4, "[]"),
+            ("lonely_perch_lie_along", 3, 5, "[]"),
+            ("sit_swing", 4, 0, "[]"),
+            ("sit_heel_kick", 3, 0, "[\"variant_of:sit_swing\"]"),
+        ])
+    }
+
+    const RATED_POOL: &[&str] = &[
+        "chest_press_tease",
+        "hip_pop_wink",
+        "lonely_perch_lie_along",
+        "oops_drop_bend",
+        "wave",
+    ];
+
+    /// Idle takes drawn over `secs` (each pass once, in order).
+    fn idle_takes(a: &mut Animator, secs: f32) -> Vec<String> {
+        let mut played = Vec::new();
+        let mut last: Option<String> = None;
+        for _ in 0..(secs * 60.0) as usize {
+            a.tick(1.0 / 60.0);
+            let v = a.idle_variant().map(str::to_string);
+            if v != last {
+                if let Some(v) = &v {
+                    played.push(v.clone());
+                }
+                last = v;
+            }
+        }
+        played
+    }
+
+    #[test]
+    fn idle_cycle_plays_every_clip_once_per_round_r_and_xxx_included() {
+        let mut cfg = quiet();
+        cfg.idle.variant_hold_s = 0.0;
+        let mut a = Animator::new(rated_set(), cfg).unwrap();
+        assert_eq!(a.variants("idle"), ["idle_tease_wink", "idle_yawn"]);
+        let pool: Vec<String> = RATED_POOL
+            .iter()
+            .chain(&["sit_swing", "idle", "no_such_clip"])
+            .map(|s| s.to_string())
+            .collect();
+        a.set_idle_pool(pool);
+        let mut all: Vec<&str> = RATED_POOL.to_vec();
+        all.extend(["idle_tease_wink", "idle_yawn"]);
+        all.sort();
+        // Base loops (another base, the idle itself) and unknown names stay out.
+        assert_eq!(a.variants("idle"), all.as_slice());
+        let played = idle_takes(&mut a, 60.0);
+        assert!(played.len() >= 3 * all.len(), "{played:?}");
+        // Shuffle bag: every round of 7 has each clip exactly once, so the
+        // R-rated (3-4) and XXX (5) takes come up like the rest.
+        for round in played.chunks_exact(all.len()) {
+            let mut r: Vec<&str> = round.iter().map(String::as_str).collect();
+            r.sort();
+            assert_eq!(r, all, "{played:?}");
+        }
+        assert!(played.windows(2).all(|w| w[0] != w[1]), "{played:?}");
+        // Other bases keep their own tagged takes only.
+        assert_eq!(a.variants("sit_swing"), ["sit_heel_kick"]);
+    }
+
+    #[test]
+    fn idle_cycle_keeps_the_rating_cap_and_calms_down() {
+        let mut cfg = quiet();
+        cfg.idle.variant_hold_s = 0.0;
+        let mut a = Animator::new(rated_set(), cfg).unwrap();
+        a.set_idle_pool(RATED_POOL.iter().map(|s| s.to_string()).collect());
+        assert_eq!(a.max_severity(), 5, "default: everything");
+        a.set_max_severity(2);
+        assert_eq!(a.variants("idle"), ["hip_pop_wink", "idle_yawn", "wave"]);
+        let played = idle_takes(&mut a, 20.0);
+        assert!(played.len() > 6, "{played:?}");
+        let rated = |a: &Animator, c: &str| a.manifest().clips[c].severity;
+        assert!(played.iter().all(|c| rated(&a, c) <= 2), "{played:?}");
+        // A cap of 4 brings the R-rated back, still no XXX.
+        a.set_max_severity(4);
+        assert!(a.variants("idle").contains(&"oops_drop_bend".to_string()));
+        assert!(!a
+            .variants("idle")
+            .contains(&"lonely_perch_lie_along".to_string()));
+        // Calm (system interaction / hush) caps at 2 whatever the setting.
+        a.set_max_severity(5);
+        a.set_idle_calm(true);
+        assert!(a
+            .variants("idle")
+            .iter()
+            .all(|c| rated(&a, c) <= CALM_IDLE_SEVERITY));
+        assert!(a
+            .idle_variant()
+            .is_none_or(|c| rated(&a, c) <= CALM_IDLE_SEVERITY));
+        a.set_idle_calm(false);
+        assert_eq!(a.variants("idle").len(), 7);
+    }
+
+    fn outfit_set() -> Manifest {
+        rated_manifest(&[
+            ("idle", 4, 0, "[]"),
+            ("blink_wink", 3, 0, "[]"),
+            ("wave", 3, 0, "[]"),
+            ("blow_kiss", 3, 1, "[]"),
+            (
+                "halloween_idle",
+                4,
+                0,
+                "[\"seasonal\", \"outfit:halloween\", \"outfit_of:idle\"]",
+            ),
+            (
+                "halloween_wave",
+                5,
+                0,
+                "[\"seasonal\", \"outfit:halloween\", \"outfit_of:wave\"]",
+            ),
+            (
+                "xmas_wave",
+                6,
+                0,
+                "[\"seasonal\", \"outfit:xmas\", \"outfit_of:wave\"]",
+            ),
+            (
+                "halloween_hat_tip_wink",
+                3,
+                2,
+                "[\"seasonal\", \"outfit:halloween\"]",
+            ),
+        ])
+    }
+
+    #[test]
+    fn worn_outfit_is_drawn_on_every_clip_that_has_a_take() {
+        let map = outfit_variant_map(&outfit_set());
+        assert_eq!(map["halloween"]["idle"], "halloween_idle");
+        assert_eq!(map["xmas"]["wave"], "xmas_wave");
+        assert!(!map["halloween"].contains_key("blow_kiss"));
+        let mut a = Animator::new(outfit_set(), quiet()).unwrap();
+        assert_eq!(a.current().clip_name, "idle");
+        a.set_outfit(Some("halloween"));
+        assert_eq!(a.outfit(), Some("halloween"));
+        assert_eq!(a.current().clip_name, "halloween_idle", "base");
+        a.react("wave", 50).unwrap();
+        assert_eq!(a.current().clip_name, "halloween_wave", "reaction");
+        assert_eq!(a.overlay_clip(), Some("wave"), "still the wave move");
+        for _ in 0..120 {
+            a.tick(1.0 / 60.0);
+        }
+        // No take yet: base outfit for that clip.
+        a.react("blow_kiss", 60).unwrap();
+        assert_eq!(a.current().clip_name, "blow_kiss");
+        for _ in 0..120 {
+            a.tick(1.0 / 60.0);
+        }
+        // Stays on across clip changes until the outfit changes.
+        assert_eq!(a.current().clip_name, "halloween_idle");
+        // Base-outfit blink frames never flash over it.
+        a.blink();
+        assert_eq!(a.current().clip_name, "halloween_idle");
+        a.set_outfit(Some("xmas"));
+        assert_eq!(a.current().clip_name, "idle", "xmas has no idle take");
+        assert_eq!(a.drawn_clip("wave"), "xmas_wave");
+        a.set_outfit(None);
+        assert_eq!(a.drawn_clip("wave"), "wave");
         assert_eq!(a.current().clip_name, "idle");
     }
 }

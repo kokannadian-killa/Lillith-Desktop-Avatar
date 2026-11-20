@@ -317,21 +317,39 @@ peak in key mode is about 160 MB. isnet needs the cap to be ≥ 1100 MB to be pi
 
 ### Model
 
-The isnet-anime model (176 MB, sha256 `f15622d8…1a6e99`) is **not** in the repo and is never fetched. The
-installers bundle it: Arch `lillith-bin` puts it in `/opt/lillith/models/rembg/`, the Windows setup in
-`<install folder>\models\rembg\`. `tools/video-pipeline/matte_model.py` is the one place that resolves it
-(paths.py, matte_v2, key_white, build_clip, new_pose and user_import all use it) and sets `U2NET_HOME` to that
-folder for any child process. Lookup order, first file with the exact size (176,069,933 bytes) wins, so a
-half-finished copy is never used:
+The isnet-anime model (176 MB, sha256 `f15622d8…1a6e99`) is **not** in git (not even Git LFS) and is never
+downloaded. The installers bundle it at pack time with `tools/release/stage-matte-model.sh <models dir>`, which
+checks the size and sha256 (the constants in `matte_model.py`) and writes `<models dir>/rembg/isnet-anime.onnx`:
 
-1. `--model <file>` (or a folder holding `isnet-anime.onnx`)
-2. `$U2NET_HOME/isnet-anime.onnx` (`%U2NET_HOME%` on Windows)
-3. the installer's copy, `<install>/models/rembg/isnet-anime.onnx`, found relative to the script
-   (`tools/video-pipeline/../../models/rembg`)
-4. `/opt/lillith/models/rembg/isnet-anime.onnx` (Linux only)
-5. `<home>/.u2net/isnet-anime.onnx` (rembg's own folder)
-6. `<home>/.rembg/models/isnet-anime/isnet-anime.onnx`, where home is Python's `Path.home()`: `~` on
-   Linux/macOS, `%USERPROFILE%` on Windows (e.g. `C:\Users\Ko\.rembg\models\isnet-anime\isnet-anime.onnx`)
+| Payload | `<models dir>` | Installed at |
+|---|---|---|
+| Arch package (`linux/PKGBUILD`, the `lillith-bin` kit) | `$pkgdir/opt/lillith/models` | `/opt/lillith/models/rembg/` |
+| Windows Setup.exe (`windows/build.sh`) | `<stage>/models` | `<install folder>\models\rembg\` |
+| all-in-one zip (`tools/bundle/make-bundle.sh`) | `<zip root>/models` | `linux/install.sh` copies it (sha256-checked) to `~/.local/share/lillith/models/rembg/` |
+
+**Where the release packer gets the file:** `$LILLITH_MATTE_MODEL` (path to a verified `isnet-anime.onnx`),
+else the build box's copy `/workspace/lillith/matte-dl/isnet-anime.onnx`. `windows/build.sh` and
+`make-bundle.sh` fail when neither exists (or the checksum is wrong) unless `NO_MATTE_MODEL=1`; the source-build
+`PKGBUILD` stages it when present and warns otherwise. Windows also ships `tools\video-pipeline\*.py`, and the
+uninstaller removes `models\rembg\isnet-anime.onnx` (other files in `models\` stay). Android has no Pose
+Builder and no matting, so nothing is bundled there.
+
+`tools/video-pipeline/matte_model.py` is the one place that resolves it (paths.py, matte_v2, key_white,
+build_clip, new_pose and user_import all use it) and sets `U2NET_HOME` to that folder for any child process.
+Lookup order, first file with the exact size (176,069,933 bytes) wins, so a half-finished copy is never used.
+Each models dir is tried as `<dir>/rembg/isnet-anime.onnx`, then `<dir>/isnet-anime.onnx`:
+
+1. `--model <file>` (or a folder holding `isnet-anime.onnx`). Pose Builder passes the install's copy here when
+   it finds one next to `lillith-settings` (`<exe>/models`, `<exe>/../models`), in `/opt/lillith/models`
+   (Linux) or in the user data dir.
+2. the install's own models dir: `/opt/lillith/models` (Linux)
+3. the repo/dev (or Windows install) models dir, relative to the script: `tools/video-pipeline/../../models`
+4. the user data dir: `~/.local/share/lillith/models` (`$XDG_DATA_HOME`), `%LOCALAPPDATA%\lillith\models` on
+   Windows
+5. `<home>/.rembg/models/isnet-anime/isnet-anime.onnx`, where home is Python's `Path.home()`
+   (`%USERPROFILE%` on Windows)
+6. `<home>/.u2net/isnet-anime.onnx` (rembg's own folder)
+7. `$U2NET_HOME/isnet-anime.onnx` (`%U2NET_HOME%`), last
 
 rembg is no longer needed: the mask is computed with onnxruntime directly, the same way rembg's isnet-anime
 session does it. `python3 tools/video-pipeline/matte_model.py [--json] [--verify]` prints what is missing
@@ -339,7 +357,8 @@ session does it. `python3 tools/video-pipeline/matte_model.py [--json] [--verify
 one JSON line, and `build_clip.py`, `matte_v2.py` and `new_pose.py` exit 2 with that message instead of a
 traceback.
 
-With `--matte isnet` and no file found, the run fails with an `error` that lists every path it tried. With
+With `--matte isnet` and no file found, the run fails with an `error` that lists every path it tried, in
+order, and says where to put the file (`/opt/lillith/models/rembg/` with sudo, or the user data dir without). With
 `auto`, it falls back to the backdrop key (plain or solid backdrops only) and the log line says which paths were
 tried.
 

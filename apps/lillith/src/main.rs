@@ -390,6 +390,12 @@ async fn app_main() -> Result<()> {
     log.with_writer(std::io::stderr).init();
 
     let cli = Cli::parse();
+    // Join the per-user cross-process stop barrier: a Stop / Ctrl-C / kill
+    // switch in any Lillith process (e.g. the detached settings window)
+    // reaches this one's commands, and ours reach theirs. Local files only.
+    if let Err(e) = lillith_core::access::kill_switch::join_session() {
+        tracing::warn!("cross-process stop unavailable (stops stay in this process): {e}");
+    }
     let rules = RuleSet::bundled();
 
     match cli.command {
@@ -1288,7 +1294,7 @@ fn ensure_voice_daemon(configured: Option<&std::path::Path>) {
         .map(String::from)
         .to_vec();
     lillith_core::launch_audit::record("voice-daemon", &argv);
-    let status = std::process::Command::new(&argv[0])
+    let status = lillith_core::proc::command(&argv[0])
         .args(&argv[1..])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -1562,6 +1568,7 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     // events: activity pauses it; `chat.safeword` doesn't touch it (the
     // safeword only hushes her voice), Ctrl-C / stop drops a step.
     let learner = learn_wiring::start(&cfg, !cli.no_llm);
+    let _share = learn_wiring::start_share(&cfg);
     let tx = learn_wiring::tee(tx, learner.as_ref());
     // Dream learning (P7): right-click "Dream learning…" / `/dream` in the
     // bubble open its card; her lines go out as speech on the feed.
@@ -1581,7 +1588,10 @@ async fn run_overlay(cli: &Cli, rules: usize) -> Result<()> {
     let server = if chat_on && !cli.no_llm {
         chat::ServerGuard::start(&cfg.chat).await
     } else {
-        chat::ServerGuard::default()
+        let g = chat::ServerGuard::default();
+        // Ctrl-C / SIGTERM stop commands even with chat off.
+        g.stop_on_signal();
+        g
     };
     let launcher = chat_on.then(|| {
         let l = chat::Launcher::new(tx.clone(), cli.config.clone(), cli.no_llm)

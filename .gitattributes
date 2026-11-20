@@ -11,18 +11,18 @@ assets/**/*.wav  filter=lfs diff=lfs merge=lfs -text
 assets/**/*.ogg  filter=lfs diff=lfs merge=lfs -text
 assets/**/*.flac filter=lfs diff=lfs merge=lfs -text
 assets/**/*.gguf filter=lfs diff=lfs merge=lfs -text
-
 # Text config stays as normal text
 *.toml text eol=lf
 *.rs   text eol=lf
 *.js   text eol=lf
 *.md   text eol=lf
 master.zip filter=lfs diff=lfs merge=lfs -text
-
 # Windows scripts
 *.bat text eol=crlf
 *.ps1 text eol=crlf
-
 # Python sidecar (attachments + bots backend) is dev/source only: keep it out of
 # release/source archives (git archive, GitHub "Download ZIP").
 tools/lillith-py export-ignore
+assets/generated/**/*.png filter=lfs diff=lfs merge=lfs -text
+assets/generated/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+assets/source/video/**/*.mp4 filter=lfs diff=lfs merge=lfs -text

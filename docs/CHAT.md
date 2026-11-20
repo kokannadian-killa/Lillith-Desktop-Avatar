@@ -249,8 +249,17 @@ LILLITH_LLAMA_BIN=/path/llama-server LILLITH_LLAMA_GGUF=/path/model.gguf \
 
 ### Known limits
 
-- **Wayland:** normal windows can't position themselves, so the compositor decides
-  where the bubble appears (KWin usually centres it). With X11/XWayland it opens next
-  to her head. A layer-shell bubble would fix this later.
+- **Wayland:** the click-to-chat window is a separate `eframe` process
+  (`lillith chat-bubble --x --y`). `xdg-toplevel` windows cannot set their
+  own position, so KWin usually centres the bubble instead of placing it
+  next to her head. The overlay already positions its right-click menu with
+  a `zwlr_layer_shell_v1` surface (anchor + margins) or an `xdg_popup` on
+  her layer surface; the chat bubble would need the same kind of surface
+  (not an XWayland fallback, which would stack under her Overlay-layer
+  window and could eat clicks). That path is not wired yet and needs a
+  real KDE Plasma 6 Wayland session to verify placement, stacking, input
+  and HiDPI. With X11, `with_position` works and the bubble opens beside
+  her head. The on-overlay speech bubble (`[chat] overlay_speech`) is
+  already drawn in her layer surface and does not have this problem.
 - Closing on a click outside relies on focus-out events. Window managers with
   focus-stealing prevention may need a click into the bubble first.

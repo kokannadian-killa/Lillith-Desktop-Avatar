@@ -215,6 +215,14 @@ mkdir -p "$PKG/bundle/llama" "$PKG/bundle/models"
 for p in "${PLATS[@]}"; do cp -a "$ROOT/bundle/llama/$p" "$PKG/bundle/llama/"; done
 cp "$LOCK" "$PKG/bundle/llama/llama.lock"
 cp "$ROOT/bundle/models/README.txt" "$PKG/bundle/models/README.txt"
+# Pose Builder's AI cut-out model (isnet-anime.onnx, sha256-checked; never in
+# git, never downloaded): models/rembg/, where linux/install.sh and the
+# pipeline (tools/video-pipeline/../../models) look. Source:
+# $LILLITH_MATTE_MODEL, else /workspace/lillith/matte-dl/isnet-anime.onnx.
+# NO_MATTE_MODEL=1 leaves it out.
+if [[ "${NO_MATTE_MODEL:-}" != 1 ]]; then
+  bash "$ROOT/tools/release/stage-matte-model.sh" "$PKG/models"
+fi
 cat >"$PKG/bundle/README.txt" <<TXT
 Lillith all-in-one bundle
 =========================
@@ -227,6 +235,8 @@ bundle/llama/<platform>/  llama.cpp $TAG llama-server (official prebuilt,
   windows-x64       CPU (AVX2 etc.); needs the Microsoft Visual C++ 2015-2022
                     Redistributable (x64), which most Windows PCs already have
 bundle/models/            put your .gguf here (no model is included)
+models/rembg/             isnet-anime.onnx, Pose Builder's AI cut-out
+                          (sha256 f15622d8...1a6e99; installed for you)
 
 The setup wizard finds the bundled llama-server and models first. Lillith
 starts llama-server on 127.0.0.1:8080 only. Nothing downloads, ever.
