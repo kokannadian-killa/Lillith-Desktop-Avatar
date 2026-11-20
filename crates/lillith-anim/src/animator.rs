@@ -169,6 +169,17 @@ pub const OUTFIT_OF_TAG: &str = "outfit_of:";
 /// Contract card, or the safeword hush): flirty / sultry at most.
 pub const CALM_IDLE_SEVERITY: u8 = 2;
 
+/// Dedicated stand → sit transition clip (`idle_a[0]` → `sit_swing[0]`).
+/// [`Animator::sit_down`] plays it instead of a generic
+/// `blend_<base>_to_<sit>` helper whenever its `[blend]` goes from the
+/// current base to the sit being taken; without it (older clip packs) the
+/// helper blend is used as before.
+pub const SIT_DOWN_CLIP: &str = "sit_down";
+
+/// Dedicated sit → stand transition clip (the reverse of [`SIT_DOWN_CLIP`]),
+/// preferred by [`Animator::stand_blended`] the same way.
+pub const STAND_UP_CLIP: &str = "stand_up";
+
 /// Outfit id -> (clip -> its `outfit_of` take) for every clip tagged both
 /// `outfit:<id>` and `outfit_of:<clip>` whose `<clip>` exists in
 /// `manifest`. The first take by name wins if two claim the same clip.
@@ -1517,6 +1528,23 @@ impl Animator {
             .map(|(n, _)| n.clone())
     }
 
+    /// The transition from `from` to `to`: the dedicated clip `dedicated`
+    /// ([`SIT_DOWN_CLIP`] / [`STAND_UP_CLIP`]) when its `[blend]` matches,
+    /// else [`Self::blend_between`] (e.g. `blend_idle_to_sit_swing`).
+    fn transition_between(&self, from: &str, to: &str, dedicated: &str) -> Option<String> {
+        let own = self
+            .manifest
+            .clips
+            .get(dedicated)
+            .and_then(|c| c.blend.as_ref())
+            .is_some_and(|b| b.from == from && b.to == to);
+        if own {
+            Some(dedicated.to_string())
+        } else {
+            self.blend_between(from, to)
+        }
+    }
+
     /// `root_motion` of the drawn clip `name` (or of the clean clip a
     /// baked-jiggle sibling was made from).
     fn root_motion_of(&self, name: &str) -> Option<&[f32]> {
@@ -1583,15 +1611,16 @@ impl Animator {
     }
 
     /// Switches the base to the seated clip `name` and plays the manifest's
-    /// `<base> -> name` blend over it when there is one (and nothing else is
-    /// playing). Returns the blend's length in seconds.
+    /// `<base> -> name` transition over it when there is one (and nothing
+    /// else is playing): [`SIT_DOWN_CLIP`] when it leads there, else a
+    /// `blend_<base>_to_<name>` helper. Returns its length in seconds.
     pub fn sit_down(&mut self, name: &str) -> Result<Option<f32>, AnimError> {
         let from = self.base.clone();
         self.set_base(name, false)?;
         if self.overlay.is_some() {
             return Ok(None);
         }
-        let Some(b) = self.blend_between(&from, name) else {
+        let Some(b) = self.transition_between(&from, name, SIT_DOWN_CLIP) else {
             return Ok(None);
         };
         let dur = ClipPlayer::for_clip(&self.manifest.clips[&b]).duration_s();
@@ -1623,8 +1652,10 @@ impl Animator {
     }
 
     /// [`Self::stand`] from a seated (non-walk) base through its
-    /// `<base> -> idle` blend when the manifest has one. Returns the blend's
-    /// length in seconds (`None`: a plain [`Self::stand`]).
+    /// `<base> -> idle` transition when the manifest has one
+    /// ([`STAND_UP_CLIP`] when it leads there, else a `blend_<base>_to_idle`
+    /// helper). Returns its length in seconds (`None`: a plain
+    /// [`Self::stand`]).
     pub fn stand_blended(&mut self) -> Option<f32> {
         if self.stopping.is_none()
             && self.base != self.idle_base
@@ -1632,7 +1663,7 @@ impl Animator {
             && footfall_for(&self.base).is_none()
         {
             let (base, idle) = (self.base.clone(), self.idle_base.clone());
-            if let Some(b) = self.blend_between(&base, &idle) {
+            if let Some(b) = self.transition_between(&base, &idle, STAND_UP_CLIP) {
                 let dur = ClipPlayer::for_clip(&self.manifest.clips[&b]).duration_s();
                 self.finish_stand(Some(b));
                 return Some(dur);
@@ -2170,6 +2201,115 @@ mod tests {
         for _ in 0..(secs * 60.0).round() as usize {
             a.tick(1.0 / 60.0);
         }
+    }
+
+    /// `[clips.<name>]` of `n` frames at `fps` (+ a `[blend]` from → to).
+    fn seat_clip(name: &str, n: usize, fps: f32, blend: Option<(&str, &str)>) -> String {
+        let mode = if blend.is_some() { "once" } else { "loop" };
+        let mut s = format!(
+            "[clips.{name}]\npage = \"{name}.png\"\nfps = {fps:.1}\nmode = \"{mode}\"\nframes = ["
+        );
+        for i in 0..n {
+            s += &format!(
+                "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                i * 400
+            );
+        }
+        s += "]\n";
+        if let Some((from, to)) = blend {
+            s += &format!(
+                "[clips.{name}.blend]\nfrom = \"{from}\"\nto = \"{to}\"\nfrom_frame = 0\nto_frame = 0\n"
+            );
+        }
+        s
+    }
+
+    #[test]
+    fn sit_down_and_stand_up_clips_replace_the_blend_helpers() {
+        // The old helper path: 6-frame blends at 10 fps (0.6 s).
+        let helpers = [
+            seat_clip("idle", 4, 10.0, None),
+            seat_clip("sit_swing", 4, 10.0, None),
+            seat_clip(
+                "blend_idle_to_sit_swing",
+                6,
+                10.0,
+                Some(("idle", "sit_swing")),
+            ),
+            seat_clip(
+                "blend_sit_swing_to_idle",
+                6,
+                10.0,
+                Some(("sit_swing", "idle")),
+            ),
+        ]
+        .concat();
+        // The dedicated transitions: 24 frames at 12 fps (2 s).
+        let dedicated = [
+            seat_clip(SIT_DOWN_CLIP, 24, 12.0, Some(("idle", "sit_swing"))),
+            seat_clip(STAND_UP_CLIP, 24, 12.0, Some(("sit_swing", "idle"))),
+        ]
+        .concat();
+        let close = |a: Option<f32>, b: f32| a.is_some_and(|a| (a - b).abs() < 1e-3);
+
+        // stand → sit plays sit_down over the sit base, then the base alone.
+        let m = Manifest::from_toml_str(&format!("{helpers}{dedicated}")).unwrap();
+        let mut a = Animator::new(m, quiet()).unwrap();
+        let down = a.sit_down("sit_swing").unwrap();
+        assert!(close(down, 2.0), "{down:?}");
+        assert_eq!(a.base(), "sit_swing");
+        assert_eq!(a.overlay_clip(), Some(SIT_DOWN_CLIP));
+        run(&mut a, 2.2);
+        assert_eq!(a.overlay_clip(), None);
+        assert_eq!(a.base(), "sit_swing");
+        // sit → stand plays stand_up over idle.
+        let up = a.stand_blended();
+        assert!(close(up, 2.0), "{up:?}");
+        assert_eq!(a.base(), "idle");
+        assert_eq!(a.overlay_clip(), Some(STAND_UP_CLIP));
+        run(&mut a, 2.2);
+        assert_eq!(a.overlay_clip(), None);
+        assert_eq!(a.base(), "idle");
+
+        // Older clip packs without them: the helper blends, as before.
+        let m = Manifest::from_toml_str(&helpers).unwrap();
+        let mut a = Animator::new(m, quiet()).unwrap();
+        assert!(close(a.sit_down("sit_swing").unwrap(), 0.6));
+        assert_eq!(a.overlay_clip(), Some("blend_idle_to_sit_swing"));
+        run(&mut a, 1.0);
+        assert!(close(a.stand_blended(), 0.6));
+        assert_eq!(a.overlay_clip(), Some("blend_sit_swing_to_idle"));
+
+        // sit_down / stand_up that do not lead between these clips (here
+        // into and out of another seat) are not used for sit_swing.
+        let other = [
+            seat_clip("perch_sit", 4, 10.0, None),
+            seat_clip(SIT_DOWN_CLIP, 24, 12.0, Some(("idle", "perch_sit"))),
+            seat_clip(STAND_UP_CLIP, 24, 12.0, Some(("perch_sit", "idle"))),
+        ]
+        .concat();
+        let m = Manifest::from_toml_str(&format!("{helpers}{other}")).unwrap();
+        let mut a = Animator::new(m, quiet()).unwrap();
+        a.sit_down("sit_swing").unwrap();
+        assert_eq!(a.overlay_clip(), Some("blend_idle_to_sit_swing"));
+        run(&mut a, 1.0);
+        a.stand_blended();
+        assert_eq!(a.overlay_clip(), Some("blend_sit_swing_to_idle"));
+
+        // No transition at all: straight into the sit and back up.
+        let m = Manifest::from_toml_str(
+            &[
+                seat_clip("idle", 4, 10.0, None),
+                seat_clip("sit_swing", 4, 10.0, None),
+            ]
+            .concat(),
+        )
+        .unwrap();
+        let mut a = Animator::new(m, quiet()).unwrap();
+        assert_eq!(a.sit_down("sit_swing").unwrap(), None);
+        assert_eq!((a.base(), a.overlay_clip()), ("sit_swing", None));
+        assert_eq!(a.stand_blended(), None);
+        assert_eq!((a.base(), a.overlay_clip()), ("idle", None));
     }
 
     #[test]

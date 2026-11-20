@@ -140,6 +140,41 @@ pub fn sit_clips(m: &Manifest) -> Vec<String> {
         .collect()
 }
 
+/// Clip tag: a hang base a perch may pick instead of a sit (e.g.
+/// `hang_from_window`): she hangs from the window's top edge by her hands
+/// instead of standing or sitting on it. Needs a looping clip with a
+/// [`HANG_GRIP_POINT`] above its feet anchor.
+pub const HANG_BASE_TAG: &str = "hang_base";
+
+/// Clip point a hang base grips the window edge with (`points.grab_point`,
+/// cell px): her window drops so this point sits on the window top.
+pub const HANG_GRIP_POINT: &str = "grab_point";
+
+/// Hang bases a perch may pick: looping [`HANG_BASE_TAG`] clips with a
+/// [`hang_cell`] and at most `max_severity` (sorted; empty without any).
+pub fn hang_clips(m: &Manifest, max_severity: u8) -> Vec<String> {
+    m.clips
+        .iter()
+        .filter(|(_, c)| {
+            c.has_tag(HANG_BASE_TAG)
+                && c.mode == lillith_anim::atlas::LoopMode::Loop
+                && c.severity <= max_severity
+                && hang_cell(c).is_some()
+        })
+        .map(|(n, _)| n.clone())
+        .collect()
+}
+
+/// A hang's grip above its feet anchor in cell px (`anchor y - grab_point
+/// y` of the first frame, like [`seat_cell`]): her window drops this × the
+/// overlay scale so the grip is on the window's top edge. `None` without a
+/// grip point or one at/below the feet.
+pub fn hang_cell(clip: &Clip) -> Option<i32> {
+    let (_, gy) = clip.point(HANG_GRIP_POINT)?;
+    let d = clip.frames.first()?.anchor.1 - gy;
+    (d > 0).then_some(d)
+}
+
 /// Clip tag: a lounge base a perch may pick instead of a sit (e.g.
 /// `perch_lounge`): she lies along the window top. Needs `seat_y` (the line
 /// her body rests on) and `seat_x_range` (the part of her lying on the edge).
@@ -229,11 +264,17 @@ pub fn landing_blend(m: &Manifest, from: &str) -> Option<LandingBlend> {
     })
 }
 
-/// `overlay` is `sit`'s own blend: its landing blend or a
-/// `blend_<from>_to_<clip>` sit-down (not an interruption of the sit).
-fn own_sit_blend(sit: &Sit, overlay: &str) -> bool {
+/// `overlay` is `sit`'s own blend: its landing blend, a
+/// `blend_<from>_to_<clip>` sit-down, or a dedicated sit-down transition
+/// whose `[blend]` leads into the sit (e.g. `sit_down` → `sit_swing`); not an
+/// interruption of the sit.
+fn own_sit_blend(m: &Manifest, sit: &Sit, overlay: &str) -> bool {
     sit.landing.as_ref().is_some_and(|l| l.clip == overlay)
         || (overlay.starts_with("blend_") && overlay.ends_with(&format!("_to_{}", sit.clip)))
+        || m.clips
+            .get(overlay)
+            .and_then(|c| c.blend.as_ref())
+            .is_some_and(|b| b.to == sit.clip)
 }
 
 /// `clip`'s seat line above its feet anchor in cell px (`anchor y - seat_y`
@@ -1090,7 +1131,7 @@ impl Controller {
             .stage
             .animator()
             .overlay_clip()
-            .is_some_and(|o| own_sit_blend(sit, o));
+            .is_some_and(|o| own_sit_blend(self.stage.animator().manifest(), sit, o));
         if own {
             self.stage.animator_mut().clear_overlays();
         }
@@ -1280,7 +1321,9 @@ impl Controller {
         if let Some(mut sit) = p.sit.clone() {
             // Its own landing or sit-down blend is not an interruption.
             let interrupted = anim.base() != sit.clip
-                || anim.overlay_clip().is_some_and(|o| !own_sit_blend(&sit, o));
+                || anim
+                    .overlay_clip()
+                    .is_some_and(|o| !own_sit_blend(anim.manifest(), &sit, o));
             // The landing blend handed over to the seated base: its seat
             // line from now on.
             if sit
@@ -1348,6 +1391,13 @@ impl Controller {
             let dx = lounge_fit(c, scale, feet_x, rect)?;
             Some((n, d, dx))
         }));
+        // Hangs: gripping the window top edge (the grip point on it).
+        let cap = self.stage.animator().max_severity();
+        seated.extend(
+            hang_clips(m, cap)
+                .into_iter()
+                .filter_map(|n| hang_cell(&m.clips[&n]).map(|d| (n, d, 0))),
+        );
         let Some(i) = self.gravity.pick_sit(seated.len()) else {
             return;
         };
@@ -3546,6 +3596,256 @@ frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
         assert!(!c.gravity.sitting());
         assert_eq!(c.placement.bottom, 496);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn perch_sits_through_sit_down_and_stands_through_stand_up() {
+        use lillith_core::desktop::Rect;
+        // sit_swing: seat 18 cell px above the feet (36 px at scale 2). The
+        // old helper blends (4 frames, 0.5 s) are still in the manifest, but
+        // the dedicated transitions (16 frames, 2 s) carry the stand ↔ sit.
+        let mut toml = clip_n(
+            "sit_swing",
+            4,
+            "mode = \"loop\"\nseat_y = 20\nseat_x_range = [14, 26]\n",
+        );
+        for (n, frames, from, to) in [
+            ("blend_idle_to_sit_swing", 4, "idle", "sit_swing"),
+            ("blend_sit_swing_to_idle", 4, "sit_swing", "idle"),
+            ("sit_down", 16, "idle", "sit_swing"),
+            ("stand_up", 16, "sit_swing", "idle"),
+        ] {
+            toml.push_str(&clip_n(n, frames, "mode = \"once\"\n"));
+            toml.push_str(&blend_of(n, from, to));
+        }
+        let (dir, mut c) = m3_controller_with("grav_sit_down", MoveMode::Stay, &toml);
+        c.gravity.cfg.sit_for_s = (3.0, 3.0);
+        c.set_screen((1200, 800));
+        c.set_desktop(Some(one_window(Rect::new(50, 300, 600, 400))));
+        drag_drop(&mut c, 0.0, -650.0);
+        run_frames(&mut c, 2.0);
+        assert_eq!(c.placement.bottom, 496);
+        let mut waited = 0.0;
+        while !c.gravity.sitting() {
+            step(&mut c);
+            waited += 1.0 / 60.0;
+            assert!(waited < 25.0, "never sat");
+        }
+        // stand → sit: sit_down over the sit base, not the helper blend.
+        assert_eq!(c.stage.animator().base(), "sit_swing");
+        assert_eq!(c.stage.animator().overlay_clip(), Some("sit_down"));
+        // The whole 2 s sit_down is her own sit-down (no interruption), and
+        // the window sinks with it onto the seat line.
+        let mut down = Vec::new();
+        while c.stage.animator().overlay_clip() == Some("sit_down") {
+            assert!(c.gravity.sitting(), "sit_down is no interruption");
+            step(&mut c);
+            down.push(c.placement.bottom);
+            assert!(down.len() < 200, "sit_down never ended");
+        }
+        assert!(down.len() > 100, "{}", down.len());
+        assert!(down.windows(2).all(|w| w[1] <= w[0] && w[0] - w[1] < 36));
+        assert!(c.gravity.sitting());
+        assert_eq!(c.stage.animator().base(), "sit_swing");
+        assert_eq!(c.placement.bottom, 496 - 36);
+        // sit → stand: stand_up over idle, rising with it.
+        while c.gravity.sitting() {
+            step(&mut c);
+        }
+        assert_eq!(c.stage.animator().base(), "idle");
+        assert_eq!(c.stage.animator().overlay_clip(), Some("stand_up"));
+        let up = run_frames(&mut c, 2.1);
+        assert!(up.windows(2).all(|w| w[1] >= w[0] && w[1] - w[0] < 36));
+        assert_eq!(c.placement.bottom, 496);
+        assert_eq!(c.stage.animator().overlay_clip(), None);
+        assert!(matches!(&c.gravity.mode, Mode::Perched(p) if p.rise.is_none()));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn perch_sit_falls_back_to_the_helper_blends_without_sit_down() {
+        use lillith_core::desktop::Rect;
+        // An older clip pack: only the helper blends lead in and out.
+        let mut toml = clip_n(
+            "sit_swing",
+            4,
+            "mode = \"loop\"\nseat_y = 20\nseat_x_range = [14, 26]\n",
+        );
+        for (n, from, to) in [
+            ("blend_idle_to_sit_swing", "idle", "sit_swing"),
+            ("blend_sit_swing_to_idle", "sit_swing", "idle"),
+        ] {
+            toml.push_str(&clip_n(n, 4, "mode = \"once\"\n"));
+            toml.push_str(&blend_of(n, from, to));
+        }
+        let (dir, mut c) = m3_controller_with("grav_sit_helper", MoveMode::Stay, &toml);
+        c.gravity.cfg.sit_for_s = (2.0, 2.0);
+        c.set_screen((1200, 800));
+        c.set_desktop(Some(one_window(Rect::new(50, 300, 600, 400))));
+        drag_drop(&mut c, 0.0, -650.0);
+        run_frames(&mut c, 2.0);
+        let mut waited = 0.0;
+        while !c.gravity.sitting() {
+            step(&mut c);
+            waited += 1.0 / 60.0;
+            assert!(waited < 25.0, "never sat");
+        }
+        assert_eq!(
+            c.stage.animator().overlay_clip(),
+            Some("blend_idle_to_sit_swing")
+        );
+        while c.gravity.sitting() {
+            step(&mut c);
+        }
+        assert_eq!(
+            c.stage.animator().overlay_clip(),
+            Some("blend_sit_swing_to_idle")
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn hang_clips_need_the_tag_a_loop_a_grip_and_the_severity_cap() {
+        let m = |toml: &str| {
+            lillith_anim::atlas::Manifest::from_toml_str(&format!(
+                "{}{toml}",
+                clip_n("idle", 1, "")
+            ))
+            .unwrap()
+        };
+        let hang = |name: &str, extra: &str| {
+            clip_n(
+                name,
+                2,
+                &format!("tags = [\"hang_base\", \"perch\"]\nseverity = 2\n{extra}"),
+            )
+        };
+        let grip = "points = { grab_point = [19, 2] }\n";
+        let good = hang("hang_from_window", &format!("mode = \"loop\"\n{grip}"));
+        let m1 = m(&good);
+        assert_eq!(hang_clips(&m1, 5), ["hang_from_window"]);
+        // Grip 2 cell px from the top, feet anchor at 38: 36 cell px up.
+        assert_eq!(hang_cell(&m1.clips["hang_from_window"]), Some(36));
+        // Over the severity cap: not picked.
+        assert!(hang_clips(&m1, 1).is_empty());
+        // Untagged, played once, or without a grip point: none.
+        let untagged = clip_n("dangle", 2, &format!("mode = \"loop\"\n{grip}"));
+        let once = hang("hang_once", &format!("mode = \"once\"\n{grip}"));
+        let gripless = hang("hang_loose", "mode = \"loop\"\n");
+        let low = hang(
+            "hang_low",
+            "mode = \"loop\"\npoints = { grab_point = [19, 39] }\n",
+        );
+        let m2 = m(&format!("{untagged}{once}{gripless}{low}"));
+        assert!(hang_clips(&m2, 5).is_empty());
+        assert_eq!(hang_cell(&m2.clips["hang_loose"]), None);
+        assert_eq!(hang_cell(&m2.clips["hang_low"]), None);
+        // Not a sit or a lounge either.
+        assert!(sit_clips(&m1).is_empty() && lounge_clips(&m1).is_empty());
+    }
+
+    #[test]
+    fn perch_hangs_from_the_window_edge_by_its_grip_point() {
+        use lillith_core::desktop::Rect;
+        // hang_from_window only (no sit, no lounge): grip 36 cell px above
+        // the feet anchor, 72 px at scale 2; a 4-frame loop at 8 fps.
+        let toml = clip_n(
+            "hang_from_window",
+            4,
+            "mode = \"loop\"\nseverity = 2\ntags = [\"baked_motion\", \"hang_base\", \"perch\"]\n\
+             points = { grab_point = [19, 2] }\n",
+        );
+        let (dir, mut c) = m3_controller_with("grav_hang", MoveMode::Stay, &toml);
+        c.gravity.cfg.sit_for_s = (3.0, 3.0);
+        c.set_screen((1200, 800));
+        c.set_desktop(Some(one_window(Rect::new(50, 300, 600, 400))));
+        drag_drop(&mut c, 0.0, -650.0);
+        run_frames(&mut c, 2.0);
+        assert_eq!(c.placement.bottom, 496, "standing on the window top");
+        let mut waited = 0.0;
+        while !c.gravity.sitting() {
+            step(&mut c);
+            waited += 1.0 / 60.0;
+            assert!(waited < 25.0, "never hung");
+        }
+        step(&mut c);
+        // Hanging: the grip point on the window top (feet 72 px lower).
+        assert_eq!(c.stage.animator().base(), "hang_from_window");
+        assert_eq!(c.placement.bottom, 496 - 72);
+        // It loops for the whole hang (4 frames = 0.5 s; well past that).
+        let mut frames = std::collections::BTreeSet::new();
+        for _ in 0..120 {
+            step(&mut c);
+            frames.insert(c.stage.animator().base_frame());
+            assert_eq!(c.stage.animator().base(), "hang_from_window");
+            assert!(c.gravity.sitting());
+            assert_eq!(c.placement.bottom, 496 - 72);
+        }
+        assert_eq!(frames.len(), 4, "{frames:?}");
+        // Over: back up on her feet on the window top.
+        while c.gravity.sitting() {
+            step(&mut c);
+        }
+        step(&mut c);
+        assert_eq!(c.stage.animator().base(), "idle");
+        assert_eq!(c.placement.bottom, 496);
+
+        // With the severity cap below it, she never hangs.
+        c.stage.animator_mut().set_max_severity(1);
+        for _ in 0..(30 * 60) {
+            step(&mut c);
+            assert!(!c.gravity.sitting());
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn shipped_manifest_wires_sit_down_stand_up_and_hang_from_window() {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/generated/manifest.toml");
+        if !path.is_file() {
+            eprintln!("{} not found; skipping", path.display());
+            return;
+        }
+        let m = lillith_anim::atlas::Manifest::load(&path).unwrap();
+        let (Some(down), Some(up), Some(hang)) = (
+            m.clips.get("sit_down"),
+            m.clips.get("stand_up"),
+            m.clips.get("hang_from_window"),
+        ) else {
+            eprintln!("{} predates sit_down/stand_up/hang; skipping", path.display());
+            return;
+        };
+        // The dedicated transitions lead idle ↔ sit_swing (a perch sit).
+        let b = down.blend.as_ref().unwrap();
+        assert_eq!((b.from.as_str(), b.to.as_str()), ("idle", SIT_CLIP));
+        let b = up.blend.as_ref().unwrap();
+        assert_eq!((b.from.as_str(), b.to.as_str()), (SIT_CLIP, "idle"));
+        assert!(sit_clips(&m).iter().any(|n| n == SIT_CLIP));
+        let mut a = lillith_anim::animator::Animator::new(
+            m.clone(),
+            AnimatorConfig {
+                idle_enabled: false,
+                ..AnimatorConfig::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(a.base(), "idle");
+        a.sit_down(SIT_CLIP).unwrap();
+        assert_eq!(a.overlay_clip(), Some("sit_down"));
+        for _ in 0..180 {
+            a.tick(1.0 / 60.0);
+        }
+        assert_eq!((a.base(), a.overlay_clip()), (SIT_CLIP, None));
+        a.stand_blended();
+        assert_eq!(a.overlay_clip(), Some("stand_up"));
+        // hang_from_window: a looping hang base gripping at grab_point
+        // [194, 10] (382 cell px above its feet anchor), severity 2.
+        assert_eq!(hang_clips(&m, 5), ["hang_from_window"]);
+        assert!(hang_clips(&m, 1).is_empty());
+        assert_eq!(hang_cell(hang), Some(382));
+        assert!(!sit_clips(&m).iter().any(|n| n == "hang_from_window"));
+        assert!(!lounge_clips(&m).iter().any(|n| n == "hang_from_window"));
     }
 
     #[test]
