@@ -1009,5 +1009,11 @@
       ]
     ],
     "engine_note": "extra chest bounce is baked into pixels; engine chest spring should stay off/low for this clip"
+  },
+  "layers": {
+    "manifest": "idle_a.layers.json",
+    "schema": "lillith.layered_art.v1",
+    "pilot": true,
+    "note": "Add-only layered art (base, covered chest, pigtail_left, pigtail_right). Ignored by the current importer. See docs/LAYERED_ART.md."
   }
 }
