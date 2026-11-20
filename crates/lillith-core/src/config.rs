@@ -29,6 +29,9 @@ pub struct Springs {
     /// softness). With the physics driver it owns the chest spring's
     /// stiffness/damping; see [`crate::bounce`].
     pub bounce: crate::bounce::ChestBounce,
+    /// `[springs.jiggle]`: Settings ▸ Motion ▸ Jiggle (layered chest, hips,
+    /// pigtails and tail springs); see [`crate::jiggle`].
+    pub jiggle: crate::jiggle::JiggleSettings,
 }
 
 impl Default for Springs {
@@ -44,6 +47,7 @@ impl Default for Springs {
             chest_bounce_gain: 1.0,
             pigtail_sway_gain: 0.9,
             bounce: Default::default(),
+            jiggle: Default::default(),
         }
     }
 }

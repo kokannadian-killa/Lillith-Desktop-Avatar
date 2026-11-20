@@ -32,9 +32,18 @@ use crate::atlas::{Clip, FrameRect, LoopMode, Manifest};
 use crate::player::ClipPlayer;
 use lillith_core::config::Springs;
 use lillith_core::idle::{IdleConfig, IdleCue, IdleLife};
+use lillith_core::jiggle::{framing_zoom, Drive, JiggleOffsets, Region, RegionMode};
 use lillith_core::mood::Mood;
 use lillith_core::physics_config::{PhysicsConfig, Recipe};
 use lillith_core::physics_driver::{Motion, Overlay as PhysicsOverlay, PhysicsDriver};
+
+/// Share of the tail offset folded into the whole-sprite skew when the
+/// clip has no tail layer art.
+pub const TAIL_FOLD: f32 = 0.4;
+/// Hip offset → whole-sprite sideways shift (px per px) without hip art.
+pub const HIP_FOLD_PX: f32 = 0.35;
+/// Hip offset → whole-sprite rock (rad per px) without hip art.
+pub const HIP_FOLD_RAD: f32 = 0.0015;
 use lillith_core::spring::{Channel, Physics, SpringMask, Transform};
 use std::collections::{BTreeMap, VecDeque};
 
@@ -430,6 +439,11 @@ pub struct FrameRef<'a> {
     pub flip: bool,
     pub layer: Layer,
     pub transform: Transform,
+    /// Layered jiggle region offsets at this clip's framing zoom (px,
+    /// lillith_core::jiggle), screen space. Regions without layer art are
+    /// folded into `transform`; the renderer moves layered-art layers
+    /// (`lillith.layered_art.v1`, [`crate::layered_art`]) by them.
+    pub jiggle: JiggleOffsets,
     /// Mouth patch to paste over the face (true lip-sync while talking).
     pub mouth: Option<MouthDraw<'a>>,
     /// Smooth mode: the next frame of the same clip and its cross-fade
@@ -501,6 +515,8 @@ pub struct Animator {
     physics: Physics,
     /// Present when [`AnimatorConfig::physics_driver`] is on; owns the springs.
     driver: Option<PhysicsDriver>,
+    /// Clip → regions its layered art moves ([`Self::set_layered_regions`]).
+    layered: BTreeMap<String, Vec<(Region, f32)>>,
     last_key: Option<(String, usize)>,
     idle_base: String,
     /// Base clip -> the takes drawn for it now (sorted): its
@@ -659,6 +675,7 @@ impl Animator {
             idle,
             physics,
             driver,
+            layered: BTreeMap::new(),
             last_key: None,
             tagged_variants: variants.clone(),
             variants,
@@ -1144,7 +1161,7 @@ impl Animator {
     /// tagged [`BAKED_MOTION_TAG`]; pigtails by their own
     /// `baked_pigtail_gain` (capped at `baked_pigtail_max_px`) when that is
     /// on, else by `baked_motion_gain` like before.
-    fn transform_for(&self, clip: &Clip) -> Transform {
+    fn transform_for(&self, name: &str, clip: &Clip) -> Transform {
         let mut t = self.physics().transform();
         // Baked-jiggle clips: their disabled springs read as rest, even
         // before the next tick parks them (see `sync_spring_mask`).
@@ -1187,7 +1204,102 @@ impl Animator {
             // chest bounce > 100 %: a light engine layer over the baked art
             t.chest_offset = self.physics().layered_chest_offset();
         }
+        // Layered jiggle on top, for regions without their own layer art.
+        let j = self.jiggle_for(name, clip);
+        // A region with layer art shows up to its seam-safe px there; only
+        // the rest goes into the whole-sprite fold.
+        let fold = |r: Region| {
+            let v = j.get(r);
+            match self.layer_px(name, r) {
+                Some(px) => v - v.clamp(-px, px),
+                None => v,
+            }
+        };
+        t.chest_offset += fold(Region::Chest);
+        t.pigtail_offset += fold(Region::Pigtails) + TAIL_FOLD * fold(Region::Tail);
+        let hips = fold(Region::Hips);
+        t.x += HIP_FOLD_PX * hips;
+        t.angle += HIP_FOLD_RAD * hips;
         t
+    }
+
+    /// Layered jiggle offsets for a frame of `clip` (`name`): the driver's
+    /// [`lillith_core::jiggle::LayeredJiggle`] at the clip's framing zoom
+    /// (push-in / `cleavage_zoom` / `zoom:<f>` clips jiggle bigger). Regions
+    /// the clip's own `disable_springs` names (baked-jiggle art) stay at
+    /// rest, baked-motion regions get only the gain above 100 %; rest
+    /// everywhere without the physics driver.
+    pub fn jiggle_for(&self, name: &str, clip: &Clip) -> JiggleOffsets {
+        match &self.driver {
+            Some(d) => {
+                let zoom = framing_zoom(name, clip.tags.iter().map(String::as_str));
+                // Baked-jiggle art (`disable_springs`) owns its regions; on
+                // baked-motion art (the region's spring masked) only the
+                // gain above 100 % is added, so the bake never doubles.
+                let own = clip.spring_mask();
+                let masked = self.clip_mask(clip);
+                let ch = |r: Region| match r {
+                    Region::Chest => Channel::Chest,
+                    Region::Hips => Channel::RootX,
+                    Region::Pigtails | Region::Tail => Channel::Pigtail,
+                };
+                let j = d.jiggle().offsets_with(zoom, |r| {
+                    if own.contains(ch(r)) {
+                        RegionMode::Off
+                    } else if masked.contains(ch(r)) {
+                        RegionMode::AboveBaked
+                    } else {
+                        RegionMode::Full
+                    }
+                });
+                j
+            }
+            None => JiggleOffsets::default(),
+        }
+    }
+
+    /// `true` if `clip` has region layer art moving region `r`
+    /// ([`Self::set_layered_regions`]).
+    pub fn has_layer_art(&self, clip: &str, r: Region) -> bool {
+        self.layer_px(clip, r).is_some()
+    }
+
+    /// Px of region `r` `clip`'s layer art shows (the rest is folded).
+    fn layer_px(&self, clip: &str, r: Region) -> Option<f32> {
+        self.layered
+            .get(clip)?
+            .iter()
+            .find(|(q, _)| *q == r)
+            .map(|&(_, px)| px)
+    }
+
+    /// Registers the regions `clip`'s layer art moves (the renderer found
+    /// `lillith.layered_art.v1` art for it); those regions are no longer
+    /// folded into the whole-sprite transform up to the px each layer
+    /// shows (beyond it, the rest still is). Empty = unregister.
+    pub fn set_layered_regions(&mut self, clip: &str, regions: Vec<(Region, f32)>) {
+        if regions.is_empty() {
+            self.layered.remove(clip);
+        } else {
+            self.layered.insert(clip.to_string(), regions);
+        }
+    }
+
+    /// Regions of `clip` with no layer art yet (the renderer folds those
+    /// into the whole-sprite squash/skew).
+    pub fn missing_layer_art(&self, clip: &str) -> Vec<Region> {
+        Region::ALL
+            .into_iter()
+            .filter(|&r| !self.has_layer_art(clip, r))
+            .collect()
+    }
+
+    /// Adds the drawn art's own body velocity (layered-art torso hints,
+    /// px/s) to the layered jiggle's inertia (driver mode).
+    pub fn set_art_body_velocity(&mut self, v: (f32, f32)) {
+        if let Some(d) = &mut self.driver {
+            d.set_art_body_velocity(v);
+        }
     }
 
     /// The clip actually drawn for `name`: its baked-jiggle sibling when
@@ -1263,6 +1375,13 @@ impl Animator {
                 }
             }
             self.entry = None;
+            if self.base != name {
+                // Sitting down, perching, hanging, bouncing: the new base
+                // pose sets the layered jiggle off.
+                if let (Some(d), Some(drive)) = (&mut self.driver, Drive::for_clip(name)) {
+                    d.drive_jiggle(drive);
+                }
+            }
             self.base = name.to_string();
             if self.play_once() && self.takes.contains_key(name) {
                 // Play-once: (re)entering a base always starts on the clean
@@ -1723,6 +1842,14 @@ impl Animator {
         let clip_dt = dt * clamp_speed(self.cfg.playback_speed);
         let before = self.base_player.frame();
         self.base_player.advance(clip_dt);
+        if self.base_player.frame() < before {
+            // Looping bounce / hang clips kick every pass: the jiggle builds.
+            if let (Some(d), Some(drive)) = (&mut self.driver, Drive::for_clip(&self.base)) {
+                if drive.repeats() {
+                    d.drive_jiggle(drive);
+                }
+            }
+        }
         // Variants: at a loop end of the base once the hold is over, a new
         // random take; play-once mode returns to the base after one pass.
         if !self.variants(&self.base).is_empty() {
@@ -1866,9 +1993,11 @@ impl Animator {
         if let Some(o) = &self.overlay {
             let name = o.drawn.as_str();
             let clip = &self.manifest.clips[name];
-            let transform = self.transform_for(clip);
+            let transform = self.transform_for(name, clip);
+            let jiggle = self.jiggle_for(name, clip);
             let frame = o.player.frame().min(clip.frames.len() - 1);
             return FrameRef {
+                jiggle,
                 clip_name: name,
                 clip,
                 frame,
@@ -1895,8 +2024,10 @@ impl Animator {
                 .get_key_value(&self.cfg.blink_clip)
                 .expect("blink clip checked on start");
             let frame = bl.frames[idx].min(clip.frames.len() - 1);
-            let transform = self.transform_for(clip);
+            let transform = self.transform_for(name, clip);
+            let jiggle = self.jiggle_for(name, clip);
             return FrameRef {
+                jiggle,
                 clip_name: name,
                 clip,
                 frame,
@@ -1914,7 +2045,8 @@ impl Animator {
             .pinned_base_frame
             .unwrap_or_else(|| self.base_player.frame())
             .min(clip.frames.len() - 1);
-        let transform = self.transform_for(clip);
+        let transform = self.transform_for(name, clip);
+        let jiggle = self.jiggle_for(name, clip);
         let mouth = self.mouth.and_then(|m| {
             let clean = clip
                 .jiggle_of
@@ -1947,6 +2079,7 @@ impl Animator {
             (m, _) => m,
         };
         FrameRef {
+            jiggle,
             clip_name: name,
             clip,
             frame,
@@ -2259,6 +2392,176 @@ mod tests {
         assert_eq!(a.overlay_clip(), Some("hip_sway"));
         run(&mut a, 0.2);
         assert_eq!(a.overlay_clip(), None);
+    }
+
+    fn layered_manifest(extra: &str) -> Manifest {
+        let mut s = String::new();
+        let clips: &[(&str, usize, &str)] = &[
+            ("idle", 4, ""),
+            ("perch_sit", 4, ""),
+            ("perch_bounce_kick", 4, ""),
+            ("window_hang_swing", 4, ""),
+            (
+                "perch_push_in_wink",
+                4,
+                "tags = [\"cleavage_zoom\", \"zoom:2.0\"]\n",
+            ),
+            ("blend_drag_held_to_perch_sit", 3, ""),
+        ];
+        for (name, n, tags) in clips {
+            s += &format!(
+                "[clips.{name}]\npage = \"{name}.png\"\nfps = 10.0\nmode = \"loop\"\n{tags}frames = ["
+            );
+            for i in 0..*n {
+                s += &format!(
+                    "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                    i * 400
+                );
+            }
+            s += "]\n";
+        }
+        s += extra;
+        Manifest::from_toml_str(&s).unwrap()
+    }
+
+    fn peak_jiggle(a: &mut Animator, secs: f32) -> JiggleOffsets {
+        let mut m = JiggleOffsets::default();
+        for _ in 0..(secs * 60.0) as usize {
+            a.tick(1.0 / 60.0);
+            let j = a.current().jiggle;
+            m.chest = m.chest.max(j.chest.abs());
+            m.hips = m.hips.max(j.hips.abs());
+            m.pigtails = m.pigtails.max(j.pigtails.abs());
+            m.tail = m.tail.max(j.tail.abs());
+        }
+        m
+    }
+
+    #[test]
+    fn sit_perch_and_hang_bases_set_the_layered_jiggle_off() {
+        for clip in ["perch_sit", "window_hang_swing", "perch_bounce_kick"] {
+            let mut a = Animator::new(layered_manifest(""), driven()).unwrap();
+            peak_jiggle(&mut a, 3.0); // settle the start-up
+            a.set_base(clip, false).unwrap();
+            let p = peak_jiggle(&mut a, 1.0);
+            for r in Region::ALL {
+                assert!(p.get(r) > 1.0, "{clip}: {r:?} {p:?}");
+            }
+        }
+        // Without the driver: no layered jiggle at all.
+        let mut plain = Animator::new(layered_manifest(""), quiet()).unwrap();
+        plain.set_base("perch_sit", false).unwrap();
+        assert_eq!(peak_jiggle(&mut plain, 0.5), JiggleOffsets::default());
+    }
+
+    #[test]
+    fn outfit_of_takes_get_the_layered_jiggle_of_their_move() {
+        let mut take = String::from(
+            "[clips.halloween_perch_sit]\npage = \"h.png\"\nfps = 10.0\nmode = \"loop\"\n\
+             tags = [\"seasonal\", \"outfit:halloween\", \"outfit_of:perch_sit\", \"cleavage_zoom\"]\nframes = [",
+        );
+        for i in 0..4 {
+            take += &format!(
+                "{{ x = {}, y = 0, w = 400, h = 400, anchor = [200, 392] }},",
+                i * 400
+            );
+        }
+        take += "]\n";
+        let run = |outfit: Option<&str>| {
+            let mut a = Animator::new(layered_manifest(&take), driven()).unwrap();
+            a.set_outfit(outfit);
+            peak_jiggle(&mut a, 3.0);
+            a.set_base("perch_sit", false).unwrap();
+            a.tick(1.0 / 60.0);
+            let drawn = a.current().clip_name.to_string();
+            (drawn, peak_jiggle(&mut a, 1.0), a)
+        };
+        let (plain_name, plain, _) = run(None);
+        let (name, worn, mut a) = run(Some("halloween"));
+        assert_eq!(plain_name, "perch_sit");
+        assert_eq!(name, "halloween_perch_sit");
+        // The take drives the same sit-down bounce (logical base name) and
+        // jiggles at its own push-in framing.
+        for r in Region::ALL {
+            assert!(
+                worn.get(r) > plain.get(r) * 1.3,
+                "{r:?} {worn:?} vs {plain:?}"
+            );
+        }
+        // Layer art is looked up by the drawn take, so registering it on
+        // the take takes the chest out of the whole-sprite fold.
+        let folded = |a: &Animator| a.current().transform.chest_offset;
+        peak_jiggle(&mut a, 3.0);
+        a.driver
+            .as_mut()
+            .unwrap()
+            .drive_jiggle(Drive::Land { impact: 1.0 });
+        peak_jiggle(&mut a, 0.15);
+        let with_fold = folded(&a);
+        assert!(with_fold.abs() > 0.5, "{with_fold}");
+        a.set_layered_regions("halloween_perch_sit", vec![(Region::Chest, 1000.0)]);
+        assert!(a.has_layer_art("halloween_perch_sit", Region::Chest));
+        assert!(!a.has_layer_art("perch_sit", Region::Chest));
+        let j = a.current().jiggle.chest;
+        assert!((with_fold - folded(&a) - j).abs() < 1e-4, "{with_fold} {j}");
+        // A layer that only shows 1 px leaves the rest in the fold.
+        a.set_layered_regions("halloween_perch_sit", vec![(Region::Chest, 1.0)]);
+        assert!((with_fold - folded(&a) - j.clamp(-1.0, 1.0)).abs() < 1e-4);
+    }
+
+    #[test]
+    fn looping_bounce_builds_up_every_pass() {
+        let mut a = Animator::new(layered_manifest(""), driven()).unwrap();
+        peak_jiggle(&mut a, 3.0);
+        a.set_base("perch_bounce_kick", false).unwrap();
+        a.tick(1.0 / 60.0);
+        let e0 = a.driver().unwrap().jiggle().energy(Region::Chest);
+        // 4 frames at 10 fps: a pass every 0.4 s.
+        peak_jiggle(&mut a, 1.7);
+        let e1 = a.driver().unwrap().jiggle().energy(Region::Chest);
+        assert!(e1 > e0 * 1.5, "energy builds: {e0} -> {e1}");
+    }
+
+    #[test]
+    fn push_in_clips_jiggle_at_their_framing_zoom() {
+        let mut a = Animator::new(layered_manifest(""), driven()).unwrap();
+        a.set_base("perch_sit", false).unwrap();
+        for _ in 0..8 {
+            a.tick(1.0 / 60.0);
+        }
+        let d = a.driver().unwrap();
+        let clips = &a.manifest().clips;
+        let plain = a.jiggle_for("perch_sit", &clips["perch_sit"]);
+        let zoomed = a.jiggle_for("perch_push_in_wink", &clips["perch_push_in_wink"]);
+        assert_eq!(plain, d.jiggle().offsets(1.0));
+        assert!(plain.chest.abs() > 0.1);
+        assert!((zoomed.chest - 2.0 * plain.chest).abs() < 1e-4);
+    }
+
+    #[test]
+    fn layer_art_takes_its_region_out_of_the_whole_sprite_fold() {
+        let mut with = Animator::new(layered_manifest(""), driven()).unwrap();
+        let mut without = Animator::new(layered_manifest(""), driven()).unwrap();
+        with.set_layered_regions("perch_sit", vec![(Region::Chest, 1000.0)]);
+        assert!(with.has_layer_art("perch_sit", Region::Chest));
+        assert!(!with.has_layer_art("perch_sit", Region::Tail));
+        assert_eq!(without.missing_layer_art("perch_sit"), Region::ALL.to_vec());
+        assert_eq!(with.missing_layer_art("perch_sit").len(), 3);
+        for a in [&mut with, &mut without] {
+            a.set_base("perch_sit", false).unwrap();
+            for _ in 0..10 {
+                a.tick(1.0 / 60.0);
+            }
+        }
+        let (fw, fo) = (with.current(), without.current());
+        assert_eq!(fw.jiggle, fo.jiggle);
+        assert!(fw.jiggle.chest.abs() > 0.5);
+        let d = fo.transform.chest_offset - fw.transform.chest_offset;
+        assert!(
+            (d - fo.jiggle.chest).abs() < 1e-4,
+            "{d} vs {}",
+            fo.jiggle.chest
+        );
     }
 
     fn driven() -> AnimatorConfig {

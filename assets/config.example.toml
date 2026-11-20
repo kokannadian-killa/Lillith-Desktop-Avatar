@@ -75,6 +75,17 @@
 # intensity = 1.0        # 0 … 3 (1 = 100 %)
 # softness = 0.85        # 0 = firm … 1 = softest
 
+# [springs.jiggle]       # Settings ▸ Motion ▸ Jiggle (layered secondary motion)
+# enabled = true
+# multiplier = 1.5       # overall, 0 … 3 (1.5 = 150 %)
+# chest = 1.2            # per region, 0 … 2 (1.2 = 120 %)
+# hips = 1.2             # hips / butt
+# pigtails = 1.2         # pigtails / hair
+# tail = 1.2
+# layers = 3             # spring layers per region (primary, secondary, flutter), 1 … 3
+# build_up = 0.6         # 0 … 1: bouncing / hanging / running builds the jiggle up
+# zoom_follow = true     # push-in / close-up clips jiggle at their framing scale
+
 # ── Behaviour ────────────────────────────────────────────────────────────────
 # [behavior]
 # mood_tau_s = 45.0

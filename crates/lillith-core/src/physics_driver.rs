@@ -294,6 +294,9 @@ pub struct PhysicsDriver {
     /// ([`crate::bounce::BounceFeel::extra`]).
     bounce_extra: f32,
     physics: Physics,
+    jiggle: crate::jiggle::LayeredJiggle,
+    /// Body velocity the drawn art itself has (layered-art torso hints).
+    art_body_v: (f32, f32),
     rng: Rng,
     time: f32,
     // mood
@@ -405,6 +408,7 @@ impl PhysicsDriver {
         let mut d = Self::from_config(with_user_springs(&base, user_springs), seed);
         d.base_cfg = base;
         d.apply_bounce_runtime(&user_springs.bounce);
+        d.jiggle.set_settings(user_springs.jiggle);
         d
     }
 
@@ -446,6 +450,8 @@ impl PhysicsDriver {
             base_cfg,
             bounce_extra: 0.0,
             physics,
+            jiggle: crate::jiggle::LayeredJiggle::new(Default::default(), cfg.physics_hz),
+            art_body_v: (0.0, 0.0),
             rng,
             time: 0.0,
             mood,
@@ -527,6 +533,20 @@ impl PhysicsDriver {
 
     // ------------------------------------------------------------------ API
 
+    pub fn jiggle(&self) -> &crate::jiggle::LayeredJiggle {
+        &self.jiggle
+    }
+    /// The drawn frame's own torso velocity (px/s, +y down) from layered
+    /// art hints; its changes push the layered jiggle like body motion.
+    pub fn set_art_body_velocity(&mut self, v: (f32, f32)) {
+        if v.0.is_finite() && v.1.is_finite() {
+            self.art_body_v = v;
+        }
+    }
+    pub fn drive_jiggle(&mut self, drive: crate::jiggle::Drive) {
+        self.jiggle.drive(drive, 1.0);
+    }
+
     pub fn time(&self) -> f32 {
         self.time
     }
@@ -552,6 +572,7 @@ impl PhysicsDriver {
         self.physics.chest.max_velocity = ch.max_velocity;
         self.physics.chest.max_offset = ch.max_offset;
         self.apply_bounce_runtime(&u.bounce);
+        self.jiggle.set_settings(u.jiggle);
     }
 
     /// The non-spring parts of the chest bounce: soft knee, baked-art layer
@@ -585,6 +606,10 @@ impl PhysicsDriver {
     }
     pub fn set_facing(&mut self, right: bool) {
         let f = if right { 1.0 } else { -1.0 };
+        if f != self.facing {
+            self.jiggle
+                .drive(crate::jiggle::Drive::Turn { dir: f }, 1.0);
+        }
         if f != self.facing && self.bounce_extra > 0.0 {
             // turning around: the chest swings through
             let k = crate::bounce::TURN_KICK * self.bounce_extra;
@@ -707,6 +732,11 @@ impl PhysicsDriver {
             let c = Arc::clone(&self.cfg);
             let (r, k) = (c.drag.drop_recipe.as_str(), c.drag.drop_scale);
             self.apply_recipe(r, k); // soft landing (proposal: 0.8x)
+        }
+        if m.dragged() && !self.motion.dragged() {
+            self.drive_jiggle(crate::jiggle::Drive::Hang);
+        } else if !m.dragged() && self.motion.dragged() {
+            self.drive_jiggle(crate::jiggle::Drive::Land { impact: 0.8 });
         }
         self.motion = m;
     }
@@ -892,6 +922,9 @@ impl PhysicsDriver {
     /// their [clip_recipes] kick unless an event kicked within 0.15 s (dedupe:
     /// the rule's event and its clip start arrive together).
     pub fn on_clip_start(&mut self, clip: &str) {
+        if let Some(drive) = crate::jiggle::Drive::for_clip(clip) {
+            self.jiggle.drive(drive, 1.0);
+        }
         let cfg = Arc::clone(&self.cfg);
         if cfg.idle_transitions.contains_key(clip) {
             if cfg.idle.baked_transition_clips.iter().any(|c| c == clip) {
@@ -940,6 +973,12 @@ impl PhysicsDriver {
         if event.starts_with("input.") {
             self.mischief = 0.0; // any interaction calms her down (repo Mischief::reset)
         }
+        if event.starts_with("input.click") {
+            self.drive_jiggle(crate::jiggle::Drive::Click);
+        }
+        if event.starts_with("input.hover") {
+            self.drive_jiggle(crate::jiggle::Drive::Hover);
+        }
         self.apply_recipe(&e.recipe, e.scale);
         self.last_event_t = self.time;
         true
@@ -951,6 +990,8 @@ impl PhysicsDriver {
         let Some((_, _, running)) = self.motion.locomotion() else {
             return;
         };
+        self.jiggle
+            .drive(crate::jiggle::Drive::Footfall { run: running, foot }, 1.0);
         let f = if running {
             self.cfg.walk.run_footfall
         } else {
@@ -1013,6 +1054,18 @@ impl PhysicsDriver {
         while remaining > 1e-7 {
             let s = remaining.min(h);
             self.substep(s);
+            let vx = match self.motion {
+                Motion::Walking { vx, .. }
+                | Motion::Running { vx, .. }
+                | Motion::Dragged { vx } => vx,
+                _ => 0.0,
+            };
+            self.jiggle.set_body_velocity(
+                vx + self.physics.root_x.velocity + self.art_body_v.0,
+                self.physics.root_y.velocity + self.art_body_v.1,
+            );
+            self.jiggle.set_breath(self.breath_value);
+            self.jiggle.tick(s);
             remaining -= s;
         }
         // Bursts emitted since the previous tick (events between ticks included).
@@ -1744,6 +1797,73 @@ mod tests {
 
     fn driver(seed: u64) -> PhysicsDriver {
         PhysicsDriver::bundled(&natural(), HZ, seed)
+    }
+
+    fn jiggle_peak(d: &mut PhysicsDriver, secs: f32) -> crate::jiggle::JiggleOffsets {
+        let mut m = crate::jiggle::JiggleOffsets::default();
+        for _ in 0..(secs * 60.0) as usize {
+            d.tick(1.0 / 60.0);
+            let o = d.jiggle().offsets(1.0);
+            m.chest = m.chest.max(o.chest.abs());
+            m.hips = m.hips.max(o.hips.abs());
+            m.pigtails = m.pigtails.max(o.pigtails.abs());
+            m.tail = m.tail.max(o.tail.abs());
+        }
+        m
+    }
+
+    #[test]
+    fn hang_swing_drop_landing_and_clicks_drive_the_layered_jiggle() {
+        use crate::jiggle::Region;
+        let mut d = driver(1);
+        jiggle_peak(&mut d, 4.0);
+        assert!(d.jiggle().offsets(1.0).max_abs() < 1.5, "quiet at rest");
+        // Picked up and swung side to side (a hang from the cursor).
+        d.set_motion(Motion::Dragged { vx: 0.0 });
+        let mut swing = 0.0f32;
+        for i in 0..120 {
+            let vx = 600.0 * (i as f32 * 0.15).sin();
+            d.set_motion(Motion::Dragged { vx });
+            d.tick(1.0 / 60.0);
+            swing = swing.max(d.jiggle().offsets(1.0).tail.abs());
+        }
+        assert!(swing > 6.0, "a swinging hang flings the tail: {swing}");
+        assert!(d.jiggle().energy(Region::Tail) > 0.0);
+        // Dropped: a landing bounce on every region.
+        d.set_motion(Motion::Idle);
+        let p = jiggle_peak(&mut d, 0.8);
+        assert!(p.chest > 2.0 && p.hips > 1.0, "{p:?}");
+        jiggle_peak(&mut d, 6.0);
+        assert!(d.on_event("input.click.left"));
+        let p = jiggle_peak(&mut d, 0.8);
+        assert!(p.chest > 2.0 && p.tail > 2.0, "{p:?}");
+    }
+
+    #[test]
+    fn walking_footfalls_turns_and_user_settings_reach_the_jiggle() {
+        let mut d = driver(2);
+        d.set_motion(Motion::Walking {
+            vx: 80.0,
+            cycle_s: 1.0,
+        });
+        let walk = jiggle_peak(&mut d, 2.0);
+        assert!(walk.chest > 1.0 && walk.pigtails > 1.0, "{walk:?}");
+        d.set_facing(false);
+        assert!(jiggle_peak(&mut d, 0.5).tail > 1.0);
+        // Settings: jiggle off -> rest; live, no rebuild.
+        let off = UserSprings {
+            jiggle: crate::jiggle::JiggleSettings {
+                enabled: false,
+                ..Default::default()
+            },
+            ..natural()
+        };
+        d.set_user_springs(&off);
+        assert_eq!(
+            jiggle_peak(&mut d, 0.5),
+            crate::jiggle::JiggleOffsets::default()
+        );
+        assert!(!d.jiggle().settings().enabled);
     }
 
     fn channels(t: Transform) -> [f32; 6] {
