@@ -1,0 +1,536 @@
+{
+  "name": "valentines__seduce_blow_kiss_screen",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "valentines__seduce_blow_kiss_screen_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/valentines_flirt_beckon_kiss/valentines_flirt_beckon_kiss_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 1.8,
+    "focus_canvas_xy": [
+      203.98000000000002,
+      72.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      195.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 1.029,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "flirt_idle",
+    "flirt_set",
+    "outfit:valentines",
+    "outfit_of:seduce_blow_kiss_screen",
+    "season:valentines",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      138,
+      277,
+      9,
+      392
+    ],
+    [
+      138,
+      277,
+      9,
+      392
+    ],
+    [
+      137,
+      277,
+      9,
+      392
+    ],
+    [
+      135,
+      273,
+      9,
+      392
+    ],
+    [
+      133,
+      277,
+      9,
+      392
+    ],
+    [
+      144,
+      283,
+      9,
+      392
+    ],
+    [
+      147,
+      291,
+      9,
+      392
+    ],
+    [
+      151,
+      297,
+      9,
+      392
+    ],
+    [
+      155,
+      294,
+      9,
+      392
+    ],
+    [
+      159,
+      279,
+      10,
+      392
+    ],
+    [
+      162,
+      268,
+      11,
+      392
+    ],
+    [
+      147,
+      273,
+      9,
+      392
+    ],
+    [
+      129,
+      282,
+      9,
+      392
+    ],
+    [
+      108,
+      278,
+      9,
+      392
+    ],
+    [
+      117,
+      269,
+      9,
+      392
+    ],
+    [
+      152,
+      270,
+      11,
+      392
+    ],
+    [
+      163,
+      271,
+      17,
+      392
+    ],
+    [
+      162,
+      273,
+      19,
+      392
+    ],
+    [
+      162,
+      284,
+      19,
+      392
+    ],
+    [
+      161,
+      285,
+      17,
+      392
+    ],
+    [
+      160,
+      283,
+      11,
+      392
+    ],
+    [
+      146,
+      283,
+      9,
+      392
+    ],
+    [
+      139,
+      286,
+      9,
+      392
+    ],
+    [
+      141,
+      290,
+      9,
+      392
+    ],
+    [
+      145,
+      292,
+      9,
+      392
+    ],
+    [
+      146,
+      293,
+      9,
+      392
+    ],
+    [
+      146,
+      291,
+      9,
+      392
+    ],
+    [
+      146,
+      320,
+      9,
+      392
+    ],
+    [
+      147,
+      321,
+      9,
+      392
+    ],
+    [
+      149,
+      306,
+      9,
+      392
+    ],
+    [
+      150,
+      301,
+      9,
+      392
+    ],
+    [
+      151,
+      313,
+      10,
+      392
+    ],
+    [
+      151,
+      309,
+      11,
+      392
+    ],
+    [
+      151,
+      307,
+      11,
+      392
+    ],
+    [
+      151,
+      314,
+      11,
+      392
+    ],
+    [
+      150,
+      303,
+      9,
+      392
+    ],
+    [
+      149,
+      288,
+      9,
+      392
+    ],
+    [
+      149,
+      287,
+      9,
+      392
+    ],
+    [
+      150,
+      285,
+      9,
+      392
+    ],
+    [
+      150,
+      284,
+      11,
+      392
+    ],
+    [
+      151,
+      283,
+      14,
+      392
+    ],
+    [
+      151,
+      283,
+      16,
+      392
+    ],
+    [
+      151,
+      283,
+      16,
+      392
+    ],
+    [
+      150,
+      283,
+      14,
+      392
+    ],
+    [
+      148,
+      282,
+      11,
+      392
+    ],
+    [
+      145,
+      281,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      136,
+      273,
+      9,
+      392
+    ],
+    [
+      135,
+      271,
+      9,
+      392
+    ],
+    [
+      137,
+      277,
+      9,
+      392
+    ],
+    [
+      138,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ]
+  ],
+  "canvas_compliant": true,
+  "video": {
+    "file": "valentines__seduce_blow_kiss_screen.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 704200,
+    "quality": {
+      "edge_mae": 2.12,
+      "edge_p99": 16.0,
+      "halo_dark": 0.011,
+      "halo_light": -0.071,
+      "alpha_mae": 0.0599
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "68c01f2611e3c7d5693a2137c09a64f24570d0a2f9ee816822067863c7f87d05",
+    "source_sha256": "ecf4868a8ea0b29ce0cdc19029954c2e900370c8d963d84b5b583bfd7d8105a0"
+  },
+  "season": "valentines",
+  "outfit": "valentines",
+  "allure": true,
+  "severity": 1,
+  "outfit_of": "seduce_blow_kiss_screen"
+}

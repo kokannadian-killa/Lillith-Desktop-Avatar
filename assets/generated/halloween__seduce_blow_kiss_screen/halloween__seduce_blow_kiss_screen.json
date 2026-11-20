@@ -1,0 +1,536 @@
+{
+  "name": "halloween__seduce_blow_kiss_screen",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "halloween__seduce_blow_kiss_screen_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/halloween_flirt_beckon_kiss/halloween_flirt_beckon_kiss_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 1.8,
+    "focus_canvas_xy": [
+      206.98000000000002,
+      72.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      195.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 1.029,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "flirt_idle",
+    "flirt_set",
+    "outfit:halloween",
+    "outfit_of:seduce_blow_kiss_screen",
+    "season:halloween",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      277,
+      9,
+      392
+    ],
+    [
+      125,
+      277,
+      9,
+      392
+    ],
+    [
+      124,
+      275,
+      9,
+      392
+    ],
+    [
+      124,
+      274,
+      9,
+      392
+    ],
+    [
+      125,
+      276,
+      9,
+      392
+    ],
+    [
+      125,
+      278,
+      9,
+      392
+    ],
+    [
+      125,
+      278,
+      9,
+      392
+    ],
+    [
+      127,
+      279,
+      9,
+      392
+    ],
+    [
+      130,
+      281,
+      9,
+      392
+    ],
+    [
+      134,
+      281,
+      9,
+      392
+    ],
+    [
+      136,
+      282,
+      9,
+      392
+    ],
+    [
+      137,
+      282,
+      10,
+      392
+    ],
+    [
+      138,
+      284,
+      11,
+      392
+    ],
+    [
+      138,
+      285,
+      11,
+      392
+    ],
+    [
+      138,
+      284,
+      12,
+      392
+    ],
+    [
+      138,
+      282,
+      12,
+      392
+    ],
+    [
+      137,
+      284,
+      13,
+      392
+    ],
+    [
+      136,
+      286,
+      14,
+      392
+    ],
+    [
+      134,
+      287,
+      15,
+      392
+    ],
+    [
+      133,
+      288,
+      16,
+      392
+    ],
+    [
+      133,
+      288,
+      17,
+      392
+    ],
+    [
+      134,
+      288,
+      16,
+      392
+    ],
+    [
+      134,
+      288,
+      17,
+      392
+    ],
+    [
+      134,
+      288,
+      18,
+      392
+    ],
+    [
+      134,
+      287,
+      17,
+      392
+    ],
+    [
+      134,
+      285,
+      12,
+      392
+    ],
+    [
+      135,
+      282,
+      9,
+      392
+    ],
+    [
+      135,
+      279,
+      9,
+      392
+    ],
+    [
+      133,
+      283,
+      9,
+      392
+    ],
+    [
+      130,
+      286,
+      9,
+      392
+    ],
+    [
+      127,
+      288,
+      9,
+      392
+    ],
+    [
+      126,
+      289,
+      9,
+      392
+    ],
+    [
+      129,
+      292,
+      9,
+      392
+    ],
+    [
+      131,
+      294,
+      9,
+      392
+    ],
+    [
+      131,
+      295,
+      9,
+      392
+    ],
+    [
+      130,
+      294,
+      9,
+      392
+    ],
+    [
+      129,
+      292,
+      9,
+      392
+    ],
+    [
+      127,
+      288,
+      9,
+      392
+    ],
+    [
+      123,
+      283,
+      9,
+      392
+    ],
+    [
+      120,
+      278,
+      9,
+      392
+    ],
+    [
+      119,
+      278,
+      9,
+      392
+    ],
+    [
+      121,
+      278,
+      9,
+      392
+    ],
+    [
+      123,
+      278,
+      9,
+      392
+    ],
+    [
+      125,
+      278,
+      9,
+      392
+    ],
+    [
+      128,
+      278,
+      9,
+      392
+    ],
+    [
+      129,
+      278,
+      9,
+      392
+    ],
+    [
+      130,
+      280,
+      9,
+      392
+    ],
+    [
+      129,
+      281,
+      9,
+      392
+    ],
+    [
+      129,
+      280,
+      10,
+      392
+    ],
+    [
+      128,
+      280,
+      10,
+      392
+    ],
+    [
+      128,
+      279,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ],
+    [
+      127,
+      278,
+      10,
+      392
+    ]
+  ],
+  "canvas_compliant": true,
+  "video": {
+    "file": "halloween__seduce_blow_kiss_screen.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 662026,
+    "quality": {
+      "edge_mae": 1.749,
+      "edge_p99": 16.0,
+      "halo_dark": 0.009,
+      "halo_light": -0.089,
+      "alpha_mae": 0.0528
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "be1104933deb9a57b8e22ac3333d037a0a1e945b55e3c25f4883daf84d5b7b44",
+    "source_sha256": "116e36656f2dca3701db8db4eaddf13649c0b3d88a89740af9b6c9bc0cace75f"
+  },
+  "season": "halloween",
+  "outfit": "halloween",
+  "allure": true,
+  "severity": 1,
+  "outfit_of": "seduce_blow_kiss_screen"
+}

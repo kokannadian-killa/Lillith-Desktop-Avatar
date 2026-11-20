@@ -1,0 +1,536 @@
+{
+  "name": "valentines__seduce_lip_bite_glance",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "valentines__seduce_lip_bite_glance_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/valentines_face_pushin_lipbite/valentines_face_pushin_lipbite_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 3.4,
+    "focus_canvas_xy": [
+      203.98000000000002,
+      72.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      262.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        5,
+        19,
+        43,
+        56
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 0.545,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.035,
+      1.1329,
+      1.2834,
+      1.4758,
+      1.6997,
+      1.9446,
+      2.2,
+      2.4554,
+      2.7003,
+      2.9242,
+      3.1166,
+      3.2671,
+      3.365,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.3596,
+      3.2471,
+      3.0756,
+      2.8582,
+      2.608,
+      2.3382,
+      2.0618,
+      1.792,
+      1.5418,
+      1.3244,
+      1.1529,
+      1.0404,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "face_zoom",
+    "flirt_set",
+    "outfit:valentines",
+    "outfit_of:seduce_lip_bite_glance",
+    "season:valentines",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      139,
+      277,
+      9,
+      392
+    ],
+    [
+      137,
+      277,
+      10,
+      392
+    ],
+    [
+      131,
+      285,
+      12,
+      392
+    ],
+    [
+      122,
+      295,
+      15,
+      392
+    ],
+    [
+      110,
+      308,
+      19,
+      392
+    ],
+    [
+      96,
+      324,
+      23,
+      392
+    ],
+    [
+      81,
+      341,
+      28,
+      392
+    ],
+    [
+      66,
+      359,
+      30,
+      392
+    ],
+    [
+      50,
+      371,
+      33,
+      392
+    ],
+    [
+      36,
+      361,
+      35,
+      392
+    ],
+    [
+      41,
+      372,
+      38,
+      392
+    ],
+    [
+      30,
+      374,
+      41,
+      392
+    ],
+    [
+      23,
+      376,
+      43,
+      392
+    ],
+    [
+      17,
+      376,
+      44,
+      392
+    ],
+    [
+      15,
+      378,
+      45,
+      392
+    ],
+    [
+      15,
+      378,
+      45,
+      392
+    ],
+    [
+      15,
+      378,
+      45,
+      392
+    ],
+    [
+      15,
+      378,
+      45,
+      392
+    ],
+    [
+      15,
+      378,
+      45,
+      392
+    ],
+    [
+      15,
+      378,
+      45,
+      392
+    ],
+    [
+      15,
+      376,
+      45,
+      392
+    ],
+    [
+      15,
+      376,
+      45,
+      392
+    ],
+    [
+      15,
+      376,
+      45,
+      392
+    ],
+    [
+      15,
+      376,
+      45,
+      392
+    ],
+    [
+      16,
+      376,
+      45,
+      392
+    ],
+    [
+      15,
+      376,
+      45,
+      392
+    ],
+    [
+      15,
+      374,
+      45,
+      392
+    ],
+    [
+      15,
+      374,
+      45,
+      392
+    ],
+    [
+      15,
+      374,
+      45,
+      392
+    ],
+    [
+      15,
+      374,
+      45,
+      392
+    ],
+    [
+      14,
+      374,
+      45,
+      392
+    ],
+    [
+      14,
+      374,
+      45,
+      392
+    ],
+    [
+      14,
+      374,
+      45,
+      392
+    ],
+    [
+      14,
+      374,
+      45,
+      392
+    ],
+    [
+      13,
+      374,
+      45,
+      392
+    ],
+    [
+      12,
+      374,
+      45,
+      392
+    ],
+    [
+      12,
+      374,
+      45,
+      392
+    ],
+    [
+      10,
+      374,
+      45,
+      392
+    ],
+    [
+      10,
+      374,
+      47,
+      392
+    ],
+    [
+      12,
+      372,
+      49,
+      392
+    ],
+    [
+      17,
+      370,
+      51,
+      392
+    ],
+    [
+      27,
+      367,
+      50,
+      392
+    ],
+    [
+      39,
+      363,
+      44,
+      392
+    ],
+    [
+      36,
+      349,
+      38,
+      392
+    ],
+    [
+      52,
+      367,
+      32,
+      392
+    ],
+    [
+      70,
+      349,
+      27,
+      392
+    ],
+    [
+      87,
+      331,
+      22,
+      392
+    ],
+    [
+      103,
+      313,
+      18,
+      392
+    ],
+    [
+      117,
+      298,
+      14,
+      392
+    ],
+    [
+      129,
+      286,
+      11,
+      392
+    ],
+    [
+      136,
+      278,
+      10,
+      392
+    ],
+    [
+      139,
+      278,
+      9,
+      392
+    ],
+    [
+      139,
+      278,
+      9,
+      392
+    ],
+    [
+      139,
+      278,
+      9,
+      392
+    ],
+    [
+      139,
+      278,
+      9,
+      392
+    ]
+  ],
+  "canvas_compliant": true,
+  "video": {
+    "file": "valentines__seduce_lip_bite_glance.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 1146513,
+    "quality": {
+      "edge_mae": 2.125,
+      "edge_p99": 16.85,
+      "halo_dark": 0.021,
+      "halo_light": -0.077,
+      "alpha_mae": 0.0885
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "29bf18fcd11a2a01213c2c4f3c74f96fb5d0e37fb10125a8874fc2699b4f6600",
+    "source_sha256": "df83e954185758859605809cdff95260c22576ad5e49c6ca70dfc118b02e0c26"
+  },
+  "season": "valentines",
+  "outfit": "valentines",
+  "allure": true,
+  "severity": 2,
+  "outfit_of": "seduce_lip_bite_glance"
+}

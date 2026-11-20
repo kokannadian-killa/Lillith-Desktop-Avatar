@@ -1,0 +1,536 @@
+{
+  "name": "summer__seduce_lip_bite_glance",
+  "placeholder": false,
+  "frame_count": 60,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "summer__seduce_lip_bite_glance_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.54,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/summer_face_pushin_lipbite/summer_face_pushin_lipbite_b.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 119,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = pose still) + tools/video-pipeline/zoom_tease.py",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "tools/video-pipeline/zoom_tease.py (matte_v2 functions)",
+  "centering": "fixed",
+  "baseline_snap": "per-frame (smoothed)",
+  "cleavage_zoom": {
+    "zmax": 3.4,
+    "focus_canvas_xy": [
+      206.98000000000002,
+      71.72
+    ],
+    "target_canvas_xy": [
+      200.0,
+      262.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        5,
+        19,
+        43,
+        56
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 0.545,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.035,
+      1.1329,
+      1.2834,
+      1.4758,
+      1.6997,
+      1.9446,
+      2.2,
+      2.4554,
+      2.7003,
+      2.9242,
+      3.1166,
+      3.2671,
+      3.365,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.4,
+      3.3596,
+      3.2471,
+      3.0756,
+      2.8582,
+      2.608,
+      2.3382,
+      2.0618,
+      1.792,
+      1.5418,
+      1.3244,
+      1.1529,
+      1.0404,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "tags": [
+    "allure",
+    "baked_motion",
+    "face_zoom",
+    "flirt_set",
+    "outfit:summer",
+    "outfit_of:seduce_lip_bite_glance",
+    "season:summer",
+    "seasonal"
+  ],
+  "bbox_per_frame": [
+    [
+      137,
+      282,
+      8,
+      392
+    ],
+    [
+      137,
+      282,
+      8,
+      392
+    ],
+    [
+      137,
+      282,
+      8,
+      392
+    ],
+    [
+      137,
+      282,
+      8,
+      392
+    ],
+    [
+      137,
+      282,
+      8,
+      392
+    ],
+    [
+      137,
+      282,
+      8,
+      392
+    ],
+    [
+      134,
+      285,
+      8,
+      392
+    ],
+    [
+      127,
+      292,
+      10,
+      392
+    ],
+    [
+      116,
+      303,
+      12,
+      392
+    ],
+    [
+      103,
+      317,
+      15,
+      392
+    ],
+    [
+      87,
+      334,
+      18,
+      392
+    ],
+    [
+      76,
+      351,
+      22,
+      392
+    ],
+    [
+      59,
+      370,
+      26,
+      392
+    ],
+    [
+      42,
+      373,
+      30,
+      392
+    ],
+    [
+      25,
+      304,
+      34,
+      392
+    ],
+    [
+      20,
+      312,
+      37,
+      392
+    ],
+    [
+      16,
+      318,
+      40,
+      392
+    ],
+    [
+      4,
+      320,
+      43,
+      392
+    ],
+    [
+      0,
+      316,
+      44,
+      392
+    ],
+    [
+      0,
+      319,
+      45,
+      392
+    ],
+    [
+      0,
+      319,
+      45,
+      392
+    ],
+    [
+      0,
+      321,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      325,
+      45,
+      392
+    ],
+    [
+      0,
+      328,
+      45,
+      392
+    ],
+    [
+      0,
+      327,
+      45,
+      392
+    ],
+    [
+      0,
+      325,
+      45,
+      392
+    ],
+    [
+      0,
+      325,
+      45,
+      392
+    ],
+    [
+      0,
+      325,
+      45,
+      392
+    ],
+    [
+      0,
+      325,
+      45,
+      392
+    ],
+    [
+      0,
+      324,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      321,
+      45,
+      392
+    ],
+    [
+      0,
+      323,
+      45,
+      392
+    ],
+    [
+      0,
+      326,
+      45,
+      392
+    ],
+    [
+      0,
+      327,
+      46,
+      392
+    ],
+    [
+      7,
+      323,
+      42,
+      392
+    ],
+    [
+      18,
+      315,
+      40,
+      392
+    ],
+    [
+      18,
+      308,
+      36,
+      392
+    ],
+    [
+      30,
+      299,
+      33,
+      392
+    ],
+    [
+      47,
+      376,
+      28,
+      392
+    ],
+    [
+      66,
+      358,
+      24,
+      392
+    ],
+    [
+      78,
+      340,
+      20,
+      392
+    ],
+    [
+      96,
+      322,
+      16,
+      392
+    ],
+    [
+      111,
+      307,
+      13,
+      392
+    ],
+    [
+      125,
+      294,
+      10,
+      392
+    ],
+    [
+      133,
+      285,
+      8,
+      392
+    ],
+    [
+      137,
+      282,
+      8,
+      392
+    ],
+    [
+      137,
+      282,
+      8,
+      392
+    ],
+    [
+      137,
+      281,
+      8,
+      392
+    ],
+    [
+      137,
+      281,
+      8,
+      392
+    ]
+  ],
+  "canvas_compliant": false,
+  "video": {
+    "file": "summer__seduce_lip_bite_glance.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 60,
+    "fps": 12.0,
+    "bytes": 1175947,
+    "quality": {
+      "edge_mae": 2.15,
+      "edge_p99": 18.97,
+      "halo_dark": 0.038,
+      "halo_light": -0.082,
+      "alpha_mae": 0.1007
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "9867e5269a038b20cd4bd15ba924f73bad8f8f365d3bef9c9c6e5f212b691347",
+    "source_sha256": "5e600bcd58fdf625388bba42517ce2e0034f53880d507988f510e85a4b11a69d"
+  },
+  "season": "summer",
+  "outfit": "summer",
+  "allure": true,
+  "severity": 2,
+  "outfit_of": "seduce_lip_bite_glance"
+}
