@@ -1,0 +1,315 @@
+{
+  "name": "xmas__walk_saunter_right",
+  "placeholder": false,
+  "frame_count": 15,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "xmas__walk_saunter_right_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.6353,
+  "body_anchor_x": 200,
+  "facing": "right",
+  "source_files": [
+    "../../source/video/xmas__walk_saunter_right/xmas__walk_saunter_right_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 39,
+    "last": 75,
+    "step": null,
+    "frames": [
+      39,
+      42,
+      44,
+      47,
+      49,
+      52,
+      55,
+      57,
+      60,
+      62,
+      65,
+      68,
+      70,
+      73,
+      75
+    ],
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers; explicit list (even-time resample)"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "body_trend",
+  "baseline_snap": "per_frame",
+  "body_point_src_x": [
+    628.0,
+    629.1,
+    630.0,
+    628.1,
+    625.5,
+    617.1,
+    620.8,
+    621.2,
+    624.8,
+    626.5,
+    626.5,
+    625.8,
+    624.5,
+    625.6,
+    625.9
+  ],
+  "horn_fix": {
+    "ref_horn_px": 558,
+    "ref_hue_median": 258.4,
+    "mean_hue_shift_deg_per_frame": [
+      -3.5,
+      -2.4,
+      -3.2,
+      -2.7,
+      -3.7,
+      -2.4,
+      -2.7,
+      -2.0,
+      -0.6,
+      -1.7,
+      -2.3,
+      -3.1,
+      -2.4,
+      -1.7,
+      -2.7
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Christmas outfit take of walk_saunter_right (outfit_of): same move redrawn in the xmas Santa bikini, Grok Imagine I2V from an xmas edit of walk_saunter_right's source still, frames picked to match walk_saunter_right's pose phase/timing; drawn in place of the source clip while outfit xmas is worn. Matte with LILLITH_WHITE_TRIM=1 (white fur).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      111,
+      305,
+      19,
+      391
+    ],
+    [
+      101,
+      283,
+      16,
+      391
+    ],
+    [
+      108,
+      267,
+      13,
+      391
+    ],
+    [
+      117,
+      244,
+      10,
+      391
+    ],
+    [
+      114,
+      250,
+      9,
+      391
+    ],
+    [
+      111,
+      267,
+      11,
+      392
+    ],
+    [
+      110,
+      306,
+      16,
+      392
+    ],
+    [
+      111,
+      312,
+      20,
+      392
+    ],
+    [
+      111,
+      296,
+      18,
+      392
+    ],
+    [
+      106,
+      280,
+      16,
+      392
+    ],
+    [
+      118,
+      258,
+      12,
+      392
+    ],
+    [
+      115,
+      250,
+      8,
+      392
+    ],
+    [
+      111,
+      259,
+      8,
+      392
+    ],
+    [
+      108,
+      283,
+      10,
+      391
+    ],
+    [
+      109,
+      309,
+      13,
+      391
+    ]
+  ],
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_ab_of": "generated_v2/xmas__walk_saunter_right/",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -198,
+        -45,
+        0.0234
+      ],
+      [
+        -198,
+        -45,
+        0.0255
+      ],
+      [
+        -198,
+        -45,
+        0.0234
+      ],
+      [
+        -198,
+        -45,
+        0.0213
+      ],
+      [
+        -198,
+        -45,
+        0.0216
+      ],
+      [
+        -197,
+        -44,
+        0.0221
+      ],
+      [
+        -197,
+        -43,
+        0.0241
+      ],
+      [
+        -197,
+        -43,
+        0.0259
+      ],
+      [
+        -197,
+        -46,
+        0.0253
+      ],
+      [
+        -197,
+        -46,
+        0.0256
+      ],
+      [
+        -197,
+        -46,
+        0.0262
+      ],
+      [
+        -197,
+        -46,
+        0.0196
+      ],
+      [
+        -197,
+        -46,
+        0.0208
+      ],
+      [
+        -197,
+        -46,
+        0.0209
+      ],
+      [
+        -196,
+        -46,
+        0.0225
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
+  "video": {
+    "file": "xmas__walk_saunter_right.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 15,
+    "fps": 12.0,
+    "bytes": 216874,
+    "quality": {
+      "edge_mae": 2.483,
+      "edge_p99": 22.0,
+      "halo_dark": 0.011,
+      "halo_light": -0.077,
+      "alpha_mae": 0.0918
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "822c3f840c204433ee46f464e4b5f9483334a5e90c1a2ee20c0ecad8ce0fde4c",
+    "source_sha256": "de6c168d8f0606182b92b99469dec50193d9f52b18495aa81ec8aade79e08daf"
+  },
+  "tags": [
+    "baked_motion",
+    "seasonal",
+    "outfit:xmas",
+    "season:xmas",
+    "outfit_of:walk_saunter_right"
+  ],
+  "season": "xmas",
+  "outfit": "xmas",
+  "outfit_of": "walk_saunter_right"
+}
