@@ -131753,6 +131753,116 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.xmas__walk_left]
+page = "xmas__walk_left/xmas__walk_left_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.6353
+tags = ["canonical", "facing:left", "baked_motion", "seasonal", "outfit:xmas", "season:xmas", "outfit_of:walk_left"]
+root_motion = [-20.0, -21.0, -21.0, -18.0, -22.0, -21.0, -22.0, -21.0, -22.0, -10.0, -18.0, -22.0, -21.0, -23.0]
+contact_frames = [3, 9]
+disable_springs = ["gait"]
+video = "xmas__walk_left/xmas__walk_left.mp4"
+
+[[clips.xmas__walk_left.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 4000
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 4400
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 4800
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
+[[clips.xmas__walk_left.frames]]
+x = 5200
+y = 0
+w = 400
+h = 400
+anchor = [200, 392]
+
 [clips.xmas__walk_right]
 page = "xmas__walk_right/xmas__walk_right_sheet.png"
 fps = 12.0
