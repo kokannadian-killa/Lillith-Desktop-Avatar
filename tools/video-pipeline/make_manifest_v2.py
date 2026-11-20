@@ -98,3 +98,4 @@ m = {'style': 'generated_v2: video-based (Grok Imagine I2V) with baked bounce/se
      'animations': anims}
 json.dump(m, open(f'{V2}/manifest_v2.json', 'w'), indent=1)
 print(len(anims), 'entries')
+VARIANT_OF.update({'xmas_oops_strap_catch_giggle': 'idle'})  # xmas idle variant (art/outfit-xmas-base-1)

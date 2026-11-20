@@ -18544,6 +18544,43 @@
       "video": "xmas__idle_b/xmas__idle_b.mp4",
       "season": "xmas",
       "outfit": "xmas"
+    },
+    {
+      "name": "xmas_oops_strap_catch_giggle",
+      "frame_count": 96,
+      "frame_width": 400,
+      "frame_height": 400,
+      "fps": 12.0,
+      "loop": true,
+      "baseline_y": 392,
+      "anchor": [
+        200,
+        392
+      ],
+      "scale": 0.585,
+      "body_anchor_x": 200,
+      "facing": "front",
+      "canvas_compliant": true,
+      "placeholder": false,
+      "source": "grok-imagine-video",
+      "dir": "xmas_oops_strap_catch_giggle/",
+      "sheet": "xmas_oops_strap_catch_giggle/xmas_oops_strap_catch_giggle_sheet.png",
+      "manifest": "xmas_oops_strap_catch_giggle/xmas_oops_strap_catch_giggle.json",
+      "preview": "xmas_oops_strap_catch_giggle/xmas_oops_strap_catch_giggle_preview.gif",
+      "tags": [
+        "baked_motion",
+        "idle_variant",
+        "outfit:xmas",
+        "season:xmas",
+        "seasonal",
+        "severity:3",
+        "variant_of:idle"
+      ],
+      "video": "xmas_oops_strap_catch_giggle/xmas_oops_strap_catch_giggle.mp4",
+      "severity": 3,
+      "system": false,
+      "season": "xmas",
+      "outfit": "xmas"
     }
   ]
 }
