@@ -1173,7 +1173,11 @@ fn workers_have_no_install_download_or_memory_write_path() {
             assert!(!src.contains(bad), "{name} mentions {bad}");
         }
         if name != "process" {
-            assert!(!src.contains("Command::new"), "{name} runs programs");
+            let raw = ["Command", "::new"].concat();
+            assert!(
+                !src.contains(&raw) && !src.contains("proc::command("),
+                "{name} runs programs"
+            );
         }
     }
 }

@@ -30,7 +30,7 @@ impl LaunchCommand {
     }
 
     pub fn to_command(&self) -> Command {
-        let mut c = Command::new(&self.program);
+        let mut c = crate::proc::command(&self.program);
         c.args(&self.args);
         scrub_model_env(&mut c);
         c

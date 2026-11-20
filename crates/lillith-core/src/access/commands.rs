@@ -481,7 +481,7 @@ pub fn run_captured(
     timeout: Duration,
     cap: usize,
 ) -> std::io::Result<String> {
-    let mut c = std::process::Command::new("sh");
+    let mut c = crate::proc::command("sh");
     c.arg("-c").arg(cmd);
     if let Some(d) = cwd.map(Path::to_path_buf).or_else(super::home) {
         if d.is_dir() {
@@ -563,11 +563,7 @@ fn run_child_ungated(
             });
         }
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        c.creation_flags(super::winshell::CREATE_NO_WINDOW);
-    }
+    crate::proc::hide(&mut c);
     let mut child = c.spawn()?;
     // Lets a (cross-process) stop check this tree is really gone.
     let mut tracked = super::stop_session::track_group(child.id(), epoch);
@@ -826,7 +822,7 @@ fn kill_tree(child: &mut std::process::Child) {
         // the POSIX form; procps-ng 4.0.x mis-parses `kill -KILL -<pgid>`
         // (exit 1, and on the GitHub runner the group survived, so a
         // grandchild kept the output pipe open until it exited).
-        let mut c = std::process::Command::new("kill");
+        let mut c = crate::proc::command("kill");
         c.args(["-s", "KILL", "--", &format!("-{}", child.id())]);
         crate::launch_audit::record_command("kill_tree", &c);
         let _ = c
@@ -837,12 +833,10 @@ fn kill_tree(child: &mut std::process::Child) {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        let mut c = std::process::Command::new("taskkill");
+        let mut c = crate::proc::command("taskkill");
         c.args(["/T", "/F", "/PID", &child.id().to_string()]);
         crate::launch_audit::record_command("kill_tree", &c);
         let _ = c
-            .creation_flags(super::winshell::CREATE_NO_WINDOW)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -968,7 +962,7 @@ mod tests {
             .write()
             .unwrap_or_else(|e| e.into_inner());
         let t = std::thread::spawn(|| {
-            let mut c = std::process::Command::new("sh");
+            let mut c = crate::proc::command("sh");
             c.arg("-c").arg("sleep 1; echo done");
             run_child_ungated(c, Duration::from_secs(30), 4096)
         });
@@ -985,7 +979,7 @@ mod tests {
             .write()
             .unwrap_or_else(|e| e.into_inner());
         let t = std::thread::spawn(|| {
-            let mut c = std::process::Command::new("sh");
+            let mut c = crate::proc::command("sh");
             c.arg("-c").arg("sleep 20");
             run_child_ungated(c, Duration::from_secs(30), 4096)
         });
@@ -1016,7 +1010,7 @@ mod tests {
             pidf.display()
         );
         let t = std::thread::spawn(move || {
-            let mut c = std::process::Command::new("sh");
+            let mut c = crate::proc::command("sh");
             c.arg("-c").arg(script);
             run_child_ungated(c, Duration::from_secs(60), 4096)
         });

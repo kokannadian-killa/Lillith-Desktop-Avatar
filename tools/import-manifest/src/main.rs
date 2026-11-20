@@ -719,7 +719,7 @@ fn ffprobe(ffmpeg: &Path, video: &Path) -> Result<Probe> {
         .map(|d| d.join("ffprobe"))
         .filter(|p| p.is_file())
         .unwrap_or_else(|| PathBuf::from("ffprobe"));
-    let mut c = std::process::Command::new(probe);
+    let mut c = lillith_core::proc::command(probe);
     c.args([
         "-v",
         "error",

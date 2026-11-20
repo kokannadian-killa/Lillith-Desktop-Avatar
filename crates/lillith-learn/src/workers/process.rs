@@ -164,11 +164,11 @@ impl WorkerProc {
                 ));
             };
             let argv = bwrap_argv(b, cmd, scratch);
-            let mut c = Command::new(&argv[0]);
+            let mut c = lillith_core::proc::command(&argv[0]);
             c.args(&argv[1..]);
             c
         } else {
-            let mut c = Command::new(&cmd.program);
+            let mut c = lillith_core::proc::command(&cmd.program);
             c.args(&cmd.args);
             c
         };
@@ -634,7 +634,7 @@ mod tests {
     #[test]
     fn seccomp_denies_exec() {
         use std::os::unix::process::CommandExt;
-        let mut c = Command::new("/bin/true");
+        let mut c = lillith_core::proc::command("/bin/true");
         // SAFETY: prctl only, between fork and exec.
         unsafe {
             c.pre_exec(deny_exec_after_start);
@@ -642,7 +642,10 @@ mod tests {
         let e = c.spawn().expect_err("exec must be denied");
         assert_eq!(e.raw_os_error(), Some(libc::EPERM), "{e}");
         // Without the filter the same program runs.
-        assert!(Command::new("/bin/true").status().unwrap().success());
+        assert!(lillith_core::proc::command("/bin/true")
+            .status()
+            .unwrap()
+            .success());
     }
 
     #[test]
@@ -759,7 +762,7 @@ pub(crate) fn run_sandboxed_watched(
             "only a bwrap argv runs here (never a weaker sandbox)",
         ));
     }
-    let mut c = Command::new(prog);
+    let mut c = lillith_core::proc::command(prog);
     c.args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")

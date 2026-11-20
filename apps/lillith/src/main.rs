@@ -1281,7 +1281,7 @@ fn ensure_voice_daemon(configured: Option<&std::path::Path>) {
         .map(String::from)
         .to_vec();
     lillith_core::launch_audit::record("voice-daemon", &argv);
-    let status = std::process::Command::new(&argv[0])
+    let status = lillith_core::proc::command(&argv[0])
         .args(&argv[1..])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

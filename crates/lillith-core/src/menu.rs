@@ -1175,9 +1175,9 @@ pub fn parse_pick(line: &str) -> Option<MenuPick> {
 /// handler there).
 pub fn open_settings_command(path: &Path) -> std::process::Command {
     #[cfg(not(windows))]
-    let mut c = std::process::Command::new("xdg-open");
+    let mut c = crate::proc::command("xdg-open");
     #[cfg(windows)]
-    let mut c = std::process::Command::new("notepad.exe");
+    let mut c = crate::proc::command("notepad.exe");
     c.arg(path)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

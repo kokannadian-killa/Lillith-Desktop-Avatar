@@ -850,7 +850,7 @@ impl SessionBus {
         deadline: Instant,
     ) -> Result<String, BusError> {
         let argv = dbus_argv(path, method, args, Some(Self::ms_left(deadline)));
-        let mut c = Command::new(&argv[0]);
+        let mut c = lillith_core::proc::command(&argv[0]);
         c.args(&argv[1..]);
         match run_until(&mut c, deadline) {
             Err(BusError::Unavailable(e))
@@ -859,7 +859,7 @@ impl SessionBus {
                 // No dbus-send: qdbus6 takes plain args.
                 let short = method.rsplit('.').next().unwrap_or(method);
                 let iface = method.rsplit_once('.').map(|x| x.0).unwrap_or("");
-                let mut q = Command::new("qdbus6");
+                let mut q = lillith_core::proc::command("qdbus6");
                 q.arg("org.kde.KWin").arg(path);
                 if method == "org.freedesktop.DBus.Properties.Get" {
                     q.arg("org.freedesktop.DBus.Properties.Get");
@@ -946,7 +946,7 @@ impl KwinRc for DiskRc {
         deadline: Instant,
     ) -> Result<(), String> {
         let argv = kwrite_argv(group, key, value);
-        let mut c = Command::new(&argv[0]);
+        let mut c = lillith_core::proc::command(&argv[0]);
         c.args(&argv[1..]);
         run_until(&mut c, deadline)
             .map(drop)
@@ -1492,13 +1492,13 @@ mod tests {
         );
         // The real helper also gives up at the deadline.
         let t0 = Instant::now();
-        let mut c = Command::new("sleep");
+        let mut c = lillith_core::proc::command("sleep");
         c.arg("5");
         let e = run_until(&mut c, Instant::now() + Duration::from_millis(200));
         assert_eq!(e, Err(BusError::Timeout));
         assert!(t0.elapsed() < Duration::from_millis(1000));
         // Missing helper = unavailable, immediately.
-        let mut c = Command::new("lillith-no-such-dbus-helper");
+        let mut c = lillith_core::proc::command("lillith-no-such-dbus-helper");
         assert!(matches!(
             run_until(&mut c, Instant::now() + BUDGET),
             Err(BusError::Unavailable(_))

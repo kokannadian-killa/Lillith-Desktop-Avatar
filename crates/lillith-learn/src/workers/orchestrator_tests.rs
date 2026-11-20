@@ -750,7 +750,7 @@ fn forget_dream_item_removes_the_note_file_index_and_log_entry() {
 
 /// The pid of a process that has exited and been reaped.
 fn dead_pid() -> u32 {
-    let mut c = std::process::Command::new("true").spawn().unwrap();
+    let mut c = lillith_core::proc::command("true").spawn().unwrap();
     let pid = c.id();
     c.wait().unwrap();
     pid

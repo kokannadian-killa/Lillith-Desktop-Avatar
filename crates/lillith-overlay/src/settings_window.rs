@@ -15,7 +15,7 @@
 use lillith_core::menu::{parse_pick, MenuAction, MenuPick};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -131,7 +131,7 @@ impl SettingsWindow {
             };
             return Launch::Failed(std::io::Error::new(kind, e.to_string()));
         }
-        let mut cmd = Command::new(&self.program);
+        let mut cmd = lillith_core::proc::command(&self.program);
         if let Some(t) = tab {
             cmd.arg("--tab").arg(t);
         }

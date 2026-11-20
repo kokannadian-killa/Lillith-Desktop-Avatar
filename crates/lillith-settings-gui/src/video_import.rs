@@ -609,7 +609,7 @@ impl ImportCmd {
     /// The child process (unbuffered stdout, own process group).
     pub fn command(&self) -> Command {
         let argv = self.argv();
-        let mut c = Command::new(&argv[0]);
+        let mut c = lillith_core::proc::command(&argv[0]);
         c.args(&argv[1..]).env("PYTHONUNBUFFERED", "1");
         c
     }
@@ -664,10 +664,8 @@ impl Job {
         }
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
             const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+            lillith_core::proc::hide_with(&mut cmd, CREATE_NEW_PROCESS_GROUP);
         }
         let mut child = cmd.spawn()?;
         let pid = child.id();
@@ -1289,7 +1287,7 @@ mod tests {
     /// A stub pipeline (sh) standing in for user_import.py.
     #[cfg(unix)]
     fn stub(body: &str) -> Command {
-        let mut c = Command::new("sh");
+        let mut c = lillith_core::proc::command("sh");
         c.arg("-c").arg(body);
         c
     }

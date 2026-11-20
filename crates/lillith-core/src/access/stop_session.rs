@@ -1619,7 +1619,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn spawn_group_sleep() -> std::process::Child {
         use std::os::unix::process::CommandExt;
-        std::process::Command::new("sleep")
+        crate::proc::command("sleep")
             .arg("60")
             .process_group(0)
             .spawn()

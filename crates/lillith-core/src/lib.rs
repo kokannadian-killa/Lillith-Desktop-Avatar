@@ -47,6 +47,7 @@ pub mod mood;
 pub mod notes;
 pub mod physics_config;
 pub mod physics_driver;
+pub mod proc;
 pub mod rng;
 pub mod rules;
 pub mod seasons;

@@ -466,7 +466,7 @@ fn run_cmd(
     envs: &[(&str, &str)],
     sink: Option<LineSink<'_>>,
 ) -> std::io::Result<String> {
-    let mut cmd = std::process::Command::new(program);
+    let mut cmd = crate::proc::command(program);
     cmd.args(args).current_dir(cwd);
     for (k, v) in envs {
         cmd.env(k, v);
