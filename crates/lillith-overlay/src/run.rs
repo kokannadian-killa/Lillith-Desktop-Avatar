@@ -479,7 +479,7 @@ impl Controller {
         tracing::debug!(px_s, "walk speed matched to the gait rig");
     }
 
-    pub fn with_stage(stage: Stage, opts: &OverlayOptions) -> Self {
+    pub fn with_stage(mut stage: Stage, opts: &OverlayOptions) -> Self {
         let clips: Vec<String> = stage.animator().clip_names().map(str::to_string).collect();
         let mut brain = Brain::new(
             opts.behavior.clone(),
@@ -493,6 +493,11 @@ impl Controller {
         brain.set_pose_tags(lillith_anim::catalog::pose_tags(
             stage.animator().manifest(),
         ));
+        // The idle cycle's rating cap (`[behavior.loneliness]
+        // max_severity`); its pool is set with the outfit below.
+        stage
+            .animator_mut()
+            .set_max_severity(opts.behavior.loneliness.cap());
         let placement = Placement::from_config(&opts.position);
         brain.set_position(placement.left as f32);
         Self {
@@ -576,7 +581,14 @@ impl Controller {
             lillith_anim::catalog::worn_outfit(&self.seasons, m, date, &self.outfit_setting);
         let id = active.map(|o| o.id.clone());
         let hidden = lillith_anim::catalog::hidden_seasonal(m, active);
+        let pool = lillith_anim::catalog::idle_pool(m, active);
         self.brain.set_hidden_clips(hidden);
+        // The outfit stays on for every animation that has a take in it
+        // (`outfit_of`), and the idle cycle plays every pose (her worn
+        // outfit's clips included, other outfits' left out).
+        let anim = self.stage.animator_mut();
+        anim.set_outfit(id.as_deref());
+        anim.set_idle_pool(pool);
         if id != self.outfit_active || self.outfit_date.is_none() {
             tracing::info!(
                 setting = %self.outfit_setting,
@@ -607,6 +619,9 @@ impl Controller {
             self.lonely_hush_epoch = epoch;
             self.brain.note_hush();
         }
+        // Idle takes stay calm during system interactions and the hush.
+        let calm = self.brain.loneliness().calm_required();
+        self.stage.animator_mut().set_idle_calm(calm);
         // TODO(loneliness): Ko's presence profile (3-hour buckets) lives in
         // the memory DB, which this process doesn't open; the mind can send
         // it as a `lonely.presence` event (8 comma-separated counts, see
@@ -909,6 +924,9 @@ impl Controller {
         self.tease.set_config(cfg.behavior.tease.clone());
         self.brain
             .set_loneliness_config(cfg.behavior.loneliness.clone());
+        self.stage
+            .animator_mut()
+            .set_max_severity(cfg.behavior.loneliness.cap());
         if self.peek.is_none() && cfg.scale > 0.0 {
             self.cancel_tease();
             self.set_scale(cfg.overlay_scale(), false);
@@ -2896,6 +2914,17 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
         mode: MoveMode,
         extra: &str,
     ) -> (std::path::PathBuf, Controller) {
+        m3_controller_outfit(tag, mode, extra, "auto")
+    }
+
+    /// [`m3_controller_with`] started with `seasonal_outfit = outfit` (as
+    /// read from config.toml at start).
+    fn m3_controller_outfit(
+        tag: &str,
+        mode: MoveMode,
+        extra: &str,
+        outfit: &str,
+    ) -> (std::path::PathBuf, Controller) {
         let (dir, m) = m3_manifest_with(tag, extra);
         let opts = OverlayOptions {
             manifest: dir.join("manifest.toml"),
@@ -2931,7 +2960,7 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0,
             click_through: false,
             avatars: None,
             avatar: Default::default(),
-            seasonal_outfit: "auto".into(),
+            seasonal_outfit: outfit.into(),
         };
         let stage = Stage::new(m, PageCache::new(&dir), 2.0, opts.animator.clone()).unwrap();
         let mut c = Controller::with_stage(stage, &opts);
@@ -4885,6 +4914,117 @@ frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
         assert!(c.stage.animator().has_clip("xmas_bow_wink"));
         assert!(c.stage.animator().has_clip("halloween_hat_tip_wink"));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn manual_outfit_stays_on_across_dates_show_off_poses_and_restarts() {
+        let frames = r#"page = "idle.png"
+mode = "once"
+frames = [ { x = 0, y = 0, w = 40, h = 40, anchor = [20, 38] }, { x = 40, y = 0, w = 40, h = 40, anchor = [20, 38] } ]
+"#;
+        let mut extra = String::new();
+        for c in ["halloween_hat_tip_wink", "halloween_cape_swirl_arch"] {
+            extra.push_str(&format!(
+                "[clips.{c}]\n{frames}severity = 3\ntags = [\"allure\", \"seasonal\", \"season:halloween\", \"outfit:halloween\"]\n"
+            ));
+        }
+        // The witch outfit's take of `wave` (art bots add these per clip).
+        extra.push_str(&format!(
+            "[clips.halloween_wave]\n{frames}tags = [\"seasonal\", \"outfit:halloween\", \"outfit_of:wave\"]\n"
+        ));
+        extra.push_str(&format!(
+            "[clips.xmas_bow_wink]\n{frames}tags = [\"seasonal\", \"season:xmas\", \"outfit:xmas\"]\n"
+        ));
+        extra.push_str(&format!("[clips.oops_drop_bend]\n{frames}severity = 4\n"));
+        extra.push_str(&format!(
+            "[clips.lonely_perch_lie_along]\n{frames}severity = 5\n"
+        ));
+        let (dir, mut c) = m3_controller_with("outfitlock", MoveMode::Stay, &extra);
+        let cfg = dir.join("cfg/config.toml");
+        c.config_path = Some(cfg.clone());
+        let md = |m, d| MonthDay::new(m, d).unwrap();
+        let worn = |c: &Controller| c.outfit_active().map(|o| o.id.clone());
+        let witch = Some("halloween".to_string());
+        // Idle cycle with the default rating: every pose, R and XXX too;
+        // no seasonal clip while she wears her base outfit.
+        c.refresh_outfit(md(7, 4));
+        assert_eq!(worn(&c), None);
+        let pool = c.stage.animator().idle_pool().to_vec();
+        for clip in [
+            "wave",
+            "knife_tap",
+            "oops_drop_bend",
+            "lonely_perch_lie_along",
+        ] {
+            assert!(pool.iter().any(|p| p == clip), "{clip}: {pool:?}");
+        }
+        assert!(pool
+            .iter()
+            .all(|p| !p.contains("halloween") && !p.contains("xmas")));
+        assert!(c.stage.animator().variants("idle").len() >= 4);
+        // Ko picks the witch outfit by hand (right-click ▸ Avatar ▸ Outfit).
+        c.set_seasonal_outfit("halloween", true);
+        assert_eq!(worn(&c), witch);
+        assert_eq!(c.stage.animator().outfit(), Some("halloween"));
+        assert_eq!(c.stage.animator().drawn_clip("wave"), "halloween_wave");
+        let pool = c.stage.animator().idle_pool().to_vec();
+        assert!(
+            pool.iter().any(|p| p == "halloween_hat_tip_wink"),
+            "{pool:?}"
+        );
+        assert!(pool
+            .iter()
+            .all(|p| p != "halloween_wave" && p != "xmas_bow_wink"));
+        // The date auto-pick never overrides it, whatever season it is.
+        for date in [
+            md(12, 25),
+            md(12, 31),
+            md(1, 1),
+            md(2, 14),
+            md(4, 1),
+            md(7, 4),
+        ] {
+            c.refresh_outfit(date);
+            c.check_outfit_date();
+            assert_eq!(worn(&c), witch, "{date}");
+            assert_eq!(c.stage.animator().outfit(), Some("halloween"), "{date}");
+        }
+        // Show off, a pose pick and a live config reload keep it on.
+        c.menu_pick(MenuAction::ShowOff);
+        assert_eq!(worn(&c), witch);
+        c.command(Command::Pose("wave".into()));
+        assert_eq!(c.stage.animator().current().clip_name, "halloween_wave");
+        assert_eq!(worn(&c), witch);
+        for _ in 0..90 {
+            c.tick(1.0 / 30.0).unwrap();
+        }
+        assert_eq!(worn(&c), witch);
+        let mut disk = Config::load(&cfg).unwrap();
+        assert_eq!(disk.seasonal_outfit, "halloween");
+        disk.behavior.loneliness.max_severity = 3;
+        c.apply_config(&disk);
+        assert_eq!(worn(&c), witch);
+        // A lower rating still filters the idle cycle.
+        assert_eq!(c.stage.animator().max_severity(), 3);
+        let takes = c.stage.animator().variants("idle").to_vec();
+        assert!(!takes
+            .iter()
+            .any(|t| t == "oops_drop_bend" || t == "lonely_perch_lie_along"));
+        // Restart: read back from config.toml, still the witch, even on
+        // Christmas.
+        let saved = Config::load(&cfg).unwrap().seasonal_outfit;
+        let (dir2, mut again) = m3_controller_outfit("outfitlock2", MoveMode::Stay, &extra, &saved);
+        again.refresh_outfit(md(12, 25));
+        assert_eq!(worn(&again), witch);
+        assert_eq!(again.stage.animator().drawn_clip("wave"), "halloween_wave");
+        // Only Ko changes it.
+        c.set_seasonal_outfit("auto", true);
+        c.refresh_outfit(md(7, 4));
+        assert_eq!(worn(&c), None);
+        assert_eq!(c.stage.animator().outfit(), None);
+        assert_eq!(c.stage.animator().drawn_clip("wave"), "wave");
+        let _ = std::fs::remove_dir_all(dir);
+        let _ = std::fs::remove_dir_all(dir2);
     }
 
     #[test]

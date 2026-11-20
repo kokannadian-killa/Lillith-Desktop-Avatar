@@ -119,6 +119,10 @@ pub fn is_pose(name: &str, m: &Manifest) -> bool {
         return false;
     };
     c.jiggle_of.is_none()
+        && !c
+            .tags
+            .iter()
+            .any(|t| t.starts_with(crate::animator::OUTFIT_OF_TAG))
         && !name.ends_with("_jiggle")
         && !name.starts_with("blend_")
         && !name.starts_with("walk_")
@@ -151,6 +155,49 @@ pub fn pose_tags(m: &Manifest) -> Vec<lillith_core::loneliness::PoseTag> {
             lillith_core::loneliness::PoseTag::new(name.clone(), c.severity, system)
         })
         .collect()
+}
+
+/// Every pose the idle cycle plays (Ko, 2026-11-19: "the idle cycles
+/// through every animation", the R-rated and XXX ones included): each
+/// non-system pose of `m` except the base loops, with the seasonal clips
+/// of the worn outfit (`active`) only. Sorted. The animator still applies
+/// the `max_severity` cap ([`crate::animator::Animator::set_max_severity`]),
+/// so a lower rating setting keeps filtering.
+pub fn idle_pool(m: &Manifest, active: Option<&Outfit>) -> Vec<String> {
+    let mut v: Vec<String> = pose_tags(m)
+        .into_iter()
+        .filter(|t| !t.system && seasonal_visible(&t.name, m, active))
+        .map(|t| t.name)
+        .collect();
+    v.sort();
+    v
+}
+
+/// Clips of `m` with no `outfit_of` take for `outfit` (see
+/// [`crate::animator::OUTFIT_OF_TAG`]): every pose, base loop and walk
+/// she draws in her base outfit while it is worn. Its own seasonal clips
+/// and other outfits' clips are left out. Sorted.
+pub fn clips_without_outfit_take(m: &Manifest, outfit: &Outfit) -> Vec<String> {
+    let takes = crate::animator::outfit_variant_map(m);
+    let mine = takes.get(&outfit.id);
+    let mut v: Vec<String> = m
+        .clips
+        .iter()
+        .filter(|(n, c)| {
+            c.jiggle_of.is_none()
+                && !n.starts_with("blend_")
+                && !n.ends_with("_jiggle")
+                && !is_seasonal(n, m)
+                && !c
+                    .tags
+                    .iter()
+                    .any(|t| t.starts_with(crate::animator::OUTFIT_OF_TAG))
+                && !mine.is_some_and(|t| t.contains_key(n.as_str()))
+        })
+        .map(|(n, _)| n.clone())
+        .collect();
+    v.sort();
+    v
 }
 
 /// Category index (into [`CATEGORIES`]) for a clip name.
@@ -516,5 +563,91 @@ mod tests {
             d.dedup();
             assert_eq!(d.len(), s.len(), "distinct: {s:?}");
         }
+    }
+
+    #[test]
+    fn shipped_idle_pool_has_every_pose_r_and_xxx_included() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/generated/manifest.toml");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        let m = Manifest::from_toml_str(&text).unwrap();
+        let seasons = lillith_core::seasons::Seasons::bundled();
+        let pool = idle_pool(&m, None);
+        let has = |c: &str| pool.iter().any(|p| p == c);
+        // idle_tease_*, the chest / bounce clips, the oops clips and every
+        // severity 3 / 4 / 5 pose are reachable from the idle cycle.
+        for c in m.clips.keys() {
+            let sys = m.clips[c].system || matches!(category_of(c), 4 | 5);
+            if is_pose(c, &m)
+                && !sys
+                && !is_seasonal(c, &m)
+                && !NOT_IDLE_PICKS.contains(&c.as_str())
+            {
+                assert!(has(c), "{c} missing from the idle pool");
+            }
+        }
+        for sev in 3..=5u8 {
+            assert!(
+                pool.iter().any(|c| m.clips[c].severity == sev),
+                "no severity {sev} in the idle pool"
+            );
+        }
+        for c in [
+            "idle_tease_jog_in_place",
+            "chest_press_tease",
+            "oops_drop_bend",
+        ] {
+            if m.clips.contains_key(c) {
+                assert!(has(c), "{c}");
+            }
+        }
+        // Base loops and event / talk clips are not idle takes.
+        for c in ["idle", "sit_swing", "perch_sit", "sleep"] {
+            assert!(!has(c), "{c}");
+        }
+        assert!(pool
+            .iter()
+            .all(|c| !c.starts_with("event_") && !c.starts_with("talk")));
+        // Seasonal clips only while their outfit is worn.
+        assert!(pool.iter().all(|c| !is_seasonal(c, &m)));
+        let witch = seasons.outfit("halloween");
+        let worn = idle_pool(&m, witch);
+        assert!(worn.iter().any(|c| c.starts_with("halloween_")));
+        assert!(worn.iter().all(|c| !c.starts_with("xmas_")));
+        // Outfit coverage: today no clip has an `outfit_of` take, so every
+        // base clip is drawn in her base outfit (docs/SEASONS.md lists them).
+        for o in seasons.listed() {
+            let gaps = clips_without_outfit_take(&m, o);
+            assert!(gaps.contains(&"idle".to_string()), "{}", o.id);
+            assert!(gaps.iter().all(|c| !is_seasonal(c, &m)), "{}", o.id);
+        }
+    }
+
+    #[test]
+    fn outfit_takes_are_not_poses_and_close_their_gap() {
+        let m = Manifest::from_toml_str(
+            r#"
+[clips.idle]
+page = "i.png"
+frames = [ { x = 0, y = 0, w = 1, h = 1 } ]
+[clips.wave]
+page = "w.png"
+frames = [ { x = 0, y = 0, w = 1, h = 1 } ]
+[clips.halloween_wave]
+page = "hw.png"
+tags = ["seasonal", "outfit:halloween", "outfit_of:wave"]
+frames = [ { x = 0, y = 0, w = 1, h = 1 } ]
+"#,
+        )
+        .unwrap();
+        let seasons = lillith_core::seasons::Seasons::bundled();
+        let witch = seasons.outfit("halloween").unwrap();
+        assert!(!is_pose("halloween_wave", &m));
+        assert_eq!(idle_pool(&m, Some(witch)), ["wave"]);
+        assert_eq!(clips_without_outfit_take(&m, witch), ["idle"]);
+        let xmas = seasons.outfit("xmas").unwrap();
+        assert_eq!(clips_without_outfit_take(&m, xmas), ["idle", "wave"]);
     }
 }

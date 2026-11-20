@@ -59,6 +59,21 @@ are skipped silently. Branches land at different times, so some outfits have `cl
    clip is seated/floating, with its lowest opaque pixel on the baseline. The zoom is baked in, so play them like other
    `baked_motion` allure clips (no physics bounce on top).
 
+## Manual picks and outfit takes
+
+A manual pick always wins over the date and survives restarts, Show off, pose picks and config reloads (the legacy
+`lillith settings` panel re-reads `seasonal_outfit` before it saves, so it can't write a stale copy back). The worn outfit's
+own clips join the idle cycle; other outfits' clips stay out. To dress a regular clip in an outfit, add an `outfit_of`
+take for it: see [OUTFIT_COVERAGE.md](OUTFIT_COVERAGE.md), which also lists the clips that still lack one.
+
+## Idle cycle
+
+The idle base (`idle`) plays every pose once per round (a shuffle bag) between short holds of the clean idle:
+its `variant_of:idle` takes plus every other non-system pose (`catalog::idle_pool`), the R-rated (severity 3-4) and
+XXX (severity 5) ones included. `[behavior.loneliness] max_severity` (default 5) still caps it: a lower value drops
+the bolder takes. During system interactions (Soul Contract / deletion cards, settings, dialogs) and the safeword
+hush the idle takes drop to severity 2 or below.
+
 ## Producing clips
 
 See `/workspace/lillith/seasonal_RECIPE.md` (box-local) and [VIDEO_PIPELINE.md](VIDEO_PIPELINE.md): `zoom_tease.py`,
