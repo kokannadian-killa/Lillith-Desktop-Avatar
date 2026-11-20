@@ -277,7 +277,6 @@ pub const REG_KEYS: &[(&str, bool)] = &[
 /// Every installed program on this Windows machine.
 #[cfg(windows)]
 pub fn installed() -> Vec<WinProgram> {
-    use std::os::windows::process::CommandExt;
     let start = scan_start_menu(&start_menu_dirs(|k| std::env::var(k).ok()));
     let (mut app_paths, mut uninstall) = (Vec::new(), Vec::new());
     for (key, is_app) in REG_KEYS {
@@ -285,7 +284,6 @@ pub fn installed() -> Vec<WinProgram> {
         c.args(["query", key, "/s"]);
         crate::launch_audit::record_command("win_programs", &c);
         let out = c
-            .creation_flags(super::winshell::CREATE_NO_WINDOW)
             .stdin(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .output();

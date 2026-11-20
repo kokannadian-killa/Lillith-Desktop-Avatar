@@ -609,8 +609,6 @@ impl Engine for Sapi {
         "sapi"
     }
     fn start(&mut self, text: &str, o: &SpeakOpts) -> std::io::Result<Box<dyn Playback>> {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let voice = o
             .voice
             .as_deref()
@@ -629,7 +627,6 @@ impl Engine for Sapi {
         c.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
         audit_once("tts_engine", &c, None);
         let mut child = c
-            .creation_flags(CREATE_NO_WINDOW)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

@@ -563,11 +563,7 @@ fn run_child_ungated(
             });
         }
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        c.creation_flags(super::winshell::CREATE_NO_WINDOW);
-    }
+    crate::proc::hide(&mut c);
     let mut child = c.spawn()?;
     // Lets a (cross-process) stop check this tree is really gone.
     let mut tracked = super::stop_session::track_group(child.id(), epoch);
@@ -837,12 +833,10 @@ fn kill_tree(child: &mut std::process::Child) {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
         let mut c = crate::proc::command("taskkill");
         c.args(["/T", "/F", "/PID", &child.id().to_string()]);
         crate::launch_audit::record_command("kill_tree", &c);
         let _ = c
-            .creation_flags(super::winshell::CREATE_NO_WINDOW)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())

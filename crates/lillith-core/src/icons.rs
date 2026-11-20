@@ -508,8 +508,6 @@ pub fn apply_windows_shortcuts(root: &Path, id: &str, card: &str) -> Result<Appl
     let argv = windows_shortcut_argv();
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         if let Some(log) = crate::config::audit_log_path() {
             crate::launch_audit::record_to(
                 &log,
@@ -523,7 +521,6 @@ pub fn apply_windows_shortcuts(root: &Path, id: &str, card: &str) -> Result<Appl
             .args(&argv[1..])
             .env("LILLITH_ICON", &ico)
             .stdin(std::process::Stdio::null())
-            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .map_err(|e| format!("powershell: {e}"))?;
         let n = String::from_utf8_lossy(&out.stdout).trim().to_string();

@@ -43,7 +43,13 @@ fn no_raw_command_new_outside_the_proc_helper() {
         walk(&root.join(top), &mut files);
     }
     assert!(files.len() > 50, "walked too few files: {}", files.len());
-    let needle = ["Command", "::new("].concat();
+    // Matched with all whitespace removed (comment lines dropped), so a
+    // call split across lines (`Command\n    ::new(`) is caught too.
+    let needles = [
+        ["Command", "::new("].concat(),
+        ["creation_flags", "("].concat(),
+        ["Command", "as"].concat(), // `use std::process::Command as X;`
+    ];
     let mut bad = Vec::new();
     for f in &files {
         let rel = f
@@ -57,21 +63,63 @@ fn no_raw_command_new_outside_the_proc_helper() {
         let Ok(text) = std::fs::read_to_string(f) else {
             continue;
         };
+        // (squashed text, line number of each squashed byte)
+        let mut squashed = String::new();
+        let mut line_of = Vec::new();
         for (i, line) in text.lines().enumerate() {
-            let t = line.trim_start();
-            if t.starts_with("//") {
+            if line.trim_start().starts_with("//") {
                 continue;
             }
-            if line.contains(&needle) {
-                bad.push(format!("{rel}:{}: {}", i + 1, line.trim()));
+            for ch in line.chars().filter(|c| !c.is_whitespace()) {
+                squashed.push(ch);
+                line_of.extend(std::iter::repeat(i + 1).take(ch.len_utf8()));
+            }
+        }
+        for n in &needles {
+            for (at, _) in squashed.match_indices(n.as_str()) {
+                if n.ends_with("as") && !is_import_alias(&squashed, at + n.len()) {
+                    continue;
+                }
+                let ln = line_of[at];
+                let src = text.lines().nth(ln - 1).unwrap_or("").trim();
+                bad.push(format!("{rel}:{ln}: {src}"));
             }
         }
     }
     assert!(
         bad.is_empty(),
-        "raw Command::new (use lillith_core::proc::command so Windows gets CREATE_NO_WINDOW):\n{}",
+        "raw Command::new / creation_flags / Command alias outside proc.rs (use lillith_core::proc::{{command, hide, hide_with}} so Windows keeps CREATE_NO_WINDOW):\n{}",
         bad.join("\n")
     );
+}
+
+/// `Command as X` only counts when it is an import alias (`as X;`, `as X,`
+/// or `as X}`), not e.g. `Command as_str`.
+fn is_import_alias(squashed: &str, after: usize) -> bool {
+    let rest = &squashed[after..];
+    let ident: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    !ident.is_empty() && matches!(rest[ident.len()..].chars().next(), Some(';' | ',' | '}'))
+}
+
+#[test]
+fn lint_catches_split_calls_and_aliases() {
+    let s: String = "let c = std::process::Command\n    ::new(x);"
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    assert!(s.contains(&["Command", "::new("].concat()));
+    let a: String = "use std::process::Command as Cmd;"
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    let n = ["Command", "as"].concat();
+    let at = a.find(&n).unwrap();
+    assert!(is_import_alias(&a, at + n.len()));
+    let b = "x.Commandas_str()";
+    assert!(!is_import_alias(b, b.find(&n).unwrap() + n.len()));
 }
 
 #[test]

@@ -18,7 +18,7 @@ use std::path::Path;
 use std::time::Duration;
 
 /// `CREATE_NO_WINDOW`: no console window flashes up for a captured run.
-pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+pub const CREATE_NO_WINDOW: u32 = crate::proc::CREATE_NO_WINDOW;
 
 /// Which Windows shell runs a command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

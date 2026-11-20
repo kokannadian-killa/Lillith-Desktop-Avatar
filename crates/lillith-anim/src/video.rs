@@ -502,13 +502,23 @@ impl VideoCache {
         let mut stderr = child.stderr.take().expect("piped stderr");
         let state: SharedDecode = Arc::default();
         let shared_child: SharedChild = Arc::new(Mutex::new(Some(child)));
+        // A thread that fails to start must not leak the decoder: kill and
+        // reap it before returning the error.
+        let reap_on_err = |e: std::io::Error| {
+            if let Some(mut c) = shared_child.lock().expect("video child lock").take() {
+                let _ = c.kill();
+                let _ = c.wait();
+            }
+            VideoError::Io(e)
+        };
         // Writer: feeds the MP4 (ffmpeg's output must be drained meanwhile,
         // so this is its own thread).
         std::thread::Builder::new()
             .name("lillith-video-in".into())
             .spawn(move || {
                 let _ = stdin.write_all(&bytes);
-            })?;
+            })
+            .map_err(reap_on_err)?;
         let st = Arc::clone(&state);
         let ch = Arc::clone(&shared_child);
         let name = path.display().to_string();
@@ -563,7 +573,8 @@ impl VideoCache {
                 d.done = true;
                 d.error = err;
                 cv.notify_all();
-            })?;
+            })
+            .map_err(reap_on_err)?;
         Ok((state, shared_child))
     }
 
@@ -840,6 +851,39 @@ mod tests {
         assert_eq!((s.resident_clips, s.evictions), (1, 1));
         assert!(vc.wait_frame(&a, 32, 32, 4, 0).is_some(), "re-decodes");
         assert_eq!(vc.stats().decodes, 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn decoders_are_capped_and_reaped() {
+        let dir = std::env::temp_dir().join(format!("lillith-video-cap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let clips: Vec<PathBuf> = (0..4).map(|i| dir.join(format!("c{i}.mp4"))).collect();
+        for c in &clips {
+            if !write_test_video(c, 64, 64, 24) {
+                eprintln!("ffmpeg/libx264 not available; skipping");
+                return;
+            }
+        }
+        let mut vc = VideoCache::new(VideoConfig::default());
+        // Rapid clip changes: never more than MAX_DECODERS ffmpegs at once.
+        for c in &clips {
+            vc.prefetch(c, 64, 64, 24);
+            assert!(
+                vc.running_decoders() <= MAX_DECODERS,
+                "{}",
+                vc.running_decoders()
+            );
+        }
+        let last = clips.last().unwrap();
+        assert!(vc.wait_frame(last, 64, 64, 24, 23).is_some());
+        // Finished decoders are reaped by their reader thread.
+        let t0 = Instant::now();
+        while vc.running_decoders() > 0 && t0.elapsed() < Duration::from_secs(10) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(vc.running_decoders(), 0);
+        drop(vc);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -229,12 +229,9 @@ impl LlamaServer {
             }
             let _ = dir;
         }
-        // Windows: no console window for the server.
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-        }
+        // Windows: no console window for the server (already set by
+        // `proc::command`; kept explicit so a later flag cannot drop it).
+        lillith_core::proc::hide(&mut cmd);
         let child = cmd.spawn()?;
         Ok(Self {
             child: Some(child),
