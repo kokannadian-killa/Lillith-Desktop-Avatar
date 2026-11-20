@@ -1,0 +1,571 @@
+{
+  "name": "xmas__idle_b",
+  "placeholder": false,
+  "frame_count": 36,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "xmas__idle_b_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 9.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.6353,
+  "body_anchor_x": 200,
+  "facing": "front",
+  "source_files": [
+    "../../source/video/xmas__idle_b/xmas__idle_b_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 71,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "fixed",
+  "baseline_snap": "global (video ground line)",
+  "body_point_src_x": [
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2,
+    628.2
+  ],
+  "horn_fix": {
+    "ref_horn_px": 722,
+    "ref_hue_median": 256.4,
+    "mean_hue_shift_deg_per_frame": [
+      0.1,
+      -0.5,
+      -0.9,
+      -2.4,
+      -0.7,
+      -0.8,
+      -0.8,
+      -0.9,
+      0.2,
+      -0.3,
+      0.5,
+      -0.4,
+      -0.9,
+      -0.4,
+      0.8,
+      -1.7,
+      -1.7,
+      -0.2,
+      0.2,
+      -1.4,
+      -1.7,
+      0.3,
+      -2.3,
+      -1.2,
+      -1.6,
+      -1.2,
+      -1.2,
+      -0.1,
+      0.9,
+      0.2,
+      0.2,
+      -0.8,
+      -1.0,
+      -0.7,
+      -0.9,
+      0.0
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Christmas outfit take of idle_b (outfit_of): same move redrawn in the xmas Santa bikini, Grok Imagine I2V from an xmas edit of idle_b's source still, frames picked to match idle_b's pose phase/timing; drawn in place of the source clip while outfit xmas is worn. Matte with LILLITH_WHITE_TRIM=1 (white fur).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      130,
+      262,
+      16,
+      391
+    ],
+    [
+      130,
+      261,
+      16,
+      391
+    ],
+    [
+      130,
+      261,
+      21,
+      391
+    ],
+    [
+      132,
+      263,
+      27,
+      392
+    ],
+    [
+      135,
+      268,
+      23,
+      392
+    ],
+    [
+      134,
+      277,
+      16,
+      392
+    ],
+    [
+      133,
+      280,
+      15,
+      392
+    ],
+    [
+      131,
+      274,
+      19,
+      391
+    ],
+    [
+      133,
+      273,
+      23,
+      391
+    ],
+    [
+      134,
+      276,
+      19,
+      391
+    ],
+    [
+      133,
+      279,
+      17,
+      391
+    ],
+    [
+      131,
+      272,
+      16,
+      391
+    ],
+    [
+      131,
+      264,
+      20,
+      391
+    ],
+    [
+      132,
+      260,
+      24,
+      391
+    ],
+    [
+      132,
+      261,
+      22,
+      391
+    ],
+    [
+      130,
+      262,
+      18,
+      391
+    ],
+    [
+      127,
+      262,
+      15,
+      391
+    ],
+    [
+      127,
+      261,
+      18,
+      391
+    ],
+    [
+      129,
+      261,
+      23,
+      391
+    ],
+    [
+      133,
+      265,
+      25,
+      391
+    ],
+    [
+      134,
+      272,
+      20,
+      391
+    ],
+    [
+      134,
+      279,
+      14,
+      391
+    ],
+    [
+      133,
+      278,
+      15,
+      391
+    ],
+    [
+      133,
+      274,
+      20,
+      391
+    ],
+    [
+      134,
+      275,
+      21,
+      391
+    ],
+    [
+      134,
+      278,
+      18,
+      391
+    ],
+    [
+      133,
+      280,
+      17,
+      391
+    ],
+    [
+      132,
+      275,
+      17,
+      391
+    ],
+    [
+      133,
+      269,
+      21,
+      391
+    ],
+    [
+      136,
+      266,
+      26,
+      391
+    ],
+    [
+      136,
+      267,
+      23,
+      391
+    ],
+    [
+      132,
+      269,
+      18,
+      391
+    ],
+    [
+      129,
+      266,
+      15,
+      391
+    ],
+    [
+      129,
+      261,
+      15,
+      391
+    ],
+    [
+      130,
+      260,
+      16,
+      391
+    ],
+    [
+      130,
+      261,
+      16,
+      391
+    ]
+  ],
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_ab_of": "generated_v2/xmas__idle_b/",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -199,
+        -48,
+        0.0298
+      ],
+      [
+        -199,
+        -48,
+        0.0293
+      ],
+      [
+        -199,
+        -48,
+        0.0275
+      ],
+      [
+        -199,
+        -48,
+        0.0275
+      ],
+      [
+        -199,
+        -48,
+        0.0245
+      ],
+      [
+        -199,
+        -48,
+        0.0279
+      ],
+      [
+        -199,
+        -48,
+        0.0317
+      ],
+      [
+        -199,
+        -48,
+        0.0295
+      ],
+      [
+        -199,
+        -48,
+        0.0246
+      ],
+      [
+        -199,
+        -48,
+        0.0319
+      ],
+      [
+        -199,
+        -48,
+        0.0303
+      ],
+      [
+        -199,
+        -48,
+        0.0268
+      ],
+      [
+        -199,
+        -48,
+        0.0265
+      ],
+      [
+        -199,
+        -48,
+        0.0262
+      ],
+      [
+        -199,
+        -48,
+        0.0294
+      ],
+      [
+        -199,
+        -48,
+        0.0318
+      ],
+      [
+        -199,
+        -48,
+        0.025
+      ],
+      [
+        -199,
+        -48,
+        0.0258
+      ],
+      [
+        -199,
+        -48,
+        0.0312
+      ],
+      [
+        -199,
+        -48,
+        0.0327
+      ],
+      [
+        -199,
+        -48,
+        0.0276
+      ],
+      [
+        -199,
+        -48,
+        0.0439
+      ],
+      [
+        -199,
+        -48,
+        0.0304
+      ],
+      [
+        -199,
+        -48,
+        0.0377
+      ],
+      [
+        -199,
+        -48,
+        0.022
+      ],
+      [
+        -199,
+        -48,
+        0.0298
+      ],
+      [
+        -199,
+        -48,
+        0.031
+      ],
+      [
+        -199,
+        -48,
+        0.0267
+      ],
+      [
+        -199,
+        -48,
+        0.0376
+      ],
+      [
+        -199,
+        -48,
+        0.0461
+      ],
+      [
+        -199,
+        -48,
+        0.0437
+      ],
+      [
+        -199,
+        -48,
+        0.0331
+      ],
+      [
+        -199,
+        -48,
+        0.0329
+      ],
+      [
+        -199,
+        -48,
+        0.0331
+      ],
+      [
+        -199,
+        -48,
+        0.0357
+      ],
+      [
+        -199,
+        -48,
+        0.0319
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
+  "video": {
+    "file": "xmas__idle_b.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 36,
+    "fps": 9.0,
+    "bytes": 593623,
+    "quality": {
+      "edge_mae": 2.459,
+      "edge_p99": 25.0,
+      "halo_dark": 0.02,
+      "halo_light": -0.058,
+      "alpha_mae": 0.0796
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "481356fe3aabb1c4c86af9352e1c879566d51f66126361db7917f427216c9455",
+    "source_sha256": "c54e22e08cf778f5c8f2804951712b102a2ca971d940a7c999ce4f97fbcef00c"
+  },
+  "tags": [
+    "baked_motion",
+    "seasonal",
+    "outfit:xmas",
+    "season:xmas",
+    "outfit_of:idle_b"
+  ],
+  "season": "xmas",
+  "outfit": "xmas",
+  "outfit_of": "idle_b"
+}
