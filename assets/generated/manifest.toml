@@ -131753,6 +131753,86 @@ w = 400
 h = 400
 anchor = [200, 392]
 
+[clips.xmas__run_right]
+page = "xmas__run_right/xmas__run_right_sheet.png"
+fps = 12.0
+mode = "loop"
+baseline_y = 392
+scale = 0.6235
+tags = ["canonical", "facing:right", "baked_motion", "seasonal", "outfit:xmas", "season:xmas", "outfit_of:run_right"]
+disable_springs = ["gait"]
+video = "xmas__run_right/xmas__run_right.mp4"
+
+[[clips.xmas__run_right.frames]]
+x = 0
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
+[[clips.xmas__run_right.frames]]
+x = 400
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
+[[clips.xmas__run_right.frames]]
+x = 800
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
+[[clips.xmas__run_right.frames]]
+x = 1200
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
+[[clips.xmas__run_right.frames]]
+x = 1600
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
+[[clips.xmas__run_right.frames]]
+x = 2000
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
+[[clips.xmas__run_right.frames]]
+x = 2400
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
+[[clips.xmas__run_right.frames]]
+x = 2800
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
+[[clips.xmas__run_right.frames]]
+x = 3200
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
+[[clips.xmas__run_right.frames]]
+x = 3600
+y = 0
+w = 400
+h = 400
+anchor = [231, 392]
+
 [clips.xmas__walk_left]
 page = "xmas__walk_left/xmas__walk_left_sheet.png"
 fps = 12.0

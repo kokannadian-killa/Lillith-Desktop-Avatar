@@ -1,0 +1,245 @@
+{
+  "name": "xmas__run_right",
+  "placeholder": false,
+  "frame_count": 10,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "xmas__run_right_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.6235,
+  "body_anchor_x": 200,
+  "facing": "right",
+  "source_files": [
+    "../../source/video/xmas__run_right/xmas__run_right_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 51,
+    "last": 69,
+    "step": null,
+    "frames": [
+      51,
+      53,
+      55,
+      57,
+      59,
+      61,
+      63,
+      65,
+      67,
+      69
+    ],
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers; explicit list (even-time resample)"
+  },
+  "generator": "Grok Imagine image-to-video (GenerateVideo, 720p, first=last frame = source still) + generated_v2/_tools/build_clip.py",
+  "keying": "white flood-fill key + enclosed-hole removal (size/purity or isnet-anime matte) + matte trim (_tools/key_white.py)",
+  "centering": "body_trend",
+  "baseline_snap": "per_frame",
+  "body_point_src_x": [
+    657.5,
+    650.5,
+    640.1,
+    642.8,
+    654.4,
+    652.9,
+    646.0,
+    645.6,
+    646.2,
+    651.4
+  ],
+  "horn_fix": {
+    "ref_horn_px": 626,
+    "ref_hue_median": 259.0,
+    "mean_hue_shift_deg_per_frame": [
+      0.9,
+      -0.6,
+      0.5,
+      1.1,
+      -3.5,
+      -0.3,
+      -0.9,
+      -1.3,
+      -2.9,
+      -1.5
+    ]
+  },
+  "baked_secondary_motion": [
+    "full_body_bounce",
+    "hip_sway",
+    "pigtails",
+    "tail",
+    "chest_follow"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles.",
+  "notes": "Christmas outfit take of run_right (outfit_of): same move redrawn in the xmas Santa bikini, Grok Imagine I2V from an xmas edit of run_right's source still, frames picked to match run_right's pose phase/timing; drawn in place of the source clip while outfit xmas is worn. Matte with LILLITH_WHITE_TRIM=1 (white fur).",
+  "canvas_compliant": true,
+  "bbox_per_frame": [
+    [
+      48,
+      333,
+      36,
+      392
+    ],
+    [
+      50,
+      360,
+      21,
+      392
+    ],
+    [
+      60,
+      314,
+      17,
+      392
+    ],
+    [
+      62,
+      306,
+      20,
+      392
+    ],
+    [
+      51,
+      324,
+      12,
+      392
+    ],
+    [
+      50,
+      329,
+      41,
+      392
+    ],
+    [
+      52,
+      360,
+      23,
+      392
+    ],
+    [
+      59,
+      317,
+      17,
+      392
+    ],
+    [
+      61,
+      307,
+      22,
+      392
+    ],
+    [
+      52,
+      328,
+      14,
+      392
+    ]
+  ],
+  "matte_version": "matte_v2.1",
+  "matte_tool": "generated_v2/_matte_v2/matte_v2.py",
+  "matte_note": "isnet-anime soft matte + backdrop-plate projection alpha in the edge band (hair/fishnet), minimal-alpha unmix for glow, flow-compensated temporal median of edge alpha (t-2..t+2 video frames), colour decontamination against the backdrop + interior colour fallback, edge lightness clamp (no white halo), premultiplied area downscale, placement registered to the v2 frame, horn_fix as build_clip. Replaces key_white.key_combined.",
+  "matte_ab_of": "generated_v2/xmas__run_right/",
+  "matte_placement": {
+    "per_frame_offset_xy_regerr": [
+      [
+        -205,
+        -20,
+        0.0322
+      ],
+      [
+        -205,
+        -38,
+        0.0262
+      ],
+      [
+        -205,
+        -51,
+        0.0326
+      ],
+      [
+        -205,
+        -53,
+        0.0289
+      ],
+      [
+        -205,
+        -51,
+        0.0249
+      ],
+      [
+        -204,
+        -16,
+        0.0251
+      ],
+      [
+        -204,
+        -35,
+        0.0261
+      ],
+      [
+        -204,
+        -51,
+        0.0291
+      ],
+      [
+        -204,
+        -51,
+        0.0312
+      ],
+      [
+        -204,
+        -49,
+        0.0251
+      ]
+    ],
+    "note": "integer canvas offset registered to the v2 frame alpha"
+  },
+  "video": {
+    "file": "xmas__run_right.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 10,
+    "fps": 12.0,
+    "bytes": 201472,
+    "quality": {
+      "edge_mae": 2.487,
+      "edge_p99": 21.0,
+      "halo_dark": 0.017,
+      "halo_light": -0.088,
+      "alpha_mae": 0.1282
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "12a87e8271fce4b6f0f115130f271d950424977c6a12bee2f21dbb93c1ccfae2",
+    "source_sha256": "245a2f81952dd49aa14dcb5956fd65132099bd4b45630d33428bd34b3cc91ae5"
+  },
+  "tags": [
+    "baked_motion",
+    "seasonal",
+    "outfit:xmas",
+    "season:xmas",
+    "outfit_of:run_right"
+  ],
+  "season": "xmas",
+  "outfit": "xmas",
+  "outfit_of": "run_right"
+}
