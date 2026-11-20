@@ -1,0 +1,801 @@
+{
+  "name": "hang_from_window",
+  "placeholder": false,
+  "frame_count": 96,
+  "frame_width": 400,
+  "frame_height": 400,
+  "canvas_w": 400,
+  "canvas_h": 400,
+  "layout": "horizontal_strip",
+  "sheet": "hang_from_window_sheet.png",
+  "frames_dir": "frames/",
+  "fps": 12.0,
+  "loop": true,
+  "baseline_y": 392,
+  "anchor": [
+    200,
+    392
+  ],
+  "style": "canonical_ko (thigh-highs + shorts)",
+  "source": "grok-imagine-video",
+  "scale": 0.56,
+  "body_anchor_x": 200,
+  "facing": "front (hanging from a window ledge)",
+  "source_files": [
+    "../../source/video/hang_from_window/hang_from_window_v3_a.mp4"
+  ],
+  "source_frame_range": {
+    "first": 1,
+    "last": 191,
+    "step": 2,
+    "video_fps": 24,
+    "note": "1-based ffmpeg frame numbers"
+  },
+  "generator": "Grok Imagine I2V + scratch-hangsit1/kit/zoom_place.py (zoom_tease matte, custom placement)",
+  "matte_version": "matte_v2.1 (full-res, single pass)",
+  "matte_tool": "scratch-hangsit1/kit/zoom_place.py (matte_v2 functions)",
+  "centering": "fixed grip line",
+  "baseline_snap": "off (registered or grip-aligned; not feet-to-392)",
+  "placement": {
+    "mode": "grip",
+    "scale0": 0.56,
+    "scale1": 0.56,
+    "paste_ends": [],
+    "grip_src": 32.0,
+    "grip_dst": 16.0
+  },
+  "cleavage_zoom": {
+    "zmax": 1.7,
+    "target_canvas_xy": [
+      200.0,
+      150.0
+    ],
+    "keyframes_ease_in_hold_out": [
+      [
+        16,
+        32,
+        52,
+        80
+      ]
+    ],
+    "cycles": 1,
+    "easing": "smoothstep",
+    "source_px_per_canvas_px_at_zmax": 1.05,
+    "zoom_per_frame": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0079,
+      1.0301,
+      1.0646,
+      1.1094,
+      1.1624,
+      1.2215,
+      1.2847,
+      1.35,
+      1.4153,
+      1.4785,
+      1.5376,
+      1.5906,
+      1.6354,
+      1.6699,
+      1.6921,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.7,
+      1.6974,
+      1.6898,
+      1.6776,
+      1.6612,
+      1.641,
+      1.6173,
+      1.5906,
+      1.5612,
+      1.5295,
+      1.4959,
+      1.4608,
+      1.4245,
+      1.3874,
+      1.35,
+      1.3126,
+      1.2755,
+      1.2392,
+      1.2041,
+      1.1705,
+      1.1388,
+      1.1094,
+      1.0827,
+      1.059,
+      1.0388,
+      1.0224,
+      1.0102,
+      1.0026,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "note": "baked progressive crop+scale from the full-res matte; first/last frames at normal framing; focus is the face"
+  },
+  "baked_secondary_motion": [
+    "breathing",
+    "sway",
+    "pigtails",
+    "tail"
+  ],
+  "engine_note": "v2 bakes secondary motion into the pixels. Mute or strongly reduce engine chest/pigtail springs and breathing for this clip, or the motion doubles. Engine should pin grip_line (y=6, x0=147, x1=243) / grab_point [194, 10] to the window edge; do not plant feet on the baseline. Anchor [200,392] is kept for compatibility.",
+  "tags": [
+    "baked_motion",
+    "canonical",
+    "hang_base",
+    "perch"
+  ],
+  "system": false,
+  "grab_point": [
+    194,
+    10
+  ],
+  "grip_line": {
+    "y": 6,
+    "x0": 147,
+    "x1": 243,
+    "note": "top opaque row of frame 0; for hang this is the bar/hand grip the engine can pin to a window edge"
+  },
+  "feet_lowest_y": 384,
+  "notes": "Hang-from-window: hands grip a thin ledge/bar at the top of the canvas. grip_line.y=6 (frame 0). Placement pins source row 32.0 to canvas row 16.0 at scale 0.56; feet are off the ground (not snapped to baseline 392). Anchor stays [200,392] for compatibility; the engine should pin grip_line to a window/screen edge rather than planting the feet. Bar near-white specular highlights were toned down so white-edge/fringeqa do not treat the grip bar as backdrop. Hang QA: near-white bar speculars in the top 36 rows were toned (channel cap 168) so they are not treated as backdrop; a 12-px near-white hair highlight pocket on frame 32 (x 157-164, y 159-165) was TELEA-filled. Light chest-bounce bake was not applied.",
+  "bbox_per_frame": [
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      384
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      387
+    ],
+    [
+      102,
+      285,
+      5,
+      389
+    ],
+    [
+      95,
+      285,
+      5,
+      389
+    ],
+    [
+      85,
+      285,
+      5,
+      388
+    ],
+    [
+      90,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      388
+    ],
+    [
+      102,
+      285,
+      5,
+      388
+    ],
+    [
+      102,
+      295,
+      5,
+      387
+    ],
+    [
+      102,
+      303,
+      5,
+      385
+    ],
+    [
+      101,
+      299,
+      5,
+      388
+    ],
+    [
+      99,
+      296,
+      5,
+      392
+    ],
+    [
+      95,
+      291,
+      6,
+      392
+    ],
+    [
+      91,
+      295,
+      6,
+      392
+    ],
+    [
+      87,
+      301,
+      7,
+      392
+    ],
+    [
+      82,
+      306,
+      8,
+      392
+    ],
+    [
+      76,
+      312,
+      9,
+      392
+    ],
+    [
+      70,
+      319,
+      10,
+      392
+    ],
+    [
+      64,
+      324,
+      10,
+      392
+    ],
+    [
+      58,
+      330,
+      11,
+      392
+    ],
+    [
+      53,
+      336,
+      12,
+      392
+    ],
+    [
+      48,
+      341,
+      13,
+      392
+    ],
+    [
+      44,
+      345,
+      14,
+      392
+    ],
+    [
+      41,
+      348,
+      14,
+      392
+    ],
+    [
+      4,
+      350,
+      14,
+      392
+    ],
+    [
+      12,
+      351,
+      14,
+      392
+    ],
+    [
+      31,
+      351,
+      15,
+      392
+    ],
+    [
+      27,
+      351,
+      15,
+      392
+    ],
+    [
+      10,
+      351,
+      14,
+      392
+    ],
+    [
+      39,
+      351,
+      14,
+      392
+    ],
+    [
+      39,
+      351,
+      14,
+      392
+    ],
+    [
+      39,
+      357,
+      15,
+      392
+    ],
+    [
+      39,
+      357,
+      15,
+      392
+    ],
+    [
+      39,
+      355,
+      14,
+      392
+    ],
+    [
+      39,
+      356,
+      13,
+      392
+    ],
+    [
+      39,
+      357,
+      13,
+      392
+    ],
+    [
+      39,
+      356,
+      14,
+      392
+    ],
+    [
+      39,
+      356,
+      15,
+      392
+    ],
+    [
+      39,
+      356,
+      15,
+      392
+    ],
+    [
+      39,
+      355,
+      14,
+      392
+    ],
+    [
+      39,
+      351,
+      14,
+      392
+    ],
+    [
+      39,
+      351,
+      14,
+      392
+    ],
+    [
+      2,
+      351,
+      14,
+      392
+    ],
+    [
+      0,
+      351,
+      14,
+      392
+    ],
+    [
+      3,
+      351,
+      14,
+      392
+    ],
+    [
+      0,
+      351,
+      14,
+      392
+    ],
+    [
+      0,
+      351,
+      14,
+      392
+    ],
+    [
+      39,
+      350,
+      14,
+      392
+    ],
+    [
+      41,
+      349,
+      14,
+      392
+    ],
+    [
+      42,
+      348,
+      14,
+      392
+    ],
+    [
+      44,
+      345,
+      14,
+      392
+    ],
+    [
+      46,
+      344,
+      13,
+      392
+    ],
+    [
+      48,
+      341,
+      13,
+      392
+    ],
+    [
+      52,
+      338,
+      12,
+      392
+    ],
+    [
+      54,
+      335,
+      12,
+      392
+    ],
+    [
+      57,
+      366,
+      11,
+      392
+    ],
+    [
+      60,
+      357,
+      11,
+      392
+    ],
+    [
+      63,
+      351,
+      11,
+      392
+    ],
+    [
+      68,
+      328,
+      10,
+      392
+    ],
+    [
+      71,
+      319,
+      9,
+      392
+    ],
+    [
+      73,
+      315,
+      9,
+      392
+    ],
+    [
+      76,
+      311,
+      9,
+      392
+    ],
+    [
+      79,
+      308,
+      8,
+      392
+    ],
+    [
+      69,
+      305,
+      7,
+      392
+    ],
+    [
+      77,
+      302,
+      7,
+      392
+    ],
+    [
+      78,
+      298,
+      7,
+      392
+    ],
+    [
+      77,
+      295,
+      6,
+      392
+    ],
+    [
+      94,
+      293,
+      6,
+      392
+    ],
+    [
+      96,
+      291,
+      6,
+      392
+    ],
+    [
+      98,
+      289,
+      5,
+      392
+    ],
+    [
+      99,
+      287,
+      5,
+      392
+    ],
+    [
+      100,
+      287,
+      5,
+      390
+    ],
+    [
+      101,
+      286,
+      5,
+      387
+    ],
+    [
+      102,
+      285,
+      5,
+      384
+    ],
+    [
+      102,
+      285,
+      5,
+      381
+    ],
+    [
+      102,
+      285,
+      5,
+      386
+    ],
+    [
+      102,
+      285,
+      5,
+      387
+    ],
+    [
+      102,
+      285,
+      5,
+      387
+    ],
+    [
+      102,
+      285,
+      5,
+      387
+    ],
+    [
+      94,
+      285,
+      5,
+      386
+    ],
+    [
+      96,
+      285,
+      5,
+      387
+    ],
+    [
+      102,
+      285,
+      5,
+      388
+    ],
+    [
+      102,
+      285,
+      5,
+      388
+    ],
+    [
+      102,
+      285,
+      5,
+      387
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ],
+    [
+      102,
+      285,
+      5,
+      385
+    ]
+  ],
+  "canvas_compliant": false,
+  "video": {
+    "file": "hang_from_window.mp4",
+    "layout": "alpha_side_by_side",
+    "codec": "h264 high yuv420p full-range bt709",
+    "crf": 16,
+    "edge_bleed_px": 0,
+    "width": 800,
+    "height": 400,
+    "frame_count": 96,
+    "fps": 12.0,
+    "bytes": 1394512,
+    "quality": {
+      "edge_mae": 1.862,
+      "edge_p99": 18.0,
+      "halo_dark": 0.042,
+      "halo_light": -0.077,
+      "alpha_mae": 0.0907
+    },
+    "tool": "tools/video-pipeline/pack_mp4.py"
+  },
+  "severity": 2,
+  "matte_clean": {
+    "version": 6,
+    "tool": "tools/matte-clean/matte_clean.py",
+    "sheet_sha256": "bb15d04e8823b304250fd6896857a565ed8366516e36993414ad031e13bf889f",
+    "source_sha256": "5051441ecd855c47cfde694a004baea13365ac1b1374f6957bbc1d361404e3da",
+    "sheet_sha256_after_pocket_fill": "e2a9c6a84d1d2ba262a8580957385b004fbc8518e2b92ad2540748bba81bb18a",
+    "post": [
+      "tone_bar_highlights_top36",
+      "telea_fill_f32_hair_pocket_12px"
+    ]
+  }
+}
