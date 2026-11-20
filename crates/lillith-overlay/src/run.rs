@@ -3818,7 +3818,10 @@ frames = [ { x = 0, y = 0, w = 400, h = 400, anchor = [200, 392] } ]
             m.clips.get("stand_up"),
             m.clips.get("hang_from_window"),
         ) else {
-            eprintln!("{} predates sit_down/stand_up/hang; skipping", path.display());
+            eprintln!(
+                "{} predates sit_down/stand_up/hang; skipping",
+                path.display()
+            );
             return;
         };
         // The dedicated transitions lead idle ↔ sit_swing (a perch sit).
