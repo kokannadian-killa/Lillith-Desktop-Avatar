@@ -3,6 +3,11 @@ post_install() {
 ==> Lillith is installed in /opt/lillith (232 clips, art-kit, voice kit, llama-server).
     Per user (no root): run   lillith-firstrun   (voice, your .gguf, KWin bridge).
     Lillith-Install.sh already ran it for you. Uninstall: lillith-uninstall
+==> QuantumSec user units installed in /usr/lib/systemd/user (never enabled by this package):
+    lillith.service, lillith-quantumsec.service (+ their 10-package-path.conf drop-ins -> /usr/bin/lillith).
+    The shield makes no network calls (local processes, interfaces, file hashes, load only).
+    Opt in:  systemctl --user enable --now lillith-quantumsec.service
+    Opt out: systemctl --user disable --now lillith-quantumsec.service
 MSG
 }
 post_upgrade() { echo "==> Restart Lillith to use the new version (re-run lillith-firstrun if her voice changed)."; }
