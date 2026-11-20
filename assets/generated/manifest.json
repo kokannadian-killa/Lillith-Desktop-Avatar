@@ -18342,6 +18342,40 @@
       "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)",
       "season": "xmas",
       "outfit": "xmas"
+    },
+    {
+      "name": "xmas__run_left",
+      "frame_count": 10,
+      "frame_width": 400,
+      "frame_height": 400,
+      "fps": 12.0,
+      "loop": true,
+      "baseline_y": 392,
+      "anchor": [
+        169,
+        392
+      ],
+      "scale": 0.6235,
+      "body_anchor_x": 169,
+      "facing": "left",
+      "canvas_compliant": true,
+      "placeholder": false,
+      "source": "grok-imagine-video",
+      "dir": "xmas__run_left/",
+      "sheet": "xmas__run_left/xmas__run_left_sheet.png",
+      "manifest": "xmas__run_left/xmas__run_left.json",
+      "preview": "xmas__run_left/xmas__run_left_preview.gif",
+      "tags": [
+        "baked_motion",
+        "seasonal",
+        "outfit:xmas",
+        "season:xmas",
+        "outfit_of:run_left"
+      ],
+      "video": "xmas__run_left/xmas__run_left.mp4",
+      "engine_springs": "disable gait for this clip (baked walk: legs, arms and hip bob are in the video frames)",
+      "season": "xmas",
+      "outfit": "xmas"
     }
   ]
 }
