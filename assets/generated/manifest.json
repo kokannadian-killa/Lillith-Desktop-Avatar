@@ -18249,6 +18249,49 @@
       "to": "idle",
       "from_frame": 0,
       "to_frame": 0
+    },
+    {
+      "name": "hang_from_window",
+      "frame_count": 96,
+      "frame_width": 400,
+      "frame_height": 400,
+      "fps": 12.0,
+      "loop": true,
+      "baseline_y": 392,
+      "anchor": [
+        200,
+        392
+      ],
+      "scale": 0.56,
+      "body_anchor_x": 200,
+      "facing": "front (hanging from a window ledge)",
+      "canvas_compliant": true,
+      "placeholder": false,
+      "source": "grok-imagine-video",
+      "dir": "hang_from_window/",
+      "sheet": "hang_from_window/hang_from_window_sheet.png",
+      "manifest": "hang_from_window/hang_from_window.json",
+      "preview": "hang_from_window/hang_from_window_preview.gif",
+      "tags": [
+        "baked_motion",
+        "hang_base",
+        "perch",
+        "canonical"
+      ],
+      "video": "hang_from_window/hang_from_window.mp4",
+      "severity": 2,
+      "system": false,
+      "grip_line": {
+        "y": 6,
+        "x0": 147,
+        "x1": 243,
+        "note": "top opaque row of frame 0; for hang this is the bar/hand grip the engine can pin to a window edge"
+      },
+      "grab_point": [
+        194,
+        10
+      ],
+      "feet_lowest_y": 384
     }
   ]
 }
