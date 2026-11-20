@@ -366,6 +366,12 @@ impl Loneliness {
             .is_some_and(|h| self.t - h < self.cfg.hush_hold_min.max(0.0) * 60.0)
     }
 
+    /// A system interaction is open or the safeword hush holds: she must
+    /// stay calm (whether lonely poses are on or off).
+    pub fn calm_required(&self) -> bool {
+        self.system_busy || self.hushed()
+    }
+
     /// Why picks / bids are blocked now, if they are.
     pub fn blocked(&self) -> Option<Block> {
         if !self.enabled {
